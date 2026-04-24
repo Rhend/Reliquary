@@ -16,7 +16,13 @@ var player: Dictionary = {
 	"resources": {},
 	"active_creature_id": "",
 	"active_biome_id": "",
-	"active_passives": []
+	"active_passives": [],
+	"equipped": {
+		"weapon": "equip_epee_bois",
+		"shield": "equip_bouclier",
+		"boots":  "equip_bottes"
+	},
+	"bestiary": {}
 }
 
 func _ready() -> void:
@@ -75,3 +81,62 @@ func get_tier_name(tier: int) -> String:
 	if tier < 0 or tier >= MASTERY_TIERS.size():
 		return "Inconnu"
 	return MASTERY_TIERS[tier]
+
+# Retourne les stats de base d'une entité scalées par son tier actuel.
+func get_effective_stats(entity_id: String) -> Dictionary:
+	var entity = get_entity(entity_id)
+	if entity.is_empty():
+		return {}
+	var stats   = entity.get("base_stats", {}).duplicate()
+	var tier    = entity.get("current_tier", 0)
+	var scaling = entity.get("tier_scaling", {})
+	for key in scaling:
+		stats[key] = stats.get(key, 0) + tier * int(scaling[key])
+	return stats
+
+# Retourne les bonus cumulés de tous les équipements portés.
+func get_equipment_bonuses() -> Dictionary:
+	var bonuses: Dictionary = {"atk": 0.0, "hp": 0.0, "attack_speed_pct": 0.0}
+	for item_id in player.get("equipped", {}).values():
+		var item = get_entity(item_id)
+		if item.is_empty():
+			continue
+		var item_bonuses: Dictionary = item.get("base_stats", {}).get("bonuses", {})
+		for key in item_bonuses:
+			bonuses[key] = bonuses.get(key, 0.0) + float(item_bonuses[key])
+	return bonuses
+
+# Enregistre ou met à jour une entrée dans le Hall des Évolutions.
+# xp_reward = 0 : première rencontre sans XP (ex: début de combat).
+func record_encounter(enc_id: String, enc_name: String, enc_type: String,
+		biome_id: String, xp_reward: float) -> void:
+	if enc_id == "":
+		return
+	var hall: Dictionary = player.get("bestiary", {})
+	if not hall.has(enc_id):
+		var biome = get_entity(biome_id)
+		hall[enc_id] = {
+			"name":       enc_name,
+			"type":       enc_type,
+			"biome_id":   biome_id,
+			"biome_name": biome.get("name", biome_id),
+			"count":      0,
+			"xp":         0.0,
+			"tier":       0
+		}
+	var entry: Dictionary = hall[enc_id]
+	entry["count"] += 1
+	if xp_reward > 0.0:
+		entry["xp"] += xp_reward
+		var tier: int = entry.get("tier", 0)
+		while tier < MAX_TIER:
+			var next_idx: int = tier + 1
+			if next_idx >= xp_thresholds.size():
+				break
+			if entry["xp"] < float(xp_thresholds[next_idx]):
+				break
+			entry["xp"]   -= float(xp_thresholds[next_idx])
+			entry["tier"] += 1
+			tier           = entry["tier"]
+	player["bestiary"] = hall
+	EventBus.bestiary_updated.emit(enc_id)

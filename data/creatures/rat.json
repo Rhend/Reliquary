@@ -1,10 +1,15 @@
 {
-	"id": "creature_rat",
-	"name": "Rat des Égouts",
+	"id": "hero",
+	"name": "Héro",
 	"base_stats": {
-		"atk": 12,
-		"def": 4,
-		"hp":  80
+		"atk": 15,
+		"def": 7,
+		"hp":  110
+	},
+	"tier_scaling": {
+		"atk": 3,
+		"def": 2,
+		"hp":  20
 	},
 	"passive_slots": [
 		{ "unlock_tier": 1, "passive_id": "passive_regeneration" },

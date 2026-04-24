@@ -1,0 +1,10 @@
+{
+	"id": "equip_epee_bois",
+	"name": "Épée en Bois",
+	"base_stats": {
+		"slot": "weapon",
+		"bonuses": {
+			"atk": 2
+		}
+	}
+}

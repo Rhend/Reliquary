@@ -4,6 +4,7 @@ extends Node
 signal xp_gained(entity_id: String, amount: float)
 signal entity_ready_to_evolve(entity_id: String)
 signal entity_evolved(entity_id: String, new_tier: int)
+signal bestiary_updated(enc_id: String)
 
 # --- Passifs ---
 signal passive_unlocked(entity_id: String, passive_id: String)

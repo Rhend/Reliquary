@@ -26,8 +26,10 @@ func start_adventure(biome_id: String) -> void:
 		return
 
 	current_biome_id = biome_id
-	current_hp       = float(creature.get("base_stats", {}).get("hp", 100))
-	is_running       = true
+	var equip_bonuses   = GameData.get_equipment_bonuses()
+	var effective_stats = GameData.get_effective_stats(creature_id)
+	current_hp = float(effective_stats.get("hp", 100)) + equip_bonuses.get("hp", 0.0)
+	is_running = true
 
 	GameData.player["active_biome_id"] = biome_id
 	EventBus.adventure_started.emit(biome_id)
@@ -69,6 +71,7 @@ func _process_event() -> void:
 				return
 			var enemy          = enemies[randi() % enemies.size()].duplicate()
 			event_data["enemy"] = enemy
+			GameData.record_encounter(enemy.get("id",""), enemy.get("name","?"), "Créature", current_biome_id, 0.0)
 			EventBus.adventure_event_resolved.emit(event_data)
 			# Lance le combat visuel — le prochain événement attendra combat_ended
 			CombatSystem.start_combat(creature_id, enemy, current_hp)
@@ -77,7 +80,9 @@ func _process_event() -> void:
 			var biome  = GameData.get_entity(current_biome_id)
 			var events = biome.get("base_stats", {}).get("positive_events", [])
 			if not events.is_empty():
-				event_data["effect"] = events[randi() % events.size()]
+				var evt            = events[randi() % events.size()]
+				event_data["effect"] = evt
+				GameData.record_encounter(evt.get("id",""), evt.get("name","?"), "Événement", current_biome_id, 5.0)
 			EventBus.adventure_event_resolved.emit(event_data)
 			_apply_regen(creature_id)
 			_schedule_next_event()
@@ -89,6 +94,7 @@ func _process_event() -> void:
 				var trap           = traps[randi() % traps.size()]
 				current_hp        -= float(trap.get("damage", 10))
 				event_data["trap"] = trap
+				GameData.record_encounter(trap.get("id",""), trap.get("name","?"), "Piège", current_biome_id, 5.0)
 			EventBus.adventure_event_resolved.emit(event_data)
 			if current_hp <= 0.0:
 				_end_adventure(false)
@@ -107,11 +113,12 @@ func _on_combat_ended(result: Dictionary) -> void:
 	current_hp = result.get("remaining_creature_hp", 0.0)
 
 	if result.get("victory", false):
-		var enemy      = result.get("enemy", {})
-		MasterySystem.add_xp_to_all_active(
-			float(enemy.get("xp_reward", 10)),
-			int(enemy.get("tier", 0))
-		)
+		var enemy    = result.get("enemy", {})
+		var xp_base  = float(enemy.get("xp_reward", 10))
+		var gen_tier = int(enemy.get("tier", 0))
+		MasterySystem.add_xp_to_all_active(xp_base, gen_tier)
+		MasterySystem.add_xp_to_entity(current_biome_id, xp_base * 0.4, gen_tier)
+		GameData.record_encounter(enemy.get("id",""), enemy.get("name","?"), "Créature", current_biome_id, xp_base)
 		_apply_regen(GameData.player.get("active_creature_id", ""))
 		_schedule_next_event()
 	else:
@@ -125,9 +132,10 @@ func _apply_regen(creature_id: String) -> void:
 	var creature = GameData.get_entity(creature_id)
 	if creature.is_empty():
 		return
-	var max_hp      = float(creature.get("base_stats", {}).get("hp", 100))
-	var regen_bonus = PassiveSystem.get_effect("hp_regen_bonus")
-	current_hp      = minf(current_hp + max_hp * (0.2 + regen_bonus), max_hp)
+	var equip_hp        = GameData.get_equipment_bonuses().get("hp", 0.0)
+	var effective_stats = GameData.get_effective_stats(creature_id)
+	var max_hp          = float(effective_stats.get("hp", 100)) + equip_hp
+	current_hp          = minf(current_hp + max_hp * 0.15, max_hp)
 
 func _schedule_next_event() -> void:
 	if not is_running:

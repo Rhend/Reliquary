@@ -1,6 +1,13 @@
 extends Node
 
-const SAVE_PATH = "user://save.json"
+const SAVE_PATH = "user://IdleEvolutionSave.json"
+
+func _ready() -> void:
+	EventBus.xp_gained.connect(_on_progress)
+	EventBus.bestiary_updated.connect(_on_progress)
+
+func _on_progress(_arg = null) -> void:
+	save()
 
 func save() -> void:
 	var save_data: Dictionary = {

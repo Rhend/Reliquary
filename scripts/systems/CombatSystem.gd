@@ -27,6 +27,8 @@ func start_combat(creature_id: String, enemy: Dictionary, current_hp: float) -> 
 	_enemy_hp     = float(enemy.get("hp", 50))
 	_creature_turn = true
 	is_fighting   = true
+	var speed_pct: float = GameData.get_equipment_bonuses().get("attack_speed_pct", 0.0)
+	_timer.wait_time = TURN_INTERVAL * (1.0 - speed_pct / 100.0)
 	EventBus.combat_started.emit(creature_id, _enemy, _creature_hp, _enemy_hp)
 	_timer.start()
 
@@ -45,11 +47,12 @@ func _on_turn_tick() -> void:
 		stop_combat()
 		return
 
-	var c_stats  = creature.get("base_stats", {})
-	var c_atk    = float(c_stats.get("atk", 10))
-	var c_def    = float(c_stats.get("def",  5))
-	var bonuses  = PassiveSystem.get_combat_bonuses()
-	c_atk += bonuses.get("atk_bonus", 0.0)
+	var c_stats      = GameData.get_effective_stats(_creature_id)
+	var c_atk        = float(c_stats.get("atk", 10))
+	var c_def        = float(c_stats.get("def",  5))
+	var bonuses      = PassiveSystem.get_combat_bonuses()
+	var equip        = GameData.get_equipment_bonuses()
+	c_atk += bonuses.get("atk_bonus", 0.0) + equip.get("atk", 0.0)
 	c_def += bonuses.get("def_bonus", 0.0)
 
 	var e_atk = float(_enemy.get("atk", 8))

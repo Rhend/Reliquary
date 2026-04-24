@@ -20,13 +20,9 @@ func add_xp_to_entity(entity_id: String, base_xp: float, generator_tier: int) ->
 	EventBus.xp_gained.emit(entity_id, xp_gained)
 	_check_evolution(entity_id)
 
-# Distribue de l'XP à toutes les entités actives (créature + passifs actifs).
-# Les passifs reçoivent 50% de la mise de base pour ralentir légèrement leur progression.
+# Le héro n'évolue pas directement : ce sont les entités autour de lui qui progressent.
+# Seuls les passifs actifs reçoivent de l'XP ici.
 func add_xp_to_all_active(base_xp: float, generator_tier: int) -> void:
-	var creature_id = GameData.player.get("active_creature_id", "")
-	if creature_id != "":
-		add_xp_to_entity(creature_id, base_xp, generator_tier)
-
 	for passive_id in GameData.player.get("active_passives", []):
 		add_xp_to_entity(passive_id, base_xp * 0.5, generator_tier)
 
