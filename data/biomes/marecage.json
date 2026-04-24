@@ -1,0 +1,47 @@
+{
+	"id": "biome_marecage",
+	"name": "Marécage Putride",
+	"base_stats": {
+		"event_table": {
+			"combat":   0.60,
+			"positive": 0.10,
+			"trap":     0.30
+		},
+		"enemies": [
+			{
+				"id": "enemy_grenouille", "name": "Grenouille Géante",
+				"atk": 12, "def": 4, "hp": 55, "tier": 0, "xp_reward": 14,
+				"loot_table": [
+					{ "item_id": "res_slime", "chance": 0.45 }
+				]
+			},
+			{
+				"id": "enemy_serpent", "name": "Serpent des Marais",
+				"atk": 20, "def": 3, "hp": 75, "tier": 1, "xp_reward": 22,
+				"loot_table": [
+					{ "item_id": "res_venin",   "chance": 0.40 },
+					{ "item_id": "res_ecaille", "chance": 0.25 }
+				]
+			},
+			{
+				"id": "enemy_hydre", "name": "Hydre",
+				"atk": 26, "def": 10, "hp": 160, "tier": 2, "xp_reward": 55,
+				"loot_table": [
+					{ "item_id": "res_venin",       "chance": 0.70 },
+					{ "item_id": "res_ecaille",     "chance": 0.50 },
+					{ "item_id": "res_mineral_fer", "chance": 0.30 }
+				]
+			}
+		],
+		"positive_events": [
+			{ "id": "boue_curative",      "name": "Boue Curative",      "effect": "heal", "value": 20 },
+			{ "id": "champignon_magique", "name": "Champignon Magique", "effect": "luck", "value": 10 }
+		],
+		"traps": [
+			{ "id": "boue_mouvante", "name": "Boue Mouvante",      "damage": 20 },
+			{ "id": "miasmes",       "name": "Miasmes Toxiques",   "damage": 30 },
+			{ "id": "lianes",        "name": "Lianes Tranchantes", "damage": 25 }
+		]
+	},
+	"passive_slots": []
+}

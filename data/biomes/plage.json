@@ -8,16 +8,29 @@
 			"trap":     0.15
 		},
 		"enemies": [
-			{ "id": "enemy_crabe",   "name": "Crabe Géant",    "atk": 14, "def": 6, "hp": 55, "tier": 0, "xp_reward": 14 },
-			{ "id": "enemy_sirene",  "name": "Sirène Hostile", "atk": 18, "def": 4, "hp": 70, "tier": 1, "xp_reward": 22 }
+			{
+				"id": "enemy_crabe", "name": "Crabe Géant",
+				"atk": 14, "def": 6, "hp": 55, "tier": 0, "xp_reward": 14,
+				"loot_table": [
+					{ "item_id": "res_ecaille", "chance": 0.45 }
+				]
+			},
+			{
+				"id": "enemy_sirene", "name": "Sirène Hostile",
+				"atk": 18, "def": 4, "hp": 70, "tier": 1, "xp_reward": 22,
+				"loot_table": [
+					{ "item_id": "res_ecaille",      "chance": 0.30 },
+					{ "item_id": "res_herbe_magique", "chance": 0.25 }
+				]
+			}
 		],
 		"positive_events": [
-			{ "id": "sea_shell",  "name": "Coquillage magique",  "effect": "luck", "value": 8  },
-			{ "id": "tide_pool",  "name": "Mare régénératrice",   "effect": "heal", "value": 30 }
+			{ "id": "sea_shell", "name": "Coquillage magique",  "effect": "luck", "value": 8  },
+			{ "id": "tide_pool", "name": "Mare régénératrice",  "effect": "heal", "value": 30 }
 		],
 		"traps": [
-			{ "id": "quicksand",   "name": "Sables mouvants",  "damage": 20 },
-			{ "id": "jellyfish",   "name": "Méduse venimeuse", "damage": 18 }
+			{ "id": "quicksand",  "name": "Sables mouvants",  "damage": 20 },
+			{ "id": "jellyfish",  "name": "Méduse venimeuse", "damage": 18 }
 		]
 	},
 	"passive_slots": []

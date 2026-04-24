@@ -1,0 +1,8 @@
+{
+	"id": "equip_lame_venimeuse",
+	"name": "Lame Venimeuse",
+	"base_stats": {
+		"slot": "weapon",
+		"bonuses": { "atk": 8 }
+	}
+}

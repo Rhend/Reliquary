@@ -3,6 +3,8 @@ extends Control
 var _bestiary_vbox:   VBoxContainer
 var _hall_filter:     String = "Tout"
 var _filter_buttons:  Dictionary = {}
+var _resources_vbox:  VBoxContainer
+var _forge_vbox:      VBoxContainer
 
 const FILTER_TO_TYPE: Dictionary = {
 	"Créatures":  "Créature",
@@ -60,6 +62,8 @@ func _build_ui() -> void:
 	_build_hero_card(row)
 	_build_equipment_card(row)
 	_build_hall_section(root_vbox)
+	_build_resources_section(root_vbox)
+	_build_forge_section(root_vbox)
 
 # --- Carte "Partir en aventure" ---
 
@@ -405,6 +409,172 @@ func _hall_row() -> HBoxContainer:
 	row.add_theme_constant_override("separation", 10)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return row
+
+# ─────────────────────────────────────────
+#  Inventaire ressources
+# ─────────────────────────────────────────
+
+func _build_resources_section(parent: Node) -> void:
+	var section = VBoxContainer.new()
+	section.add_theme_constant_override("separation", 8)
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(section)
+
+	_section_title(section, "INVENTAIRE")
+	section.add_child(HSeparator.new())
+
+	_resources_vbox = VBoxContainer.new()
+	_resources_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_resources_vbox.add_theme_constant_override("separation", 4)
+	section.add_child(_resources_vbox)
+
+	_refresh_resources()
+
+func _refresh_resources() -> void:
+	if _resources_vbox == null:
+		return
+	for child in _resources_vbox.get_children():
+		child.queue_free()
+
+	var resources: Dictionary = GameData.player.get("resources", {})
+	if resources.is_empty():
+		var empty_lbl = Label.new()
+		empty_lbl.text = "Aucune ressource pour l'instant..."
+		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		empty_lbl.add_theme_font_size_override("font_size", 12)
+		_resources_vbox.add_child(empty_lbl)
+		return
+
+	var row_wrap = HFlowContainer.new()
+	row_wrap.add_theme_constant_override("h_separation", 16)
+	row_wrap.add_theme_constant_override("v_separation", 6)
+	_resources_vbox.add_child(row_wrap)
+
+	for item_id in resources:
+		var qty = int(resources[item_id])
+		if qty <= 0:
+			continue
+		var res  = GameData.get_entity(item_id)
+		var name = res.get("name", item_id)
+
+		var chip = PanelContainer.new()
+		row_wrap.add_child(chip)
+
+		var m    = MarginContainer.new()
+		for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
+			m.add_theme_constant_override(side, 6)
+		chip.add_child(m)
+
+		var hbox = HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 6)
+		m.add_child(hbox)
+
+		var name_lbl = Label.new()
+		name_lbl.text = name
+		name_lbl.add_theme_font_size_override("font_size", 12)
+		hbox.add_child(name_lbl)
+
+		var qty_lbl = Label.new()
+		qty_lbl.text = "×%d" % qty
+		qty_lbl.add_theme_font_size_override("font_size", 12)
+		qty_lbl.add_theme_color_override("font_color", Color(0.7, 1.0, 0.7))
+		hbox.add_child(qty_lbl)
+
+# ─────────────────────────────────────────
+#  Forge
+# ─────────────────────────────────────────
+
+func _build_forge_section(parent: Node) -> void:
+	var section = VBoxContainer.new()
+	section.add_theme_constant_override("separation", 8)
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(section)
+
+	_section_title(section, "FORGE")
+	section.add_child(HSeparator.new())
+
+	_forge_vbox = VBoxContainer.new()
+	_forge_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_forge_vbox.add_theme_constant_override("separation", 10)
+	section.add_child(_forge_vbox)
+
+	_refresh_forge()
+
+func _refresh_forge() -> void:
+	if _forge_vbox == null:
+		return
+	for child in _forge_vbox.get_children():
+		child.queue_free()
+
+	var recipes = GameData.get_forge_recipes()
+	if recipes.is_empty():
+		var empty_lbl = Label.new()
+		empty_lbl.text = "Aucune recette disponible."
+		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		_forge_vbox.add_child(empty_lbl)
+		return
+
+	for recipe in recipes:
+		_add_recipe_card(recipe)
+
+func _add_recipe_card(recipe: Dictionary) -> void:
+	var card = PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_forge_vbox.add_child(card)
+
+	var m    = _margin_container(card, 12)
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 6)
+	m.add_child(vbox)
+
+	var header = HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	vbox.add_child(header)
+
+	var name_lbl = Label.new()
+	name_lbl.text = recipe.get("name", "?")
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(name_lbl)
+
+	var slot_lbl = Label.new()
+	slot_lbl.text = "[%s]" % recipe.get("result_slot", "?")
+	slot_lbl.add_theme_font_size_override("font_size", 11)
+	slot_lbl.add_theme_color_override("font_color", Color(0.55, 0.75, 1.0))
+	header.add_child(slot_lbl)
+
+	var ing_row = HBoxContainer.new()
+	ing_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(ing_row)
+
+	var resources: Dictionary = GameData.player.get("resources", {})
+	var can_craft = GameData.can_craft(recipe)
+
+	for ing in recipe.get("ingredients", []):
+		var item_id  = ing.get("item_id", "")
+		var needed   = int(ing.get("qty", 0))
+		var have     = int(resources.get(item_id, 0))
+		var res_ent  = GameData.get_entity(item_id)
+		var res_name = res_ent.get("name", item_id)
+
+		var ing_lbl = Label.new()
+		ing_lbl.add_theme_font_size_override("font_size", 11)
+		ing_lbl.text = "%s %d/%d" % [res_name, have, needed]
+		ing_lbl.add_theme_color_override("font_color",
+			Color(0.35, 0.85, 0.35) if have >= needed else Color(0.85, 0.35, 0.35))
+		ing_row.add_child(ing_lbl)
+
+	var forge_btn = Button.new()
+	forge_btn.text = "Forger"
+	forge_btn.disabled = not can_craft
+	forge_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	forge_btn.pressed.connect(func(): _on_forge_pressed(recipe))
+	vbox.add_child(forge_btn)
+
+func _on_forge_pressed(recipe: Dictionary) -> void:
+	if GameData.craft(recipe):
+		_refresh_resources()
+		_refresh_forge()
 
 # ─────────────────────────────────────────
 #  Logique aventure

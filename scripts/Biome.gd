@@ -6,6 +6,7 @@ var _c_hp_label:  Label
 var _c_hp_style:  StyleBoxFlat
 var _c_hp_tween:  Tween
 var _c_atk_flash: Label
+var _combo_label: Label
 
 # --- Ennemi (droite) ---
 var _e_name_label:  Label
@@ -17,7 +18,9 @@ var _e_hp_tween:    Tween
 var _e_atk_flash:   Label
 
 # --- Partagé ---
-var _event_label: Label
+var _event_label:    Label
+var _modifier_label: Label
+var _log_vbox:       VBoxContainer
 
 # --- État interne ---
 var _enemy_max_hp:        float  = 0.0
@@ -34,6 +37,12 @@ func _ready() -> void:
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.adventure_event_resolved.connect(_on_event_resolved)
 	EventBus.adventure_cycle_ended.connect(_on_cycle_ended)
+	EventBus.loot_dropped.connect(_on_loot_dropped)
+	EventBus.modifier_activated.connect(_on_modifier_activated)
+	EventBus.combo_changed.connect(_on_combo_changed)
+	# Affiche le modificateur déjà actif si l'aventure était déjà lancée
+	if not AdventureSystem.current_modifier.is_empty():
+		_on_modifier_activated(AdventureSystem.current_modifier)
 
 # ─────────────────────────────────────────
 #  Construction UI
@@ -64,6 +73,13 @@ func _build_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(title)
 
+	_modifier_label = Label.new()
+	_modifier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_modifier_label.add_theme_font_size_override("font_size", 13)
+	_modifier_label.add_theme_color_override("font_color", Color(0.95, 0.75, 0.1))
+	_modifier_label.visible = false
+	root.add_child(_modifier_label)
+
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -73,6 +89,7 @@ func _build_ui() -> void:
 	_build_enemy_card(row)
 
 	_build_event_banner(root)
+	_build_event_log(root)
 
 	var exit_btn = Button.new()
 	exit_btn.text = "◀  Quitter le cycle"
@@ -132,6 +149,14 @@ func _build_creature_card(parent: Node) -> void:
 	equip_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(equip_line)
 
+	_combo_label = Label.new()
+	_combo_label.text = ""
+	_combo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_combo_label.add_theme_font_size_override("font_size", 14)
+	_combo_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.0))
+	_combo_label.visible = false
+	vbox.add_child(_combo_label)
+
 	vbox.add_child(_spacer())
 
 	_c_atk_flash = _flash_label("⚔  ATTAQUE !", Color(1.0, 0.92, 0.05))
@@ -188,6 +213,33 @@ func _build_event_banner(parent: Node) -> void:
 	_event_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	m.add_child(_event_label)
 
+# --- Journal d'événements (8 lignes max) ---
+
+func _build_event_log(parent: Node) -> void:
+	var panel = PanelContainer.new()
+	parent.add_child(panel)
+
+	var m = _pad(panel, 8)
+	var vbox_outer = VBoxContainer.new()
+	vbox_outer.add_theme_constant_override("separation", 4)
+	m.add_child(vbox_outer)
+
+	var header = Label.new()
+	header.text = "JOURNAL"
+	header.add_theme_font_size_override("font_size", 11)
+	header.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+	vbox_outer.add_child(header)
+
+	var scroll = ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 96)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox_outer.add_child(scroll)
+
+	_log_vbox = VBoxContainer.new()
+	_log_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_log_vbox.add_theme_constant_override("separation", 2)
+	scroll.add_child(_log_vbox)
+
 # ─────────────────────────────────────────
 #  Handlers signaux
 # ─────────────────────────────────────────
@@ -205,6 +257,7 @@ func _on_combat_started(_creature_id: String, enemy: Dictionary, creature_hp: fl
 
 	_set_creature_hp(creature_hp)
 	_event_label.text = "⚔  Combat contre %s !" % _current_enemy_name
+	_add_log_entry("⚔  Combat: %s  (PV %d)" % [_current_enemy_name, int(enemy_hp)], Color(0.95, 0.58, 0.12))
 
 func _on_combat_turn(attacker: String, damage: float, creature_hp: float, enemy_hp: float) -> void:
 	_set_creature_hp(creature_hp)
@@ -225,20 +278,29 @@ func _on_combat_turn(attacker: String, damage: float, creature_hp: float, enemy_
 func _on_combat_ended(result: Dictionary) -> void:
 	var enemy_name = result.get("enemy", {}).get("name", "l'ennemi")
 	if result.get("victory", false):
-		_event_label.text = "✅ Victoire contre %s ! Prochain événement dans 2 s..." % enemy_name
+		_event_label.text = "Victoire contre %s ! Prochain événement dans 2 s..." % enemy_name
+		_add_log_entry("  Victoire vs %s" % enemy_name, Color(0.2, 0.85, 0.35))
 	else:
-		_event_label.text = "💀 Défaite contre %s..." % enemy_name
+		_event_label.text = "Défaite contre %s..." % enemy_name
+		_add_log_entry("  Défaite vs %s" % enemy_name, Color(0.88, 0.18, 0.12))
 	_set_creature_hp(result.get("remaining_creature_hp", 0.0))
 
 func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
 		"positive":
-			var effect        = event_data.get("effect", {})
-			_event_label.text = "✨ " + effect.get("name", "Événement positif")
+			var effect = event_data.get("effect", {})
+			_event_label.text = effect.get("name", "Événement positif")
+			_add_log_entry("  " + effect.get("name", "Événement positif"), Color(0.4, 0.9, 0.55))
 			_clear_enemy_display()
 		"trap":
-			var trap          = event_data.get("trap", {})
-			_event_label.text = "🪤 Piège : %s  (−%.0f PV)" % [trap.get("name","?"), trap.get("damage",0.0)]
+			var trap    = event_data.get("trap", {})
+			var ignored = event_data.get("ignored", false)
+			if ignored:
+				_event_label.text = "Piège ignoré : %s  (Fantôme)" % trap.get("name","?")
+				_add_log_entry("  Piège ignoré: %s" % trap.get("name","?"), Color(0.5, 0.5, 0.9))
+			else:
+				_event_label.text = "Piège : %s  (−%.0f PV)" % [trap.get("name","?"), trap.get("damage",0.0)]
+				_add_log_entry("  Piège: %s  −%.0f PV" % [trap.get("name","?"), trap.get("damage",0.0)], Color(0.88, 0.22, 0.22))
 			_clear_enemy_display()
 			_set_creature_hp(AdventureSystem.current_hp)
 
@@ -247,6 +309,38 @@ func _on_cycle_ended(result: Dictionary) -> void:
 		_event_label.text = "💀 Cycle terminé — retour au village dans 2 s..."
 		await get_tree().create_timer(2.0).timeout
 	get_tree().change_scene_to_file("res://scenes/Village.tscn")
+
+func _on_loot_dropped(drops: Array, enemy_name: String) -> void:
+	var parts: Array = []
+	for d in drops:
+		parts.append("%s ×%d" % [d.get("name", "?"), d.get("qty", 1)])
+	_add_log_entry("  Butin [%s] : %s" % [enemy_name, ", ".join(PackedStringArray(parts))], Color(1.0, 0.85, 0.15))
+
+func _on_modifier_activated(modifier: Dictionary) -> void:
+	var m_name = modifier.get("name", "—")
+	var m_desc = modifier.get("desc", "")
+	if m_name == "—" or m_name == "":
+		_modifier_label.visible = false
+	else:
+		_modifier_label.text = "  %s  —  %s  " % [m_name, m_desc]
+		_modifier_label.visible = true
+
+func _on_combo_changed(count: int) -> void:
+	if count > 1:
+		_combo_label.text = "COMBO  ×%d" % count
+		_combo_label.visible = true
+	else:
+		_combo_label.visible = false
+
+func _add_log_entry(text: String, color: Color) -> void:
+	var lbl = Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", color)
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_log_vbox.add_child(lbl)
+	while _log_vbox.get_child_count() > 8:
+		_log_vbox.get_child(0).queue_free()
 
 func _on_exit_pressed() -> void:
 	AdventureSystem.stop_adventure()

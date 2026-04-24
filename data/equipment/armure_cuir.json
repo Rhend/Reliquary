@@ -1,0 +1,8 @@
+{
+	"id": "equip_armure_cuir",
+	"name": "Armure de Cuir",
+	"base_stats": {
+		"slot": "armor",
+		"bonuses": { "def": 3, "hp": 20 }
+	}
+}

@@ -20,7 +20,8 @@ var player: Dictionary = {
 	"equipped": {
 		"weapon": "equip_epee_bois",
 		"shield": "equip_bouclier",
-		"boots":  "equip_bottes"
+		"boots":  "equip_bottes",
+		"armor":  ""
 	},
 	"bestiary": {}
 }
@@ -42,6 +43,8 @@ func _load_all_entities() -> void:
 	_load_entities_from_folder("res://data/biomes/",    "biome")
 	_load_entities_from_folder("res://data/passives/",  "passive")
 	_load_entities_from_folder("res://data/equipment/", "equipment")
+	_load_data_from_folder("res://data/resources/",     "resource")
+	_load_data_from_folder("res://data/forge/",         "recipe")
 
 func _load_entities_from_folder(path: String, entity_type: String) -> void:
 	var dir = DirAccess.open(path)
@@ -58,6 +61,20 @@ func _load_entities_from_folder(path: String, entity_type: String) -> void:
 				data["current_xp"]        = 0.0
 				data["unlocked_passives"] = []
 				entities[data["id"]]      = data
+		file_name = dir.get_next()
+
+func _load_data_from_folder(path: String, entity_type: String) -> void:
+	var dir = DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".json"):
+			var data = _read_json(path + file_name)
+			if not data.is_empty() and data.has("id"):
+				data["entity_type"] = entity_type
+				entities[data["id"]] = data
 		file_name = dir.get_next()
 
 func _read_json(path: String) -> Dictionary:
@@ -140,3 +157,36 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 			tier           = entry["tier"]
 	player["bestiary"] = hall
 	EventBus.bestiary_updated.emit(enc_id)
+
+func get_forge_recipes() -> Array:
+	var result: Array = []
+	for id in entities:
+		if entities[id].get("entity_type") == "recipe":
+			result.append(entities[id])
+	return result
+
+func get_mastery_combat_bonus(enemy_id: String) -> float:
+	var entry = player.get("bestiary", {}).get(enemy_id, {})
+	return float(entry.get("tier", 0)) * 2.0
+
+func add_resource(item_id: String, qty: int) -> void:
+	player["resources"][item_id] = int(player["resources"].get(item_id, 0)) + qty
+
+func can_craft(recipe: Dictionary) -> bool:
+	for ing in recipe.get("ingredients", []):
+		var needed = int(ing.get("qty", 0))
+		var have   = int(player.get("resources", {}).get(ing.get("item_id", ""), 0))
+		if have < needed:
+			return false
+	return true
+
+func craft(recipe: Dictionary) -> bool:
+	if not can_craft(recipe):
+		return false
+	for ing in recipe.get("ingredients", []):
+		var item_id = ing.get("item_id", "")
+		var qty     = int(ing.get("qty", 0))
+		player["resources"][item_id] = int(player["resources"].get(item_id, 0)) - qty
+	var slot = recipe.get("result_slot", "weapon")
+	player["equipped"][slot] = recipe.get("result_id", "")
+	return true

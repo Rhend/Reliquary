@@ -1,0 +1,10 @@
+{
+	"id": "forge_epee_fer",
+	"name": "Épée de Fer",
+	"result_id": "equip_epee_fer",
+	"result_slot": "weapon",
+	"ingredients": [
+		{ "item_id": "res_mineral_fer",  "qty": 5 },
+		{ "item_id": "res_dent_gobelin", "qty": 3 }
+	]
+}

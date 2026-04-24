@@ -1,0 +1,10 @@
+{
+	"id": "forge_bottes_vif",
+	"name": "Bottes Vif-Argent",
+	"result_id": "equip_bottes_vif",
+	"result_slot": "boots",
+	"ingredients": [
+		{ "item_id": "res_fourrure",      "qty": 4 },
+		{ "item_id": "res_herbe_magique", "qty": 3 }
+	]
+}

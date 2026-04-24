@@ -53,7 +53,11 @@ func _on_turn_tick() -> void:
 	var bonuses      = PassiveSystem.get_combat_bonuses()
 	var equip        = GameData.get_equipment_bonuses()
 	c_atk += bonuses.get("atk_bonus", 0.0) + equip.get("atk", 0.0)
+	c_atk += GameData.get_mastery_combat_bonus(_enemy.get("id", ""))
 	c_def += bonuses.get("def_bonus", 0.0)
+	var mod = AdventureSystem.get_modifier_bonuses()
+	c_atk  *= mod.get("atk_mult", 1.0)
+	c_def  *= mod.get("def_mult", 1.0)
 
 	var e_atk = float(_enemy.get("atk", 8))
 	var e_def = float(_enemy.get("def", 3))
