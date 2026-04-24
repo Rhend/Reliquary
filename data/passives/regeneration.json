@@ -1,0 +1,14 @@
+{
+	"id": "passive_regeneration",
+	"name": "Régénération",
+	"base_stats": {
+		"effects": [
+			{
+				"id":          "hp_regen_bonus",
+				"value":       0.05,
+				"description": "+5% régénération supplémentaire entre événements"
+			}
+		]
+	},
+	"passive_slots": []
+}

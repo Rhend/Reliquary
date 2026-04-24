@@ -1,0 +1,24 @@
+{
+	"id": "biome_plage",
+	"name": "Plage Sauvage",
+	"base_stats": {
+		"event_table": {
+			"combat":   0.65,
+			"positive": 0.20,
+			"trap":     0.15
+		},
+		"enemies": [
+			{ "id": "enemy_crabe",   "name": "Crabe Géant",    "atk": 14, "def": 6, "hp": 55, "tier": 0, "xp_reward": 14 },
+			{ "id": "enemy_sirene",  "name": "Sirène Hostile", "atk": 18, "def": 4, "hp": 70, "tier": 1, "xp_reward": 22 }
+		],
+		"positive_events": [
+			{ "id": "sea_shell",  "name": "Coquillage magique",  "effect": "luck", "value": 8  },
+			{ "id": "tide_pool",  "name": "Mare régénératrice",   "effect": "heal", "value": 30 }
+		],
+		"traps": [
+			{ "id": "quicksand",   "name": "Sables mouvants",  "damage": 20 },
+			{ "id": "jellyfish",   "name": "Méduse venimeuse", "damage": 18 }
+		]
+	},
+	"passive_slots": []
+}

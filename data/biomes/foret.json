@@ -1,0 +1,25 @@
+{
+	"id": "biome_foret",
+	"name": "Forêt Sombre",
+	"base_stats": {
+		"event_table": {
+			"combat":   0.70,
+			"positive": 0.15,
+			"trap":     0.15
+		},
+		"enemies": [
+			{ "id": "enemy_gobelin",  "name": "Gobelin",  "atk": 10, "def": 3, "hp": 40, "tier": 0, "xp_reward": 12 },
+			{ "id": "enemy_loup",     "name": "Loup",     "atk": 15, "def": 5, "hp": 60, "tier": 0, "xp_reward": 15 },
+			{ "id": "enemy_sanglier", "name": "Sanglier", "atk": 20, "def": 8, "hp": 90, "tier": 1, "xp_reward": 25 }
+		],
+		"positive_events": [
+			{ "id": "herb_find",    "name": "Herbes médicinales",    "effect": "heal", "value": 20 },
+			{ "id": "lucky_charm",  "name": "Breloque porte-bonheur","effect": "luck", "value": 5  }
+		],
+		"traps": [
+			{ "id": "spike_trap",  "name": "Pièges à pointes",    "damage": 15 },
+			{ "id": "poison_trap", "name": "Baies empoisonnées",   "damage": 25 }
+		]
+	},
+	"passive_slots": []
+}
