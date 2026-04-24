@@ -1,0 +1,11 @@
+# Godot 4 - fichiers générés automatiquement
+.godot/
+*.translation
+export_presets.cfg
+
+# Logs
+*.log
+
+# Exports
+build/
+exports/
