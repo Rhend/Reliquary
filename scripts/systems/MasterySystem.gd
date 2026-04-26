@@ -30,10 +30,12 @@ func add_xp_to_entity(entity_id: String, base_xp: float, generator_tier: int) ->
 	if entity.is_empty():
 		return
 
-	var xp_gained = calculate_xp(base_xp, generator_tier, entity.get("current_tier", 0))
-	entity["current_xp"] = entity.get("current_xp", 0.0) + xp_gained
+	var receiver_tier = entity.get("current_tier", 0)
+	var xp_gained     = calculate_xp(base_xp, generator_tier, receiver_tier)
+	var xp_before     = entity.get("current_xp", 0.0)
+	entity["current_xp"] = xp_before + xp_gained
 	EventBus.xp_gained.emit(entity_id, xp_gained)
-	_check_evolution(entity_id)
+	_check_evolution(entity_id, xp_before)
 
 # Distribue de l'XP à tous les passifs actifs du joueur.
 # Le héro (active_creature_id) est INTENTIONNELLEMENT exclu :
@@ -65,19 +67,23 @@ func add_xp_to_all_active(base_xp: float, generator_tier: int) -> void:
 
 # ─── Contrôle d'évolution ───────────────────────────────────
 
-# Vérifie si une entité a atteint le seuil du tier suivant,
-# et émet un signal si l'évolution est disponible.
-func _check_evolution(entity_id: String) -> void:
+# Vérifie si le seuil vient d'être franchi et émet le signal une seule fois.
+# xp_before = XP de l'entité AVANT l'ajout courant.
+# Le signal n'est émis que si on passe de "sous le seuil" à "au-dessus",
+# évitant le spam de signal sur chaque XP ultérieur.
+func _check_evolution(entity_id: String, xp_before: float) -> void:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return
 	var tier = entity.get("current_tier", 0)
 	if tier >= GameData.MAX_TIER:
-		return   # Déjà au palier maximum
+		return
 	var next_idx = tier + 1
 	if next_idx >= GameData.xp_thresholds.size():
 		return
-	if entity.get("current_xp", 0.0) >= float(GameData.xp_thresholds[next_idx]):
+	var threshold = float(GameData.xp_thresholds[next_idx])
+	# Émet uniquement au franchissement (avant < seuil, maintenant ≥ seuil)
+	if xp_before < threshold and entity.get("current_xp", 0.0) >= threshold:
 		EventBus.entity_ready_to_evolve.emit(entity_id)
 
 # Fait monter une entité d'un tier sur action explicite du joueur.

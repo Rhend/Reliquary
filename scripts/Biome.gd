@@ -794,10 +794,10 @@ func _add_log_entry(text: String, color: Color) -> void:
 	while _log_vbox.get_child_count() > 8:
 		_log_vbox.get_child(0).queue_free()
 
-	# Défile automatiquement vers la dernière entrée
+	# Défile automatiquement vers le bas — valeur arbitrairement grande
+	# car le moteur n'a pas encore mis en page le nouveau label au moment de l'appel.
 	if _scroll_log != null:
-		_scroll_log.call_deferred("set", "scroll_vertical",
-			_scroll_log.get_v_scroll_bar().max_value)
+		_scroll_log.call_deferred("set", "scroll_vertical", 999999)
 
 # Met à jour le bandeau d'événement avec la couleur du type.
 func _set_event_banner(event_type: String, text: String) -> void:

@@ -1,9 +1,12 @@
 # ============================================================
 # SaveManager.gd — Sauvegarde automatique sur progression.
 #
-# La sauvegarde est déclenchée par tout signal indiquant une
-# progression (XP gagné, bestiaire mis à jour, ressources
-# modifiées, évolution) afin que rien ne soit jamais perdu.
+# Stratégie de déclenchement :
+#   Les signaux de progression marquent un flag "dirty" et
+#   démarrent un timer de SAVE_DEBOUNCE secondes.  La sauvegarde
+#   n'est écrite sur disque qu'à l'expiration du timer, pas à
+#   chaque signal.  Cela évite les dizaines de writes par combat
+#   (xp_gained × creature + biome + N passifs + bestiary_updated).
 #
 # Format : JSON indenté, un seul fichier.
 # Chemin  : user://IdleEvolutionSave.json
@@ -12,19 +15,36 @@
 # ============================================================
 extends Node
 
-const SAVE_PATH = "user://IdleEvolutionSave.json"
-const SAVE_VER  = 2   # À incrémenter lors d'un changement de format incompatible
+const SAVE_PATH     = "user://IdleEvolutionSave.json"
+const SAVE_VER      = 2      # Incrémenter lors d'un changement de format incompatible
+const SAVE_DEBOUNCE = 2.0    # Secondes d'inactivité avant l'écriture sur disque
+
+var _save_dirty: bool  = false
+var _save_timer: Timer
 
 func _ready() -> void:
-	# Connexion à tous les signaux de progression — chacun déclenche une sauvegarde
+	_save_timer           = Timer.new()
+	_save_timer.one_shot  = true
+	_save_timer.wait_time = SAVE_DEBOUNCE
+	_save_timer.timeout.connect(_flush_save)
+	add_child(_save_timer)
+
 	EventBus.xp_gained.connect(_on_progress)
 	EventBus.bestiary_updated.connect(_on_progress)
 	EventBus.resources_changed.connect(_on_progress)
 	EventBus.entity_evolved.connect(_on_progress)
 
-# Callback mutualisé : les paramètres éventuels des signaux sont ignorés.
+# Marque la sauvegarde comme nécessaire et remet le timer à zéro.
+# start() sur un Timer en cours le relance depuis le début.
 func _on_progress(_a = null, _b = null) -> void:
-	save()
+	_save_dirty = true
+	_save_timer.start()
+
+# Appelé quand le timer expire : écrit sur disque une seule fois.
+func _flush_save() -> void:
+	if _save_dirty:
+		_save_dirty = false
+		save()
 
 # ═══════════════════════════════════════════════════════════
 #  Sauvegarde
@@ -33,11 +53,10 @@ func _on_progress(_a = null, _b = null) -> void:
 func save() -> void:
 	var save_data: Dictionary = {
 		"version": SAVE_VER,
-		"player":  GameData.player.duplicate(true),   # copie profonde
+		"player":  GameData.player.duplicate(true),
 		"entities": {}
 	}
 
-	# On ne persiste que les entités qui ont un système de progression
 	for entity_id in GameData.entities:
 		var e = GameData.entities[entity_id]
 		if not e.has("current_tier"):
@@ -77,7 +96,13 @@ func load_save() -> void:
 
 	var save_data: Dictionary = json.get_data()
 
-	# Fusionne l'état joueur sauvegardé dans l'état courant (true = écrase)
+	# Avertissement si la version de la sauvegarde ne correspond pas
+	var saved_ver = int(save_data.get("version", 0))
+	if saved_ver != SAVE_VER:
+		push_warning("SaveManager: version %d en mémoire, %d attendu — chargement tenté" \
+			% [saved_ver, SAVE_VER])
+
+	# Fusionne l'état joueur sauvegardé (true = les clés du save écrasent les défauts)
 	if save_data.has("player"):
 		GameData.player.merge(save_data["player"], true)
 

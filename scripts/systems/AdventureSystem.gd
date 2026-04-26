@@ -239,7 +239,7 @@ func _handle_trap_event(creature_id: String, event_data: Dictionary) -> void:
 		_schedule_next_event()
 	else:
 		_cycle_events += 1
-		current_hp -= float(trap.get("damage", 10))
+		current_hp = maxf(current_hp - float(trap.get("damage", 10)), 0.0)
 		GameData.record_encounter(
 			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
 		)
@@ -371,7 +371,7 @@ func _drop_loot(enemy: Dictionary) -> void:
 	var luck_bonus: float = float(_get_effective_luck()) * 0.01
 
 	for entry in loot_table:
-		var roll_threshold = float(entry.get("chance", 0.0)) + luck_bonus
+		var roll_threshold = minf(float(entry.get("chance", 0.0)) + luck_bonus, 1.0)
 		if randf() < roll_threshold:
 			var item_id = entry.get("item_id", "")
 			if item_id == "":
