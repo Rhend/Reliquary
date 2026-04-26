@@ -111,7 +111,6 @@ func evolve_entity(entity_id: String) -> bool:
 
 	_unlock_passives_for_tier(entity_id, tier + 1)
 	EventBus.entity_evolved.emit(entity_id, tier + 1)
-	PassiveSystem.refresh_active_passives()
 	return true
 
 # Débloque les passifs configurés pour se débloquer au tier atteint.

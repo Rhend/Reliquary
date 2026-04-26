@@ -37,23 +37,23 @@ const COMBO_ATK_BONUS_PCT:  float = 0.05   # +5 % ATK par niveau de combo au-des
 # ─── Modificateurs de cycle disponibles ─────────────────────
 const CYCLE_MODIFIERS: Array = [
 	{
-		"id": "none", "name": "—", "desc": "", "xp_mult": 1.0
+		"id": "none", "name": "—", "desc": "", "xp_mult": 1.0, "weight": 66
 	},
 	{
 		"id": "bonus_xp", "name": "Cycle Chanceux",
-		"desc": "XP ×1.5 ce cycle", "xp_mult": 1.5
+		"desc": "XP ×1.5 ce cycle", "xp_mult": 1.5, "weight": 15
 	},
 	{
 		"id": "resilient", "name": "Endurance",
-		"desc": "Régénère 30 % entre combats", "xp_mult": 0.8, "regen_pct": 0.30
+		"desc": "Régénère 30 % entre combats", "xp_mult": 0.8, "regen_pct": 0.30, "weight": 10
 	},
 	{
 		"id": "ghost", "name": "Fantôme",
-		"desc": "Pièges ignorés, XP ×0.7", "xp_mult": 0.7, "ignore_traps": true
+		"desc": "Pièges ignorés, XP ×0.7", "xp_mult": 0.7, "ignore_traps": true, "weight": 5
 	},
 	{
 		"id": "berserker_mod", "name": "Frénésie",
-		"desc": "ATK ×1.3, DEF ×0.6", "xp_mult": 1.1, "atk_mult": 1.3, "def_mult": 0.6
+		"desc": "ATK ×1.3, DEF ×0.6", "xp_mult": 1.1, "atk_mult": 1.3, "def_mult": 0.6, "weight": 4
 	},
 ]
 
@@ -349,17 +349,17 @@ func _roll_event_type() -> String:
 		return "trap"
 
 func _pick_modifier() -> void:
-	var roll = randf()
-	if roll < 0.04:
-		current_modifier = CYCLE_MODIFIERS[4]   # Frénésie       — 4 %
-	elif roll < 0.09:
-		current_modifier = CYCLE_MODIFIERS[3]   # Fantôme        — 5 %
-	elif roll < 0.19:
-		current_modifier = CYCLE_MODIFIERS[2]   # Endurance      — 10 %
-	elif roll < 0.34:
-		current_modifier = CYCLE_MODIFIERS[1]   # Cycle Chanceux — 15 %
-	else:
-		current_modifier = CYCLE_MODIFIERS[0]   # Normal         — 66 %
+	var total_weight: int = 0
+	for m in CYCLE_MODIFIERS:
+		total_weight += int(m.get("weight", 1))
+
+	var roll       = randi() % total_weight
+	var cumulative = 0
+	for m in CYCLE_MODIFIERS:
+		cumulative += int(m.get("weight", 1))
+		if roll < cumulative:
+			current_modifier = m
+			break
 	EventBus.modifier_activated.emit(current_modifier)
 
 func _drop_loot(enemy: Dictionary) -> void:

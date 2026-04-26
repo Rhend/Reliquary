@@ -757,14 +757,16 @@ func _refresh_resources() -> void:
 
 	var resources: Dictionary = GameData.player.get("resources", {})
 
-	# Filtre les ressources à quantité nulle ou négative
-	var has_any = false
+	# Trie les ressources à quantité positive par nom
+	var sorted_ids: Array = []
 	for item_id in resources:
 		if int(resources[item_id]) > 0:
-			has_any = true
-			break
+			sorted_ids.append(item_id)
+	sorted_ids.sort_custom(func(a, b):
+		return GameData.get_entity(a).get("name", a) < GameData.get_entity(b).get("name", b)
+	)
 
-	if not has_any:
+	if sorted_ids.is_empty():
 		var empty_lbl = Label.new()
 		empty_lbl.text = "Aucune ressource pour le moment..."
 		empty_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
@@ -778,19 +780,8 @@ func _refresh_resources() -> void:
 	flow.add_theme_constant_override("v_separation", 6)
 	_resources_vbox.add_child(flow)
 
-	# Trie les ressources par nom pour un inventaire stable et lisible
-	var sorted_ids: Array = []
-	for item_id in resources:
-		if int(resources[item_id]) > 0:
-			sorted_ids.append(item_id)
-	sorted_ids.sort_custom(func(a, b):
-		return GameData.get_entity(a).get("name", a) < GameData.get_entity(b).get("name", b)
-	)
-
 	for item_id in sorted_ids:
 		var qty = int(resources[item_id])
-		if qty <= 0:
-			continue
 		var res      = GameData.get_entity(item_id)
 		var res_name = res.get("name", item_id)
 

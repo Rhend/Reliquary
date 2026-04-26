@@ -216,7 +216,9 @@ func _build_creature_card(parent: Node) -> void:
 	var creature      = GameData.get_entity(creature_id)
 	var equip_bonuses = GameData.get_equipment_bonuses()
 	var eff_stats     = GameData.get_effective_stats(creature_id)
-	var max_hp        = float(eff_stats.get("hp", 100)) + equip_bonuses.get("hp", 0.0)
+	var passives      = PassiveSystem.get_combat_bonuses()
+	var max_hp        = float(eff_stats.get("hp", 100)) + equip_bonuses.get("hp", 0.0) \
+	                    + passives.get("hp_bonus", 0.0)
 	var initial_hp    = AdventureSystem.current_hp if AdventureSystem.is_running else max_hp
 
 	_h1(vbox, creature.get("name", "Héro").to_upper())
@@ -232,8 +234,8 @@ func _build_creature_card(parent: Node) -> void:
 
 	var stats_lbl = Label.new()
 	stats_lbl.text = "ATK %d   DEF %d   PV %d" % [
-		int(eff_stats.get("atk", 0)) + int(equip_bonuses.get("atk", 0)),
-		eff_stats.get("def", 0),
+		int(eff_stats.get("atk", 0)) + int(equip_bonuses.get("atk", 0)) + int(passives.get("atk_bonus", 0.0)),
+		int(eff_stats.get("def", 0)) + int(passives.get("def_bonus", 0.0)),
 		int(max_hp)
 	]
 	stats_lbl.add_theme_font_size_override("font_size", 12)

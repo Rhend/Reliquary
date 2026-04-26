@@ -96,6 +96,7 @@ func _load_entities_from_folder(path: String, entity_type: String) -> void:
 				data["unlocked_passives"] = []
 				entities[data["id"]]      = data
 		file_name = dir.get_next()
+	dir.list_dir_end()
 
 # Charge un dossier de données statiques (sans champs de progression).
 func _load_data_from_folder(path: String, entity_type: String) -> void:
@@ -111,6 +112,7 @@ func _load_data_from_folder(path: String, entity_type: String) -> void:
 				data["entity_type"] = entity_type
 				entities[data["id"]] = data
 		file_name = dir.get_next()
+	dir.list_dir_end()
 
 # Lit et parse un fichier JSON. Retourne {} en cas d'erreur.
 func _read_json(path: String) -> Dictionary:
@@ -201,11 +203,13 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 		}
 
 	var entry: Dictionary = hall[enc_id]
-	entry["count"] += 1
 
-	# Distribution d'XP et montée de tier éventuelle
+	# count n'est incrémenté qu'à la complétion (xp_reward > 0) pour éviter
+	# le double-comptage : l'entrée est créée au début du combat (xp=0)
+	# mais le kill n'est confirmé qu'à la victoire (xp>0).
 	if xp_reward > 0.0:
-		entry["xp"] += xp_reward
+		entry["count"] += 1
+		entry["xp"]    += xp_reward
 		var tier: int = entry.get("tier", 0)
 		while tier < MAX_TIER:
 			var next_idx: int = tier + 1
@@ -217,7 +221,7 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 			entry["tier"] += 1
 			tier            = entry["tier"]
 
-	player["bestiary"] = hall
+	# Pas de player["bestiary"] = hall : hall est déjà la même référence
 	EventBus.bestiary_updated.emit(enc_id)
 
 # ═══════════════════════════════════════════════════════════
