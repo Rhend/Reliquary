@@ -1,15 +1,30 @@
+# ============================================================
+# MasterySystem.gd — Gestion de la progression par maîtrise.
+#
+# Principes fondamentaux :
+#   • Le héro lui-même n'évolue PAS — ce sont les entités
+#     autour de lui (passifs, biomes) qui progressent.
+#   • L'XP reçue est modulée par l'écart de tier entre le
+#     générateur (l'ennemi vaincu) et le récepteur :
+#       - Générateur plus fort → moins d'XP (diminishing returns)
+#       - Générateur plus faible → plus d'XP (catch-up mechanic)
+#   • L'évolution est toujours déclenchée manuellement par
+#     le joueur ; le système ne fait que signaler quand c'est possible.
+# ============================================================
 extends Node
 
-# Calcule le XP effectif reçu selon l'écart de palier entre générateur et récepteur.
-# écart = generator_tier - receiver_tier
-# Valeurs positives : générateur plus fort → moins d'XP (diminishing returns)
-# Valeurs négatives : générateur plus faible → plus d'XP (catch-up)
+# ─── Calcul XP ──────────────────────────────────────────────
+
+# Applique le modificateur d'écart de tier à l'XP de base.
+# écart = generator_tier - receiver_tier, clampé entre -4 et +4.
 func calculate_xp(base_xp: float, generator_tier: int, receiver_tier: int) -> float:
 	var ecart    = clampi(generator_tier - receiver_tier, -4, 4)
 	var modifier = float(GameData.xp_modifiers.get(str(ecart), 1.0))
 	return base_xp * modifier
 
-# Distribue de l'XP à une entité unique et vérifie si elle peut évoluer.
+# ─── Distribution d'XP ──────────────────────────────────────
+
+# Distribue de l'XP à une seule entité et vérifie si elle peut évoluer.
 func add_xp_to_entity(entity_id: String, base_xp: float, generator_tier: int) -> void:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
@@ -20,29 +35,34 @@ func add_xp_to_entity(entity_id: String, base_xp: float, generator_tier: int) ->
 	EventBus.xp_gained.emit(entity_id, xp_gained)
 	_check_evolution(entity_id)
 
-# Le héro n'évolue pas directement : ce sont les entités autour de lui qui progressent.
-# Seuls les passifs actifs reçoivent de l'XP ici.
+# Distribue de l'XP à tous les passifs actifs du joueur.
+# Le héro (active_creature_id) est INTENTIONNELLEMENT exclu :
+# sa progression passe par l'équipement forgé et les biomes explorés,
+# pas par un système d'XP direct.
 func add_xp_to_all_active(base_xp: float, generator_tier: int) -> void:
 	for passive_id in GameData.player.get("active_passives", []):
+		# Les passifs reçoivent 50 % de l'XP de base pour équilibrer leur progression
 		add_xp_to_entity(passive_id, base_xp * 0.5, generator_tier)
 
-# Déclenche le signal d'évolution possible sans faire évoluer automatiquement.
-# L'évolution est toujours déclenchée manuellement par le joueur.
+# ─── Contrôle d'évolution ───────────────────────────────────
+
+# Vérifie si une entité a atteint le seuil du tier suivant,
+# et émet un signal si l'évolution est disponible.
 func _check_evolution(entity_id: String) -> void:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return
 	var tier = entity.get("current_tier", 0)
 	if tier >= GameData.MAX_TIER:
-		return
+		return   # Déjà au palier maximum
 	var next_idx = tier + 1
 	if next_idx >= GameData.xp_thresholds.size():
 		return
 	if entity.get("current_xp", 0.0) >= float(GameData.xp_thresholds[next_idx]):
 		EventBus.entity_ready_to_evolve.emit(entity_id)
 
-# Fait évoluer une entité d'un palier. Retourne false si impossible.
-# À appeler sur action explicite du joueur uniquement.
+# Fait monter une entité d'un tier sur action explicite du joueur.
+# Retourne true si l'évolution a réussi, false sinon (XP insuffisant, tier max).
 func evolve_entity(entity_id: String) -> bool:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
@@ -60,21 +80,24 @@ func evolve_entity(entity_id: String) -> bool:
 	if entity.get("current_xp", 0.0) < threshold:
 		return false
 
-	entity["current_tier"] = tier + 1
-	entity["current_xp"]   = entity["current_xp"] - threshold
+	# Monte le tier et soustrait l'XP dépensée (le surplus est conservé)
+	entity["current_tier"]  = tier + 1
+	entity["current_xp"]    = entity["current_xp"] - threshold
 
 	_unlock_passives_for_tier(entity_id, tier + 1)
 	EventBus.entity_evolved.emit(entity_id, tier + 1)
 	PassiveSystem.refresh_active_passives()
 	return true
 
+# Débloque les passifs configurés pour se débloquer au tier atteint.
 func _unlock_passives_for_tier(entity_id: String, tier: int) -> void:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return
 	for slot in entity.get("passive_slots", []):
-		if slot.get("unlock_tier", 99) == tier:
-			var passive_id = slot.get("passive_id", "")
-			if passive_id != "" and passive_id not in entity.get("unlocked_passives", []):
-				entity["unlocked_passives"].append(passive_id)
-				EventBus.passive_unlocked.emit(entity_id, passive_id)
+		if slot.get("unlock_tier", 99) != tier:
+			continue
+		var passive_id = slot.get("passive_id", "")
+		if passive_id != "" and passive_id not in entity.get("unlocked_passives", []):
+			entity["unlocked_passives"].append(passive_id)
+			EventBus.passive_unlocked.emit(entity_id, passive_id)

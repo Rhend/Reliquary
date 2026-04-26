@@ -11,13 +11,14 @@ config_version=5
 [application]
 
 config/name="IdleEvolution"
-run/main_scene="uid://main"
+run/main_scene="uid://village"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
 config/main_scene="res://scenes/Main.tscn"
 
 [autoload]
 
+UIColors="*res://scripts/autoloads/UIColors.gd"
 EventBus="*res://scripts/autoloads/EventBus.gd"
 GameData="*res://scripts/autoloads/GameData.gd"
 SaveManager="*res://scripts/autoloads/SaveManager.gd"
