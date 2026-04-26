@@ -1,25 +1,25 @@
 # ============================================================
 # UIColors.gd — Palette de couleurs centralisée.
 #
-# Toutes les teintes de l'interface sont définies ici et
-# référencées par nom dans Village.gd et Biome.gd.
+# Toutes les teintes de l'interface sont définies ici.
 # Modifier une valeur ici la propage dans tout le jeu.
 #
 # Convention :
-#   • Constantes en SCREAMING_SNAKE pour les valeurs brutes
+#   • Constantes SCREAMING_SNAKE pour les valeurs brutes
 #   • Fonctions statiques pour la logique conditionnelle
 # ============================================================
 extends Node
 
 # ── Arrière-plans ───────────────────────────────────────────
-const BG_DARK := Color(0.06, 0.07, 0.11)   # fond principal de scène
-const BG_CARD := Color(0.10, 0.11, 0.16)   # fond d'une carte PanelContainer
-const BG_BAR  := Color(0.07, 0.07, 0.12)   # fond d'une ProgressBar
+const BG_DARK := Color(0.06, 0.07, 0.11)
+const BG_CARD := Color(0.10, 0.11, 0.16)
+const BG_BAR  := Color(0.07, 0.07, 0.12)
 
-# ── Barres de PV — Héro (vert → jaune → rouge) ─────────────
-const HP_HIGH := Color(0.18, 0.82, 0.32)   # > 60 %
-const HP_MID  := Color(0.90, 0.74, 0.08)   # 30–60 %
-const HP_LOW  := Color(0.88, 0.18, 0.12)   # < 30 %
+# ── Barres de PV — Héro (vert → jaune → rouge → rouge vif) ─
+const HP_HIGH     := Color(0.18, 0.82, 0.32)   # > 60 %
+const HP_MID      := Color(0.90, 0.74, 0.08)   # 30–60 %
+const HP_LOW      := Color(0.88, 0.18, 0.12)   # 15–30 %
+const HP_CRITICAL := Color(1.00, 0.05, 0.05)   # < 15 % — danger immédiat
 
 # ── Barres de PV — Ennemi (rouge → orange → jaune) ─────────
 # Logique inversée : rouge = fort, jaune = presque vaincu.
@@ -50,6 +50,10 @@ const LOG_IGNORED  := Color(0.50, 0.55, 0.92)
 # ── Modificateur de cycle ───────────────────────────────────
 const MODIFIER_ACTIVE := Color(0.95, 0.75, 0.10)
 
+# ── Effets visuels ──────────────────────────────────────────
+const VICTORY_GLOW := Color(0.22, 1.00, 0.48)   # flash carte héro après victoire
+const HEAL_COLOR   := Color(0.25, 0.95, 0.40)   # nombres flottants de soin
+
 # ── Forge / Recettes ────────────────────────────────────────
 const INGREDIENT_OK      := Color(0.35, 0.85, 0.35)
 const INGREDIENT_MISSING := Color(0.85, 0.35, 0.35)
@@ -75,14 +79,15 @@ const COMBO_COLOR := Color(1.00, 0.62, 0.05)
 #  Fonctions utilitaires (logique conditionnelle)
 # ───────────────────────────────────────────────────────────
 
-# Couleur de la barre de PV du héro selon son pourcentage de vie (0.0–1.0).
+# Couleur de la barre de PV du héro — 4 niveaux de danger.
 static func hero_hp(pct: float) -> Color:
 	if pct > 0.60: return HP_HIGH
 	if pct > 0.30: return HP_MID
-	return HP_LOW
+	if pct > 0.15: return HP_LOW
+	return HP_CRITICAL
 
 # Couleur de la barre de PV d'un ennemi.
-# (logique inversée : rouge quand il est fort, jaune quand il est presque mort)
+# Logique inversée : rouge quand il est fort, jaune quand il faiblit.
 static func enemy_hp(pct: float) -> Color:
 	if pct > 0.60: return ENEMY_HIGH
 	if pct > 0.30: return ENEMY_MID
@@ -96,3 +101,11 @@ static func encounter(enc_type: String) -> Color:
 		"Événement": return TYPE_EVENT_POS
 		"Biome":     return TYPE_BIOME
 		_:           return Color.WHITE
+
+# Préfixe icône + couleur pour le bandeau d'événement.
+static func event_banner(event_type: String) -> Array:
+	match event_type:
+		"combat":   return ["⚔ ", LOG_COMBAT]
+		"positive": return ["✦ ", LOG_EVENT]
+		"trap":     return ["▲ ", LOG_TRAP]
+		_:          return ["", Color.WHITE]

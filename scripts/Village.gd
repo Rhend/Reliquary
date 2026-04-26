@@ -144,11 +144,13 @@ func _build_adventure_card(parent: Node) -> void:
 	vbox.add_theme_constant_override("separation", 14)
 	m.add_child(vbox)
 
-	_title_label(vbox, "PARTIR EN AVENTURE")
+	_title_label(vbox, "PARTIR EN AVENTURE", UIColors.TYPE_EVENT_POS)
 	vbox.add_child(HSeparator.new())
 
 	var biome_lbl = Label.new()
 	biome_lbl.text = "Choisir un biome :"
+	biome_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	biome_lbl.add_theme_font_size_override("font_size", 12)
 	vbox.add_child(biome_lbl)
 
 	# Peuple la liste avec tous les biomes disponibles
@@ -160,6 +162,29 @@ func _build_adventure_card(parent: Node) -> void:
 			biome_selector.add_item(e.get("name", entity_id))
 			biome_selector.set_item_metadata(biome_selector.item_count - 1, entity_id)
 	vbox.add_child(biome_selector)
+
+	# Aperçu du biome sélectionné : ennemis · events · pièges
+	var biome_preview = Label.new()
+	biome_preview.add_theme_font_size_override("font_size", 11)
+	biome_preview.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	biome_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(biome_preview)
+
+	var _refresh_preview = func():
+		if biome_selector.item_count == 0:
+			return
+		var bid    = biome_selector.get_item_metadata(biome_selector.selected)
+		var bdata  = GameData.get_entity(bid)
+		var bstats = bdata.get("base_stats", {})
+		var n_enemies = bstats.get("enemies", []).size()
+		var n_events  = bstats.get("positive_events", []).size()
+		var n_traps   = bstats.get("traps", []).size()
+		biome_preview.text = "%d ennemis · %d événements · %d pièges" % [
+			n_enemies, n_events, n_traps
+		]
+
+	_refresh_preview.call()
+	biome_selector.item_selected.connect(func(_i): _refresh_preview.call())
 
 	vbox.add_child(_spacer())
 
@@ -176,10 +201,17 @@ func _build_hero_card(parent: Node) -> void:
 	card.custom_minimum_size = Vector2(260, 0)
 	parent.add_child(card)
 
-	var m = _margin(card, 18)
+	var m    = _margin(card, 18)
+	var wrap = VBoxContainer.new()
+	wrap.add_theme_constant_override("separation", 8)
+	m.add_child(wrap)
+
+	_title_label(wrap, "HÉRO", UIColors.STAT_HP)
+	wrap.add_child(HSeparator.new())
+
 	_hero_vbox = VBoxContainer.new()
 	_hero_vbox.add_theme_constant_override("separation", 8)
-	m.add_child(_hero_vbox)
+	wrap.add_child(_hero_vbox)
 
 	_fill_hero_card()
 
@@ -318,7 +350,7 @@ func _build_equipment_card(parent: Node) -> void:
 	vbox.add_theme_constant_override("separation", 10)
 	m.add_child(vbox)
 
-	_title_label(vbox, "ÉQUIPEMENT")
+	_title_label(vbox, "ÉQUIPEMENT", UIColors.STAT_DEF)
 	vbox.add_child(HSeparator.new())
 
 	for slot in ["weapon", "shield", "boots", "armor"]:
@@ -373,7 +405,7 @@ func _build_hall_section(parent: Node) -> void:
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(section)
 
-	_title_label(section, "HALL DES ÉVOLUTIONS")
+	_title_label(section, "HALL DES ÉVOLUTIONS", UIColors.TYPE_CREATURE)
 	section.add_child(HSeparator.new())
 	_build_filter_buttons(section)
 
@@ -411,14 +443,25 @@ func _on_filter_pressed(filter: String) -> void:
 	_update_filter_highlight()
 	_refresh_bestiary()
 
-# Met en évidence le bouton de filtre actif en jaune.
+# Surligne le filtre actif avec un fond coloré, les inactifs restent plats.
 func _update_filter_highlight() -> void:
 	for f in _filter_buttons:
 		var btn: Button = _filter_buttons[f]
 		if f == _hall_filter:
-			btn.add_theme_color_override("font_color",       UIColors.FILTER_ON)
-			btn.add_theme_color_override("font_hover_color", UIColors.FILTER_ON)
+			var s = StyleBoxFlat.new()
+			s.bg_color = UIColors.FILTER_ON
+			for corner in ["corner_radius_top_left","corner_radius_top_right",
+					"corner_radius_bottom_right","corner_radius_bottom_left"]:
+				s.set(corner, 4)
+			btn.add_theme_stylebox_override("normal",  s)
+			btn.add_theme_stylebox_override("hover",   s)
+			btn.add_theme_stylebox_override("pressed", s)
+			btn.add_theme_color_override("font_color",       UIColors.BG_DARK)
+			btn.add_theme_color_override("font_hover_color", UIColors.BG_DARK)
 		else:
+			btn.remove_theme_stylebox_override("normal")
+			btn.remove_theme_stylebox_override("hover")
+			btn.remove_theme_stylebox_override("pressed")
 			btn.remove_theme_color_override("font_color")
 			btn.remove_theme_color_override("font_hover_color")
 
@@ -654,7 +697,7 @@ func _build_resources_section(parent: Node) -> void:
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(section)
 
-	_title_label(section, "INVENTAIRE")
+	_title_label(section, "INVENTAIRE", UIColors.RESOURCE_QTY)
 	section.add_child(HSeparator.new())
 
 	_resources_vbox = VBoxContainer.new()
@@ -734,7 +777,7 @@ func _build_forge_section(parent: Node) -> void:
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(section)
 
-	_title_label(section, "FORGE")
+	_title_label(section, "FORGE", UIColors.STAT_ATK)
 	section.add_child(HSeparator.new())
 
 	_forge_vbox = VBoxContainer.new()
@@ -866,7 +909,7 @@ func _build_passives_section(parent: Node) -> void:
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(section)
 
-	_title_label(section, "PASSIFS ACTIFS")
+	_title_label(section, "PASSIFS ACTIFS", UIColors.TEXT_BONUS)
 	section.add_child(HSeparator.new())
 
 	_passives_vbox = VBoxContainer.new()
@@ -985,13 +1028,23 @@ func _margin(parent: Node, px: int) -> MarginContainer:
 	parent.add_child(m)
 	return m
 
-# Titre de section centré.
-func _title_label(parent: Node, text: String) -> void:
+# Titre de section : barre d'accent colorée à gauche + texte.
+func _title_label(parent: Node, text: String, accent: Color = UIColors.TEXT_HEADER) -> void:
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 10)
+	parent.add_child(hbox)
+
+	var bar = ColorRect.new()
+	bar.color = accent
+	bar.custom_minimum_size = Vector2(3, 20)
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hbox.add_child(bar)
+
 	var lbl = Label.new()
 	lbl.text = text
 	lbl.add_theme_font_size_override("font_size", 15)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	parent.add_child(lbl)
+	lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
+	hbox.add_child(lbl)
 
 # Spacer vertical pour pousser le contenu vers le haut.
 func _spacer() -> Control:
