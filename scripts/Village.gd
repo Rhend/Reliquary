@@ -19,6 +19,7 @@ extends Control
 var _bestiary_vbox:   VBoxContainer
 var _resources_vbox:  VBoxContainer
 var _forge_vbox:      VBoxContainer
+var _passives_vbox:   VBoxContainer
 var _fade_rect:       ColorRect      # Overlay de transition de scène
 
 # ─── État du filtre Hall des Évolutions ─────────────────────
@@ -62,6 +63,8 @@ func _ready() -> void:
 	EventBus.loot_dropped.connect(func(_d, _n): _refresh_resources())
 	EventBus.resources_changed.connect(_refresh_resources)
 	EventBus.bestiary_updated.connect(func(_id): _refresh_bestiary())
+	EventBus.entity_evolved.connect(_on_entity_evolved)
+	EventBus.passive_unlocked.connect(func(_eid, _pid): _refresh_passives())
 
 # ═══════════════════════════════════════════════════════════
 #  Construction de l'interface (appelée une seule fois)
@@ -112,6 +115,7 @@ func _build_ui() -> void:
 
 	# Sections inférieures
 	_build_hall_section(root_vbox)
+	_build_passives_section(root_vbox)
 	_build_resources_section(root_vbox)
 	_build_forge_section(root_vbox)
 
@@ -366,20 +370,110 @@ func _refresh_bestiary() -> void:
 			_add_entry_row(entry)
 		_bestiary_vbox.add_child(HSeparator.new())
 
-# Affiche les biomes comme des "rencontres" spéciales dans le Hall.
+# Affiche les biomes avec leur XP/tier et un bouton Évoluer si disponible.
 func _populate_biomes() -> void:
 	_add_group_header("BIOMES EXPLORÉS")
 	for entity_id in GameData.entities:
 		var e = GameData.entities[entity_id]
 		if e.get("entity_type") != "biome":
 			continue
-		_add_entry_row({
-			"name":  e.get("name", "?"),
-			"type":  "Biome",
-			"tier":  e.get("current_tier", 0),
-			"xp":    e.get("current_xp",   0.0),
-			"count": 0
-		})
+		_add_evolvable_row(entity_id, e, UIColors.TYPE_BIOME)
+
+# Ligne d'entité évolutive (biome ou passif) avec barre XP et bouton Évoluer.
+func _add_evolvable_row(entity_id: String, entity: Dictionary, bar_color: Color) -> void:
+	var tier:     int   = entity.get("current_tier", 0)
+	var xp:       float = entity.get("current_xp",   0.0)
+	var next_idx: int   = mini(tier + 1, GameData.xp_thresholds.size() - 1)
+	var xp_max:   float = float(GameData.xp_thresholds[next_idx]) if tier < GameData.MAX_TIER else 1.0
+	var can_evolve: bool = tier < GameData.MAX_TIER and xp >= xp_max
+
+	var row = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bestiary_vbox.add_child(row)
+
+	# Colonne gauche : nom + tier
+	var left = VBoxContainer.new()
+	left.custom_minimum_size = Vector2(160, 0)
+	row.add_child(left)
+
+	var name_lbl = Label.new()
+	name_lbl.text = entity.get("name", "?")
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	left.add_child(name_lbl)
+
+	var tier_lbl = Label.new()
+	tier_lbl.text = GameData.get_tier_name(tier)
+	tier_lbl.add_theme_font_size_override("font_size", 11)
+	tier_lbl.add_theme_color_override("font_color",
+		UIColors.FILTER_ON if tier > 0 else UIColors.TEXT_MUTED)
+	left.add_child(tier_lbl)
+
+	# Passifs déjà débloqués sur cette entité
+	var unlocked = entity.get("unlocked_passives", [])
+	if not unlocked.is_empty():
+		var pnames: Array = []
+		for pid in unlocked:
+			pnames.append(GameData.get_entity(pid).get("name", pid))
+		var plab = Label.new()
+		plab.text = "Passifs : " + ", ".join(PackedStringArray(pnames))
+		plab.add_theme_font_size_override("font_size", 10)
+		plab.add_theme_color_override("font_color", UIColors.TEXT_BONUS)
+		left.add_child(plab)
+
+	# Prochain passif à débloquer
+	var next_passive_name = ""
+	for slot in entity.get("passive_slots", []):
+		if slot.get("unlock_tier", 99) == tier + 1:
+			var np = GameData.get_entity(slot.get("passive_id", ""))
+			if not np.is_empty():
+				next_passive_name = np.get("name", "")
+			break
+
+	# Colonne droite : barre XP + bouton
+	var right = VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(right)
+
+	if tier < GameData.MAX_TIER:
+		var bar = _colored_bar(bar_color if not can_evolve else UIColors.FILTER_ON, 12)
+		bar.min_value = 0.0
+		bar.max_value = xp_max
+		bar.value     = minf(xp, xp_max)
+		right.add_child(bar)
+
+		var hint = ""
+		if next_passive_name != "":
+			hint = "  → %s" % next_passive_name
+		var xp_lbl = Label.new()
+		xp_lbl.text = "XP %.0f / %.0f%s" % [xp, xp_max, hint]
+		xp_lbl.add_theme_font_size_override("font_size", 10)
+		xp_lbl.add_theme_color_override("font_color",
+			UIColors.FILTER_ON if can_evolve else UIColors.TEXT_MUTED)
+		right.add_child(xp_lbl)
+
+		if can_evolve:
+			var btn = Button.new()
+			btn.text = "ÉVOLUER ▲"
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.add_theme_color_override("font_color", UIColors.FILTER_ON)
+			btn.pressed.connect(func(): _on_evolve_pressed(entity_id))
+			right.add_child(btn)
+	else:
+		var max_lbl = Label.new()
+		max_lbl.text = "Maîtrise maximale atteinte"
+		max_lbl.add_theme_font_size_override("font_size", 11)
+		max_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
+		right.add_child(max_lbl)
+
+func _on_entity_evolved(_entity_id: String, _new_tier: int) -> void:
+	_refresh_bestiary()
+	_refresh_passives()
+
+func _on_evolve_pressed(entity_id: String) -> void:
+	if MasterySystem.evolve_entity(entity_id):
+		_refresh_bestiary()
+		_refresh_passives()
 
 func _add_group_header(biome_name: String) -> void:
 	var lbl = Label.new()
@@ -626,6 +720,102 @@ func _on_forge_pressed(recipe: Dictionary) -> void:
 		# La ressource a changé — rafraîchit les deux sections concernées
 		_refresh_resources()
 		_refresh_forge()
+
+# ═══════════════════════════════════════════════════════════
+#  Passifs actifs
+# ═══════════════════════════════════════════════════════════
+
+func _build_passives_section(parent: Node) -> void:
+	var section = VBoxContainer.new()
+	section.add_theme_constant_override("separation", 8)
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(section)
+
+	_title_label(section, "PASSIFS ACTIFS")
+	section.add_child(HSeparator.new())
+
+	_passives_vbox = VBoxContainer.new()
+	_passives_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_passives_vbox.add_theme_constant_override("separation", 6)
+	section.add_child(_passives_vbox)
+
+	_refresh_passives()
+
+func _refresh_passives() -> void:
+	if _passives_vbox == null:
+		return
+	for child in _passives_vbox.get_children():
+		child.queue_free()
+
+	# Collecte tous les passifs actifs (débloqués sur des entités)
+	var active: Array = []
+	for entity_id in GameData.entities:
+		var e = GameData.entities[entity_id]
+		for passive_id in e.get("unlocked_passives", []):
+			if passive_id not in active:
+				active.append(passive_id)
+	for passive_id in GameData.player.get("active_passives", []):
+		if passive_id not in active:
+			active.append(passive_id)
+
+	if active.is_empty():
+		var lbl = Label.new()
+		lbl.text = "Aucun passif actif — faites évoluer vos biomes !"
+		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		lbl.add_theme_font_size_override("font_size", 12)
+		_passives_vbox.add_child(lbl)
+		return
+
+	var bonuses = PassiveSystem.get_combat_bonuses()
+
+	for passive_id in active:
+		var p = GameData.get_entity(passive_id)
+		if p.is_empty():
+			continue
+
+		var card = PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_passives_vbox.add_child(card)
+
+		var m    = _margin(card, 10)
+		var hbox = HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 12)
+		m.add_child(hbox)
+
+		# Nom + effets
+		var left = VBoxContainer.new()
+		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hbox.add_child(left)
+
+		var name_lbl = Label.new()
+		name_lbl.text = p.get("name", passive_id)
+		name_lbl.add_theme_font_size_override("font_size", 13)
+		name_lbl.add_theme_color_override("font_color", UIColors.TEXT_BONUS)
+		left.add_child(name_lbl)
+
+		for effect in p.get("base_stats", {}).get("effects", []):
+			var eff_lbl = Label.new()
+			eff_lbl.text = effect.get("description", "")
+			eff_lbl.add_theme_font_size_override("font_size", 11)
+			eff_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+			left.add_child(eff_lbl)
+
+	# Résumé des bonus totaux
+	var parts: Array = []
+	if bonuses.get("atk_bonus", 0.0) > 0.0:
+		parts.append("+%.0f ATK" % bonuses["atk_bonus"])
+	if bonuses.get("def_bonus", 0.0) > 0.0:
+		parts.append("+%.0f DEF" % bonuses["def_bonus"])
+	if bonuses.get("hp_bonus", 0.0) > 0.0:
+		parts.append("+%.0f PV" % bonuses["hp_bonus"])
+
+	if not parts.is_empty():
+		var total_lbl = Label.new()
+		total_lbl.text = "Bonus total : " + "   ".join(PackedStringArray(parts))
+		total_lbl.add_theme_font_size_override("font_size", 12)
+		total_lbl.add_theme_color_override("font_color", UIColors.STAT_ATK)
+		total_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_passives_vbox.add_child(total_lbl)
 
 # ═══════════════════════════════════════════════════════════
 #  Logique aventure

@@ -49,5 +49,8 @@
 			{ "id": "poison_trap", "name": "Baies empoisonnées", "damage": 25 }
 		]
 	},
-	"passive_slots": []
+	"passive_slots": [
+		{ "unlock_tier": 1, "passive_id": "passive_regeneration" },
+		{ "unlock_tier": 3, "passive_id": "passive_resistance"   }
+	]
 }

@@ -34,6 +34,11 @@ func refresh_active_passives() -> void:
 	if creature_id != "":
 		_apply_entity_passives(creature_id)
 
+	# Applique les passifs débloqués sur tous les biomes connus
+	for entity_id in GameData.entities:
+		if GameData.entities[entity_id].get("entity_type") == "biome":
+			_apply_entity_passives(entity_id)
+
 	# Applique les passifs actifs additionnels (placés manuellement par le joueur)
 	for passive_id in GameData.player.get("active_passives", []):
 		_apply_passive_effects(passive_id)

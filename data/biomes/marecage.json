@@ -43,5 +43,8 @@
 			{ "id": "lianes",        "name": "Lianes Tranchantes", "damage": 25 }
 		]
 	},
-	"passive_slots": []
+	"passive_slots": [
+		{ "unlock_tier": 1, "passive_id": "passive_poison_touch" },
+		{ "unlock_tier": 2, "passive_id": "passive_regeneration" }
+	]
 }

@@ -1,0 +1,14 @@
+{
+	"id": "passive_resistance",
+	"name": "Résistance",
+	"base_stats": {
+		"effects": [
+			{
+				"id":          "def_bonus",
+				"value":       5,
+				"description": "+5 DEF permanente"
+			}
+		]
+	},
+	"passive_slots": []
+}
