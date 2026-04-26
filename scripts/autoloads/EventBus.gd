@@ -80,6 +80,12 @@ signal combat_turn(attacker: String, damage: float,
 # combat_ended   : { victory, remaining_creature_hp, enemy }
 signal combat_ended(result: Dictionary)
 
+# ── État joueur ─────────────────────────────────────────────
+
+# Émis quand une donnée joueur change hors des circuits habituels
+# (ex. changement de créature active dans le Village).
+signal player_state_changed()
+
 # ── Sauvegarde ──────────────────────────────────────────────
 
 signal save_completed()

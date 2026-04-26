@@ -33,6 +33,8 @@ func _ready() -> void:
 	EventBus.bestiary_updated.connect(_on_progress)
 	EventBus.resources_changed.connect(_on_progress)
 	EventBus.entity_evolved.connect(_on_progress)
+	EventBus.passive_unlocked.connect(_on_progress)
+	EventBus.player_state_changed.connect(_on_progress)
 
 # Marque la sauvegarde comme nécessaire et remet le timer à zéro.
 # start() sur un Timer en cours le relance depuis le début.

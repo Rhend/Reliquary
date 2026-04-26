@@ -245,6 +245,7 @@ func _fill_hero_card() -> void:
 	selector.selected = active_idx
 	selector.item_selected.connect(func(i: int):
 		GameData.player["active_creature_id"] = selector.get_item_metadata(i)
+		EventBus.player_state_changed.emit()
 		_fill_hero_card()
 	)
 	_hero_vbox.add_child(selector)
