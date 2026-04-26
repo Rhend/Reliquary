@@ -563,7 +563,6 @@ func _add_evolvable_row(entity_id: String, entity: Dictionary, bar_color: Color)
 func _on_entity_evolved(entity_id: String, _new_tier: int) -> void:
 	_refresh_bestiary()
 	_refresh_passives()
-	# Si la créature active a évolué, rafraîchit aussi la carte héro
 	if entity_id == GameData.player.get("active_creature_id", ""):
 		_fill_hero_card()
 
@@ -759,10 +758,22 @@ func _refresh_forge() -> void:
 		_forge_vbox.add_child(empty_lbl)
 		return
 
+	# Trie par coût total croissant (ingrédients)
+	recipes.sort_custom(func(a, b):
+		var ca = 0; for i in a.get("ingredients",[]): ca += int(i.get("qty",0))
+		var cb = 0; for i in b.get("ingredients",[]): cb += int(i.get("qty",0))
+		return ca < cb
+	)
+
 	for recipe in recipes:
 		_add_recipe_card(recipe)
 
 func _add_recipe_card(recipe: Dictionary) -> void:
+	var slot      = recipe.get("result_slot", "weapon")
+	var result_id = recipe.get("result_id", "")
+	var equipped  = GameData.player.get("equipped", {}).get(slot, "")
+	var is_equipped   = (equipped == result_id)
+
 	var card = PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_forge_vbox.add_child(card)
@@ -772,7 +783,7 @@ func _add_recipe_card(recipe: Dictionary) -> void:
 	vbox.add_theme_constant_override("separation", 6)
 	m.add_child(vbox)
 
-	# En-tête : nom de la recette + slot cible
+	# En-tête : nom + slot + badge ÉQUIPÉ ou UPGRADE
 	var header = HBoxContainer.new()
 	header.add_theme_constant_override("separation", 8)
 	vbox.add_child(header)
@@ -783,23 +794,43 @@ func _add_recipe_card(recipe: Dictionary) -> void:
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(name_lbl)
 
+	# Badge contextuel
+	var badge_text  = ""
+	var badge_color = UIColors.TEXT_MUTED
+	if is_equipped:
+		badge_text  = "[ÉQUIPÉ]"
+		badge_color = UIColors.INGREDIENT_OK
+	else:
+		# Détecte si c'est un upgrade sur l'item actuellement dans le slot
+		var result_item   = GameData.get_entity(result_id)
+		var current_item  = GameData.get_entity(equipped)
+		if not result_item.is_empty():
+			var r_bonus = result_item.get("base_stats",{}).get("bonuses",{})
+			var c_bonus = current_item.get("base_stats",{}).get("bonuses",{}) if not current_item.is_empty() else {}
+			var r_score = 0; for v in r_bonus.values(): r_score += int(v)
+			var c_score = 0; for v in c_bonus.values(): c_score += int(v)
+			if r_score > c_score:
+				badge_text  = "[UPGRADE ▲]"
+				badge_color = UIColors.FILTER_ON
+
 	var slot_lbl = Label.new()
-	slot_lbl.text = "[%s]" % SLOT_ICONS.get(recipe.get("result_slot", ""), recipe.get("result_slot", "?"))
+	slot_lbl.text = "[%s]  %s" % [SLOT_ICONS.get(slot, "?"), badge_text] if badge_text != "" \
+			else "[%s]" % SLOT_ICONS.get(slot, "?")
 	slot_lbl.add_theme_font_size_override("font_size", 11)
-	slot_lbl.add_theme_color_override("font_color", UIColors.RESULT_SLOT)
+	slot_lbl.add_theme_color_override("font_color", badge_color if badge_text != "" else UIColors.RESULT_SLOT)
 	header.add_child(slot_lbl)
 
-	# Liste des ingrédients avec indicateur vert/rouge selon le stock
+	# Ingrédients
 	var ing_row = HBoxContainer.new()
 	ing_row.add_theme_constant_override("separation", 14)
 	vbox.add_child(ing_row)
 
 	var resources: Dictionary = GameData.player.get("resources", {})
 	for ing in recipe.get("ingredients", []):
-		var item_id   = ing.get("item_id", "")
-		var needed    = int(ing.get("qty", 0))
-		var have      = int(resources.get(item_id, 0))
-		var res_name  = GameData.get_entity(item_id).get("name", item_id)
+		var item_id  = ing.get("item_id", "")
+		var needed   = int(ing.get("qty", 0))
+		var have     = int(resources.get(item_id, 0))
+		var res_name = GameData.get_entity(item_id).get("name", item_id)
 
 		var ing_lbl = Label.new()
 		ing_lbl.add_theme_font_size_override("font_size", 11)
@@ -808,12 +839,14 @@ func _add_recipe_card(recipe: Dictionary) -> void:
 			UIColors.INGREDIENT_OK if have >= needed else UIColors.INGREDIENT_MISSING)
 		ing_row.add_child(ing_lbl)
 
-	# Bouton Forger (grisé si stock insuffisant)
+	# Bouton Forger
 	var can_craft = GameData.can_craft(recipe)
 	var forge_btn = Button.new()
-	forge_btn.text     = "Forger"
-	forge_btn.disabled = not can_craft
+	forge_btn.text     = "Forger" if not is_equipped else "Déjà équipé"
+	forge_btn.disabled = not can_craft or is_equipped
 	forge_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if can_craft and not is_equipped:
+		forge_btn.add_theme_color_override("font_color", UIColors.INGREDIENT_OK)
 	forge_btn.pressed.connect(func(): _on_forge_pressed(recipe))
 	vbox.add_child(forge_btn)
 

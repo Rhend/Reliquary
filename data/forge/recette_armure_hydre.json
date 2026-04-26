@@ -1,0 +1,11 @@
+{
+	"id": "forge_armure_hydre",
+	"name": "Armure d'Hydre",
+	"result_id": "equip_armure_hydre",
+	"result_slot": "armor",
+	"ingredients": [
+		{ "item_id": "res_ecaille",     "qty": 8 },
+		{ "item_id": "res_venin",       "qty": 5 },
+		{ "item_id": "res_os_corail",   "qty": 3 }
+	]
+}

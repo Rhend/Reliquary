@@ -1,0 +1,8 @@
+{
+	"id": "equip_armure_hydre",
+	"name": "Armure d'Hydre",
+	"base_stats": {
+		"slot": "armor",
+		"bonuses": { "def": 9, "hp": 55 }
+	}
+}
