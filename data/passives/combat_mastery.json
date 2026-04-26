@@ -1,0 +1,14 @@
+{
+	"id": "passive_combat_mastery",
+	"name": "Maîtrise du Combat",
+	"base_stats": {
+		"effects": [
+			{
+				"id":          "atk_bonus",
+				"value":       10,
+				"description": "+10 ATK permanente"
+			}
+		]
+	},
+	"passive_slots": []
+}

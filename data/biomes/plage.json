@@ -33,5 +33,9 @@
 			{ "id": "jellyfish",  "name": "Méduse venimeuse", "damage": 18 }
 		]
 	},
-	"passive_slots": []
+	"passive_slots": [
+		{ "unlock_tier": 1, "passive_id": "passive_regeneration" },
+		{ "unlock_tier": 2, "passive_id": "passive_resistance"   },
+		{ "unlock_tier": 4, "passive_id": "passive_resilience"   }
+	]
 }

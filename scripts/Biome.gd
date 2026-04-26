@@ -2,20 +2,23 @@
 # Biome.gd — Scène d'aventure / combat.
 #
 # Mise en page :
-#   [Titre du biome]
-#   [Bandeau modificateur de cycle]   ← visible si modificateur actif
+#   [Titre du biome + indicateur XP biome]
+#   [Bandeau modificateur de cycle]
 #   [Carte Héro]      [Carte Ennemi]
 #   [Bandeau événement courant]
 #   [Journal des 8 derniers événements]
 #   [Bouton Quitter]
 #
 # Effets visuels (FX) :
-#   • Dégâts flottants  : labels qui montent et s'estompent au-dessus des barres HP
-#   • Flash HP          : la barre flashe blanc au moment d'un impact
-#   • Tween HP smooth   : transition cubic ease-out sur 0.28 s
-#   • Couleur HP        : verte/jaune/rouge pour le héro, inverse pour l'ennemi
-#   • Pulse combo       : le label combo s'illumine dorée à chaque incrément
+#   • Dégâts flottants  : labels qui montent et s'estompent
+#   • Soins flottants   : labels verts "+N PV"
+#   • Flash HP          : la barre flashe blanc à l'impact
+#   • Tween HP smooth   : cubic ease-out sur 0.28 s
+#   • Couleur HP        : verte/jaune/rouge pour le héro, inverse ennemi
+#   • Pulse combo       : le label combo s'illumine à chaque incrément
+#   • Pulse luck        : bandeau luck clignote en doré
 #   • Fondu de scène    : transition noir à chaque entrée / sortie
+#   • Résumé de cycle   : overlay complet après la fin du cycle
 # ============================================================
 extends Control
 
@@ -23,10 +26,10 @@ extends Control
 
 var _c_hp_bar:    ProgressBar
 var _c_hp_label:  Label
-var _c_hp_style:  StyleBoxFlat   # Référence directe pour animer la couleur de remplissage
+var _c_hp_style:  StyleBoxFlat
 var _c_hp_tween:  Tween
-var _c_atk_flash: Label          # Label "ATTAQUE !" qui pulse puis disparaît
-var _combo_label: Label          # Compteur de combos propres consécutifs
+var _c_atk_flash: Label
+var _combo_label: Label
 
 # ─── Ennemi (carte droite) ──────────────────────────────────
 
@@ -40,11 +43,13 @@ var _e_atk_flash:   Label
 
 # ─── Éléments partagés ──────────────────────────────────────
 
-var _event_label:    Label       # Événement courant (remplacé à chaque événement)
-var _modifier_label: Label       # Modificateur de cycle actif
-var _log_vbox:       VBoxContainer  # Journal des derniers événements
-var _fx_overlay:     Control     # Canvas transparent sur lequel on spawn les dégâts flottants
-var _fade_rect:      ColorRect   # Overlay de transition de scène
+var _event_label:    Label
+var _modifier_label: Label
+var _biome_xp_label: Label        # Progression XP du biome en temps réel
+var _luck_label:     Label        # Luck de cycle accumulée
+var _log_vbox:       VBoxContainer
+var _fx_overlay:     Control
+var _fade_rect:      ColorRect
 
 # ─── État interne ────────────────────────────────────────────
 
@@ -58,21 +63,18 @@ var _current_enemy_name: String = "Ennemi"
 func _ready() -> void:
 	_build_ui()
 
-	# Signaux de combat
 	EventBus.combat_started.connect(_on_combat_started)
 	EventBus.combat_turn.connect(_on_combat_turn)
 	EventBus.combat_ended.connect(_on_combat_ended)
-
-	# Signaux d'aventure
 	EventBus.adventure_event_resolved.connect(_on_event_resolved)
 	EventBus.adventure_cycle_ended.connect(_on_cycle_ended)
-
-	# Signaux FX / UI
 	EventBus.loot_dropped.connect(_on_loot_dropped)
 	EventBus.modifier_activated.connect(_on_modifier_activated)
 	EventBus.combo_changed.connect(_on_combo_changed)
+	EventBus.heal_applied.connect(_on_heal_applied)
+	EventBus.luck_boosted.connect(_on_luck_boosted)
+	EventBus.xp_gained.connect(_on_xp_gained)
 
-	# Affiche le modificateur déjà actif si on arrive en cours d'aventure
 	if not AdventureSystem.current_modifier.is_empty():
 		_on_modifier_activated(AdventureSystem.current_modifier)
 
@@ -83,7 +85,6 @@ func _ready() -> void:
 func _build_ui() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
-	# Fond vert très sombre pour distinguer visuellement du village
 	var bg = ColorRect.new()
 	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	bg.color = Color(0.06, 0.10, 0.08)
@@ -99,23 +100,56 @@ func _build_ui() -> void:
 	root.add_theme_constant_override("separation", 10)
 	margin.add_child(root)
 
-	# Titre du biome
+	# ── En-tête biome ─────────────────────────────────────
+	var header_hbox = HBoxContainer.new()
+	header_hbox.add_theme_constant_override("separation", 12)
+	root.add_child(header_hbox)
+
 	var biome = GameData.get_entity(GameData.player.get("active_biome_id", ""))
 	var title = Label.new()
 	title.text = biome.get("name", "Biome").to_upper()
-	title.add_theme_font_size_override("font_size", 24)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(title)
+	title.add_theme_font_size_override("font_size", 22)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
+	header_hbox.add_child(title)
 
-	# Bandeau modificateur (invisible jusqu'à l'émission du signal)
+	# Indicateur XP du biome (tier actuel + barre mini)
+	var xp_panel = PanelContainer.new()
+	xp_panel.custom_minimum_size = Vector2(180, 0)
+	header_hbox.add_child(xp_panel)
+
+	var xp_m = MarginContainer.new()
+	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
+		xp_m.add_theme_constant_override(side, 6)
+	xp_panel.add_child(xp_m)
+
+	_biome_xp_label = Label.new()
+	_biome_xp_label.add_theme_font_size_override("font_size", 11)
+	_biome_xp_label.add_theme_color_override("font_color", UIColors.TYPE_BIOME)
+	xp_m.add_child(_biome_xp_label)
+	_update_biome_xp_label()
+
+	# ── Bandeau modificateur ───────────────────────────────
+	var mod_row = HBoxContainer.new()
+	mod_row.add_theme_constant_override("separation", 10)
+	root.add_child(mod_row)
+
 	_modifier_label = Label.new()
 	_modifier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_modifier_label.add_theme_font_size_override("font_size", 13)
 	_modifier_label.add_theme_color_override("font_color", UIColors.MODIFIER_ACTIVE)
 	_modifier_label.visible = false
-	root.add_child(_modifier_label)
+	_modifier_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mod_row.add_child(_modifier_label)
 
-	# Ligne de combat : héro à gauche, ennemi à droite
+	_luck_label = Label.new()
+	_luck_label.text    = ""
+	_luck_label.visible = false
+	_luck_label.add_theme_font_size_override("font_size", 12)
+	_luck_label.add_theme_color_override("font_color", UIColors.LOG_LOOT)
+	mod_row.add_child(_luck_label)
+
+	# ── Cartes combat ──────────────────────────────────────
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -127,29 +161,23 @@ func _build_ui() -> void:
 	_build_event_banner(root)
 	_build_event_log(root)
 
-	# Bouton de sortie
 	var exit_btn = Button.new()
 	exit_btn.text = "Quitter le cycle"
 	exit_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	exit_btn.pressed.connect(_on_exit_pressed)
 	root.add_child(exit_btn)
 
-	# ── FX overlay ─────────────────────────────────────────
-	# Control transparent par-dessus tout — les dégâts flottants y sont spawned
 	_fx_overlay = Control.new()
 	_fx_overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_fx_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_fx_overlay)
 
-	# ── Overlay de fondu ────────────────────────────────────
-	# Doit être le DERNIER enfant pour être rendu par-dessus tout le reste
 	_fade_rect = ColorRect.new()
 	_fade_rect.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_fade_rect.color = Color.BLACK
 	_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_fade_rect)
 
-	# Fondu d'entrée : noir → transparent
 	var tw = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_property(_fade_rect, "color:a", 0.0, 0.40)
 
@@ -165,27 +193,24 @@ func _build_creature_card(parent: Node) -> void:
 	vbox.add_theme_constant_override("separation", 8)
 	m.add_child(vbox)
 
-	var creature_id    = GameData.player.get("active_creature_id", "")
-	var creature       = GameData.get_entity(creature_id)
-	var equip_bonuses  = GameData.get_equipment_bonuses()
-	var eff_stats      = GameData.get_effective_stats(creature_id)
-	var max_hp         = float(eff_stats.get("hp", 100)) + equip_bonuses.get("hp", 0.0)
-	var initial_hp     = AdventureSystem.current_hp if AdventureSystem.is_running else max_hp
+	var creature_id   = GameData.player.get("active_creature_id", "")
+	var creature      = GameData.get_entity(creature_id)
+	var equip_bonuses = GameData.get_equipment_bonuses()
+	var eff_stats     = GameData.get_effective_stats(creature_id)
+	var max_hp        = float(eff_stats.get("hp", 100)) + equip_bonuses.get("hp", 0.0)
+	var initial_hp    = AdventureSystem.current_hp if AdventureSystem.is_running else max_hp
 
 	_h1(vbox, creature.get("name", "Héro").to_upper())
 	vbox.add_child(HSeparator.new())
 
-	# Label HP avec valeurs courantes
 	_c_hp_label      = Label.new()
 	_c_hp_label.text = "PV : %.0f / %.0f" % [initial_hp, max_hp]
 	vbox.add_child(_c_hp_label)
 
-	# Barre de PV avec couleur dynamique
 	_c_hp_style = _fill_style(UIColors.hero_hp(initial_hp / max_hp if max_hp > 0.0 else 1.0))
 	_c_hp_bar   = _make_bar(_c_hp_style, max_hp, initial_hp)
 	vbox.add_child(_c_hp_bar)
 
-	# Stats effectives avec équipements
 	var stats_lbl = Label.new()
 	stats_lbl.text = "ATK %d   DEF %d   PV %d" % [
 		int(eff_stats.get("atk", 0)) + int(equip_bonuses.get("atk", 0)),
@@ -196,7 +221,6 @@ func _build_creature_card(parent: Node) -> void:
 	stats_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	vbox.add_child(stats_lbl)
 
-	# Noms des équipements portés
 	var parts: Array = []
 	for slot in ["weapon", "shield", "boots", "armor"]:
 		var item = GameData.get_entity(GameData.player.get("equipped", {}).get(slot, ""))
@@ -210,7 +234,6 @@ func _build_creature_card(parent: Node) -> void:
 	equip_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(equip_line)
 
-	# Compteur de combo — caché par défaut, affiché dès combo ≥ 2
 	_combo_label = Label.new()
 	_combo_label.text = ""
 	_combo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -221,7 +244,6 @@ func _build_creature_card(parent: Node) -> void:
 
 	vbox.add_child(_spacer())
 
-	# Flash FX "ATTAQUE !" (alpha=0 au repos, animé lors d'une attaque)
 	_c_atk_flash = _flash_label("ATTAQUE !", Color(1.0, 0.92, 0.05))
 	vbox.add_child(_c_atk_flash)
 
@@ -237,7 +259,6 @@ func _build_enemy_card(parent: Node) -> void:
 	vbox.add_theme_constant_override("separation", 8)
 	m.add_child(vbox)
 
-	# Nom de l'ennemi (remplacé dynamiquement au combat_started)
 	_e_name_label      = Label.new()
 	_e_name_label.text = "EN ATTENTE..."
 	_e_name_label.add_theme_font_size_override("font_size", 18)
@@ -250,7 +271,6 @@ func _build_enemy_card(parent: Node) -> void:
 	_e_hp_label.text = "PV : —"
 	vbox.add_child(_e_hp_label)
 
-	# Barre initialisée à 0 (mise à jour dans _on_combat_started)
 	_e_hp_style = _fill_style(UIColors.ENEMY_HIGH)
 	_e_hp_bar   = _make_bar(_e_hp_style, 100.0, 0.0)
 	vbox.add_child(_e_hp_bar)
@@ -266,12 +286,11 @@ func _build_enemy_card(parent: Node) -> void:
 	_e_atk_flash = _flash_label("RIPOSTE !", Color(1.0, 0.20, 0.05))
 	vbox.add_child(_e_atk_flash)
 
-# ─── Bandeau événement courant ───────────────────────────────
+# ─── Bandeau événement ───────────────────────────────────────
 
 func _build_event_banner(parent: Node) -> void:
 	var card = PanelContainer.new()
 	parent.add_child(card)
-
 	var m = _pad(card, 12)
 	_event_label = Label.new()
 	_event_label.text = "En attente du premier événement..."
@@ -279,13 +298,12 @@ func _build_event_banner(parent: Node) -> void:
 	_event_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	m.add_child(_event_label)
 
-# ─── Journal des événements (8 lignes max) ───────────────────
+# ─── Journal ─────────────────────────────────────────────────
 
 func _build_event_log(parent: Node) -> void:
 	var panel = PanelContainer.new()
 	parent.add_child(panel)
-
-	var m = _pad(panel, 8)
+	var m     = _pad(panel, 8)
 	var outer = VBoxContainer.new()
 	outer.add_theme_constant_override("separation", 4)
 	m.add_child(outer)
@@ -297,8 +315,8 @@ func _build_event_log(parent: Node) -> void:
 	outer.add_child(header)
 
 	var scroll = ScrollContainer.new()
-	scroll.custom_minimum_size       = Vector2(0, 96)
-	scroll.horizontal_scroll_mode    = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size    = Vector2(0, 96)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	outer.add_child(scroll)
 
 	_log_vbox = VBoxContainer.new()
@@ -338,7 +356,6 @@ func _on_combat_turn(attacker: String, damage: float,
 			c_name, damage, maxf(enemy_hp, 0.0)
 		]
 		_flash(_c_atk_flash)
-		# Dégâts flottants dorés au-dessus de la barre HP de l'ennemi
 		_spawn_damage_number(_e_hp_bar, "-%.0f" % damage, UIColors.DMG_BY_HERO)
 	else:
 		_set_creature_hp(creature_hp)
@@ -346,7 +363,6 @@ func _on_combat_turn(attacker: String, damage: float,
 			_current_enemy_name, damage, maxf(creature_hp, 0.0)
 		]
 		_flash(_e_atk_flash)
-		# Dégâts flottants rouges au-dessus de la barre HP du héro
 		_spawn_damage_number(_c_hp_bar, "-%.0f" % damage, UIColors.DMG_BY_ENEMY)
 
 func _on_combat_ended(result: Dictionary) -> void:
@@ -384,18 +400,19 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_set_creature_hp(AdventureSystem.current_hp)
 
 func _on_cycle_ended(result: Dictionary) -> void:
-	if not result.get("victory", true):
-		_event_label.text = "Cycle terminé — retour au village dans 2 s..."
-		_add_log_entry("Cycle terminé — défaite", UIColors.LOG_DEFEAT)
-	await get_tree().create_timer(2.0).timeout
-	_fade_to("res://scenes/Village.tscn")
+	var victory = result.get("victory", false)
+	_add_log_entry(
+		"Cycle terminé — %s" % ("Victoire !" if victory else "Défaite"),
+		UIColors.LOG_VICTORY if victory else UIColors.LOG_DEFEAT
+	)
+	_show_cycle_summary(result)
 
 func _on_loot_dropped(drops: Array, enemy_name: String) -> void:
 	var parts: Array = []
 	for d in drops:
 		parts.append("%s ×%d" % [d.get("name", "?"), d.get("qty", 1)])
-	var text = "Butin [%s] : %s" % [enemy_name, ", ".join(PackedStringArray(parts))]
-	_add_log_entry(text, UIColors.LOG_LOOT)
+	_add_log_entry("Butin [%s] : %s" % [enemy_name, ", ".join(PackedStringArray(parts))],
+		UIColors.LOG_LOOT)
 
 func _on_modifier_activated(modifier: Dictionary) -> void:
 	var m_name = modifier.get("name", "—")
@@ -405,37 +422,198 @@ func _on_modifier_activated(modifier: Dictionary) -> void:
 		return
 	_modifier_label.text    = "%s  —  %s" % [m_name, m_desc]
 	_modifier_label.visible = true
-	# Fondu d'apparition du bandeau
 	_modifier_label.modulate.a = 0.0
 	var tw = create_tween().set_ease(Tween.EASE_OUT)
 	tw.tween_property(_modifier_label, "modulate:a", 1.0, 0.50)
 
 func _on_combo_changed(count: int) -> void:
 	if count > 1:
-		_combo_label.text    = "COMBO  x%d" % count
+		var bonus_pct = int((count - 1) * 5)
+		_combo_label.text    = "COMBO  x%d  (+%d%% ATK)" % [count, bonus_pct]
 		_combo_label.visible = true
-		# Pulse dorée : illumine le label puis revient à blanc
 		_combo_label.modulate = UIColors.COMBO_COLOR * 1.6
 		var tw = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		tw.tween_property(_combo_label, "modulate", Color.WHITE, 0.35)
 	else:
 		_combo_label.visible = false
 
+func _on_heal_applied(amount: float, new_hp: float) -> void:
+	_set_creature_hp(new_hp)
+	_spawn_damage_number(_c_hp_bar, "+%.0f PV" % amount, UIColors.LOG_EVENT)
+
+func _on_luck_boosted(cycle_luck: int) -> void:
+	_luck_label.text    = "Luck +%d" % cycle_luck
+	_luck_label.visible = true
+	_luck_label.modulate = UIColors.LOG_LOOT * 1.5
+	var tw = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(_luck_label, "modulate", Color.WHITE, 0.6)
+
+func _on_xp_gained(entity_id: String, _amount: float) -> void:
+	if entity_id == GameData.player.get("active_biome_id", ""):
+		_update_biome_xp_label()
+
 func _on_exit_pressed() -> void:
 	AdventureSystem.stop_adventure()
 	_fade_to("res://scenes/Village.tscn")
 
 # ═══════════════════════════════════════════════════════════
-#  Gestion des barres HP (tween + couleur + flash d'impact)
+#  Indicateur XP du biome
+# ═══════════════════════════════════════════════════════════
+
+func _update_biome_xp_label() -> void:
+	if _biome_xp_label == null:
+		return
+	var biome_id = GameData.player.get("active_biome_id", "")
+	var biome    = GameData.get_entity(biome_id)
+	if biome.is_empty():
+		return
+	var tier     = biome.get("current_tier", 0)
+	var xp       = biome.get("current_xp",   0.0)
+	var next_idx = mini(tier + 1, GameData.xp_thresholds.size() - 1)
+	var xp_max   = float(GameData.xp_thresholds[next_idx])
+	var tier_name = GameData.get_tier_name(tier)
+	_biome_xp_label.text = "%s  XP %.0f/%.0f" % [tier_name, xp, xp_max]
+
+# ═══════════════════════════════════════════════════════════
+#  Résumé de cycle
+# ═══════════════════════════════════════════════════════════
+
+func _show_cycle_summary(result: Dictionary) -> void:
+	var victory      = result.get("victory", false)
+	var biome        = GameData.get_entity(result.get("biome_id", ""))
+	var modifier     = result.get("modifier", {})
+	var xp_total     = result.get("xp_total", 0.0)
+	var loot_total   = result.get("loot_total", 0)
+	var combo_max    = result.get("combo_max", 0)
+	var combats_won  = result.get("combats_won", 0)
+	var cycle_luck   = result.get("cycle_luck", 0)
+
+	# Container global (intercepte les clics)
+	var overlay = Control.new()
+	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+
+	# Fond semi-transparent
+	var bg_rect = ColorRect.new()
+	bg_rect.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	bg_rect.color = Color(0.0, 0.0, 0.0, 0.78)
+	overlay.add_child(bg_rect)
+
+	# CenterContainer pour centrer le panel
+	var center = CenterContainer.new()
+	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	overlay.add_child(center)
+
+	# Panel de résumé
+	var panel = PanelContainer.new()
+	panel.custom_minimum_size = Vector2(440, 0)
+	center.add_child(panel)
+
+	var m    = MarginContainer.new()
+	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
+		m.add_theme_constant_override(side, 28)
+	panel.add_child(m)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 14)
+	m.add_child(vbox)
+
+	# Titre
+	var title_lbl = Label.new()
+	title_lbl.text = "VICTOIRE !" if victory else "DÉFAITE..."
+	title_lbl.add_theme_font_size_override("font_size", 28)
+	title_lbl.add_theme_color_override("font_color",
+		UIColors.LOG_VICTORY if victory else UIColors.LOG_DEFEAT)
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title_lbl)
+
+	# Biome + modificateur
+	var ctx_lbl = Label.new()
+	var mod_name = modifier.get("name", "—")
+	ctx_lbl.text = "%s   •   %s" % [biome.get("name", "?"), mod_name]
+	ctx_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ctx_lbl.add_theme_font_size_override("font_size", 13)
+	ctx_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	vbox.add_child(ctx_lbl)
+
+	vbox.add_child(HSeparator.new())
+
+	# Statistiques
+	var stats = [
+		["XP gagnée",       "%.0f" % xp_total,  UIColors.FILTER_ON],
+		["Combats gagnés",  "%d"   % combats_won, UIColors.LOG_VICTORY],
+		["Meilleur combo",  "x%d"  % combo_max,  UIColors.COMBO_COLOR],
+		["Objets ramassés", "%d"   % loot_total, UIColors.LOG_LOOT],
+	]
+	if cycle_luck > 0:
+		stats.append(["Luck accumulée", "+%d" % cycle_luck, UIColors.LOG_LOOT])
+
+	for stat in stats:
+		var row = HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		vbox.add_child(row)
+
+		var key = Label.new()
+		key.text = stat[0]
+		key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		key.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		key.add_theme_font_size_override("font_size", 13)
+		row.add_child(key)
+
+		var val = Label.new()
+		val.text = stat[1]
+		val.add_theme_color_override("font_color", stat[2])
+		val.add_theme_font_size_override("font_size", 14)
+		row.add_child(val)
+
+	vbox.add_child(HSeparator.new())
+
+	# Bouton retour + countdown
+	var btn = Button.new()
+	btn.text = "Retour au Village"
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_child(btn)
+
+	var countdown_lbl = Label.new()
+	countdown_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	countdown_lbl.add_theme_font_size_override("font_size", 11)
+	countdown_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	vbox.add_child(countdown_lbl)
+
+	# Fondu d'entrée
+	overlay.modulate.a = 0.0
+	var tw_in = create_tween().set_ease(Tween.EASE_OUT)
+	tw_in.tween_property(overlay, "modulate:a", 1.0, 0.40)
+
+	# Connexion du bouton et du countdown
+	btn.pressed.connect(func():
+		if is_instance_valid(overlay):
+			overlay.queue_free()
+		_fade_to("res://scenes/Village.tscn")
+	)
+	_run_summary_countdown(overlay, countdown_lbl)
+
+func _run_summary_countdown(overlay: Control, lbl: Label) -> void:
+	var secs = 6
+	while secs > 0 and is_instance_valid(overlay):
+		lbl.text = "Retour automatique dans %d s..." % secs
+		await get_tree().create_timer(1.0).timeout
+		secs -= 1
+	if is_instance_valid(overlay):
+		overlay.queue_free()
+		_fade_to("res://scenes/Village.tscn")
+
+# ═══════════════════════════════════════════════════════════
+#  Gestion des barres HP
 # ═══════════════════════════════════════════════════════════
 
 func _set_creature_hp(hp: float) -> void:
 	var val       = maxf(hp, 0.0)
-	var decreased = val < _c_hp_bar.value   # true si le héro vient de recevoir des dégâts
+	var decreased = val < _c_hp_bar.value
 
 	_c_hp_label.text = "PV : %.0f / %.0f" % [val, _c_hp_bar.max_value]
 
-	# Tween smooth de la barre
 	if _c_hp_tween:
 		_c_hp_tween.kill()
 	_c_hp_tween = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
@@ -445,7 +623,6 @@ func _set_creature_hp(hp: float) -> void:
 	var new_color = UIColors.hero_hp(pct)
 
 	if decreased:
-		# Flash blanc → couleur cible : retour visuel d'impact
 		_c_hp_style.bg_color = Color(1.0, 1.0, 1.0, 0.90)
 		var flash = create_tween()
 		flash.tween_property(_c_hp_style, "bg_color", new_color, 0.20)
@@ -473,7 +650,6 @@ func _set_enemy_hp(hp: float) -> void:
 	else:
 		_e_hp_style.bg_color = new_color
 
-# Remet à zéro l'affichage de l'ennemi entre deux combats.
 func _clear_enemy_display() -> void:
 	_e_name_label.text  = "—"
 	_e_stats_label.text = ""
@@ -481,11 +657,9 @@ func _clear_enemy_display() -> void:
 	_e_hp_bar.value     = 0.0
 
 # ═══════════════════════════════════════════════════════════
-#  Effets visuels (FX)
+#  Effets visuels
 # ═══════════════════════════════════════════════════════════
 
-# Spawn un label de dégâts flottant au-dessus de anchor_bar,
-# qui monte puis disparaît en 0.85 s.
 func _spawn_damage_number(anchor_bar: ProgressBar, text: String, color: Color) -> void:
 	var rect  = anchor_bar.get_global_rect()
 	var start = Vector2(rect.get_center().x - 18.0, rect.position.y - 8.0)
@@ -500,26 +674,20 @@ func _spawn_damage_number(anchor_bar: ProgressBar, text: String, color: Color) -
 	lbl.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0))
 	_fx_overlay.add_child(lbl)
 
-	# Tween parallèle : montée + estompe simultanées
 	var tw = create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(lbl, "position:y", start.y - 65.0, 0.85) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_property(lbl, "modulate:a", 0.0, 0.85) \
 		.set_ease(Tween.EASE_IN).set_delay(0.28)
-	# Libère le label une fois l'animation terminée
 	tw.chain().tween_callback(lbl.queue_free)
 
-# Anime un label "ATTAQUE !" ou "RIPOSTE !" : apparaît puis s'estompe.
 func _flash(lbl: Label) -> void:
 	var tw = create_tween()
 	tw.tween_property(lbl, "modulate:a", 1.0, 0.04)
 	tw.tween_interval(0.28)
 	tw.tween_property(lbl, "modulate:a", 0.0, 0.45)
 
-# ─── Journal ─────────────────────────────────────────────────
-
-# Ajoute une ligne colorée au journal. Supprime la plus ancienne si > 8 lignes.
 func _add_log_entry(text: String, color: Color) -> void:
 	var lbl = Label.new()
 	lbl.text = text
@@ -530,9 +698,6 @@ func _add_log_entry(text: String, color: Color) -> void:
 	while _log_vbox.get_child_count() > 8:
 		_log_vbox.get_child(0).queue_free()
 
-# ─── Navigation ──────────────────────────────────────────────
-
-# Fondu vers noir puis changement de scène.
 func _fade_to(scene_path: String) -> void:
 	_fade_rect.color.a = 0.0
 	var tw = create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
@@ -543,7 +708,6 @@ func _fade_to(scene_path: String) -> void:
 #  Utilitaires constructeurs UI
 # ═══════════════════════════════════════════════════════════
 
-# StyleBoxFlat pour le remplissage d'une ProgressBar, avec coins arrondis.
 func _fill_style(color: Color) -> StyleBoxFlat:
 	var s = StyleBoxFlat.new()
 	s.bg_color                   = color
@@ -553,7 +717,6 @@ func _fill_style(color: Color) -> StyleBoxFlat:
 	s.corner_radius_bottom_left  = 4
 	return s
 
-# ProgressBar avec fond sombre et remplissage coloré.
 func _make_bar(fill: StyleBoxFlat, max_val: float, val: float) -> ProgressBar:
 	var bar = ProgressBar.new()
 	bar.min_value           = 0.0
@@ -572,7 +735,6 @@ func _make_bar(fill: StyleBoxFlat, max_val: float, val: float) -> ProgressBar:
 	bar.add_theme_stylebox_override("background", bg)
 	return bar
 
-# MarginContainer avec padding uniforme, ajouté à parent.
 func _pad(parent: Node, px: int) -> MarginContainer:
 	var m = MarginContainer.new()
 	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
@@ -580,7 +742,6 @@ func _pad(parent: Node, px: int) -> MarginContainer:
 	parent.add_child(m)
 	return m
 
-# Titre centré en gras.
 func _h1(parent: Node, text: String) -> void:
 	var lbl = Label.new()
 	lbl.text = text
@@ -588,13 +749,11 @@ func _h1(parent: Node, text: String) -> void:
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	parent.add_child(lbl)
 
-# Spacer vertical extensible.
 func _spacer() -> Control:
 	var s = Control.new()
 	s.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	return s
 
-# Label FX (alpha 0 au repos) pour les animations d'attaque.
 func _flash_label(text: String, color: Color) -> Label:
 	var lbl = Label.new()
 	lbl.text     = text

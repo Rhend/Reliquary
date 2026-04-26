@@ -20,6 +20,7 @@ var _bestiary_vbox:   VBoxContainer
 var _resources_vbox:  VBoxContainer
 var _forge_vbox:      VBoxContainer
 var _passives_vbox:   VBoxContainer
+var _hero_vbox:       VBoxContainer  # Contenu de la carte héro (refresh sur XP/évolution)
 var _fade_rect:       ColorRect      # Overlay de transition de scène
 
 # ─── État du filtre Hall des Évolutions ─────────────────────
@@ -65,6 +66,7 @@ func _ready() -> void:
 	EventBus.bestiary_updated.connect(func(_id): _refresh_bestiary())
 	EventBus.entity_evolved.connect(_on_entity_evolved)
 	EventBus.passive_unlocked.connect(func(_eid, _pid): _refresh_passives())
+	EventBus.xp_gained.connect(_on_xp_gained_village)
 
 # ═══════════════════════════════════════════════════════════
 #  Construction de l'interface (appelée une seule fois)
@@ -167,37 +169,61 @@ func _build_adventure_card(parent: Node) -> void:
 	start_btn.pressed.connect(func(): _start_adventure(biome_selector))
 	vbox.add_child(start_btn)
 
-# ─── Carte Héro (stats uniquement — pas d'XP ni d'évolution) ─
+# ─── Carte Héro (sélecteur + stats + XP + évolution) ─────────
 
 func _build_hero_card(parent: Node) -> void:
 	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(240, 220)
+	card.custom_minimum_size = Vector2(260, 0)
 	parent.add_child(card)
 
-	var m    = _margin(card, 18)
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
-	m.add_child(vbox)
+	var m = _margin(card, 18)
+	_hero_vbox = VBoxContainer.new()
+	_hero_vbox.add_theme_constant_override("separation", 8)
+	m.add_child(_hero_vbox)
 
+	_fill_hero_card()
+
+func _fill_hero_card() -> void:
+	for child in _hero_vbox.get_children():
+		child.queue_free()
+
+	# ── Sélecteur de créature ────────────────────────────────
+	var selector = OptionButton.new()
+	selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var active_id = GameData.player.get("active_creature_id", "")
+	var idx       = 0
+	var active_idx = 0
+	for entity_id in GameData.entities:
+		var e = GameData.entities[entity_id]
+		if e.get("entity_type") == "creature":
+			selector.add_item(e.get("name", entity_id))
+			selector.set_item_metadata(idx, entity_id)
+			if entity_id == active_id:
+				active_idx = idx
+			idx += 1
+	selector.selected = active_idx
+	selector.item_selected.connect(func(i: int):
+		GameData.player["active_creature_id"] = selector.get_item_metadata(i)
+		_fill_hero_card()
+	)
+	_hero_vbox.add_child(selector)
+	_hero_vbox.add_child(HSeparator.new())
+
+	# ── Stats ────────────────────────────────────────────────
 	var creature_id = GameData.player.get("active_creature_id", "")
-	var creature    = GameData.get_entity(creature_id)
+	var equip       = GameData.get_equipment_bonuses()
+	var eff         = GameData.get_effective_stats(creature_id)
+	var passives    = PassiveSystem.get_combat_bonuses()
 
-	_title_label(vbox, creature.get("name", "Héro").to_upper())
-	vbox.add_child(HSeparator.new())
-
-	var equip = GameData.get_equipment_bonuses()
-	var eff   = GameData.get_effective_stats(creature_id)
-
-	# Affiche ATK, DEF et PV avec leurs couleurs respectives
 	var stat_rows = [
-		["ATK", int(eff.get("atk", 0)) + int(equip.get("atk", 0)), UIColors.STAT_ATK],
-		["DEF", eff.get("def", 0),                                   UIColors.STAT_DEF],
-		["PV",  int(eff.get("hp",  0)) + int(equip.get("hp",  0)),  UIColors.STAT_HP ]
+		["ATK", int(eff.get("atk",0)) + int(equip.get("atk",0)) + int(passives.get("atk_bonus",0)), UIColors.STAT_ATK],
+		["DEF", int(eff.get("def",0)) + int(passives.get("def_bonus",0)),                            UIColors.STAT_DEF],
+		["PV",  int(eff.get("hp", 0)) + int(equip.get("hp", 0)) + int(passives.get("hp_bonus", 0)), UIColors.STAT_HP ],
 	]
 	for row_data in stat_rows:
 		var hbox = HBoxContainer.new()
 		hbox.add_theme_constant_override("separation", 8)
-		vbox.add_child(hbox)
+		_hero_vbox.add_child(hbox)
 
 		var key_lbl = Label.new()
 		key_lbl.text = str(row_data[0]) + " :"
@@ -210,7 +236,75 @@ func _build_hero_card(parent: Node) -> void:
 		val_lbl.add_theme_font_size_override("font_size", 14)
 		hbox.add_child(val_lbl)
 
-	vbox.add_child(_spacer())
+	# ── Progression XP ───────────────────────────────────────
+	_hero_vbox.add_child(HSeparator.new())
+
+	var creature    = GameData.get_entity(creature_id)
+	var tier        = creature.get("current_tier",  0)
+	var xp          = creature.get("current_xp",   0.0)
+	var next_idx    = mini(tier + 1, GameData.xp_thresholds.size() - 1)
+	var xp_max      = float(GameData.xp_thresholds[next_idx])
+	var can_evolve  = tier < GameData.MAX_TIER and xp >= xp_max
+
+	var tier_lbl = Label.new()
+	tier_lbl.text = GameData.get_tier_name(tier)
+	tier_lbl.add_theme_font_size_override("font_size", 11)
+	tier_lbl.add_theme_color_override("font_color",
+		UIColors.FILTER_ON if tier > 0 else UIColors.TEXT_MUTED)
+	tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hero_vbox.add_child(tier_lbl)
+
+	if tier < GameData.MAX_TIER:
+		var bar_fill = StyleBoxFlat.new()
+		bar_fill.bg_color = UIColors.FILTER_ON if can_evolve else UIColors.STAT_HP
+		for corner in ["corner_radius_top_left","corner_radius_top_right",
+				"corner_radius_bottom_right","corner_radius_bottom_left"]:
+			bar_fill.set(corner, 3)
+
+		var bar_bg = StyleBoxFlat.new()
+		bar_bg.bg_color = UIColors.BG_BAR
+		for corner in ["corner_radius_top_left","corner_radius_top_right",
+				"corner_radius_bottom_right","corner_radius_bottom_left"]:
+			bar_bg.set(corner, 3)
+
+		var xp_bar = ProgressBar.new()
+		xp_bar.min_value       = 0.0
+		xp_bar.max_value       = xp_max
+		xp_bar.value           = minf(xp, xp_max)
+		xp_bar.show_percentage = false
+		xp_bar.custom_minimum_size = Vector2(0, 10)
+		xp_bar.add_theme_stylebox_override("fill", bar_fill)
+		xp_bar.add_theme_stylebox_override("background", bar_bg)
+		_hero_vbox.add_child(xp_bar)
+
+		var xp_lbl = Label.new()
+		xp_lbl.text = "XP  %.0f / %.0f" % [xp, xp_max]
+		xp_lbl.add_theme_font_size_override("font_size", 10)
+		xp_lbl.add_theme_color_override("font_color",
+			UIColors.FILTER_ON if can_evolve else UIColors.TEXT_MUTED)
+		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_hero_vbox.add_child(xp_lbl)
+
+		if can_evolve:
+			var evolve_btn = Button.new()
+			evolve_btn.text = "ÉVOLUER ▲"
+			evolve_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			evolve_btn.add_theme_color_override("font_color", UIColors.FILTER_ON)
+			evolve_btn.pressed.connect(func():
+				if MasterySystem.evolve_entity(creature_id):
+					_fill_hero_card()
+					_refresh_passives()
+			)
+			_hero_vbox.add_child(evolve_btn)
+	else:
+		var max_lbl = Label.new()
+		max_lbl.text = "Maîtrise maximale"
+		max_lbl.add_theme_font_size_override("font_size", 11)
+		max_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
+		max_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_hero_vbox.add_child(max_lbl)
+
+	_hero_vbox.add_child(_spacer())
 
 # ─── Carte Équipement (4 slots) ──────────────────────────────
 
@@ -466,9 +560,17 @@ func _add_evolvable_row(entity_id: String, entity: Dictionary, bar_color: Color)
 		max_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
 		right.add_child(max_lbl)
 
-func _on_entity_evolved(_entity_id: String, _new_tier: int) -> void:
+func _on_entity_evolved(entity_id: String, _new_tier: int) -> void:
 	_refresh_bestiary()
 	_refresh_passives()
+	# Si la créature active a évolué, rafraîchit aussi la carte héro
+	if entity_id == GameData.player.get("active_creature_id", ""):
+		_fill_hero_card()
+
+func _on_xp_gained_village(entity_id: String, _amount: float) -> void:
+	# Mise à jour de la carte héro si la créature active reçoit de l'XP
+	if entity_id == GameData.player.get("active_creature_id", ""):
+		_fill_hero_card()
 
 func _on_evolve_pressed(entity_id: String) -> void:
 	if MasterySystem.evolve_entity(entity_id):

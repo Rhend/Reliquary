@@ -43,6 +43,13 @@ signal modifier_activated(modifier: Dictionary)
 # count = 0 si le combo a été cassé.
 signal combo_changed(count: int)
 
+# Émis quand un événement positif de soin restaure des PV.
+# amount = PV effectivement restaurés, new_hp = PV après soin.
+signal heal_applied(amount: float, new_hp: float)
+
+# Émis quand un événement positif de chance booste la luck du cycle.
+signal luck_boosted(cycle_luck: int)
+
 # ── Passifs ─────────────────────────────────────────────────
 
 # Émis quand un passif est débloqué sur une entité (palier de tier atteint).
