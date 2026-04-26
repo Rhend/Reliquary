@@ -23,6 +23,12 @@ var _passives_vbox:   VBoxContainer
 var _hero_vbox:       VBoxContainer  # Contenu de la carte héro (refresh sur XP/évolution)
 var _fade_rect:       ColorRect      # Overlay de transition de scène
 
+# ─── Badges de notification d'évolution ─────────────────────
+
+var _hero_evo_badge: Label       # "▲ Évolution disponible" dans l'en-tête Héro
+var _hall_evo_badge: Label       # "▲ Évolution disponible" dans l'en-tête Hall
+var _evolvable_set:  Dictionary = {}  # entity_id → true, entités prêtes à évoluer
+
 # ─── État du filtre Hall des Évolutions ─────────────────────
 
 var _hall_filter:    String     = "Tout"
@@ -59,14 +65,17 @@ func _ready() -> void:
 				break
 
 	_build_ui()
+	_scan_evolvable_entities()   # Badges dès l'entrée si des entités peuvent évoluer
 
 	# Rafraîchissements dynamiques via EventBus
-	EventBus.loot_dropped.connect(func(_d, _n): _refresh_resources())
+	# Note : pas de connexion loot_dropped → _refresh_resources car resources_changed
+	# est émis par add_resource() et couvre tous les cas sans double-rebuild.
 	EventBus.resources_changed.connect(_refresh_resources)
 	EventBus.bestiary_updated.connect(func(_id): _refresh_bestiary())
 	EventBus.entity_evolved.connect(_on_entity_evolved)
 	EventBus.passive_unlocked.connect(func(_eid, _pid): _refresh_passives())
 	EventBus.xp_gained.connect(_on_xp_gained_village)
+	EventBus.entity_ready_to_evolve.connect(_on_entity_ready_to_evolve)
 
 # ═══════════════════════════════════════════════════════════
 #  Construction de l'interface (appelée une seule fois)
@@ -206,7 +215,7 @@ func _build_hero_card(parent: Node) -> void:
 	wrap.add_theme_constant_override("separation", 8)
 	m.add_child(wrap)
 
-	_title_label(wrap, "HÉRO", UIColors.STAT_HP)
+	_hero_evo_badge = _title_label(wrap, "HÉRO", UIColors.STAT_HP)
 	wrap.add_child(HSeparator.new())
 
 	_hero_vbox = VBoxContainer.new()
@@ -405,7 +414,7 @@ func _build_hall_section(parent: Node) -> void:
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(section)
 
-	_title_label(section, "HALL DES ÉVOLUTIONS", UIColors.TYPE_CREATURE)
+	_hall_evo_badge = _title_label(section, "HALL DES ÉVOLUTIONS", UIColors.TYPE_CREATURE)
 	section.add_child(HSeparator.new())
 	_build_filter_buttons(section)
 
@@ -604,15 +613,48 @@ func _add_evolvable_row(entity_id: String, entity: Dictionary, bar_color: Color)
 		right.add_child(max_lbl)
 
 func _on_entity_evolved(entity_id: String, _new_tier: int) -> void:
+	_evolvable_set.erase(entity_id)
+	_update_evo_badges()
 	_refresh_bestiary()
 	_refresh_passives()
 	if entity_id == GameData.player.get("active_creature_id", ""):
 		_fill_hero_card()
 
 func _on_xp_gained_village(entity_id: String, _amount: float) -> void:
-	# Mise à jour de la carte héro si la créature active reçoit de l'XP
 	if entity_id == GameData.player.get("active_creature_id", ""):
 		_fill_hero_card()
+
+# Reçoit le signal émis par MasterySystem dès qu'une entité franchit le seuil.
+# Peuple _evolvable_set au chargement de la scène (entités déjà au seuil).
+func _scan_evolvable_entities() -> void:
+	for entity_id in GameData.entities:
+		var e = GameData.entities[entity_id]
+		if e.get("entity_type") not in ["creature", "biome"]:
+			continue
+		var tier = e.get("current_tier", 0)
+		if tier >= GameData.MAX_TIER:
+			continue
+		if e.get("current_xp", 0.0) >= float(GameData.xp_thresholds[tier + 1]):
+			_evolvable_set[entity_id] = true
+	_update_evo_badges()
+
+func _on_entity_ready_to_evolve(entity_id: String) -> void:
+	_evolvable_set[entity_id] = true
+	_update_evo_badges()
+
+# Met à jour la visibilité des badges selon le type des entités évolvables.
+func _update_evo_badges() -> void:
+	var creature_ready := false
+	var biome_ready    := false
+	for eid in _evolvable_set:
+		var e_type = GameData.get_entity(eid).get("entity_type", "")
+		if e_type == "creature": creature_ready = true
+		elif e_type == "biome":  biome_ready    = true
+
+	if _hero_evo_badge != null:
+		_hero_evo_badge.visible = creature_ready
+	if _hall_evo_badge != null:
+		_hall_evo_badge.visible = creature_ready or biome_ready
 
 func _on_evolve_pressed(entity_id: String) -> void:
 	if MasterySystem.evolve_entity(entity_id):
@@ -736,7 +778,16 @@ func _refresh_resources() -> void:
 	flow.add_theme_constant_override("v_separation", 6)
 	_resources_vbox.add_child(flow)
 
+	# Trie les ressources par nom pour un inventaire stable et lisible
+	var sorted_ids: Array = []
 	for item_id in resources:
+		if int(resources[item_id]) > 0:
+			sorted_ids.append(item_id)
+	sorted_ids.sort_custom(func(a, b):
+		return GameData.get_entity(a).get("name", a) < GameData.get_entity(b).get("name", b)
+	)
+
+	for item_id in sorted_ids:
 		var qty = int(resources[item_id])
 		if qty <= 0:
 			continue
@@ -1028,8 +1079,9 @@ func _margin(parent: Node, px: int) -> MarginContainer:
 	parent.add_child(m)
 	return m
 
-# Titre de section : barre d'accent colorée à gauche + texte.
-func _title_label(parent: Node, text: String, accent: Color = UIColors.TEXT_HEADER) -> void:
+# Titre de section : barre d'accent colorée à gauche + texte + badge caché.
+# Retourne le Label de badge afin que l'appelant puisse l'afficher / masquer.
+func _title_label(parent: Node, text: String, accent: Color = UIColors.TEXT_HEADER) -> Label:
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 10)
 	parent.add_child(hbox)
@@ -1045,6 +1097,15 @@ func _title_label(parent: Node, text: String, accent: Color = UIColors.TEXT_HEAD
 	lbl.add_theme_font_size_override("font_size", 15)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 	hbox.add_child(lbl)
+
+	# Badge d'évolution — caché par défaut, affiché via _update_evo_badges()
+	var badge = Label.new()
+	badge.text = " ▲ ÉVOLUTION"
+	badge.add_theme_font_size_override("font_size", 12)
+	badge.add_theme_color_override("font_color", UIColors.FILTER_ON)
+	badge.visible = false
+	hbox.add_child(badge)
+	return badge
 
 # Spacer vertical pour pousser le contenu vers le haut.
 func _spacer() -> Control:

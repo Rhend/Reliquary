@@ -621,6 +621,29 @@ func _show_cycle_summary(result: Dictionary) -> void:
 		val.add_theme_font_size_override("font_size", 14)
 		row.add_child(val)
 
+	# Entités prêtes à évoluer — calculé en temps réel sur GameData
+	var ready_names: Array = []
+	for eid in GameData.entities:
+		var e = GameData.entities[eid]
+		if e.get("entity_type") not in ["creature", "biome"]:
+			continue
+		var e_tier = e.get("current_tier", 0)
+		if e_tier >= GameData.MAX_TIER:
+			continue
+		var next_thresh = float(GameData.xp_thresholds[e_tier + 1])
+		if e.get("current_xp", 0.0) >= next_thresh:
+			ready_names.append(e.get("name", eid))
+
+	if not ready_names.is_empty():
+		vbox.add_child(HSeparator.new())
+		var evo_lbl = Label.new()
+		evo_lbl.text = "▲ Prêt à évoluer : " + ", ".join(PackedStringArray(ready_names))
+		evo_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
+		evo_lbl.add_theme_font_size_override("font_size", 12)
+		evo_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		evo_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vbox.add_child(evo_lbl)
+
 	vbox.add_child(HSeparator.new())
 
 	# Bouton retour + countdown automatique

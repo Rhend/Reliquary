@@ -154,15 +154,17 @@ func _compute_creature_atk() -> float:
 	atk *= mod.get("atk_mult", 1.0)
 	return atk
 
-# DEF totale du héro = (base + passifs) × mod de cycle.
+# DEF totale du héro = (base + passifs + équipement) × mod de cycle.
 # Le mod Frénésie peut passer def_mult à 0.6, ce qui est volontaire.
 func _compute_creature_def() -> float:
 	var c_stats  = GameData.get_effective_stats(_creature_id)
 	var passives = PassiveSystem.get_combat_bonuses()
+	var equip    = GameData.get_equipment_bonuses()
 	var mod      = AdventureSystem.get_modifier_bonuses()
 
 	var def = float(c_stats.get("def", 5))
 	def += passives.get("def_bonus", 0.0)
+	def += equip.get("def", 0.0)   # boucliers et armures contribuent à la DEF
 	def *= mod.get("def_mult", 1.0)
 	return def
 
