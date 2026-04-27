@@ -249,12 +249,16 @@ func _on_step_started(step: CombatStep) -> void:
 	var step_dur := CombatPlayer.BASE_STEP_DURATION * GameSettings.combat_speed
 
 	if step.attacker == "hero":
+		# Éteint le glow ennemi du step précédent avant d'allumer le héro
+		_reset_card_fx(_e_card, _e_border, _e_halo, CombatColors.ENEMY_BORDER_COLOR)
 		_glow_card(_c_card, _c_border, _c_halo,
 			CombatColors.HERO_GLOW_COLOR, CombatColors.HERO_HALO_COLOR, step_dur)
 		_shake_card(_e_card, step_dur)
 		_spawn_damage_pop(_e_hp_bar, "-%d" % step.damage, step.is_killing_blow, step_dur)
 		_set_enemy_hp(float(step.target_hp_after))
 	else:
+		# Éteint le glow héro du step précédent avant d'allumer l'ennemi
+		_reset_card_fx(_c_card, _c_border, _c_halo, CombatColors.HERO_BORDER_COLOR)
 		_glow_card(_e_card, _e_border, _e_halo,
 			CombatColors.ENEMY_GLOW_COLOR, CombatColors.ENEMY_HALO_COLOR, step_dur)
 		_shake_card(_c_card, step_dur)
