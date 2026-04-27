@@ -16,7 +16,7 @@
 extends Node
 
 const SAVE_PATH     = "user://IdleEvolutionSave.json"
-const SAVE_VER      = 2      # Incrémenter lors d'un changement de format incompatible
+const SAVE_VER      = 3      # Incrémenter lors d'un changement de format incompatible
 const SAVE_DEBOUNCE = 2.0    # Secondes d'inactivité avant l'écriture sur disque
 
 var _save_dirty: bool  = false
@@ -98,11 +98,12 @@ func load_save() -> void:
 
 	var save_data: Dictionary = json.get_data()
 
-	# Avertissement si la version de la sauvegarde ne correspond pas
+	# Abandonne si la version ne correspond pas (format incompatible)
 	var saved_ver = int(save_data.get("version", 0))
 	if saved_ver != SAVE_VER:
-		push_warning("SaveManager: version %d en mémoire, %d attendu — chargement tenté" \
+		push_warning("SaveManager: version %d en mémoire, %d attendu — sauvegarde ignorée" \
 			% [saved_ver, SAVE_VER])
+		return
 
 	# Fusionne l'état joueur sauvegardé (true = les clés du save écrasent les défauts)
 	if save_data.has("player"):

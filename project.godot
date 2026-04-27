@@ -11,10 +11,10 @@ config_version=5
 [application]
 
 config/name="IdleEvolution"
-run/main_scene="uid://village"
+run/main_scene="uid://hub_village"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
-config/main_scene="res://scenes/Main.tscn"
+config/main_scene="res://scenes/village/village.tscn"
 
 [autoload]
 
@@ -22,10 +22,13 @@ UIColors="*res://scripts/autoloads/UIColors.gd"
 EventBus="*res://scripts/autoloads/EventBus.gd"
 GameData="*res://scripts/autoloads/GameData.gd"
 SaveManager="*res://scripts/autoloads/SaveManager.gd"
+GameSettings="*res://scripts/autoloads/GameSettings.gd"
 MasterySystem="*res://scripts/systems/MasterySystem.gd"
 AdventureSystem="*res://scripts/systems/AdventureSystem.gd"
-CombatSystem="*res://scripts/systems/CombatSystem.gd"
+CombatPlayer="*res://systems/combat/combat_player.gd"
 PassiveSystem="*res://scripts/systems/PassiveSystem.gd"
+MasteryRegistry="*res://scripts/autoloads/MasteryRegistry.gd"
+RecipeRegistry="*res://scripts/autoloads/RecipeRegistry.gd"
 
 [display]
 

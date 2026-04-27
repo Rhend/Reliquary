@@ -2,7 +2,7 @@
 	"id": "forge_bouclier_ecailles",
 	"name": "Bouclier d'Écailles",
 	"result_id": "equip_bouclier_ecailles",
-	"result_slot": "shield",
+	"result_slot": "accessory",
 	"ingredients": [
 		{ "item_id": "res_ecaille",      "qty": 6 },
 		{ "item_id": "res_perle_marine", "qty": 4 },

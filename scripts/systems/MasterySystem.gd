@@ -25,7 +25,22 @@ func calculate_xp(base_xp: float, generator_tier: int, receiver_tier: int) -> fl
 # ─── Distribution d'XP ──────────────────────────────────────
 
 # Distribue de l'XP à une seule entité et vérifie si elle peut évoluer.
+# Retourne true si l'entité peut évoluer (seuil atteint, pas au tier max).
+func can_evolve(entity_id: String) -> bool:
+	var entity = GameData.get_entity(entity_id)
+	if entity.is_empty():
+		return false
+	var tier = entity.get("current_tier", 0)
+	if tier >= GameData.MAX_TIER:
+		return false
+	var next_idx = tier + 1
+	if next_idx >= GameData.xp_thresholds.size():
+		return false
+	return entity.get("current_xp", 0.0) >= float(GameData.xp_thresholds[next_idx])
+
 func add_xp_to_entity(entity_id: String, base_xp: float, generator_tier: int) -> void:
+	if entity_id == "hero":
+		return   # Le Héro ne reçoit pas d'XP de Maîtrise (SPEC 1)
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return

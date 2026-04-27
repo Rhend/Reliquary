@@ -2,7 +2,7 @@
 	"id": "forge_bouclier_fer",
 	"name": "Bouclier de Fer",
 	"result_id": "equip_bouclier_fer",
-	"result_slot": "shield",
+	"result_slot": "accessory",
 	"ingredients": [
 		{ "item_id": "res_fourrure",    "qty": 3 },
 		{ "item_id": "res_mineral_fer", "qty": 4 }

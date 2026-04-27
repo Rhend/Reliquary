@@ -35,19 +35,20 @@ var xp_modifiers: Dictionary = {}
 # Fusionnent définition JSON et état runtime.
 var entities: Dictionary = {}
 
+# ─── Héro (hors système de Maîtrise — SPEC 1) ───────────────
+var hero_data: HeroData = null
+
 # ─── État courant du joueur ─────────────────────────────────
 
 var player: Dictionary = {
 	"luck":               0,
 	"resources":          {},          # item_id → quantité possédée
-	"active_creature_id": "",
 	"active_biome_id":    "",
 	"active_passives":    [],
 	"equipped": {
-		"weapon": "equip_epee_bois",   # équipement de départ
-		"shield": "equip_bouclier",
-		"boots":  "equip_bottes",
-		"armor":  ""
+		"weapon":    "equip_epee_bois",   # équipement de départ
+		"armor":     "",
+		"accessory": "equip_bouclier"
 	},
 	"bestiary": {}   # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
 }
@@ -58,7 +59,16 @@ var player: Dictionary = {
 
 func _ready() -> void:
 	_load_mastery_config()
+	_load_hero_data()
 	_load_all_entities()
+
+func _load_hero_data() -> void:
+	hero_data = HeroData.new()
+	var raw = _read_json("res://data/hero/hero.json")
+	if not raw.is_empty():
+		hero_data.base_hp  = int(raw.get("base_hp",  hero_data.base_hp))
+		hero_data.base_atk = int(raw.get("base_atk", hero_data.base_atk))
+		hero_data.base_def = int(raw.get("base_def", hero_data.base_def))
 
 func _load_mastery_config() -> void:
 	var config = _read_json("res://data/mastery_config.json")
@@ -69,6 +79,7 @@ func _load_mastery_config() -> void:
 	xp_modifiers  = config.get("xp_modifiers",  {})
 
 # Charge toutes les entités depuis leurs dossiers respectifs.
+# Le Héro (id "hero") est exclu du catalogue d'entités (pas de Maîtrise).
 func _load_all_entities() -> void:
 	# Entités avec progression (tier / XP / passifs débloqués)
 	_load_entities_from_folder("res://data/creatures/", "creature")
@@ -90,6 +101,8 @@ func _load_entities_from_folder(path: String, entity_type: String) -> void:
 		if file_name.ends_with(".json"):
 			var data = _read_json(path + file_name)
 			if not data.is_empty() and data.has("id"):
+				if data["id"] == "hero":
+					continue   # Le Héro est géré séparément via hero_data
 				data["entity_type"]       = entity_type
 				data["current_tier"]      = 0
 				data["current_xp"]        = 0.0
