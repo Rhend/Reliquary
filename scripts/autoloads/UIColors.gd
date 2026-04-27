@@ -80,7 +80,7 @@ const COMBO_COLOR := Color(1.00, 0.62, 0.05)
 # ───────────────────────────────────────────────────────────
 
 # Couleur de la barre de PV du héro — 4 niveaux de danger.
-static func hero_hp(pct: float) -> Color:
+func hero_hp(pct: float) -> Color:
 	if pct > 0.60: return HP_HIGH
 	if pct > 0.30: return HP_MID
 	if pct > 0.15: return HP_LOW
@@ -88,13 +88,13 @@ static func hero_hp(pct: float) -> Color:
 
 # Couleur de la barre de PV d'un ennemi.
 # Logique inversée : rouge quand il est fort, jaune quand il faiblit.
-static func enemy_hp(pct: float) -> Color:
+func enemy_hp(pct: float) -> Color:
 	if pct > 0.60: return ENEMY_HIGH
 	if pct > 0.30: return ENEMY_MID
 	return ENEMY_LOW
 
 # Couleur d'une entrée du Hall des Évolutions selon son type.
-static func encounter(enc_type: String) -> Color:
+func encounter(enc_type: String) -> Color:
 	match enc_type:
 		"Créature":  return TYPE_CREATURE
 		"Piège":     return TYPE_TRAP
@@ -103,7 +103,7 @@ static func encounter(enc_type: String) -> Color:
 		_:           return Color.WHITE
 
 # Préfixe icône + couleur pour le bandeau d'événement.
-static func event_banner(event_type: String) -> Array:
+func event_banner(event_type: String) -> Array:
 	match event_type:
 		"combat":   return ["⚔ ", LOG_COMBAT]
 		"positive": return ["✦ ", LOG_EVENT]

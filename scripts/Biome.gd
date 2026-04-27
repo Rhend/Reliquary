@@ -794,7 +794,9 @@ func _add_log_entry(text: String, color: Color) -> void:
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_log_vbox.add_child(lbl)
 	while _log_vbox.get_child_count() > 8:
-		_log_vbox.get_child(0).queue_free()
+		var old = _log_vbox.get_child(0)
+		_log_vbox.remove_child(old)
+		old.queue_free()
 
 	# Défile automatiquement vers le bas — valeur arbitrairement grande
 	# car le moteur n'a pas encore mis en page le nouveau label au moment de l'appel.

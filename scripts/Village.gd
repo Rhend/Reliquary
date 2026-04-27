@@ -211,16 +211,16 @@ func _build_hero_card(parent: Node) -> void:
 	parent.add_child(card)
 
 	var m    = _margin(card, 18)
-	var wrap = VBoxContainer.new()
-	wrap.add_theme_constant_override("separation", 8)
-	m.add_child(wrap)
+	var card_vbox = VBoxContainer.new()
+	card_vbox.add_theme_constant_override("separation", 8)
+	m.add_child(card_vbox)
 
-	_hero_evo_badge = _title_label(wrap, "HÉRO", UIColors.STAT_HP)
-	wrap.add_child(HSeparator.new())
+	_hero_evo_badge = _title_label(card_vbox, "HÉRO", UIColors.STAT_HP)
+	card_vbox.add_child(HSeparator.new())
 
 	_hero_vbox = VBoxContainer.new()
 	_hero_vbox.add_theme_constant_override("separation", 8)
-	wrap.add_child(_hero_vbox)
+	card_vbox.add_child(_hero_vbox)
 
 	_fill_hero_card()
 
