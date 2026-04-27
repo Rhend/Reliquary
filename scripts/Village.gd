@@ -71,9 +71,9 @@ func _ready() -> void:
 	# Note : pas de connexion loot_dropped → _refresh_resources car resources_changed
 	# est émis par add_resource() et couvre tous les cas sans double-rebuild.
 	EventBus.resources_changed.connect(_refresh_resources)
-	EventBus.bestiary_updated.connect(func(_id): _refresh_bestiary())
+	EventBus.bestiary_updated.connect(_on_bestiary_updated)
 	EventBus.entity_evolved.connect(_on_entity_evolved)
-	EventBus.passive_unlocked.connect(func(_eid, _pid): _refresh_passives())
+	EventBus.passive_unlocked.connect(_on_passive_unlocked)
 	EventBus.xp_gained.connect(_on_xp_gained_village)
 	EventBus.entity_ready_to_evolve.connect(_on_entity_ready_to_evolve)
 
@@ -612,6 +612,12 @@ func _add_evolvable_row(entity_id: String, entity: Dictionary, bar_color: Color)
 		max_lbl.add_theme_font_size_override("font_size", 11)
 		max_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
 		right.add_child(max_lbl)
+
+func _on_bestiary_updated(_id: String) -> void:
+	_refresh_bestiary()
+
+func _on_passive_unlocked(_eid: String, _pid: String) -> void:
+	_refresh_passives()
 
 func _on_entity_evolved(entity_id: String, _new_tier: int) -> void:
 	_evolvable_set.erase(entity_id)
