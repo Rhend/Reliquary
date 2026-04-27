@@ -154,7 +154,7 @@ func _build_hero_card(parent: Node) -> void:
 
 	var stats_lbl = Label.new()
 	var h_atk = int(hero.base_atk + passives.get("atk_bonus", 0.0) + equip.get("atk", 0.0))
-	var h_def = int(hero.base_def + passives.get("def_bonus", 0.0))
+	var h_def = int(hero.base_def + passives.get("def_bonus", 0.0) + equip.get("def", 0.0))
 	stats_lbl.text = "ATK %d   DEF %d" % [h_atk, h_def]
 	stats_lbl.add_theme_font_size_override("font_size", 11)
 	stats_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)

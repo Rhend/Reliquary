@@ -59,6 +59,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 
 	var h_def := hero.get_effective_def(
 		passives.get("def_bonus", 0.0),
+		equip.get("def", 0.0),
 		modifier_bonuses.get("def_mult", 1.0)
 	)
 

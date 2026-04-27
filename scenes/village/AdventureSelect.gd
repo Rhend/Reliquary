@@ -171,9 +171,10 @@ func _refresh_content() -> void:
 	_content_vbox.add_child(HSeparator.new())
 
 	# ── Sections de contenu ───────────────────────────────────
-	_add_pool_section("Créatures",        pools["creatures"], UIColors.TYPE_CREATURE)
-	_add_pool_section("Pièges",           pools["traps"],     UIColors.TYPE_TRAP)
-	_add_pool_section("Événements positifs", pools["events"], UIColors.TYPE_EVENT_POS)
+	_add_pool_section("Créatures",           pools["creatures"],  UIColors.TYPE_CREATURE)
+	_add_pool_section("Pièges",              pools["traps"],      UIColors.TYPE_TRAP)
+	_add_pool_section("Événements positifs", pools["events"],     UIColors.TYPE_EVENT_POS)
+	_add_pool_section("Équipements",         pools["equipment"],  UIColors.STAT_ATK)
 
 	# ── Bouton Partir ─────────────────────────────────────────
 	var btn = Button.new()

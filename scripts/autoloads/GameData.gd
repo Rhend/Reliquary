@@ -41,16 +41,17 @@ var hero_data: HeroData = null
 # ─── État courant du joueur ─────────────────────────────────
 
 var player: Dictionary = {
-	"luck":               0,
-	"resources":          {},          # item_id → quantité possédée
-	"active_biome_id":    "",
-	"active_passives":    [],
+	"luck":                 0,
+	"resources":            {},   # item_id → quantité possédée
+	"active_biome_id":      "",
+	"active_passives":      [],
 	"equipped": {
 		"weapon":    "equip_epee_bois",   # équipement de départ
 		"armor":     "",
 		"accessory": "equip_bouclier"
 	},
-	"bestiary": {}   # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
+	"equipment_inventory":  [],   # item_id des équipements possédés mais non portés
+	"bestiary":             {}    # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -89,6 +90,8 @@ func _load_all_entities() -> void:
 	# Données statiques (sans progression)
 	_load_data_from_folder("res://data/resources/", "resource")
 	_load_data_from_folder("res://data/forge/",      "recipe")
+	# Extrait pièges et événements des biomes comme entités à part entière
+	_extract_biome_sub_entities()
 
 # Charge un dossier JSON et initialise les champs de maîtrise.
 func _load_entities_from_folder(path: String, entity_type: String) -> void:
@@ -126,6 +129,33 @@ func _load_data_from_folder(path: String, entity_type: String) -> void:
 				entities[data["id"]] = data
 		file_name = dir.get_next()
 	dir.list_dir_end()
+
+# Extrait les pièges et événements positifs de chaque biome et les enregistre
+# comme entités indépendantes avec progression de maîtrise.
+func _extract_biome_sub_entities() -> void:
+	for entity_id in entities.keys():
+		var e = entities[entity_id]
+		if e.get("entity_type") != "biome":
+			continue
+		var bstats = e.get("base_stats", {})
+		for trap in bstats.get("traps", []):
+			var tid = trap.get("id", "")
+			if tid != "" and not entities.has(tid):
+				var entry                   = trap.duplicate()
+				entry["entity_type"]        = "trap"
+				entry["current_tier"]       = 0
+				entry["current_xp"]         = 0.0
+				entry["unlocked_passives"]  = []
+				entities[tid]               = entry
+		for evt in bstats.get("positive_events", []):
+			var eid = evt.get("id", "")
+			if eid != "" and not entities.has(eid):
+				var entry                   = evt.duplicate()
+				entry["entity_type"]        = "event"
+				entry["current_tier"]       = 0
+				entry["current_xp"]         = 0.0
+				entry["unlocked_passives"]  = []
+				entities[eid]               = entry
 
 # Lit et parse un fichier JSON. Retourne {} en cas d'erreur.
 func _read_json(path: String) -> Dictionary:
@@ -172,7 +202,7 @@ func get_effective_stats(entity_id: String) -> Dictionary:
 # Bonus cumulés de tous les équipements portés.
 # Retourne au minimum { atk:0, hp:0, attack_speed_pct:0 }.
 func get_equipment_bonuses() -> Dictionary:
-	var bonuses: Dictionary = {"atk": 0.0, "hp": 0.0, "attack_speed_pct": 0.0}
+	var bonuses: Dictionary = {"atk": 0.0, "def": 0.0, "hp": 0.0, "attack_speed_pct": 0.0}
 	for item_id in player.get("equipped", {}).values():
 		if item_id == "":
 			continue
@@ -258,7 +288,7 @@ func can_craft(recipe: Dictionary) -> bool:
 			return false
 	return true
 
-# Consomme les ingrédients et équipe le résultat dans le slot approprié.
+# Consomme les ingrédients et ajoute le résultat à l'inventaire d'équipement.
 # Retourne false si les ressources sont insuffisantes.
 func craft(recipe: Dictionary) -> bool:
 	if not can_craft(recipe):
@@ -267,11 +297,42 @@ func craft(recipe: Dictionary) -> bool:
 		var item_id = ing.get("item_id", "")
 		var qty     = int(ing.get("qty", 0))
 		player["resources"][item_id] = int(player["resources"].get(item_id, 0)) - qty
-	# Équipe directement l'objet résultant dans son slot dédié
-	var slot = recipe.get("result_slot", "weapon")
-	player["equipped"][slot] = recipe.get("result_id", "")
+	var result_id = recipe.get("result_id", "")
+	if result_id != "":
+		player["equipment_inventory"].append(result_id)
 	EventBus.resources_changed.emit()
 	return true
+
+# Équipe un item de l'inventaire dans son slot. L'item précédent retourne en inventaire.
+func equip_item(item_id: String) -> void:
+	var item = get_entity(item_id)
+	if item.is_empty():
+		return
+	var slot = item.get("base_stats", {}).get("slot", "")
+	if slot not in ["weapon", "armor", "accessory"]:
+		return
+	var inventory: Array = player.get("equipment_inventory", [])
+	if not inventory.has(item_id):
+		return
+	# Renvoie l'item actuellement équipé en inventaire
+	var current = player["equipped"].get(slot, "")
+	if current != "":
+		inventory.append(current)
+	# Équipe le nouvel item
+	inventory.erase(item_id)
+	player["equipped"][slot] = item_id
+	EventBus.equipment_changed.emit()
+
+# Déséquipe l'item du slot et le remet en inventaire.
+func unequip_item(slot: String) -> void:
+	if slot not in ["weapon", "armor", "accessory"]:
+		return
+	var current = player["equipped"].get(slot, "")
+	if current == "":
+		return
+	player["equipment_inventory"].append(current)
+	player["equipped"][slot] = ""
+	EventBus.equipment_changed.emit()
 
 # ═══════════════════════════════════════════════════════════
 #  Ressources

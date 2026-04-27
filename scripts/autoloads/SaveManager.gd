@@ -16,7 +16,7 @@
 extends Node
 
 const SAVE_PATH     = "user://IdleEvolutionSave.json"
-const SAVE_VER      = 3      # Incrémenter lors d'un changement de format incompatible
+const SAVE_VER      = 4      # Incrémenter lors d'un changement de format incompatible
 const SAVE_DEBOUNCE = 2.0    # Secondes d'inactivité avant l'écriture sur disque
 
 var _save_dirty: bool  = false
@@ -35,6 +35,7 @@ func _ready() -> void:
 	EventBus.entity_evolved.connect(_on_progress)
 	EventBus.passive_unlocked.connect(_on_progress)
 	EventBus.player_state_changed.connect(_on_progress)
+	EventBus.equipment_changed.connect(_on_progress)
 
 # Marque la sauvegarde comme nécessaire et remet le timer à zéro.
 # start() sur un Timer en cours le relance depuis le début.

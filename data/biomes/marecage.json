@@ -41,6 +41,12 @@
 			{ "id": "boue_mouvante", "name": "Boue Mouvante",      "damage": 20 },
 			{ "id": "miasmes",       "name": "Miasmes Toxiques",   "damage": 30 },
 			{ "id": "lianes",        "name": "Lianes Tranchantes", "damage": 25 }
+		],
+		"equipment_pool": [
+			"equip_lame_venimeuse",
+			"equip_armure_hydre",
+			"equip_bottes_vif",
+			"equip_lame_hydre"
 		]
 	},
 	"passive_slots": [

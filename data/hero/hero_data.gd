@@ -23,8 +23,9 @@ func get_effective_atk(passive_bonus: float = 0.0, equip_bonus: float = 0.0,
 		atk_mult: float = 1.0) -> float:
 	return (float(base_atk) + passive_bonus + equip_bonus) * atk_mult
 
-func get_effective_def(passive_bonus: float = 0.0, def_mult: float = 1.0) -> float:
-	return (float(base_def) + passive_bonus) * def_mult
+func get_effective_def(passive_bonus: float = 0.0, equip_bonus: float = 0.0,
+		def_mult: float = 1.0) -> float:
+	return (float(base_def) + passive_bonus + equip_bonus) * def_mult
 
 func get_effective_hp(passive_bonus: float = 0.0, equip_bonus: float = 0.0) -> float:
 	return float(base_hp) + passive_bonus + equip_bonus

@@ -12,6 +12,8 @@ const SECTION_LABELS := {
 	"biome":     "BIOMES",
 	"passive":   "PASSIFS",
 	"equipment": "ÉQUIPEMENTS",
+	"trap":      "PIÈGES",
+	"event":     "ÉVÉNEMENTS",
 }
 
 var _scroll_vbox: VBoxContainer

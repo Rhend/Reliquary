@@ -99,10 +99,15 @@ signal combat_turn(attacker: String, damage: float,
 @warning_ignore("unused_signal")
 signal combat_ended(result: Dictionary)
 
+# ── Équipement ──────────────────────────────────────────────
+
+# Émis quand un item est équipé ou déséquipé.
+@warning_ignore("unused_signal")
+signal equipment_changed()
+
 # ── État joueur ─────────────────────────────────────────────
 
-# Émis quand une donnée joueur change hors des circuits habituels
-# (ex. changement de créature active dans le Village).
+# Émis quand une donnée joueur change hors des circuits habituels.
 @warning_ignore("unused_signal")
 signal player_state_changed()
 

@@ -47,6 +47,11 @@
 		"traps": [
 			{ "id": "spike_trap",  "name": "Pièges à pointes",  "damage": 15 },
 			{ "id": "poison_trap", "name": "Baies empoisonnées", "damage": 25 }
+		],
+		"equipment_pool": [
+			"equip_epee_fer",
+			"equip_armure_cuir",
+			"equip_bouclier_fer"
 		]
 	},
 	"passive_slots": [

@@ -189,6 +189,7 @@ func _handle_positive_event(event_data: Dictionary) -> void:
 		GameData.record_encounter(
 			evt.get("id", ""), evt.get("name", "?"), "Événement", current_biome_id, 5.0
 		)
+		MasterySystem.add_xp_to_entity(evt.get("id", ""), 5.0, 0)
 		_apply_positive_effect(evt)
 		_cycle_events += 1
 
@@ -239,6 +240,7 @@ func _handle_trap_event(event_data: Dictionary) -> void:
 		GameData.record_encounter(
 			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
 		)
+		MasterySystem.add_xp_to_entity(trap.get("id", ""), 5.0, 0)
 		EventBus.adventure_event_resolved.emit(event_data)
 		if current_hp <= 0.0:
 			_end_adventure(false)
