@@ -81,10 +81,10 @@ func get_mastery_display(entity_id: String) -> Dictionary:
 	var e = GameData.get_entity(entity_id)
 	if e.is_empty():
 		return {}
-	var tier     := e.get("current_tier", 0)
-	var xp       := e.get("current_xp",   0.0)
-	var next_idx := mini(tier + 1, GameData.xp_thresholds.size() - 1)
-	var xp_max   := float(GameData.xp_thresholds[next_idx])
+	var tier: int      = e.get("current_tier", 0)
+	var xp: float      = e.get("current_xp",   0.0)
+	var next_idx: int  = mini(tier + 1, GameData.xp_thresholds.size() - 1)
+	var xp_max: float  = float(GameData.xp_thresholds[next_idx])
 	return {
 		"name":       e.get("name", entity_id),
 		"tier":       tier,

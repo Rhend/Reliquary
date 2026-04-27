@@ -126,7 +126,7 @@ func _add_section(entity_type: String, entities: Array) -> void:
 	section.add_child(count_lbl)
 
 func _add_entity_row(parent: Node, entity: Dictionary) -> void:
-	var entity_id := entity.get("id", "")
+	var entity_id: String = entity.get("id", "")
 	var display   := MasteryRegistry.get_mastery_display(entity_id)
 	if display.is_empty():
 		return

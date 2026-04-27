@@ -124,7 +124,7 @@ func _finish(winner: String) -> void:
 func _determine_winner() -> String:
 	if _steps.is_empty():
 		return "hero"
-	var last := _steps.back()
+	var last: CombatStep = _steps.back()
 	if last.is_killing_blow:
 		return "hero" if last.attacker == "hero" else "enemy"
 	# Si max_steps atteint sans mort : celui qui a le moins de HP perd
