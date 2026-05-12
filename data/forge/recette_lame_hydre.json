@@ -1,0 +1,11 @@
+{
+	"id": "forge_lame_hydre",
+	"name": "Lame d'Hydre",
+	"result_id": "equip_lame_hydre",
+	"result_slot": "weapon",
+	"ingredients": [
+		{ "item_id": "res_venin",       "qty": 5 },
+		{ "item_id": "res_ecaille",     "qty": 4 },
+		{ "item_id": "res_mineral_fer", "qty": 3 }
+	]
+}

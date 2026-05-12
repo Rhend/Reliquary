@@ -1,0 +1,19 @@
+{
+	"id": "passive_fortification",
+	"name": "Fortification",
+	"base_stats": {
+		"effects": [
+			{
+				"id":          "def_bonus",
+				"value":       10,
+				"description": "+10 DEF permanente"
+			},
+			{
+				"id":          "hp_bonus",
+				"value":       15,
+				"description": "+15 PV maximum"
+			}
+		]
+	},
+	"passive_slots": []
+}

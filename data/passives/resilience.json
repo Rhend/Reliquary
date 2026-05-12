@@ -1,0 +1,14 @@
+{
+	"id": "passive_resilience",
+	"name": "Résilience",
+	"base_stats": {
+		"effects": [
+			{
+				"id":          "hp_bonus",
+				"value":       25,
+				"description": "+25 PV maximum"
+			}
+		]
+	},
+	"passive_slots": []
+}

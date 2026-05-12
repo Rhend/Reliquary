@@ -1,0 +1,8 @@
+{
+	"id": "equip_trident_mer",
+	"name": "Trident de Mer",
+	"base_stats": {
+		"slot": "weapon",
+		"bonuses": { "atk": 9, "def": 3 }
+	}
+}

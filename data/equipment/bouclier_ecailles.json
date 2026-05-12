@@ -1,0 +1,8 @@
+{
+	"id": "equip_bouclier_ecailles",
+	"name": "Bouclier d'Écailles",
+	"base_stats": {
+		"slot": "accessory",
+		"bonuses": { "def": 6, "hp": 30 }
+	}
+}

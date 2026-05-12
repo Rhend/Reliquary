@@ -1,0 +1,10 @@
+{
+	"id": "forge_armure_cuir",
+	"name": "Armure de Cuir",
+	"result_id": "equip_armure_cuir",
+	"result_slot": "armor",
+	"ingredients": [
+		{ "item_id": "res_fourrure",          "qty": 5 },
+		{ "item_id": "res_defense_sanglier",  "qty": 2 }
+	]
+}

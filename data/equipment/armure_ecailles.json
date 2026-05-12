@@ -1,0 +1,8 @@
+{
+	"id": "equip_armure_ecailles",
+	"name": "Armure d'Écailles",
+	"base_stats": {
+		"slot": "armor",
+		"bonuses": { "def": 5, "hp": 30 }
+	}
+}

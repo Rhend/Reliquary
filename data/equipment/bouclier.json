@@ -2,9 +2,7 @@
 	"id": "equip_bouclier",
 	"name": "Bouclier de Bois",
 	"base_stats": {
-		"slot": "shield",
-		"bonuses": {
-			"hp": 10
-		}
+		"slot": "accessory",
+		"bonuses": { "hp": 10 }
 	}
 }

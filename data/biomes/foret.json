@@ -8,10 +8,37 @@
 			"trap":     0.15
 		},
 		"enemies": [
-			{ "id": "enemy_rat",      "name": "Rat des Égouts", "atk": 8,  "def": 2, "hp": 30, "tier": 0, "xp_reward": 8  },
-			{ "id": "enemy_gobelin",  "name": "Gobelin",        "atk": 10, "def": 3, "hp": 40, "tier": 0, "xp_reward": 12 },
-			{ "id": "enemy_loup",     "name": "Loup",           "atk": 15, "def": 5, "hp": 60, "tier": 0, "xp_reward": 15 },
-			{ "id": "enemy_sanglier", "name": "Sanglier",       "atk": 18, "def": 8, "hp": 90, "tier": 1, "xp_reward": 25 }
+			{
+				"id": "enemy_rat", "name": "Rat des Égouts",
+				"atk": 8, "def": 2, "hp": 30, "tier": 0, "xp_reward": 8,
+				"loot_table": [
+					{ "item_id": "res_fourrure", "chance": 0.30 }
+				]
+			},
+			{
+				"id": "enemy_gobelin", "name": "Gobelin",
+				"atk": 10, "def": 3, "hp": 40, "tier": 0, "xp_reward": 12,
+				"loot_table": [
+					{ "item_id": "res_dent_gobelin", "chance": 0.40 },
+					{ "item_id": "res_mineral_fer",  "chance": 0.15 }
+				]
+			},
+			{
+				"id": "enemy_loup", "name": "Loup",
+				"atk": 15, "def": 5, "hp": 60, "tier": 0, "xp_reward": 15,
+				"loot_table": [
+					{ "item_id": "res_fourrure",     "chance": 0.50 },
+					{ "item_id": "res_dent_gobelin", "chance": 0.20 }
+				]
+			},
+			{
+				"id": "enemy_sanglier", "name": "Sanglier",
+				"atk": 18, "def": 8, "hp": 90, "tier": 1, "xp_reward": 25,
+				"loot_table": [
+					{ "item_id": "res_defense_sanglier", "chance": 0.45 },
+					{ "item_id": "res_fourrure",         "chance": 0.35 }
+				]
+			}
 		],
 		"positive_events": [
 			{ "id": "herb_find",   "name": "Herbes médicinales",     "effect": "heal", "value": 20 },
@@ -20,7 +47,15 @@
 		"traps": [
 			{ "id": "spike_trap",  "name": "Pièges à pointes",  "damage": 15 },
 			{ "id": "poison_trap", "name": "Baies empoisonnées", "damage": 25 }
+		],
+		"equipment_pool": [
+			"equip_epee_fer",
+			"equip_armure_cuir",
+			"equip_bouclier_fer"
 		]
 	},
-	"passive_slots": []
+	"passive_slots": [
+		{ "unlock_tier": 1, "passive_id": "passive_regeneration" },
+		{ "unlock_tier": 3, "passive_id": "passive_resistance"   }
+	]
 }

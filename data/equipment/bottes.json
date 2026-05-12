@@ -2,9 +2,7 @@
 	"id": "equip_bottes",
 	"name": "Bottes Légères",
 	"base_stats": {
-		"slot": "boots",
-		"bonuses": {
-			"attack_speed_pct": 2
-		}
+		"slot": "accessory",
+		"bonuses": { "attack_speed_pct": 2 }
 	}
 }

@@ -1,48 +1,99 @@
+# ============================================================
+# GameData.gd — Source de vérité unique pour les données du jeu.
+#
+# Responsabilités :
+#   1. Charger les entités depuis les fichiers JSON au démarrage.
+#   2. Maintenir l'état runtime du joueur (stats, inventaire, etc.).
+#   3. Exposer des méthodes typées pour lire / modifier ces données.
+#
+# Structure des entités :
+#   • Entités à maîtrise (creature / biome / passive / equipment) :
+#     dict JSON + entity_type + current_tier + current_xp + unlocked_passives
+#   • Données statiques (resource / recipe) :
+#     dict JSON + entity_type  (pas de progression)
+# ============================================================
 extends Node
 
-const MASTERY_TIERS: Array[String] = ["Commun", "Peu Commun", "Rare", "Épique", "Légendaire", "Unique"]
+# ─── Constantes ─────────────────────────────────────────────
+
+# Labels des paliers dans l'ordre croissant (index = tier).
+const MASTERY_TIERS: Array[String] = [
+	"Commun", "Peu Commun", "Rare", "Épique", "Légendaire", "Unique"
+]
 const MAX_TIER: int = 5
 
-# Chargés depuis mastery_config.json
+# ─── Données chargées depuis mastery_config.json ────────────
+
+# XP cumulatif requis pour atteindre chaque tier [0, 100, 500, …]
 var xp_thresholds: Array = []
+# Dictionnaire écart_de_tier (string) → multiplicateur d'XP reçu (float)
 var xp_modifiers: Dictionary = {}
 
-# Toutes les entités du jeu (id -> Dictionary fusionnant définition + état runtime)
+# ─── Catalogue d'entités ────────────────────────────────────
+
+# Toutes les entités du jeu, indexées par leur id.
+# Fusionnent définition JSON et état runtime.
 var entities: Dictionary = {}
 
-# État courant du joueur
+# ─── Héro (hors système de Maîtrise — SPEC 1) ───────────────
+var hero_data: HeroData = null
+
+# ─── État courant du joueur ─────────────────────────────────
+
 var player: Dictionary = {
-	"luck": 0,
-	"resources": {},
-	"active_creature_id": "",
-	"active_biome_id": "",
-	"active_passives": [],
+	"luck":                 0,
+	"resources":            {},   # item_id → quantité possédée
+	"active_biome_id":      "",
+	"active_passives":      [],
 	"equipped": {
-		"weapon": "equip_epee_bois",
-		"shield": "equip_bouclier",
-		"boots":  "equip_bottes"
+		"weapon":    "equip_epee_bois",   # équipement de départ
+		"armor":     "",
+		"accessory": "equip_bouclier"
 	},
-	"bestiary": {}
+	"equipment_inventory":  [],   # item_id des équipements possédés mais non portés
+	"bestiary":             {}    # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
 }
+
+# ═══════════════════════════════════════════════════════════
+#  Initialisation
+# ═══════════════════════════════════════════════════════════
 
 func _ready() -> void:
 	_load_mastery_config()
+	_load_hero_data()
 	_load_all_entities()
+
+func _load_hero_data() -> void:
+	hero_data = HeroData.new()
+	var raw = _read_json("res://data/hero/hero.json")
+	if not raw.is_empty():
+		hero_data.base_hp  = int(raw.get("base_hp",  hero_data.base_hp))
+		hero_data.base_atk = int(raw.get("base_atk", hero_data.base_atk))
+		hero_data.base_def = int(raw.get("base_def", hero_data.base_def))
 
 func _load_mastery_config() -> void:
 	var config = _read_json("res://data/mastery_config.json")
 	if config.is_empty():
-		push_error("mastery_config.json introuvable ou invalide")
+		push_error("GameData: mastery_config.json introuvable ou invalide")
 		return
 	xp_thresholds = config.get("xp_thresholds", [])
-	xp_modifiers  = config.get("xp_modifiers", {})
+	xp_modifiers  = config.get("xp_modifiers",  {})
 
+# Charge toutes les entités depuis leurs dossiers respectifs.
+# Le Héro (id "hero") est exclu du catalogue d'entités (pas de Maîtrise).
 func _load_all_entities() -> void:
+	# Entités avec progression (tier / XP / passifs débloqués)
 	_load_entities_from_folder("res://data/creatures/", "creature")
 	_load_entities_from_folder("res://data/biomes/",    "biome")
 	_load_entities_from_folder("res://data/passives/",  "passive")
 	_load_entities_from_folder("res://data/equipment/", "equipment")
+	# Données statiques (sans progression)
+	_load_data_from_folder("res://data/resources/", "resource")
+	_load_data_from_folder("res://data/forge/",      "recipe")
+	# Extrait pièges et événements des biomes comme entités à part entière
+	_extract_biome_sub_entities()
 
+# Charge un dossier JSON et initialise les champs de maîtrise.
 func _load_entities_from_folder(path: String, entity_type: String) -> void:
 	var dir = DirAccess.open(path)
 	if dir == null:
@@ -53,13 +104,60 @@ func _load_entities_from_folder(path: String, entity_type: String) -> void:
 		if file_name.ends_with(".json"):
 			var data = _read_json(path + file_name)
 			if not data.is_empty() and data.has("id"):
+				if data["id"] == "hero":
+					continue   # Le Héro est géré séparément via hero_data
 				data["entity_type"]       = entity_type
 				data["current_tier"]      = 0
 				data["current_xp"]        = 0.0
 				data["unlocked_passives"] = []
 				entities[data["id"]]      = data
 		file_name = dir.get_next()
+	dir.list_dir_end()
 
+# Charge un dossier de données statiques (sans champs de progression).
+func _load_data_from_folder(path: String, entity_type: String) -> void:
+	var dir = DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".json"):
+			var data = _read_json(path + file_name)
+			if not data.is_empty() and data.has("id"):
+				data["entity_type"] = entity_type
+				entities[data["id"]] = data
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+# Extrait les pièges et événements positifs de chaque biome et les enregistre
+# comme entités indépendantes avec progression de maîtrise.
+func _extract_biome_sub_entities() -> void:
+	for entity_id in entities.keys():
+		var e = entities[entity_id]
+		if e.get("entity_type") != "biome":
+			continue
+		var bstats = e.get("base_stats", {})
+		for trap in bstats.get("traps", []):
+			var tid = trap.get("id", "")
+			if tid != "" and not entities.has(tid):
+				var entry                   = trap.duplicate()
+				entry["entity_type"]        = "trap"
+				entry["current_tier"]       = 0
+				entry["current_xp"]         = 0.0
+				entry["unlocked_passives"]  = []
+				entities[tid]               = entry
+		for evt in bstats.get("positive_events", []):
+			var eid = evt.get("id", "")
+			if eid != "" and not entities.has(eid):
+				var entry                   = evt.duplicate()
+				entry["entity_type"]        = "event"
+				entry["current_tier"]       = 0
+				entry["current_xp"]         = 0.0
+				entry["unlocked_passives"]  = []
+				entities[eid]               = entry
+
+# Lit et parse un fichier JSON. Retourne {} en cas d'erreur.
 func _read_json(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
@@ -70,19 +168,26 @@ func _read_json(path: String) -> Dictionary:
 	var err  = json.parse(file.get_as_text())
 	file.close()
 	if err != OK:
-		push_error("Erreur parsing JSON : " + path)
+		push_error("GameData: erreur parsing JSON — " + path)
 		return {}
 	return json.get_data()
 
+# ═══════════════════════════════════════════════════════════
+#  Accesseurs — Entités
+# ═══════════════════════════════════════════════════════════
+
+# Retourne le dict d'une entité par son id, ou {} si introuvable.
 func get_entity(entity_id: String) -> Dictionary:
 	return entities.get(entity_id, {})
 
+# Retourne le nom du palier correspondant à un tier (0–5).
 func get_tier_name(tier: int) -> String:
 	if tier < 0 or tier >= MASTERY_TIERS.size():
 		return "Inconnu"
 	return MASTERY_TIERS[tier]
 
-# Retourne les stats de base d'une entité scalées par son tier actuel.
+# Stats de base d'une entité après application de sa progression de tier.
+# Exemple : héro tier 2 avec tier_scaling.atk=3 → atk_base + 2×3 = +6 ATK.
 func get_effective_stats(entity_id: String) -> Dictionary:
 	var entity = get_entity(entity_id)
 	if entity.is_empty():
@@ -94,10 +199,13 @@ func get_effective_stats(entity_id: String) -> Dictionary:
 		stats[key] = stats.get(key, 0) + tier * int(scaling[key])
 	return stats
 
-# Retourne les bonus cumulés de tous les équipements portés.
+# Bonus cumulés de tous les équipements portés.
+# Retourne au minimum { atk:0, hp:0, attack_speed_pct:0 }.
 func get_equipment_bonuses() -> Dictionary:
-	var bonuses: Dictionary = {"atk": 0.0, "hp": 0.0, "attack_speed_pct": 0.0}
+	var bonuses: Dictionary = {"atk": 0.0, "def": 0.0, "hp": 0.0, "attack_speed_pct": 0.0}
 	for item_id in player.get("equipped", {}).values():
+		if item_id == "":
+			continue
 		var item = get_entity(item_id)
 		if item.is_empty():
 			continue
@@ -106,13 +214,25 @@ func get_equipment_bonuses() -> Dictionary:
 			bonuses[key] = bonuses.get(key, 0.0) + float(item_bonuses[key])
 	return bonuses
 
-# Enregistre ou met à jour une entrée dans le Hall des Évolutions.
-# xp_reward = 0 : première rencontre sans XP (ex: début de combat).
+# ═══════════════════════════════════════════════════════════
+#  Hall des Évolutions (Bestiaire)
+# ═══════════════════════════════════════════════════════════
+
+# Crée ou met à jour une entrée dans le Hall des Évolutions.
+#
+# xp_reward == 0 : début de rencontre (compteur incrémenté, pas d'XP).
+# xp_reward  > 0 : rencontre terminée — XP distribué, tier vérifié.
+#
+# Le tier du Hall est indépendant du tier de l'entité dans le jeu :
+# il mesure la familiarité du joueur avec cette rencontre spécifique.
 func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 		biome_id: String, xp_reward: float) -> void:
 	if enc_id == "":
 		return
+
 	var hall: Dictionary = player.get("bestiary", {})
+
+	# Première rencontre : création de l'entrée
 	if not hall.has(enc_id):
 		var biome = get_entity(biome_id)
 		hall[enc_id] = {
@@ -124,10 +244,15 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 			"xp":         0.0,
 			"tier":       0
 		}
+
 	var entry: Dictionary = hall[enc_id]
-	entry["count"] += 1
+
+	# count n'est incrémenté qu'à la complétion (xp_reward > 0) pour éviter
+	# le double-comptage : l'entrée est créée au début du combat (xp=0)
+	# mais le kill n'est confirmé qu'à la victoire (xp>0).
 	if xp_reward > 0.0:
-		entry["xp"] += xp_reward
+		entry["count"] += 1
+		entry["xp"]    += xp_reward
 		var tier: int = entry.get("tier", 0)
 		while tier < MAX_TIER:
 			var next_idx: int = tier + 1
@@ -137,6 +262,94 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 				break
 			entry["xp"]   -= float(xp_thresholds[next_idx])
 			entry["tier"] += 1
-			tier           = entry["tier"]
-	player["bestiary"] = hall
+			tier            = entry["tier"]
+
+	# Pas de player["bestiary"] = hall : hall est déjà la même référence
 	EventBus.bestiary_updated.emit(enc_id)
+
+# ═══════════════════════════════════════════════════════════
+#  Forge
+# ═══════════════════════════════════════════════════════════
+
+# Liste toutes les recettes de forge disponibles dans le catalogue.
+func get_forge_recipes() -> Array:
+	var result: Array = []
+	for id in entities:
+		if entities[id].get("entity_type") == "recipe":
+			result.append(entities[id])
+	return result
+
+# Vérifie si le joueur possède tous les ingrédients d'une recette.
+func can_craft(recipe: Dictionary) -> bool:
+	for ing in recipe.get("ingredients", []):
+		var needed = int(ing.get("qty", 0))
+		var have   = int(player.get("resources", {}).get(ing.get("item_id", ""), 0))
+		if have < needed:
+			return false
+	return true
+
+# Consomme les ingrédients et ajoute le résultat à l'inventaire d'équipement.
+# Retourne false si les ressources sont insuffisantes.
+func craft(recipe: Dictionary) -> bool:
+	if not can_craft(recipe):
+		return false
+	for ing in recipe.get("ingredients", []):
+		var item_id = ing.get("item_id", "")
+		var qty     = int(ing.get("qty", 0))
+		player["resources"][item_id] = int(player["resources"].get(item_id, 0)) - qty
+	var result_id = recipe.get("result_id", "")
+	if result_id != "":
+		player["equipment_inventory"].append(result_id)
+	EventBus.resources_changed.emit()
+	return true
+
+# Équipe un item de l'inventaire dans son slot. L'item précédent retourne en inventaire.
+func equip_item(item_id: String) -> void:
+	var item = get_entity(item_id)
+	if item.is_empty():
+		return
+	var slot = item.get("base_stats", {}).get("slot", "")
+	if slot not in ["weapon", "armor", "accessory"]:
+		return
+	var inventory: Array = player.get("equipment_inventory", [])
+	if not inventory.has(item_id):
+		return
+	# Renvoie l'item actuellement équipé en inventaire
+	var current = player["equipped"].get(slot, "")
+	if current != "":
+		inventory.append(current)
+	# Équipe le nouvel item
+	inventory.erase(item_id)
+	player["equipped"][slot] = item_id
+	EventBus.equipment_changed.emit()
+
+# Déséquipe l'item du slot et le remet en inventaire.
+func unequip_item(slot: String) -> void:
+	if slot not in ["weapon", "armor", "accessory"]:
+		return
+	var current = player["equipped"].get(slot, "")
+	if current == "":
+		return
+	player["equipment_inventory"].append(current)
+	player["equipped"][slot] = ""
+	EventBus.equipment_changed.emit()
+
+# ═══════════════════════════════════════════════════════════
+#  Ressources
+# ═══════════════════════════════════════════════════════════
+
+# Ajoute qty unités d'une ressource à l'inventaire du joueur.
+func add_resource(item_id: String, qty: int) -> void:
+	player["resources"][item_id] = int(player["resources"].get(item_id, 0)) + qty
+	EventBus.resources_changed.emit()
+
+# ═══════════════════════════════════════════════════════════
+#  Combat — Bonus de maîtrise spécifique à un ennemi
+# ═══════════════════════════════════════════════════════════
+
+# Retourne un bonus d'ATK basé sur la maîtrise accumulée face à cet ennemi précis.
+# Formule : tier_hall × 2 ATK.
+# Récompense les joueurs qui s'acharnent sur le même type d'ennemi.
+func get_mastery_combat_bonus(enemy_id: String) -> float:
+	var entry = player.get("bestiary", {}).get(enemy_id, {})
+	return float(entry.get("tier", 0)) * 2.0

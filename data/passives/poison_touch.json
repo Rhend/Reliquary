@@ -1,0 +1,14 @@
+{
+	"id": "passive_poison_touch",
+	"name": "Contact Venimeux",
+	"base_stats": {
+		"effects": [
+			{
+				"id":          "atk_bonus",
+				"value":       8,
+				"description": "+8 ATK (venin des marais)"
+			}
+		]
+	},
+	"passive_slots": []
+}

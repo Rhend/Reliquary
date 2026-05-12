@@ -1,0 +1,8 @@
+{
+	"id": "equip_lame_hydre",
+	"name": "Lame d'Hydre",
+	"base_stats": {
+		"slot": "weapon",
+		"bonuses": { "atk": 14, "attack_speed_pct": 5 }
+	}
+}

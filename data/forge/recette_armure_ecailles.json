@@ -1,0 +1,10 @@
+{
+	"id": "forge_armure_ecailles",
+	"name": "Armure d'Écailles",
+	"result_id": "equip_armure_ecailles",
+	"result_slot": "armor",
+	"ingredients": [
+		{ "item_id": "res_ecaille", "qty": 8 },
+		{ "item_id": "res_slime",   "qty": 3 }
+	]
+}

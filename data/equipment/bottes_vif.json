@@ -1,0 +1,8 @@
+{
+	"id": "equip_bottes_vif",
+	"name": "Bottes Vif-Argent",
+	"base_stats": {
+		"slot": "accessory",
+		"bonuses": { "attack_speed_pct": 8 }
+	}
+}

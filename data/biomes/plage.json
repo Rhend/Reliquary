@@ -8,17 +8,52 @@
 			"trap":     0.15
 		},
 		"enemies": [
-			{ "id": "enemy_crabe",   "name": "Crabe Géant",    "atk": 14, "def": 6, "hp": 55, "tier": 0, "xp_reward": 14 },
-			{ "id": "enemy_sirene",  "name": "Sirène Hostile", "atk": 18, "def": 4, "hp": 70, "tier": 1, "xp_reward": 22 }
+			{
+				"id": "enemy_crabe", "name": "Crabe Géant",
+				"atk": 14, "def": 6, "hp": 55, "tier": 0, "xp_reward": 14,
+				"loot_table": [
+					{ "item_id": "res_ecaille",      "chance": 0.40 },
+					{ "item_id": "res_perle_marine", "chance": 0.20 }
+				]
+			},
+			{
+				"id": "enemy_sirene", "name": "Sirène Hostile",
+				"atk": 18, "def": 4, "hp": 70, "tier": 1, "xp_reward": 22,
+				"loot_table": [
+					{ "item_id": "res_ecaille",       "chance": 0.30 },
+					{ "item_id": "res_herbe_magique",  "chance": 0.25 },
+					{ "item_id": "res_perle_marine",   "chance": 0.30 }
+				]
+			},
+			{
+				"id": "enemy_requin", "name": "Requin Marteau",
+				"atk": 24, "def": 8, "hp": 120, "tier": 2, "xp_reward": 40,
+				"loot_table": [
+					{ "item_id": "res_os_corail",    "chance": 0.55 },
+					{ "item_id": "res_ecaille",       "chance": 0.35 },
+					{ "item_id": "res_perle_marine",  "chance": 0.20 }
+				]
+			}
 		],
 		"positive_events": [
-			{ "id": "sea_shell",  "name": "Coquillage magique",  "effect": "luck", "value": 8  },
-			{ "id": "tide_pool",  "name": "Mare régénératrice",   "effect": "heal", "value": 30 }
+			{ "id": "sea_shell",   "name": "Coquillage Magique", "effect": "luck", "value": 8  },
+			{ "id": "tide_pool",   "name": "Mare Régénératrice", "effect": "heal", "value": 30 },
+			{ "id": "drift_chest", "name": "Coffre à la Dérive", "effect": "luck", "value": 5  }
 		],
 		"traps": [
-			{ "id": "quicksand",   "name": "Sables mouvants",  "damage": 20 },
-			{ "id": "jellyfish",   "name": "Méduse venimeuse", "damage": 18 }
+			{ "id": "quicksand", "name": "Sables Mouvants",  "damage": 20 },
+			{ "id": "jellyfish", "name": "Méduse Venimeuse", "damage": 18 },
+			{ "id": "rip_tide",  "name": "Courant Violent",  "damage": 25 }
+		],
+		"equipment_pool": [
+			"equip_trident_mer",
+			"equip_armure_ecailles",
+			"equip_bouclier_ecailles"
 		]
 	},
-	"passive_slots": []
+	"passive_slots": [
+		{ "unlock_tier": 1, "passive_id": "passive_regeneration" },
+		{ "unlock_tier": 2, "passive_id": "passive_resistance"   },
+		{ "unlock_tier": 4, "passive_id": "passive_resilience"   }
+	]
 }
