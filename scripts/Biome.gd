@@ -218,7 +218,7 @@ func _build_creature_card(parent: Node) -> void:
 	var eff_stats     = GameData.get_effective_stats(creature_id)
 	var passives      = PassiveSystem.get_combat_bonuses()
 	var max_hp        = float(eff_stats.get("hp", 100)) + equip_bonuses.get("hp", 0.0) \
-	                    + passives.get("hp_bonus", 0.0)
+						+ passives.get("hp_bonus", 0.0)
 	var initial_hp    = AdventureSystem.current_hp if AdventureSystem.is_running else max_hp
 
 	_h1(vbox, creature.get("name", "Héro").to_upper())
