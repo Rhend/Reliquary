@@ -12,13 +12,13 @@ extends Node
 
 const BASE_STEP_DURATION: float = 0.8
 
-signal step_started(step: CombatStep)
-signal step_ended(step: CombatStep)
+signal step_started(step)
+signal step_ended(step)
 signal combat_finished(winner: String)
 
 # ─── État runtime ────────────────────────────────────────────
 
-var _steps:            Array[CombatStep] = []
+var _steps:            Array = []
 var _index:            int               = 0
 var _timer:            Timer
 var _current_hero_hp:  float             = 0.0
@@ -90,7 +90,7 @@ func _play_next() -> void:
 		_finish(winner)
 		return
 
-	var step := _steps[_index]
+	var step = _steps[_index]
 
 	# Met à jour les HP courants AVANT d'émettre (pour que l'UI soit cohérente)
 	if step.attacker == "hero":
@@ -124,7 +124,7 @@ func _finish(winner: String) -> void:
 func _determine_winner() -> String:
 	if _steps.is_empty():
 		return "hero"
-	var last: CombatStep = _steps.back()
+	var last = _steps.back()
 	if last.is_killing_blow:
 		return "hero" if last.attacker == "hero" else "enemy"
 	# Si max_steps atteint sans mort : celui qui a le moins de HP perd

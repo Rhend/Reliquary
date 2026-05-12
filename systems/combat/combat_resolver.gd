@@ -15,9 +15,9 @@ const MAX_STEPS: int          = 300   # garde-fou anti-boucle infinie
 static func resolve(
 		hero_atk:  float, hero_def:  float, hero_hp:  float,
 		enemy_atk: float, enemy_def: float, enemy_hp: float
-	) -> Array[CombatStep]:
+	) -> Array:
 
-	var steps: Array[CombatStep] = []
+	var steps: Array = []
 	var h_hp := hero_hp
 	var e_hp := enemy_hp
 
