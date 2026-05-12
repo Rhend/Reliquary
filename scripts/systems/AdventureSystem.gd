@@ -277,9 +277,9 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	# XP au biome (40 % de l'XP du cycle)
 	MasterySystem.add_xp_to_entity(current_biome_id, xp_earned * 0.40, gen_tier)
 
-	# XP à la créature active (60 % de l'XP de base)
+	# XP au héro (20 % de l'XP du cycle — 2× plus lent que le biome)
 	var creature_id = GameData.player.get("active_creature_id", "")
-	MasterySystem.add_xp_to_entity(creature_id, xp_base * 0.60, gen_tier)
+	MasterySystem.add_xp_to_entity(creature_id, xp_earned * 0.20, gen_tier)
 
 	# Hall des Évolutions
 	GameData.record_encounter(

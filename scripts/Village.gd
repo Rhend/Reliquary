@@ -1,54 +1,33 @@
 # ============================================================
 # Village.gd — Scène principale du Village.
 #
-# Sections affichées :
-#   • Partir en aventure  — sélection du biome + lancement
-#   • Héro                — stats ATK / DEF / PV (sans XP ni évolution)
-#   • Équipement          — 4 slots (arme / bouclier / bottes / armure)
-#   • Hall des Évolutions — toutes les rencontres, filtré par type
-#   • Inventaire          — ressources possédées avec quantités
-#   • Forge               — recettes disponibles avec boutons de craft
+# Sections inline :
+#   • Partir en expédition — sélection du biome + CTA mis en avant
+#   • Héro                 — stats + XP + évolution
+#   • Équipement           — 4 slots
+#   • Passifs actifs
+#   • Inventaire
 #
-# Les sections Inventaire et Forge se rafraîchissent dynamiquement
-# via les signaux EventBus.resources_changed et EventBus.loot_dropped.
+# Écrans secondaires (overlay plein écran) :
+#   • Hall des Évolutions  — EvolutionHall.gd
+#   • Forge                — Forge.gd
 # ============================================================
 extends Control
 
 # ─── Références UI dynamiques ───────────────────────────────
 
-var _bestiary_vbox:   VBoxContainer
 var _resources_vbox:  VBoxContainer
-var _forge_vbox:      VBoxContainer
 var _passives_vbox:   VBoxContainer
-var _hero_vbox:       VBoxContainer  # Contenu de la carte héro (refresh sur XP/évolution)
-var _fade_rect:       ColorRect      # Overlay de transition de scène
+var _hero_vbox:       VBoxContainer
+var _fade_rect:       ColorRect
 
 # ─── Badges de notification d'évolution ─────────────────────
 
 var _hero_evo_badge: Label       # "▲ Évolution disponible" dans l'en-tête Héro
-var _hall_evo_badge: Label       # "▲ Évolution disponible" dans l'en-tête Hall
+var _hall_btn:       Button      # Bouton d'accès au Hall (badge si évolution dispo)
 var _evolvable_set:  Dictionary = {}  # entity_id → true, entités prêtes à évoluer
 
-# ─── État du filtre Hall des Évolutions ─────────────────────
-
-var _hall_filter:    String     = "Tout"
-var _filter_buttons: Dictionary = {}   # label → Button
-
-# Correspondance label de filtre → valeur du champ "type" dans le bestiaire
-const FILTER_TO_TYPE: Dictionary = {
-	"Créatures":  "Créature",
-	"Pièges":     "Piège",
-	"Événements": "Événement"
-}
-
-# ─── Libellés et icônes des slots d'équipement ──────────────
-
-const SLOT_ICONS: Dictionary = {
-	"weapon": "Arme",
-	"shield": "Bouclier",
-	"boots":  "Bottes",
-	"armor":  "Armure"
-}
+const SLOT_ICONS: Dictionary = {"weapon":"Arme","shield":"Bouclier","boots":"Bottes","armor":"Armure"}
 
 # ═══════════════════════════════════════════════════════════
 #  Initialisation
@@ -57,13 +36,6 @@ const SLOT_ICONS: Dictionary = {
 func _ready() -> void:
 	SaveManager.load_save()
 
-	# Sélectionne la première créature disponible si la sauvegarde n'en avait pas
-	if GameData.player.get("active_creature_id", "") == "":
-		for entity_id in GameData.entities:
-			if GameData.entities[entity_id].get("entity_type") == "creature":
-				GameData.player["active_creature_id"] = entity_id
-				break
-
 	_build_ui()
 	_scan_evolvable_entities()   # Badges dès l'entrée si des entités peuvent évoluer
 
@@ -71,7 +43,6 @@ func _ready() -> void:
 	# Note : pas de connexion loot_dropped → _refresh_resources car resources_changed
 	# est émis par add_resource() et couvre tous les cas sans double-rebuild.
 	EventBus.resources_changed.connect(_refresh_resources)
-	EventBus.bestiary_updated.connect(func(_id): _refresh_bestiary())
 	EventBus.entity_evolved.connect(_on_entity_evolved)
 	EventBus.passive_unlocked.connect(func(_eid, _pid): _refresh_passives())
 	EventBus.xp_gained.connect(_on_xp_gained_village)
@@ -107,28 +78,23 @@ func _build_ui() -> void:
 	root_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	margin.add_child(root_vbox)
 
-	# Titre
-	var title = Label.new()
-	title.text = "VILLAGE"
-	title.add_theme_font_size_override("font_size", 30)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root_vbox.add_child(title)
+	# Section aventure — pleine largeur, mise en avant
+	_build_adventure_section(root_vbox)
 
-	# Ligne principale de cartes (aventure / héro / équipement)
+	# Cartes héro + équipement
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 20)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	root_vbox.add_child(row)
 
-	_build_adventure_card(row)
 	_build_hero_card(row)
 	_build_equipment_card(row)
 
-	# Sections inférieures
-	_build_hall_section(root_vbox)
+	# Accès aux écrans secondaires + sections basses
+	_build_hall_button(root_vbox)
+	_build_forge_button(root_vbox)
 	_build_passives_section(root_vbox)
 	_build_resources_section(root_vbox)
-	_build_forge_section(root_vbox)
 
 	# Overlay de fondu — doit être le DERNIER enfant pour se rendre par-dessus tout
 	_fade_rect = ColorRect.new()
@@ -141,43 +107,57 @@ func _build_ui() -> void:
 	var tw = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_property(_fade_rect, "color:a", 0.0, 0.40)
 
-# ─── Carte "Partir en aventure" ─────────────────────────────
+# ─── Section "Partir en expédition" — pleine largeur ────────
 
-func _build_adventure_card(parent: Node) -> void:
+func _build_adventure_section(parent: Node) -> void:
 	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(280, 220)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(card)
 
-	var m    = _margin(card, 18)
+	var m    = _margin(card, 20)
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 14)
 	m.add_child(vbox)
 
-	_title_label(vbox, "PARTIR EN AVENTURE", UIColors.TYPE_EVENT_POS)
+	# Titre avec accent coloré
+	var title_row = HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 10)
+	vbox.add_child(title_row)
+
+	var accent = ColorRect.new()
+	accent.color = UIColors.TYPE_EVENT_POS
+	accent.custom_minimum_size = Vector2(4, 22)
+	accent.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title_row.add_child(accent)
+
+	var title_lbl = Label.new()
+	title_lbl.text = "PARTIR EN EXPÉDITION"
+	title_lbl.add_theme_font_size_override("font_size", 18)
+	title_lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
+	title_row.add_child(title_lbl)
+
 	vbox.add_child(HSeparator.new())
 
-	var biome_lbl = Label.new()
-	biome_lbl.text = "Choisir un biome :"
-	biome_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	biome_lbl.add_theme_font_size_override("font_size", 12)
-	vbox.add_child(biome_lbl)
+	# Ligne : sélecteur de biome + aperçu
+	var selector_row = HBoxContainer.new()
+	selector_row.add_theme_constant_override("separation", 16)
+	vbox.add_child(selector_row)
 
-	# Peuple la liste avec tous les biomes disponibles
 	var biome_selector = OptionButton.new()
-	biome_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	biome_selector.custom_minimum_size = Vector2(200, 0)
 	for entity_id in GameData.entities:
 		var e = GameData.entities[entity_id]
 		if e.get("entity_type") == "biome":
 			biome_selector.add_item(e.get("name", entity_id))
 			biome_selector.set_item_metadata(biome_selector.item_count - 1, entity_id)
-	vbox.add_child(biome_selector)
+	selector_row.add_child(biome_selector)
 
-	# Aperçu du biome sélectionné : ennemis · events · pièges
 	var biome_preview = Label.new()
-	biome_preview.add_theme_font_size_override("font_size", 11)
+	biome_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	biome_preview.add_theme_font_size_override("font_size", 12)
 	biome_preview.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	biome_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vbox.add_child(biome_preview)
+	biome_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	selector_row.add_child(biome_preview)
 
 	var _refresh_preview = func():
 		if biome_selector.item_count == 0:
@@ -185,21 +165,32 @@ func _build_adventure_card(parent: Node) -> void:
 		var bid    = biome_selector.get_item_metadata(biome_selector.selected)
 		var bdata  = GameData.get_entity(bid)
 		var bstats = bdata.get("base_stats", {})
+		var tier   = bdata.get("current_tier", 0)
+		var tier_name = GameData.get_tier_name(tier)
 		var n_enemies = bstats.get("enemies", []).size()
 		var n_events  = bstats.get("positive_events", []).size()
 		var n_traps   = bstats.get("traps", []).size()
-		biome_preview.text = "%d ennemis · %d événements · %d pièges" % [
-			n_enemies, n_events, n_traps
+		biome_preview.text = "%s  ·  %d ennemis · %d événements · %d pièges" % [
+			tier_name, n_enemies, n_events, n_traps
 		]
 
 	_refresh_preview.call()
 	biome_selector.item_selected.connect(func(_i): _refresh_preview.call())
 
-	vbox.add_child(_spacer())
-
+	# Bouton CTA mis en avant
 	var start_btn = Button.new()
-	start_btn.text = "Lancer l'aventure"
+	start_btn.text = "▶  LANCER L'EXPÉDITION"
 	start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_btn.add_theme_font_size_override("font_size", 16)
+	start_btn.add_theme_color_override("font_color", UIColors.BG_DARK)
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = UIColors.TYPE_EVENT_POS
+	for corner in ["corner_radius_top_left","corner_radius_top_right",
+			"corner_radius_bottom_right","corner_radius_bottom_left"]:
+		btn_style.set(corner, 6)
+	start_btn.add_theme_stylebox_override("normal",  btn_style)
+	start_btn.add_theme_stylebox_override("hover",   btn_style)
+	start_btn.add_theme_stylebox_override("pressed", btn_style)
 	start_btn.pressed.connect(func(): _start_adventure(biome_selector))
 	vbox.add_child(start_btn)
 
@@ -228,27 +219,11 @@ func _fill_hero_card() -> void:
 	for child in _hero_vbox.get_children():
 		child.queue_free()
 
-	# ── Sélecteur de créature ────────────────────────────────
-	var selector = OptionButton.new()
-	selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var active_id = GameData.player.get("active_creature_id", "")
-	var idx       = 0
-	var active_idx = 0
-	for entity_id in GameData.entities:
-		var e = GameData.entities[entity_id]
-		if e.get("entity_type") == "creature":
-			selector.add_item(e.get("name", entity_id))
-			selector.set_item_metadata(idx, entity_id)
-			if entity_id == active_id:
-				active_idx = idx
-			idx += 1
-	selector.selected = active_idx
-	selector.item_selected.connect(func(i: int):
-		GameData.player["active_creature_id"] = selector.get_item_metadata(i)
-		EventBus.player_state_changed.emit()
-		_fill_hero_card()
-	)
-	_hero_vbox.add_child(selector)
+	var hero_name_lbl = Label.new()
+	hero_name_lbl.text = GameData.get_entity("hero").get("name", "Héro")
+	hero_name_lbl.add_theme_font_size_override("font_size", 14)
+	hero_name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hero_vbox.add_child(hero_name_lbl)
 	_hero_vbox.add_child(HSeparator.new())
 
 	# ── Stats ────────────────────────────────────────────────
@@ -313,10 +288,12 @@ func _fill_hero_card() -> void:
 		xp_bar.min_value       = 0.0
 		xp_bar.max_value       = xp_max
 		xp_bar.value           = minf(xp, xp_max)
-		xp_bar.show_percentage = false
-		xp_bar.custom_minimum_size = Vector2(0, 10)
+		xp_bar.show_percentage = true
+		xp_bar.custom_minimum_size = Vector2(0, 16)
 		xp_bar.add_theme_stylebox_override("fill", bar_fill)
 		xp_bar.add_theme_stylebox_override("background", bar_bg)
+		xp_bar.add_theme_color_override("font_color", Color.WHITE)
+		xp_bar.add_theme_font_size_override("font_size", 10)
 		_hero_vbox.add_child(xp_bar)
 
 		var xp_lbl = Label.new()
@@ -406,217 +383,12 @@ func _build_equipment_card(parent: Node) -> void:
 	vbox.add_child(_spacer())
 
 # ═══════════════════════════════════════════════════════════
-#  Hall des Évolutions
+#  Hall des Évolutions (bouton d'accès)
 # ═══════════════════════════════════════════════════════════
-
-func _build_hall_section(parent: Node) -> void:
-	var section = VBoxContainer.new()
-	section.add_theme_constant_override("separation", 10)
-	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(section)
-
-	_hall_evo_badge = _title_label(section, "HALL DES ÉVOLUTIONS", UIColors.TYPE_CREATURE)
-	section.add_child(HSeparator.new())
-	_build_filter_buttons(section)
-
-	var scroll = ScrollContainer.new()
-	scroll.custom_minimum_size         = Vector2(0, 300)
-	scroll.size_flags_horizontal       = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode      = ScrollContainer.SCROLL_MODE_DISABLED
-	section.add_child(scroll)
-
-	_bestiary_vbox = VBoxContainer.new()
-	_bestiary_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bestiary_vbox.add_theme_constant_override("separation", 3)
-	scroll.add_child(_bestiary_vbox)
-
-	_refresh_bestiary()
-
-func _build_filter_buttons(parent: Node) -> void:
-	var row = HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	parent.add_child(row)
-
-	for f in ["Tout", "Créatures", "Pièges", "Événements", "Biomes"]:
-		var btn = Button.new()
-		btn.text = f
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.flat = true
-		_filter_buttons[f] = btn
-		btn.pressed.connect(func(): _on_filter_pressed(f))
-		row.add_child(btn)
-
-	_update_filter_highlight()
-
-func _on_filter_pressed(filter: String) -> void:
-	_hall_filter = filter
-	_update_filter_highlight()
-	_refresh_bestiary()
-
-# Surligne le filtre actif avec un fond coloré, les inactifs restent plats.
-func _update_filter_highlight() -> void:
-	for f in _filter_buttons:
-		var btn: Button = _filter_buttons[f]
-		if f == _hall_filter:
-			var s = StyleBoxFlat.new()
-			s.bg_color = UIColors.FILTER_ON
-			for corner in ["corner_radius_top_left","corner_radius_top_right",
-					"corner_radius_bottom_right","corner_radius_bottom_left"]:
-				s.set(corner, 4)
-			btn.add_theme_stylebox_override("normal",  s)
-			btn.add_theme_stylebox_override("hover",   s)
-			btn.add_theme_stylebox_override("pressed", s)
-			btn.add_theme_color_override("font_color",       UIColors.BG_DARK)
-			btn.add_theme_color_override("font_hover_color", UIColors.BG_DARK)
-		else:
-			btn.remove_theme_stylebox_override("normal")
-			btn.remove_theme_stylebox_override("hover")
-			btn.remove_theme_stylebox_override("pressed")
-			btn.remove_theme_color_override("font_color")
-			btn.remove_theme_color_override("font_hover_color")
-
-func _refresh_bestiary() -> void:
-	if _bestiary_vbox == null:
-		return
-	for child in _bestiary_vbox.get_children():
-		child.queue_free()
-
-	# Vue spéciale "Biomes"
-	if _hall_filter == "Biomes":
-		_populate_biomes()
-		return
-
-	# Regroupe les entrées par biome, filtrées par type si nécessaire
-	var hall: Dictionary   = GameData.player.get("bestiary", {})
-	var by_biome: Dictionary = {}
-
-	for enc_id in hall:
-		var entry    = hall[enc_id]
-		var enc_type = entry.get("type", "Créature")
-		if _hall_filter != "Tout":
-			var required = FILTER_TO_TYPE.get(_hall_filter, "")
-			if enc_type != required:
-				continue
-		var biome_name = entry.get("biome_name", "Inconnu")
-		if not by_biome.has(biome_name):
-			by_biome[biome_name] = []
-		by_biome[biome_name].append(entry)
-
-	if by_biome.is_empty():
-		var lbl = Label.new()
-		lbl.text = ("Aucune rencontre de ce type enregistrée." if not hall.is_empty()
-				else "Aucune rencontre enregistrée pour le moment...")
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		_bestiary_vbox.add_child(lbl)
-		return
-
-	for biome_name in by_biome:
-		_add_group_header(biome_name)
-		for entry in by_biome[biome_name]:
-			_add_entry_row(entry)
-		_bestiary_vbox.add_child(HSeparator.new())
-
-# Affiche les biomes avec leur XP/tier et un bouton Évoluer si disponible.
-func _populate_biomes() -> void:
-	_add_group_header("BIOMES EXPLORÉS")
-	for entity_id in GameData.entities:
-		var e = GameData.entities[entity_id]
-		if e.get("entity_type") != "biome":
-			continue
-		_add_evolvable_row(entity_id, e, UIColors.TYPE_BIOME)
-
-# Ligne d'entité évolutive (biome ou passif) avec barre XP et bouton Évoluer.
-func _add_evolvable_row(entity_id: String, entity: Dictionary, bar_color: Color) -> void:
-	var tier:     int   = entity.get("current_tier", 0)
-	var xp:       float = entity.get("current_xp",   0.0)
-	var next_idx: int   = mini(tier + 1, GameData.xp_thresholds.size() - 1)
-	var xp_max:   float = float(GameData.xp_thresholds[next_idx]) if tier < GameData.MAX_TIER else 1.0
-	var can_evolve: bool = tier < GameData.MAX_TIER and xp >= xp_max
-
-	var row = HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bestiary_vbox.add_child(row)
-
-	# Colonne gauche : nom + tier
-	var left = VBoxContainer.new()
-	left.custom_minimum_size = Vector2(160, 0)
-	row.add_child(left)
-
-	var name_lbl = Label.new()
-	name_lbl.text = entity.get("name", "?")
-	name_lbl.add_theme_font_size_override("font_size", 13)
-	left.add_child(name_lbl)
-
-	var tier_lbl = Label.new()
-	tier_lbl.text = GameData.get_tier_name(tier)
-	tier_lbl.add_theme_font_size_override("font_size", 11)
-	tier_lbl.add_theme_color_override("font_color",
-		UIColors.FILTER_ON if tier > 0 else UIColors.TEXT_MUTED)
-	left.add_child(tier_lbl)
-
-	# Passifs déjà débloqués sur cette entité
-	var unlocked = entity.get("unlocked_passives", [])
-	if not unlocked.is_empty():
-		var pnames: Array = []
-		for pid in unlocked:
-			pnames.append(GameData.get_entity(pid).get("name", pid))
-		var plab = Label.new()
-		plab.text = "Passifs : " + ", ".join(PackedStringArray(pnames))
-		plab.add_theme_font_size_override("font_size", 10)
-		plab.add_theme_color_override("font_color", UIColors.TEXT_BONUS)
-		left.add_child(plab)
-
-	# Prochain passif à débloquer
-	var next_passive_name = ""
-	for slot in entity.get("passive_slots", []):
-		if slot.get("unlock_tier", 99) == tier + 1:
-			var np = GameData.get_entity(slot.get("passive_id", ""))
-			if not np.is_empty():
-				next_passive_name = np.get("name", "")
-			break
-
-	# Colonne droite : barre XP + bouton
-	var right = VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(right)
-
-	if tier < GameData.MAX_TIER:
-		var bar = _colored_bar(bar_color if not can_evolve else UIColors.FILTER_ON, 12)
-		bar.min_value = 0.0
-		bar.max_value = xp_max
-		bar.value     = minf(xp, xp_max)
-		right.add_child(bar)
-
-		var hint = ""
-		if next_passive_name != "":
-			hint = "  → %s" % next_passive_name
-		var xp_lbl = Label.new()
-		xp_lbl.text = "XP %.0f / %.0f%s" % [xp, xp_max, hint]
-		xp_lbl.add_theme_font_size_override("font_size", 10)
-		xp_lbl.add_theme_color_override("font_color",
-			UIColors.FILTER_ON if can_evolve else UIColors.TEXT_MUTED)
-		right.add_child(xp_lbl)
-
-		if can_evolve:
-			var btn = Button.new()
-			btn.text = "ÉVOLUER ▲"
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.add_theme_color_override("font_color", UIColors.FILTER_ON)
-			btn.pressed.connect(func(): _on_evolve_pressed(entity_id))
-			right.add_child(btn)
-	else:
-		var max_lbl = Label.new()
-		max_lbl.text = "Maîtrise maximale atteinte"
-		max_lbl.add_theme_font_size_override("font_size", 11)
-		max_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
-		right.add_child(max_lbl)
 
 func _on_entity_evolved(entity_id: String, _new_tier: int) -> void:
 	_evolvable_set.erase(entity_id)
 	_update_evo_badges()
-	_refresh_bestiary()
 	_refresh_passives()
 	if entity_id == GameData.player.get("active_creature_id", ""):
 		_fill_hero_card()
@@ -630,7 +402,7 @@ func _on_xp_gained_village(entity_id: String, _amount: float) -> void:
 func _scan_evolvable_entities() -> void:
 	for entity_id in GameData.entities:
 		var e = GameData.entities[entity_id]
-		if e.get("entity_type") not in ["creature", "biome"]:
+		if e.get("entity_type") not in ["hero", "biome"]:
 			continue
 		var tier = e.get("current_tier", 0)
 		if tier >= GameData.MAX_TIER:
@@ -643,92 +415,30 @@ func _on_entity_ready_to_evolve(entity_id: String) -> void:
 	_evolvable_set[entity_id] = true
 	_update_evo_badges()
 
-# Met à jour la visibilité des badges selon le type des entités évolvables.
 func _update_evo_badges() -> void:
-	var creature_ready := false
-	var biome_ready    := false
+	var hero_ready  := false
+	var hall_ready  := false
 	for eid in _evolvable_set:
 		var e_type = GameData.get_entity(eid).get("entity_type", "")
-		if e_type == "creature": creature_ready = true
-		elif e_type == "biome":  biome_ready    = true
+		if e_type == "hero":  hero_ready = true
+		elif e_type == "biome": hall_ready = true
 
 	if _hero_evo_badge != null:
-		_hero_evo_badge.visible = creature_ready
-	if _hall_evo_badge != null:
-		_hall_evo_badge.visible = creature_ready or biome_ready
+		_hero_evo_badge.visible = hero_ready
+	if _hall_btn != null:
+		_hall_btn.text = ("⚔ HALL DES ÉVOLUTIONS  ▲" if hall_ready
+				else "⚔ HALL DES ÉVOLUTIONS")
 
-func _on_evolve_pressed(entity_id: String) -> void:
-	if MasterySystem.evolve_entity(entity_id):
-		_refresh_bestiary()
-		_refresh_passives()
+func _build_hall_button(parent: Node) -> void:
+	_hall_btn = Button.new()
+	_hall_btn.text = "⚔ HALL DES ÉVOLUTIONS"
+	_hall_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hall_btn.pressed.connect(_open_hall)
+	parent.add_child(_hall_btn)
 
-func _add_group_header(biome_name: String) -> void:
-	var lbl = Label.new()
-	lbl.text = "  " + biome_name.to_upper()
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
-	_bestiary_vbox.add_child(lbl)
-
-	# En-tête de colonnes
-	var header = _hall_row()
-	_bestiary_vbox.add_child(header)
-	for col in ["Nom", "Type", "Maîtrise", "XP"]:
-		var h = Label.new()
-		h.text = col
-		h.add_theme_font_size_override("font_size", 11)
-		h.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		header.add_child(h)
-
-func _add_entry_row(entry: Dictionary) -> void:
-	var tier:     int   = entry.get("tier",  0)
-	var xp:       float = entry.get("xp",    0.0)
-	var count:    int   = entry.get("count", 0)
-	var enc_type        = entry.get("type",  "Créature")
-	var next_i:   int   = mini(tier + 1, GameData.xp_thresholds.size() - 1)
-	var xp_max:   float = float(GameData.xp_thresholds[next_i])
-	var bar_color       = UIColors.encounter(enc_type)
-
-	var row = _hall_row()
-	_bestiary_vbox.add_child(row)
-
-	var name_lbl = Label.new()
-	name_lbl.text = entry.get("name", "?")
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 12)
-	row.add_child(name_lbl)
-
-	var type_lbl = Label.new()
-	type_lbl.text = enc_type
-	type_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	type_lbl.add_theme_font_size_override("font_size", 12)
-	type_lbl.add_theme_color_override("font_color", bar_color)
-	row.add_child(type_lbl)
-
-	var tier_lbl = Label.new()
-	tier_lbl.text = GameData.get_tier_name(tier)
-	tier_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tier_lbl.add_theme_font_size_override("font_size", 12)
-	row.add_child(tier_lbl)
-
-	# Colonne XP : barre colorée + texte
-	var xp_col = VBoxContainer.new()
-	xp_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var bar = _colored_bar(bar_color, 14)
-	bar.min_value = 0.0
-	bar.max_value = xp_max
-	bar.value     = xp
-	xp_col.add_child(bar)
-
-	var count_text = "  (%d×)" % count if count > 0 else ""
-	var xp_lbl = Label.new()
-	xp_lbl.text = "%.0f / %.0f%s" % [xp, xp_max, count_text]
-	xp_lbl.add_theme_font_size_override("font_size", 10)
-	xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	xp_col.add_child(xp_lbl)
-
-	row.add_child(xp_col)
+func _open_hall() -> void:
+	var hall = load("res://scripts/village/EvolutionHall.gd").new()
+	add_child(hall)
 
 # ═══════════════════════════════════════════════════════════
 #  Inventaire
@@ -810,137 +520,16 @@ func _refresh_resources() -> void:
 		qty_lbl.add_theme_color_override("font_color", UIColors.RESOURCE_QTY)
 		hbox.add_child(qty_lbl)
 
-# ═══════════════════════════════════════════════════════════
-#  Forge
-# ═══════════════════════════════════════════════════════════
+func _build_forge_button(parent: Node) -> void:
+	var btn = Button.new()
+	btn.text = "🔨 FORGE"
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.pressed.connect(_open_forge)
+	parent.add_child(btn)
 
-func _build_forge_section(parent: Node) -> void:
-	var section = VBoxContainer.new()
-	section.add_theme_constant_override("separation", 8)
-	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(section)
-
-	_title_label(section, "FORGE", UIColors.STAT_ATK)
-	section.add_child(HSeparator.new())
-
-	_forge_vbox = VBoxContainer.new()
-	_forge_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_forge_vbox.add_theme_constant_override("separation", 10)
-	section.add_child(_forge_vbox)
-
-	_refresh_forge()
-
-func _refresh_forge() -> void:
-	if _forge_vbox == null:
-		return
-	for child in _forge_vbox.get_children():
-		child.queue_free()
-
-	var recipes = GameData.get_forge_recipes()
-	if recipes.is_empty():
-		var empty_lbl = Label.new()
-		empty_lbl.text = "Aucune recette disponible."
-		empty_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		_forge_vbox.add_child(empty_lbl)
-		return
-
-	# Trie par coût total croissant (ingrédients)
-	recipes.sort_custom(func(a, b):
-		var ca = 0; for i in a.get("ingredients",[]): ca += int(i.get("qty",0))
-		var cb = 0; for i in b.get("ingredients",[]): cb += int(i.get("qty",0))
-		return ca < cb
-	)
-
-	for recipe in recipes:
-		_add_recipe_card(recipe)
-
-func _add_recipe_card(recipe: Dictionary) -> void:
-	var slot      = recipe.get("result_slot", "weapon")
-	var result_id = recipe.get("result_id", "")
-	var equipped  = GameData.player.get("equipped", {}).get(slot, "")
-	var is_equipped   = (equipped == result_id)
-
-	var card = PanelContainer.new()
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_forge_vbox.add_child(card)
-
-	var m    = _margin(card, 12)
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	m.add_child(vbox)
-
-	# En-tête : nom + slot + badge ÉQUIPÉ ou UPGRADE
-	var header = HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	vbox.add_child(header)
-
-	var name_lbl = Label.new()
-	name_lbl.text = recipe.get("name", "?")
-	name_lbl.add_theme_font_size_override("font_size", 13)
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(name_lbl)
-
-	# Badge contextuel
-	var badge_text  = ""
-	var badge_color = UIColors.TEXT_MUTED
-	if is_equipped:
-		badge_text  = "[ÉQUIPÉ]"
-		badge_color = UIColors.INGREDIENT_OK
-	else:
-		# Détecte si c'est un upgrade sur l'item actuellement dans le slot
-		var result_item   = GameData.get_entity(result_id)
-		var current_item  = GameData.get_entity(equipped)
-		if not result_item.is_empty():
-			var r_bonus = result_item.get("base_stats",{}).get("bonuses",{})
-			var c_bonus = current_item.get("base_stats",{}).get("bonuses",{}) if not current_item.is_empty() else {}
-			var r_score = 0; for v in r_bonus.values(): r_score += int(v)
-			var c_score = 0; for v in c_bonus.values(): c_score += int(v)
-			if r_score > c_score:
-				badge_text  = "[UPGRADE ▲]"
-				badge_color = UIColors.FILTER_ON
-
-	var slot_lbl = Label.new()
-	slot_lbl.text = "[%s]  %s" % [SLOT_ICONS.get(slot, "?"), badge_text] if badge_text != "" \
-			else "[%s]" % SLOT_ICONS.get(slot, "?")
-	slot_lbl.add_theme_font_size_override("font_size", 11)
-	slot_lbl.add_theme_color_override("font_color", badge_color if badge_text != "" else UIColors.RESULT_SLOT)
-	header.add_child(slot_lbl)
-
-	# Ingrédients
-	var ing_row = HBoxContainer.new()
-	ing_row.add_theme_constant_override("separation", 14)
-	vbox.add_child(ing_row)
-
-	var resources: Dictionary = GameData.player.get("resources", {})
-	for ing in recipe.get("ingredients", []):
-		var item_id  = ing.get("item_id", "")
-		var needed   = int(ing.get("qty", 0))
-		var have     = int(resources.get(item_id, 0))
-		var res_name = GameData.get_entity(item_id).get("name", item_id)
-
-		var ing_lbl = Label.new()
-		ing_lbl.add_theme_font_size_override("font_size", 11)
-		ing_lbl.text = "%s  %d/%d" % [res_name, have, needed]
-		ing_lbl.add_theme_color_override("font_color",
-			UIColors.INGREDIENT_OK if have >= needed else UIColors.INGREDIENT_MISSING)
-		ing_row.add_child(ing_lbl)
-
-	# Bouton Forger
-	var can_craft = GameData.can_craft(recipe)
-	var forge_btn = Button.new()
-	forge_btn.text     = "Forger" if not is_equipped else "Déjà équipé"
-	forge_btn.disabled = not can_craft or is_equipped
-	forge_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if can_craft and not is_equipped:
-		forge_btn.add_theme_color_override("font_color", UIColors.INGREDIENT_OK)
-	forge_btn.pressed.connect(func(): _on_forge_pressed(recipe))
-	vbox.add_child(forge_btn)
-
-func _on_forge_pressed(recipe: Dictionary) -> void:
-	if GameData.craft(recipe):
-		# La ressource a changé — rafraîchit les deux sections concernées
-		_refresh_resources()
-		_refresh_forge()
+func _open_forge() -> void:
+	var forge = load("res://scripts/village/Forge.gd").new()
+	add_child(forge)
 
 # ═══════════════════════════════════════════════════════════
 #  Passifs actifs
@@ -1105,33 +694,3 @@ func _spacer() -> Control:
 	s.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	return s
 
-# HBoxContainer avec séparation uniforme, pleine largeur.
-func _hall_row() -> HBoxContainer:
-	var row = HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	return row
-
-# ProgressBar colorée avec fond sombre pour le Hall des Évolutions.
-func _colored_bar(color: Color, min_h: int) -> ProgressBar:
-	var bar = ProgressBar.new()
-	bar.custom_minimum_size = Vector2(0, min_h)
-	bar.show_percentage = false
-
-	var fill = StyleBoxFlat.new()
-	fill.bg_color                   = color
-	fill.corner_radius_top_left     = 3
-	fill.corner_radius_top_right    = 3
-	fill.corner_radius_bottom_right = 3
-	fill.corner_radius_bottom_left  = 3
-	bar.add_theme_stylebox_override("fill", fill)
-
-	var bg = StyleBoxFlat.new()
-	bg.bg_color                   = UIColors.BG_BAR
-	bg.corner_radius_top_left     = 3
-	bg.corner_radius_top_right    = 3
-	bg.corner_radius_bottom_right = 3
-	bg.corner_radius_bottom_left  = 3
-	bar.add_theme_stylebox_override("background", bg)
-
-	return bar

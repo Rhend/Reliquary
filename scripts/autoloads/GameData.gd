@@ -40,7 +40,7 @@ var entities: Dictionary = {}
 var player: Dictionary = {
 	"luck":               0,
 	"resources":          {},          # item_id → quantité possédée
-	"active_creature_id": "",
+	"active_creature_id": "hero",
 	"active_biome_id":    "",
 	"active_passives":    [],
 	"equipped": {
@@ -59,6 +59,22 @@ var player: Dictionary = {
 func _ready() -> void:
 	_load_mastery_config()
 	_load_all_entities()
+	_seed_test_bestiary()
+
+# Données de test — couvre les 6 tiers de rareté pour le Hall des Évolutions.
+func _seed_test_bestiary() -> void:
+	var hall: Dictionary = player.get("bestiary", {})
+	var test_entries: Array = [
+		{"id":"enemy_rat",      "name":"Rat des Égouts",    "tier":0, "xp":50.0,    "count":6,   "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
+		{"id":"enemy_gobelin",  "name":"Gobelin",           "tier":1, "xp":180.0,   "count":22,  "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
+		{"id":"enemy_loup",     "name":"Loup Sombre",       "tier":2, "xp":750.0,   "count":55,  "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
+		{"id":"enemy_sanglier", "name":"Sanglier Épique",   "tier":3, "xp":4200.0,  "count":120, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
+		{"id":"enemy_ours",     "name":"Ours Légendaire",   "tier":4, "xp":22000.0, "count":210, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
+		{"id":"enemy_dragon",   "name":"Dragon Ancien",     "tier":5, "xp":0.0,     "count":350, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
+	]
+	for e in test_entries:
+		if not hall.has(e["id"]):
+			hall[e["id"]] = e.duplicate()
 
 func _load_mastery_config() -> void:
 	var config = _read_json("res://data/mastery_config.json")
@@ -71,7 +87,7 @@ func _load_mastery_config() -> void:
 # Charge toutes les entités depuis leurs dossiers respectifs.
 func _load_all_entities() -> void:
 	# Entités avec progression (tier / XP / passifs débloqués)
-	_load_entities_from_folder("res://data/creatures/", "creature")
+	_load_entities_from_folder("res://data/hero/",      "hero")
 	_load_entities_from_folder("res://data/biomes/",    "biome")
 	_load_entities_from_folder("res://data/passives/",  "passive")
 	_load_entities_from_folder("res://data/equipment/", "equipment")

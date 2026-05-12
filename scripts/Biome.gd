@@ -627,7 +627,7 @@ func _show_cycle_summary(result: Dictionary) -> void:
 	var ready_names: Array = []
 	for eid in GameData.entities:
 		var e = GameData.entities[eid]
-		if e.get("entity_type") not in ["creature", "biome"]:
+		if e.get("entity_type") not in ["hero", "biome"]:
 			continue
 		var e_tier = e.get("current_tier", 0)
 		if e_tier >= GameData.MAX_TIER:
