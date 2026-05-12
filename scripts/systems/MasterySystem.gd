@@ -53,12 +53,11 @@ func add_xp_to_entity(entity_id: String, base_xp: float, generator_tier: int) ->
 	_check_evolution(entity_id, xp_before)
 
 # Distribue de l'XP à tous les passifs actifs du joueur.
-# Le héro (active_creature_id) est INTENTIONNELLEMENT exclu :
-# sa progression passe par l'équipement forgé et les biomes explorés.
+# Le héro reçoit son XP séparément via add_xp_to_entity dans AdventureSystem.
 #
 # Deux sources de passifs actifs :
 #   1. player["active_passives"]        — passifs activés manuellement
-#   2. entity["unlocked_passives"] (*)  — passifs débloqués sur créatures/biomes
+#   2. entity["unlocked_passives"] (*)  — passifs débloqués sur héro/biomes
 # (*) Dédoublonnés pour éviter qu'un même passif partagé entre entités
 #     reçoive de l'XP plusieurs fois.
 func add_xp_to_all_active(base_xp: float, generator_tier: int) -> void:
@@ -73,7 +72,7 @@ func add_xp_to_all_active(base_xp: float, generator_tier: int) -> void:
 	# Passifs débloqués via l'évolution de créatures et de biomes
 	for entity_id in GameData.entities:
 		var e = GameData.entities[entity_id]
-		if e.get("entity_type") not in ["creature", "biome"]:
+		if e.get("entity_type") not in ["hero", "biome"]:
 			continue
 		for passive_id in e.get("unlocked_passives", []):
 			if not seen.has(passive_id):

@@ -82,17 +82,19 @@ func _ready() -> void:
 	_event_timer.one_shot = true
 	_event_timer.timeout.connect(_on_event_timer)
 	add_child(_event_timer)
-	CombatPlayer.combat_finished.connect(_on_combat_finished)
+	EventBus.combat_ended.connect(_on_combat_ended)
 
 # ═══════════════════════════════════════════════════════════
 #  Interface publique
 # ═══════════════════════════════════════════════════════════
 
 func start_adventure(biome_id: String) -> void:
-	var biome = GameData.get_entity(biome_id)
+	var biome       = GameData.get_entity(biome_id)
+	var creature_id = GameData.player.get("active_creature_id", "")
+	var creature    = GameData.get_entity(creature_id)
 
-	if biome.is_empty():
-		push_error("AdventureSystem: biome introuvable pour démarrer")
+	if biome.is_empty() or creature.is_empty():
+		push_error("AdventureSystem: biome ou créature manquant pour démarrer")
 		return
 
 	current_biome_id = biome_id   # Nécessaire avant _get_max_hp()
@@ -120,8 +122,8 @@ func stop_adventure() -> void:
 		return
 	is_running = false
 	_event_timer.stop()
-	if CombatPlayer.is_playing:
-		CombatPlayer.stop()
+	if CombatSystem.is_fighting:
+		CombatSystem.stop_combat()
 	EventBus.adventure_stopped.emit()
 
 # Bonus ATK/DEF du modificateur de cycle + bonus de combo.
@@ -146,20 +148,22 @@ func _on_event_timer() -> void:
 		_process_event()
 
 func _process_event() -> void:
-	var event_type = _roll_event_type()
-	var event_data = {
-		"type":     event_type,
-		"biome_id": current_biome_id,
+	var creature_id = GameData.player.get("active_creature_id", "")
+	var event_type  = _roll_event_type()
+	var event_data  = {
+		"type":        event_type,
+		"biome_id":    current_biome_id,
+		"creature_id": creature_id
 	}
 
 	match event_type:
-		"combat":   _handle_combat_event(event_data)
-		"positive": _handle_positive_event(event_data)
-		"trap":     _handle_trap_event(event_data)
+		"combat":   _handle_combat_event(creature_id, event_data)
+		"positive": _handle_positive_event(creature_id, event_data)
+		"trap":     _handle_trap_event(creature_id, event_data)
 
 # ─── Combat ──────────────────────────────────────────────────
 
-func _handle_combat_event(event_data: Dictionary) -> void:
+func _handle_combat_event(creature_id: String, event_data: Dictionary) -> void:
 	var biome   = GameData.get_entity(current_biome_id)
 	var enemies = biome.get("base_stats", {}).get("enemies", [])
 
@@ -175,11 +179,11 @@ func _handle_combat_event(event_data: Dictionary) -> void:
 		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, 0.0
 	)
 	EventBus.adventure_event_resolved.emit(event_data)
-	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses())
+	CombatSystem.start_combat(creature_id, enemy, current_hp)
 
 # ─── Événement positif ───────────────────────────────────────
 
-func _handle_positive_event(event_data: Dictionary) -> void:
+func _handle_positive_event(creature_id: String, event_data: Dictionary) -> void:
 	var biome  = GameData.get_entity(current_biome_id)
 	var events = biome.get("base_stats", {}).get("positive_events", [])
 
@@ -189,12 +193,11 @@ func _handle_positive_event(event_data: Dictionary) -> void:
 		GameData.record_encounter(
 			evt.get("id", ""), evt.get("name", "?"), "Événement", current_biome_id, 5.0
 		)
-		MasterySystem.add_xp_to_entity(evt.get("id", ""), 5.0, 0)
 		_apply_positive_effect(evt)
 		_cycle_events += 1
 
 	EventBus.adventure_event_resolved.emit(event_data)
-	_apply_regen()
+	_apply_regen(creature_id)
 	_schedule_next_event()
 
 func _apply_positive_effect(evt: Dictionary) -> void:
@@ -214,7 +217,7 @@ func _apply_positive_effect(evt: Dictionary) -> void:
 
 # ─── Piège ────────────────────────────────────────────────────
 
-func _handle_trap_event(event_data: Dictionary) -> void:
+func _handle_trap_event(creature_id: String, event_data: Dictionary) -> void:
 	var biome = GameData.get_entity(current_biome_id)
 	var traps = biome.get("base_stats", {}).get("traps", [])
 
@@ -232,7 +235,7 @@ func _handle_trap_event(event_data: Dictionary) -> void:
 			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
 		)
 		EventBus.adventure_event_resolved.emit(event_data)
-		_apply_regen()
+		_apply_regen(creature_id)
 		_schedule_next_event()
 	else:
 		_cycle_events += 1
@@ -240,24 +243,25 @@ func _handle_trap_event(event_data: Dictionary) -> void:
 		GameData.record_encounter(
 			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
 		)
-		MasterySystem.add_xp_to_entity(trap.get("id", ""), 5.0, 0)
 		EventBus.adventure_event_resolved.emit(event_data)
 		if current_hp <= 0.0:
 			_end_adventure(false)
 		else:
-			_apply_regen()
+			_apply_regen(creature_id)
 			_schedule_next_event()
 
 # ═══════════════════════════════════════════════════════════
 #  Résultat de combat
 # ═══════════════════════════════════════════════════════════
 
-func _on_combat_finished(winner: String) -> void:
+func _on_combat_ended(result: Dictionary) -> void:
 	if not is_running:
 		return
-	current_hp = CombatPlayer._current_hero_hp
-	if winner == "hero":
-		_resolve_victory(CombatPlayer._enemy_dict)
+
+	current_hp = result.get("remaining_creature_hp", 0.0)
+
+	if result.get("victory", false):
+		_resolve_victory(result.get("enemy", {}))
 	else:
 		_end_adventure(false)
 
@@ -273,7 +277,9 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	# XP au biome (40 % de l'XP du cycle)
 	MasterySystem.add_xp_to_entity(current_biome_id, xp_earned * 0.40, gen_tier)
 
-	# Le Héro ne reçoit pas d'XP de Maîtrise (SPEC 1)
+	# XP au héro (20 % de l'XP du cycle — 2× plus lent que le biome)
+	var creature_id = GameData.player.get("active_creature_id", "")
+	MasterySystem.add_xp_to_entity(creature_id, xp_earned * 0.20, gen_tier)
 
 	# Hall des Évolutions
 	GameData.record_encounter(
@@ -297,22 +303,23 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_cycle_combats_won += 1
 	_cycle_combo_max    = maxi(_cycle_combo_max, _combo_count)
 
-	_apply_regen()
+	_apply_regen(creature_id)
 	_schedule_next_event()
 
 # ═══════════════════════════════════════════════════════════
 #  Utilitaires internes
 # ═══════════════════════════════════════════════════════════
 
-func _apply_regen() -> void:
+func _apply_regen(_creature_id: String) -> void:
 	var regen_pct = float(current_modifier.get("regen_pct", DEFAULT_REGEN_PCT))
 	var max_hp    = _get_max_hp()
 	current_hp    = minf(current_hp + max_hp * regen_pct, max_hp)
 
 func _get_max_hp() -> float:
-	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)
-	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
-	return GameData.hero_data.get_effective_hp(hp_bonus, equip_hp)
+	var creature_id = GameData.player.get("active_creature_id", "")
+	var equip_hp    = GameData.get_equipment_bonuses().get("hp", 0.0)
+	var hp_bonus    = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
+	return float(GameData.get_effective_stats(creature_id).get("hp", 100)) + equip_hp + hp_bonus
 
 func _schedule_next_event() -> void:
 	if not is_running:
@@ -389,7 +396,7 @@ func _end_adventure(victory: bool) -> void:
 	EventBus.adventure_cycle_ended.emit({
 		"victory":      victory,
 		"biome_id":     current_biome_id,
-		"creature_id":  "hero",
+		"creature_id":  GameData.player.get("active_creature_id", ""),
 		"modifier":     current_modifier,
 		"xp_total":     _cycle_xp,
 		"loot_total":   _cycle_loot,

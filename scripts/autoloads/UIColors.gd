@@ -62,6 +62,14 @@ const RESULT_SLOT        := Color(0.55, 0.75, 1.00)
 # ── Inventaire ──────────────────────────────────────────────
 const RESOURCE_QTY := Color(0.70, 1.00, 0.70)
 
+# ── Rareté / tiers de maîtrise ──────────────────────────────
+const TIER_COMMUN     := Color(0.62, 0.62, 0.65)   # 0 — Commun
+const TIER_PEU_COMMUN := Color(0.22, 0.82, 0.38)   # 1 — Peu Commun
+const TIER_RARE       := Color(0.22, 0.58, 1.00)   # 2 — Rare
+const TIER_EPIQUE     := Color(0.72, 0.28, 1.00)   # 3 — Épique
+const TIER_LEGENDAIRE := Color(1.00, 0.78, 0.08)   # 4 — Légendaire
+const TIER_UNIQUE     := Color(1.00, 0.36, 0.68)   # 5 — Unique
+
 # ── Texte UI générique ──────────────────────────────────────
 const TEXT_MUTED  := Color(0.48, 0.48, 0.52)
 const TEXT_HEADER := Color(0.75, 0.85, 1.00)
@@ -92,6 +100,17 @@ func enemy_hp(pct: float) -> Color:
 	if pct > 0.60: return ENEMY_HIGH
 	if pct > 0.30: return ENEMY_MID
 	return ENEMY_LOW
+
+# Couleur d'un tier de maîtrise (0 = Commun … 5 = Unique).
+func tier_color(tier: int) -> Color:
+	match tier:
+		0: return TIER_COMMUN
+		1: return TIER_PEU_COMMUN
+		2: return TIER_RARE
+		3: return TIER_EPIQUE
+		4: return TIER_LEGENDAIRE
+		5: return TIER_UNIQUE
+		_: return Color.WHITE
 
 # Couleur d'une entrée du Hall des Évolutions selon son type.
 func encounter(enc_type: String) -> Color:

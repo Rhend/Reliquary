@@ -1,5 +1,18 @@
 {
-	"base_hp":  110,
-	"base_atk": 15,
-	"base_def": 7
+	"id": "hero",
+	"name": "Héro",
+	"base_stats": {
+		"atk": 15,
+		"def": 7,
+		"hp":  110
+	},
+	"tier_scaling": {
+		"atk": 3,
+		"def": 2,
+		"hp":  20
+	},
+	"passive_slots": [
+		{ "unlock_tier": 1, "passive_id": "passive_regeneration" },
+		{ "unlock_tier": 3, "passive_id": "passive_resilience"   }
+	]
 }
