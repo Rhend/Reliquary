@@ -64,11 +64,11 @@ func _ready() -> void:
 func _seed_test_passives() -> void:
 	# XP initiale — ne s'applique que si le passif n'a pas encore d'XP (premier démarrage)
 	var xp_seeds := {
-		"passive_resistance":    65.0,
 		"passive_combat_mastery": 30.0,
 	}
 	var tier_seeds := {
 		"passive_fortification": {"tier": 1, "xp": 180.0},
+		"passive_resistance":    {"tier": 4, "xp": 12400.0},
 	}
 	for pid in xp_seeds:
 		if entities.has(pid) and entities[pid].get("current_xp", 0.0) == 0.0:
