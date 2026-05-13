@@ -131,10 +131,11 @@ func _build_hero_card(parent: Node) -> void:
 	vbox.add_theme_constant_override("separation", 8)
 	m.add_child(vbox)
 
-	var hero     = GameData.hero_data
 	var passives = PassiveSystem.get_combat_bonuses()
 	var equip    = GameData.get_equipment_bonuses()
-	_hero_max_hp = hero.get_effective_hp(passives.get("hp_bonus", 0.0), equip.get("hp", 0.0))
+	var cid      = GameData.player.get("active_creature_id", "") as String
+	var stats    = GameData.get_effective_stats(cid)
+	_hero_max_hp = float(stats.get("hp", 0)) + passives.get("hp_bonus", 0.0) + equip.get("hp", 0.0)
 	var cur_hp   = AdventureSystem.current_hp if AdventureSystem.is_running else _hero_max_hp
 
 	var name_lbl = Label.new()
@@ -153,8 +154,8 @@ func _build_hero_card(parent: Node) -> void:
 	vbox.add_child(_c_hp_bar)
 
 	var stats_lbl = Label.new()
-	var h_atk = int(hero.base_atk + passives.get("atk_bonus", 0.0) + equip.get("atk", 0.0))
-	var h_def = int(hero.base_def + passives.get("def_bonus", 0.0) + equip.get("def", 0.0))
+	var h_atk = int(float(stats.get("atk", 0)) + passives.get("atk_bonus", 0.0) + equip.get("atk", 0.0))
+	var h_def = int(float(stats.get("def", 0)) + passives.get("def_bonus", 0.0) + equip.get("def", 0.0))
 	stats_lbl.text = "ATK %d   DEF %d" % [h_atk, h_def]
 	stats_lbl.add_theme_font_size_override("font_size", 11)
 	stats_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)

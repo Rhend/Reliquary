@@ -47,21 +47,14 @@ func start_combat(enemy: Dictionary, current_hp: float,
 		modifier_bonuses: Dictionary) -> void:
 	var passives  := PassiveSystem.get_combat_bonuses()
 	var equip     := GameData.get_equipment_bonuses()
-	var hero      := GameData.hero_data
+	var cid       := GameData.player.get("active_creature_id", "") as String
+	var stats     := GameData.get_effective_stats(cid)
 
-	var h_atk := hero.get_effective_atk(
-		passives.get("atk_bonus", 0.0),
-		equip.get("atk", 0.0),
-		modifier_bonuses.get("atk_mult", 1.0)
-	)
-	var h_atk_mastery := GameData.get_mastery_combat_bonus(enemy.get("id", ""))
+	var h_atk: float = (float(stats.get("atk", 0)) + float(passives.get("atk_bonus", 0.0)) + float(equip.get("atk", 0.0))) * float(modifier_bonuses.get("atk_mult", 1.0))
+	var h_atk_mastery: float = GameData.get_mastery_combat_bonus(enemy.get("id", ""))
 	h_atk += h_atk_mastery
 
-	var h_def := hero.get_effective_def(
-		passives.get("def_bonus", 0.0),
-		equip.get("def", 0.0),
-		modifier_bonuses.get("def_mult", 1.0)
-	)
+	var h_def: float = (float(stats.get("def", 0)) + float(passives.get("def_bonus", 0.0)) + float(equip.get("def", 0.0))) * float(modifier_bonuses.get("def_mult", 1.0))
 
 	var e_atk := float(enemy.get("atk", 8))
 	var e_def := float(enemy.get("def", 2))

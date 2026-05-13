@@ -52,7 +52,14 @@ func _apply_passive_effects(passive_id: String) -> void:
 	var passive = GameData.get_entity(passive_id)
 	if passive.is_empty():
 		return
-	for effect in passive.get("base_stats", {}).get("effects", []):
+	var tier: int    = passive.get("current_tier", 0) as int
+	var te_list: Array = passive.get("tier_effects", [])
+	var effects: Array = []
+	if tier < te_list.size():
+		effects = te_list[tier].get("effects", [])
+	if effects.is_empty():
+		effects = passive.get("base_stats", {}).get("effects", [])
+	for effect in effects:
 		var eid   = effect.get("id",    "")
 		var value = float(effect.get("value", 0.0))
 		if eid != "":

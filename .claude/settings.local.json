@@ -6,7 +6,10 @@
       "Bash(git checkout *)",
       "Bash(git commit -m ' *)",
       "Bash(git commit -m ')",
-      "Bash(git commit -m 'feat: contenu Plage, équipements mid/late, Forge améliorée *)"
+      "Bash(git commit -m 'feat: contenu Plage, équipements mid/late, Forge améliorée *)",
+      "Bash(git merge *)",
+      "Bash(git branch *)",
+      "Bash(git stash *)"
     ]
   }
 }

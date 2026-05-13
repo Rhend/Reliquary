@@ -4,11 +4,19 @@
 	"base_stats": {
 		"effects": [
 			{
-				"id":          "def_bonus",
+				"id":          "def_pct",
 				"value":       5,
-				"description": "+5 DEF permanente"
+				"description": "−5 % dégâts subis"
 			}
 		]
 	},
+	"tier_effects": [
+		{ "effects": [{ "id": "def_pct", "value": 5,  "description": "−5 % dégâts subis"  }] },
+		{ "effects": [{ "id": "def_pct", "value": 8,  "description": "−8 % dégâts subis"  }] },
+		{ "effects": [{ "id": "def_pct", "value": 12, "description": "−12 % dégâts subis" }] },
+		{ "effects": [{ "id": "def_pct", "value": 18, "description": "−18 % dégâts subis" }] },
+		{ "effects": [{ "id": "def_pct", "value": 25, "description": "−25 % dégâts subis" }] },
+		{ "effects": [{ "id": "def_pct", "value": 35, "description": "−35 % dégâts subis" }] }
+	],
 	"passive_slots": []
 }

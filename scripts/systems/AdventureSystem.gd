@@ -122,8 +122,8 @@ func stop_adventure() -> void:
 		return
 	is_running = false
 	_event_timer.stop()
-	if CombatSystem.is_fighting:
-		CombatSystem.stop_combat()
+	if CombatPlayer.is_playing:
+		CombatPlayer.stop()
 	EventBus.adventure_stopped.emit()
 
 # Bonus ATK/DEF du modificateur de cycle + bonus de combo.
@@ -179,7 +179,7 @@ func _handle_combat_event(creature_id: String, event_data: Dictionary) -> void:
 		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, 0.0
 	)
 	EventBus.adventure_event_resolved.emit(event_data)
-	CombatSystem.start_combat(creature_id, enemy, current_hp)
+	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses())
 
 # ─── Événement positif ───────────────────────────────────────
 

@@ -68,7 +68,7 @@ const TIER_PEU_COMMUN := Color(0.22, 0.82, 0.38)   # 1 — Peu Commun
 const TIER_RARE       := Color(0.22, 0.58, 1.00)   # 2 — Rare
 const TIER_EPIQUE     := Color(0.72, 0.28, 1.00)   # 3 — Épique
 const TIER_LEGENDAIRE := Color(1.00, 0.78, 0.08)   # 4 — Légendaire
-const TIER_UNIQUE     := Color(1.00, 0.36, 0.68)   # 5 — Unique
+const TIER_UNIQUE     := Color(0.55, 0.04, 0.04)   # 5 — Unique
 
 # ── Texte UI générique ──────────────────────────────────────
 const TEXT_MUTED  := Color(0.48, 0.48, 0.52)
