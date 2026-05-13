@@ -917,11 +917,17 @@ func _section_header(title: String, color: Color) -> Control:
 
 	return vb
 
-func _passive_card(pdata: Dictionary, tcolor: Color) -> Control:
-	var rarity := pdata.get("current_tier", 0) as int
-	var rcolor := UIColors.tier_color(rarity)
-	var rname  := GameData.get_tier_name(rarity)
+func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
+	var rarity   := pdata.get("current_tier", 0) as int
+	var rcolor   := UIColors.tier_color(rarity)
+	var rname    := GameData.get_tier_name(rarity)
+	var has_evos := rarity < GameData.MASTERY_TIERS.size() - 1
 
+	var wrapper := VBoxContainer.new()
+	wrapper.add_theme_constant_override("separation", 2)
+	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	# ── Carte principale (cliquable si évolutions dispo) ──────
 	var panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color     = Color(rcolor.r, rcolor.g, rcolor.b, 0.07)
@@ -931,6 +937,9 @@ func _passive_card(pdata: Dictionary, tcolor: Color) -> Control:
 			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
 		style.set(prop, 4)
 	panel.add_theme_stylebox_override("panel", style)
+	if has_evos:
+		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	wrapper.add_child(panel)
 
 	var m := MarginContainer.new()
 	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
@@ -941,7 +950,6 @@ func _passive_card(pdata: Dictionary, tcolor: Color) -> Control:
 	vb.add_theme_constant_override("separation", 3)
 	m.add_child(vb)
 
-	# Ligne nom + badge rareté
 	var header := HBoxContainer.new()
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_child(header)
@@ -959,6 +967,12 @@ func _passive_card(pdata: Dictionary, tcolor: Color) -> Control:
 	badge.add_theme_color_override("font_color", rcolor)
 	header.add_child(badge)
 
+	var arrow := Label.new()
+	arrow.text = "  ▶" if has_evos else ""
+	arrow.add_theme_font_size_override("font_size", 9)
+	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	header.add_child(arrow)
+
 	for effect in pdata.get("base_stats", {}).get("effects", []):
 		var desc := effect.get("description", "") as String
 		if desc.is_empty(): continue
@@ -969,7 +983,78 @@ func _passive_card(pdata: Dictionary, tcolor: Color) -> Control:
 		eff_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vb.add_child(eff_lbl)
 
-	return panel
+	# ── Arbre d'évolutions (caché par défaut) ─────────────────
+	var evo_tree := VBoxContainer.new()
+	evo_tree.add_theme_constant_override("separation", 2)
+	evo_tree.visible = false
+	wrapper.add_child(evo_tree)
+
+	for t in range(rarity + 1, GameData.MASTERY_TIERS.size()):
+		evo_tree.add_child(_evo_row(t, rarity))
+
+	if has_evos:
+		panel.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton \
+					and event.button_index == MOUSE_BUTTON_LEFT \
+					and event.pressed:
+				evo_tree.visible = not evo_tree.visible
+				arrow.text = "  ▼" if evo_tree.visible else "  ▶"
+		)
+
+	return wrapper
+
+func _evo_row(t: int, base_rarity: int) -> Control:
+	var tc     := UIColors.tier_color(t)
+	var tn     := GameData.get_tier_name(t)
+	var indent := (t - base_rarity) * 14
+	var xp_val : int = 0
+	if t < GameData.xp_thresholds.size():
+		xp_val = int(GameData.xp_thresholds[t])
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", indent)
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color     = Color(tc.r, tc.g, tc.b, 0.06)
+	style.border_color = Color(tc.r, tc.g, tc.b, 0.38)
+	style.set_border_width_all(1)
+	for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
+			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
+		style.set(prop, 3)
+	panel.add_theme_stylebox_override("panel", style)
+	margin.add_child(panel)
+
+	var pm := MarginContainer.new()
+	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+		pm.add_theme_constant_override(s, 4)
+	panel.add_child(pm)
+
+	var hb := HBoxContainer.new()
+	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pm.add_child(hb)
+
+	var name_lbl := Label.new()
+	name_lbl.text = "→  " + tn
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 11)
+	name_lbl.add_theme_color_override("font_color", tc)
+	hb.add_child(name_lbl)
+
+	var xp_lbl := Label.new()
+	xp_lbl.text = _xp_fmt(xp_val) + " XP"
+	xp_lbl.add_theme_font_size_override("font_size", 9)
+	xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hb.add_child(xp_lbl)
+
+	return margin
+
+func _xp_fmt(xp: int) -> String:
+	if xp >= 1000:
+		return "%d %03d" % [xp / 1000, xp % 1000]
+	return str(xp)
 
 func _passive_locked_card(pname: String, unlock_tier: int) -> Control:
 	var panel := PanelContainer.new()
