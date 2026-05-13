@@ -990,7 +990,7 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	wrapper.add_child(evo_tree)
 
 	for t in range(rarity + 1, GameData.MASTERY_TIERS.size()):
-		evo_tree.add_child(_evo_row(t, rarity))
+		evo_tree.add_child(_evo_row(t, rarity, pdata))
 
 	if has_evos:
 		panel.gui_input.connect(func(event: InputEvent) -> void:
@@ -1003,13 +1003,14 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 
 	return wrapper
 
-func _evo_row(t: int, base_rarity: int) -> Control:
-	var tc     := UIColors.tier_color(t)
-	var tn     := GameData.get_tier_name(t)
-	var indent := (t - base_rarity) * 14
-	var xp_val : int = 0
+func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
+	var tc      := UIColors.tier_color(t)
+	var tn      := GameData.get_tier_name(t)
+	var indent  := (t - base_rarity) * 14
+	var xp_cur  : int = int(pdata.get("current_xp", 0.0))
+	var xp_need : int = 0
 	if t < GameData.xp_thresholds.size():
-		xp_val = int(GameData.xp_thresholds[t])
+		xp_need = int(GameData.xp_thresholds[t])
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", indent)
@@ -1031,9 +1032,15 @@ func _evo_row(t: int, base_rarity: int) -> Control:
 		pm.add_theme_constant_override(s, 4)
 	panel.add_child(pm)
 
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 2)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pm.add_child(vb)
+
+	# Ligne rareté + XP X/Y
 	var hb := HBoxContainer.new()
 	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pm.add_child(hb)
+	vb.add_child(hb)
 
 	var name_lbl := Label.new()
 	name_lbl.text = "→  " + tn
@@ -1043,11 +1050,22 @@ func _evo_row(t: int, base_rarity: int) -> Control:
 	hb.add_child(name_lbl)
 
 	var xp_lbl := Label.new()
-	xp_lbl.text = _xp_fmt(xp_val) + " XP"
+	xp_lbl.text = "%s / %s XP" % [_xp_fmt(xp_cur), _xp_fmt(xp_need)]
 	xp_lbl.add_theme_font_size_override("font_size", 9)
 	xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hb.add_child(xp_lbl)
+
+	# Effets du passif
+	for effect in pdata.get("base_stats", {}).get("effects", []):
+		var desc := effect.get("description", "") as String
+		if desc.is_empty(): continue
+		var eff_lbl := Label.new()
+		eff_lbl.text = desc
+		eff_lbl.add_theme_font_size_override("font_size", 9)
+		eff_lbl.add_theme_color_override("font_color", tc.darkened(0.2))
+		eff_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vb.add_child(eff_lbl)
 
 	return margin
 
