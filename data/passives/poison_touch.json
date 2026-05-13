@@ -10,5 +10,13 @@
 			}
 		]
 	},
+	"tier_effects": [
+		{ "effects": [{ "id": "atk_bonus", "value": 8,  "description": "+8 ATK (venin des marais)"  }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 12, "description": "+12 ATK (venin des marais)" }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 18, "description": "+18 ATK (venin des marais)" }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 26, "description": "+26 ATK (venin des marais)" }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 36, "description": "+36 ATK (venin des marais)" }, { "id": "atk_speed_pct", "value": 5,  "description": "+5% vitesse d'attaque"  }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 50, "description": "+50 ATK (venin des marais)" }, { "id": "atk_speed_pct", "value": 12, "description": "+12% vitesse d'attaque" }] }
+	],
 	"passive_slots": []
 }

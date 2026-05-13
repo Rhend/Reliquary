@@ -10,5 +10,13 @@
 			}
 		]
 	},
+	"tier_effects": [
+		{ "effects": [{ "id": "hp_bonus", "value": 25,  "description": "+25 PV maximum"  }] },
+		{ "effects": [{ "id": "hp_bonus", "value": 40,  "description": "+40 PV maximum"  }] },
+		{ "effects": [{ "id": "hp_bonus", "value": 60,  "description": "+60 PV maximum"  }] },
+		{ "effects": [{ "id": "hp_bonus", "value": 85,  "description": "+85 PV maximum"  }] },
+		{ "effects": [{ "id": "hp_bonus", "value": 120, "description": "+120 PV maximum" }, { "id": "def_bonus", "value": 8,  "description": "+8 DEF permanente"  }] },
+		{ "effects": [{ "id": "hp_bonus", "value": 170, "description": "+170 PV maximum" }, { "id": "def_bonus", "value": 20, "description": "+20 DEF permanente" }] }
+	],
 	"passive_slots": []
 }
