@@ -560,7 +560,7 @@ func _build_hub(creature: Dictionary, tier: int) -> void:
 	var vp     := get_viewport_rect().size
 	var tcolor := UIColors.tier_color(tier)
 	var _diam_margins := [70.0, 70.0, 82.0, 104.0, 136.0, 164.0]
-	var diam := RING_RADIUS * 2.0 + _diam_margins[tier]
+	var diam: float = RING_RADIUS * 2.0 + float(_diam_margins[tier])
 
 	_hub_root = Control.new()
 	_hub_root.size = vp
