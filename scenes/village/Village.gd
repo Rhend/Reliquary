@@ -1140,9 +1140,10 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	var tn      := GameData.get_tier_name(t)
 	var indent  := (t - base_rarity) * 14
 	var xp_cur  : float = pdata.get("current_xp", 0.0) as float
+	var is_max  : bool  = t >= GameData.MAX_TIER
 	var xp_need : int   = 0
-	if t < GameData.xp_thresholds.size():
-		xp_need = int(GameData.xp_thresholds[t])
+	if not is_max and t + 1 < GameData.xp_thresholds.size():
+		xp_need = int(GameData.xp_thresholds[t + 1])
 	var xp_fill := 0.0
 	if xp_need > 0:
 		xp_fill = clampf(xp_cur / float(xp_need), 0.0, 1.0)
@@ -1187,9 +1188,9 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	hb.add_child(name_lbl)
 
 	var xp_lbl := Label.new()
-	xp_lbl.text = "%s / %s XP" % [_xp_fmt(int(xp_cur)), _xp_fmt(xp_need)]
+	xp_lbl.text = "RANG MAX" if is_max else "%s / %s XP" % [_xp_fmt(int(xp_cur)), _xp_fmt(xp_need)]
 	xp_lbl.add_theme_font_size_override("font_size", 9)
-	xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	xp_lbl.add_theme_color_override("font_color", tc if is_max else UIColors.TEXT_MUTED)
 	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hb.add_child(xp_lbl)
 
