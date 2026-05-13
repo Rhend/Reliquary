@@ -298,17 +298,6 @@ class HexItem extends Control:
 
 	func _ready() -> void:
 		pivot_offset = size * 0.5
-		if not icon_text.is_empty():
-			var ico := Label.new()
-			ico.text = icon_text
-			ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-			ico.add_theme_font_size_override("font_size", 22)
-			ico.anchor_left   = 0.0; ico.anchor_right  = 1.0
-			ico.anchor_top    = 0.0; ico.anchor_bottom = 0.0
-			ico.offset_top    = 22;  ico.offset_bottom = 62
-			ico.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-			add_child(ico)
 		var lbl := Label.new()
 		lbl.text = label_text
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
