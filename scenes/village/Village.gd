@@ -157,25 +157,26 @@ class CircleRing extends Control:
 
 	# ── Tier 5 : Unique — battement de cœur, veines, vivant ───
 	func _unique(c: Vector2, r: float) -> void:
-		var beat := abs(sin(_t * 2.4)) * 0.7 + abs(sin(_t * 4.8)) * 0.3
-		var w    := 18.0 + beat * 5.0
+		var beat: float = absf(sin(_t * 2.4)) * 0.7 + absf(sin(_t * 4.8)) * 0.3
+		var w:    float = 18.0 + beat * 5.0
 		draw_arc(c, r + 58.0, 0.0, TAU, 64, Color(ring_color.r, ring_color.g, ring_color.b, 0.05 + 0.08 * beat), w * 6.0, true)
 		draw_arc(c, r + 28.0, 0.0, TAU, 96, Color(ring_color.r, ring_color.g, ring_color.b, 0.14 + 0.12 * beat), w * 3.0, true)
 		draw_arc(c, r + 10.0, 0.0, TAU, 96, Color(ring_color.r, ring_color.g, ring_color.b, 0.24 + 0.16 * beat), w * 1.8, true)
+		var _layer_r: Array[float] = [0.0, 34.0, 46.0]
 		for layer in 3:
-			var pb   := abs(sin(_t * 2.4 + layer * 0.5))
-			var lr   := r + ([0.0, 34.0, 46.0] as Array)[layer]
-			var lw   := w if layer == 0 else 1.8
-			var la   := (0.82 + 0.16 * pb) if layer == 0 else (0.30 + 0.22 * pb)
-			var lc   := ring_color; lc.a = la
+			var pb: float = absf(sin(_t * 2.4 + layer * 0.5))
+			var lr: float = r + _layer_r[layer]
+			var lw: float = w if layer == 0 else 1.8
+			var la: float = (0.82 + 0.16 * pb) if layer == 0 else (0.30 + 0.22 * pb)
+			var lc        := ring_color; lc.a = la
 			draw_arc(c, lr, 0.0, TAU, 128 - layer * 32, lc, lw, true)
 		_borders(c, r, w)
 		var rim := ring_color.lightened(0.35); rim.a = 0.55 + 0.30 * beat
 		draw_arc(c, r + w * 0.5 - 1.0, 0.0, TAU, 64, rim, 1.5, true)
 		for i in 8:
-			var ang := i * TAU / 8.0 + _t * 0.06
-			var vp  := 0.28 + 0.42 * abs(sin(_t * 2.8 + i * 1.1))
-			var vc  := ring_color.lightened(0.25); vc.a = vp
+			var ang: float = i * TAU / 8.0 + _t * 0.06
+			var vp:  float = 0.28 + 0.42 * absf(sin(_t * 2.8 + i * 1.1))
+			var vc         := ring_color.lightened(0.25); vc.a = vp
 			draw_arc(c, r, ang, ang + 0.28, 6, vc, w * 0.85, true)
 		for i in 3:
 			var sa := _t * (1.1 + i * 0.18) + i * TAU / 3.0
