@@ -626,6 +626,7 @@ func _build_ui() -> void:
 		_build_hub(creature, tier)
 
 	_build_debug_buttons()
+	_build_fullscreen_btn()
 
 # ─── Tier 0 : clicker ─────────────────────────────────────────
 func _build_tier0(creature: Dictionary) -> void:
@@ -1052,6 +1053,13 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	evo_tree.visible = false
 	wrapper.add_child(evo_tree)
 
+	var unlock_hdr := Label.new()
+	unlock_hdr.text = "— À DÉBLOQUER —"
+	unlock_hdr.add_theme_font_size_override("font_size", 9)
+	unlock_hdr.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	unlock_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	evo_tree.add_child(unlock_hdr)
+
 	for t in range(rarity + 1, GameData.MASTERY_TIERS.size()):
 		evo_tree.add_child(_evo_row(t, rarity, pdata))
 
@@ -1192,6 +1200,22 @@ func _build_debug_buttons() -> void:
 	dn.text = "Tier −"
 	dn.pressed.connect(_debug_tier_down)
 	hb.add_child(dn)
+
+func _build_fullscreen_btn() -> void:
+	var btn := Button.new()
+	btn.text = "⛶"
+	btn.flat = true
+	btn.anchor_left   = 1.0; btn.anchor_right  = 1.0
+	btn.anchor_top    = 0.0; btn.anchor_bottom = 0.0
+	btn.offset_left   = -34; btn.offset_right  = -6
+	btn.offset_top    = 6;   btn.offset_bottom = 34
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.add_theme_font_size_override("font_size", 16)
+	btn.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
+	btn.tooltip_text = "Plein écran  (F11)"
+	btn.pressed.connect(func() -> void: GameSettings.set_fullscreen(not GameSettings.fullscreen))
+	add_child(btn)
 
 func _debug_tier_up() -> void:
 	var hero := GameData.get_entity("hero")
