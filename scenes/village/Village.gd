@@ -596,10 +596,17 @@ func _panel_hero() -> void:
 	var eff := GameData.get_effective_stats(cid)
 	var pas := PassiveSystem.get_combat_bonuses()
 
+	var atk_base  := int(eff.get("atk", 0))
+	var atk_bonus := int(eq.get("atk", 0)) + int(pas.get("atk_bonus", 0))
+	var def_base  := int(eff.get("def", 0))
+	var def_bonus := int(pas.get("def_bonus", 0))
+	var hp_base   := int(eff.get("hp", 0))
+	var hp_bonus  := int(eq.get("hp", 0)) + int(pas.get("hp_bonus", 0))
+
 	for row: Array in [
-		["ATK", int(eff.get("atk", 0)) + int(eq.get("atk", 0)) + int(pas.get("atk_bonus", 0)), UIColors.STAT_ATK],
-		["DEF", int(eff.get("def", 0)) + int(pas.get("def_bonus", 0)),                           UIColors.STAT_DEF],
-		["PV",  int(eff.get("hp",  0)) + int(eq.get("hp",  0)) + int(pas.get("hp_bonus",  0)),  UIColors.STAT_HP ],
+		["ATK", atk_base + atk_bonus, atk_base, atk_bonus, UIColors.STAT_ATK],
+		["DEF", def_base + def_bonus, def_base, def_bonus, UIColors.STAT_DEF],
+		["PV",  hp_base  + hp_bonus,  hp_base,  hp_bonus,  UIColors.STAT_HP ],
 	]:
 		var hb := HBoxContainer.new()
 		hb.add_theme_constant_override("separation", 8)
@@ -611,8 +618,13 @@ func _panel_hero() -> void:
 		var vl := Label.new()
 		vl.text = str(row[1])
 		vl.add_theme_font_size_override("font_size", 14)
-		vl.add_theme_color_override("font_color", row[2])
+		vl.add_theme_color_override("font_color", row[4])
 		hb.add_child(vl)
+		var detail := Label.new()
+		detail.text = "(%d + %d)" % [row[2], row[3]]
+		detail.add_theme_font_size_override("font_size", 10)
+		detail.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		hb.add_child(detail)
 
 	if tier < GameData.MAX_TIER:
 		var xp_color := UIColors.FILTER_ON if can_ev else UIColors.STAT_HP
@@ -702,10 +714,14 @@ func _section_header(title: String, color: Color) -> Control:
 	return vb
 
 func _passive_card(pdata: Dictionary, tcolor: Color) -> Control:
+	var rarity := pdata.get("rarity", 0) as int
+	var rcolor := UIColors.tier_color(rarity)
+	var rname  := GameData.get_tier_name(rarity)
+
 	var panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(tcolor.r, tcolor.g, tcolor.b, 0.10)
-	style.border_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.30)
+	style.bg_color     = Color(rcolor.r, rcolor.g, rcolor.b, 0.07)
+	style.border_color = Color(rcolor.r, rcolor.g, rcolor.b, 0.60)
 	style.set_border_width_all(1)
 	for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
 			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
@@ -721,11 +737,23 @@ func _passive_card(pdata: Dictionary, tcolor: Color) -> Control:
 	vb.add_theme_constant_override("separation", 3)
 	m.add_child(vb)
 
+	# Ligne nom + badge rareté
+	var header := HBoxContainer.new()
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(header)
+
 	var name_lbl := Label.new()
 	name_lbl.text = pdata.get("name", pdata.get("id", "?")) as String
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.add_theme_font_size_override("font_size", 12)
-	name_lbl.add_theme_color_override("font_color", tcolor)
-	vb.add_child(name_lbl)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	header.add_child(name_lbl)
+
+	var badge := Label.new()
+	badge.text = rname
+	badge.add_theme_font_size_override("font_size", 10)
+	badge.add_theme_color_override("font_color", rcolor)
+	header.add_child(badge)
 
 	for effect in pdata.get("base_stats", {}).get("effects", []):
 		var desc := effect.get("description", "") as String

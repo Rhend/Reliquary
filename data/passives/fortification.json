@@ -1,6 +1,7 @@
 {
 	"id": "passive_fortification",
 	"name": "Fortification",
+	"rarity": 2,
 	"base_stats": {
 		"effects": [
 			{

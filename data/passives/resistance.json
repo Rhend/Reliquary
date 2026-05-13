@@ -1,6 +1,7 @@
 {
 	"id": "passive_resistance",
 	"name": "Résistance",
+	"rarity": 0,
 	"base_stats": {
 		"effects": [
 			{

@@ -1,6 +1,7 @@
 {
 	"id": "passive_resilience",
 	"name": "Résilience",
+	"rarity": 0,
 	"base_stats": {
 		"effects": [
 			{

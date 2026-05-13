@@ -1,6 +1,7 @@
 {
 	"id": "passive_combat_mastery",
 	"name": "Maîtrise du Combat",
+	"rarity": 2,
 	"base_stats": {
 		"effects": [
 			{
