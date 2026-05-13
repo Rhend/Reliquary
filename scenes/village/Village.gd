@@ -1039,11 +1039,13 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	var has_evos := rarity < GameData.MASTERY_TIERS.size() - 1
 
 	# Calcul de la progression XP vers le palier suivant
+	var xp_cur  : float = pdata.get("current_xp", 0.0) as float
+	var xp_need : int   = 0
 	var xp_fill := 0.0
 	if has_evos and rarity + 1 < GameData.xp_thresholds.size():
-		var xp_need := GameData.xp_thresholds[rarity + 1] as float
-		if xp_need > 0.0:
-			xp_fill = clampf(pdata.get("current_xp", 0.0) as float / xp_need, 0.0, 1.0)
+		xp_need = int(GameData.xp_thresholds[rarity + 1])
+		if xp_need > 0:
+			xp_fill = clampf(xp_cur / float(xp_need), 0.0, 1.0)
 
 	var wrapper := VBoxContainer.new()
 	wrapper.add_theme_constant_override("separation", 2)
@@ -1098,15 +1100,49 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	header.add_child(arrow)
 
 	var cur_effs: Array = _tier_effects(pdata, rarity)
+	var eff_descs: Array[String] = []
 	for effect in cur_effs:
 		var desc := effect.get("description", "") as String
-		if desc.is_empty(): continue
+		if not desc.is_empty():
+			eff_descs.append(desc)
+
+	var xp_text := ""
+	var xp_color := UIColors.TEXT_MUTED
+	if rarity >= GameData.MAX_TIER:
+		xp_text  = "RANG MAX"
+		xp_color = rcolor
+	else:
+		xp_text = "%s / %s XP" % [_xp_fmt(int(xp_cur)), _xp_fmt(xp_need)]
+
+	for i in eff_descs.size():
+		var hb := HBoxContainer.new()
+		hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		vb.add_child(hb)
+
 		var eff_lbl := Label.new()
-		eff_lbl.text = desc
+		eff_lbl.text = eff_descs[i]
+		eff_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		eff_lbl.add_theme_font_size_override("font_size", 10)
 		eff_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		eff_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vb.add_child(eff_lbl)
+		hb.add_child(eff_lbl)
+
+		if i == eff_descs.size() - 1:
+			var xp_lbl := Label.new()
+			xp_lbl.text = xp_text
+			xp_lbl.add_theme_font_size_override("font_size", 10)
+			xp_lbl.add_theme_color_override("font_color", xp_color)
+			xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			hb.add_child(xp_lbl)
+
+	if eff_descs.is_empty():
+		var xp_lbl := Label.new()
+		xp_lbl.text = xp_text
+		xp_lbl.add_theme_font_size_override("font_size", 10)
+		xp_lbl.add_theme_color_override("font_color", xp_color)
+		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		xp_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		vb.add_child(xp_lbl)
 
 	# ── Arbre d'évolutions (caché par défaut) ─────────────────
 	var evo_tree := VBoxContainer.new()
