@@ -10,5 +10,13 @@
 			}
 		]
 	},
+	"tier_effects": [
+		{ "effects": [{ "id": "atk_bonus", "value": 10, "description": "+10 ATK permanente"  }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 16, "description": "+16 ATK permanente"  }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 24, "description": "+24 ATK permanente"  }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 35, "description": "+35 ATK permanente"  }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 50, "description": "+50 ATK permanente"  }] },
+		{ "effects": [{ "id": "atk_bonus", "value": 70, "description": "+70 ATK permanente"  }] }
+	],
 	"passive_slots": []
 }

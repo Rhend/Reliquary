@@ -500,6 +500,67 @@ class JRPGPanel extends Control:
 			pos + Vector2(-r, 0.0),
 		]), c)
 
+class XPCard extends PanelContainer:
+	var xp_fill    := 0.0
+	var fill_color := Color.WHITE
+	var _t         := 0.0
+
+	# [x_fraction, radius, vitesse, phase]
+	const _BUBBLES: Array = [
+		[0.08, 2.0, 0.55, 0.00],
+		[0.20, 1.5, 0.80, 0.30],
+		[0.33, 3.0, 0.45, 0.70],
+		[0.45, 1.0, 0.90, 0.15],
+		[0.57, 2.5, 0.60, 0.55],
+		[0.68, 1.5, 0.70, 0.85],
+		[0.78, 2.0, 0.50, 0.40],
+		[0.90, 1.0, 0.95, 0.60],
+	]
+
+	func _process(delta: float) -> void:
+		if xp_fill > 0.0:
+			_t += delta
+			queue_redraw()
+
+	func _draw() -> void:
+		if xp_fill <= 0.0: return
+		var w := size.x * xp_fill
+		var h := size.y
+
+		# Remplissage de base
+		draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)),
+				Color(fill_color.r, fill_color.g, fill_color.b, 0.35))
+
+		# Bulles qui montent de bas en haut
+		for b in _BUBBLES:
+			var xf : float = b[0]
+			var r  : float = b[1]
+			var sp : float = b[2]
+			var ph : float = b[3]
+
+			if xf * w < r: continue   # hors de la zone remplie
+
+			# Légère oscillation horizontale
+			var bx := clampf(xf * w + sin(_t * sp * 3.0 + ph * TAU) * r * 0.6, r, w - r)
+			# Montée continue de bas en haut, en boucle
+			var progress := fmod(_t * sp + ph, 1.0)
+			var by       := h + r - progress * (h + r * 2.0)
+
+			# Fondu à l'entrée (bas) et à la sortie (haut)
+			var fade  := r * 3.0
+			var alpha := clampf(minf((h - by) / fade, by / fade), 0.0, 1.0) * 0.55
+
+			if alpha > 0.01:
+				var bc := fill_color
+				# Corps de la bulle (cercle semi-transparent)
+				draw_circle(Vector2(bx, by), r, Color(bc.r, bc.g, bc.b, alpha * 0.45))
+				# Contour pour le rendu "bulle"
+				draw_arc(Vector2(bx, by), r, 0.0, TAU, 16,
+						Color(bc.r, bc.g, bc.b, alpha), 1.2)
+				# Reflet lumineux en haut-gauche de la bulle
+				draw_circle(Vector2(bx - r * 0.3, by - r * 0.3),
+						r * 0.28, Color(bc.r, bc.g, bc.b, alpha * 0.8))
+
 # ─── Constantes ───────────────────────────────────────────────
 const RING_RADIUS  := 165.0
 const HEX_SIZE     := Vector2(152.0, 152.0)
@@ -538,6 +599,7 @@ var _hex_items       : Dictionary = {}   # panel_id → HexItem
 # ─── Init ─────────────────────────────────────────────────────
 func _ready() -> void:
 	SaveManager.load_save()
+	GameData._seed_test_passives()
 	_build_ui()
 
 func _active_creature() -> Dictionary:
@@ -888,15 +950,6 @@ func _panel_hero() -> void:
 			if not pdata.is_empty():
 				_rp_content.add_child(_passive_card(pdata, tcolor))
 
-	# Passifs verrouillés (futurs slots)
-	for slot in c.get("passive_slots", []):
-		var unlock_t := slot.get("unlock_tier", 99) as int
-		var pid      := slot.get("passive_id",  "") as String
-		if pid in unlocked:
-			continue
-		var pdata := GameData.get_entity(pid)
-		var pname := pdata.get("name", pid) as String if not pdata.is_empty() else pid
-		_rp_content.add_child(_passive_locked_card(pname, unlock_t))
 
 # ─── Helpers sous-sections ────────────────────────────────────
 func _section_header(title: String, color: Color) -> Control:
@@ -923,12 +976,21 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	var rname    := GameData.get_tier_name(rarity)
 	var has_evos := rarity < GameData.MASTERY_TIERS.size() - 1
 
+	# Calcul de la progression XP vers le palier suivant
+	var xp_fill := 0.0
+	if has_evos and rarity + 1 < GameData.xp_thresholds.size():
+		var xp_need := GameData.xp_thresholds[rarity + 1] as float
+		if xp_need > 0.0:
+			xp_fill = clampf(pdata.get("current_xp", 0.0) as float / xp_need, 0.0, 1.0)
+
 	var wrapper := VBoxContainer.new()
 	wrapper.add_theme_constant_override("separation", 2)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# ── Carte principale (cliquable si évolutions dispo) ──────
-	var panel := PanelContainer.new()
+	# ── Carte principale avec barre XP en fond ──────────────
+	var panel := XPCard.new()
+	panel.xp_fill    = xp_fill
+	panel.fill_color = rcolor
 	var style := StyleBoxFlat.new()
 	style.bg_color     = Color(rcolor.r, rcolor.g, rcolor.b, 0.07)
 	style.border_color = Color(rcolor.r, rcolor.g, rcolor.b, 0.60)
@@ -973,7 +1035,8 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	header.add_child(arrow)
 
-	for effect in pdata.get("base_stats", {}).get("effects", []):
+	var cur_effs: Array = _tier_effects(pdata, rarity)
+	for effect in cur_effs:
 		var desc := effect.get("description", "") as String
 		if desc.is_empty(): continue
 		var eff_lbl := Label.new()
@@ -1007,16 +1070,21 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	var tc      := UIColors.tier_color(t)
 	var tn      := GameData.get_tier_name(t)
 	var indent  := (t - base_rarity) * 14
-	var xp_cur  : int = int(pdata.get("current_xp", 0.0))
-	var xp_need : int = 0
+	var xp_cur  : float = pdata.get("current_xp", 0.0) as float
+	var xp_need : int   = 0
 	if t < GameData.xp_thresholds.size():
 		xp_need = int(GameData.xp_thresholds[t])
+	var xp_fill := 0.0
+	if xp_need > 0:
+		xp_fill = clampf(xp_cur / float(xp_need), 0.0, 1.0)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", indent)
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	var panel := PanelContainer.new()
+	var panel := XPCard.new()
+	panel.xp_fill    = xp_fill
+	panel.fill_color = tc
 	var style := StyleBoxFlat.new()
 	style.bg_color     = Color(tc.r, tc.g, tc.b, 0.06)
 	style.border_color = Color(tc.r, tc.g, tc.b, 0.38)
@@ -1050,14 +1118,14 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	hb.add_child(name_lbl)
 
 	var xp_lbl := Label.new()
-	xp_lbl.text = "%s / %s XP" % [_xp_fmt(xp_cur), _xp_fmt(xp_need)]
+	xp_lbl.text = "%s / %s XP" % [_xp_fmt(int(xp_cur)), _xp_fmt(xp_need)]
 	xp_lbl.add_theme_font_size_override("font_size", 9)
 	xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hb.add_child(xp_lbl)
 
-	# Effets du passif
-	for effect in pdata.get("base_stats", {}).get("effects", []):
+	# Effets du palier
+	for effect in _tier_effects(pdata, t):
 		var desc := effect.get("description", "") as String
 		if desc.is_empty(): continue
 		var eff_lbl := Label.new()
@@ -1069,54 +1137,17 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 
 	return margin
 
+func _tier_effects(pdata: Dictionary, t: int) -> Array:
+	var te_list: Array = pdata.get("tier_effects", [])
+	if t < te_list.size():
+		var effs: Array = te_list[t].get("effects", [])
+		if not effs.is_empty(): return effs
+	return pdata.get("base_stats", {}).get("effects", [])
+
 func _xp_fmt(xp: int) -> String:
 	if xp >= 1000:
 		return "%d %03d" % [xp / 1000, xp % 1000]
 	return str(xp)
-
-func _passive_locked_card(pname: String, unlock_tier: int) -> Control:
-	var panel := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(0.08, 0.08, 0.12, 0.6)
-	style.border_color = Color(0.25, 0.25, 0.30, 0.4)
-	style.set_border_width_all(1)
-	for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
-			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
-		style.set(prop, 4)
-	panel.add_theme_stylebox_override("panel", style)
-
-	var m := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		m.add_theme_constant_override(s, 6)
-	panel.add_child(m)
-
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 8)
-	m.add_child(hb)
-
-	var lock_lbl := Label.new()
-	lock_lbl.text = "🔒"
-	lock_lbl.add_theme_font_size_override("font_size", 12)
-	hb.add_child(lock_lbl)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 1)
-	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(vb)
-
-	var name_lbl := Label.new()
-	name_lbl.text = pname
-	name_lbl.add_theme_font_size_override("font_size", 11)
-	name_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	vb.add_child(name_lbl)
-
-	var tier_lbl := Label.new()
-	tier_lbl.text = "Débloque au %s" % GameData.get_tier_name(unlock_tier)
-	tier_lbl.add_theme_font_size_override("font_size", 9)
-	tier_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED.darkened(0.2))
-	vb.add_child(tier_lbl)
-
-	return panel
 
 func _panel_nav(desc_text: String, icon: String, scene_path: String) -> void:
 	var desc := Label.new()
