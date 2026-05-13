@@ -1,7 +1,6 @@
 {
 	"id": "passive_poison_touch",
 	"name": "Contact Venimeux",
-	"rarity": 1,
 	"base_stats": {
 		"effects": [
 			{

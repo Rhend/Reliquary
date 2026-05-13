@@ -1,7 +1,6 @@
 {
 	"id": "passive_regeneration",
 	"name": "Régénération",
-	"rarity": 1,
 	"base_stats": {
 		"effects": [
 			{

@@ -714,7 +714,7 @@ func _section_header(title: String, color: Color) -> Control:
 	return vb
 
 func _passive_card(pdata: Dictionary, tcolor: Color) -> Control:
-	var rarity := pdata.get("rarity", 0) as int
+	var rarity := pdata.get("current_tier", 0) as int
 	var rcolor := UIColors.tier_color(rarity)
 	var rname  := GameData.get_tier_name(rarity)
 
