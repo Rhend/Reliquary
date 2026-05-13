@@ -285,30 +285,28 @@ class ClickOrb extends Control:
 
 # ─── Hexagone interactif ──────────────────────────────────────
 class HexItem extends Control:
-	var icon_text   := ""
-	var label_text  := ""
-	var tier_color  := Color.WHITE
-	var tier        := 1
-	var callback    : Callable
-	var hex_radius  := 58.0
-	var is_hovered  := false
-	var is_selected := false
-	var _htween     : Tween
-	var _t          := 0.0
+	var icon_text    := ""
+	var label_text   := ""
+	var tier_color   := Color.WHITE
+	var tier         := 1
+	var callback     : Callable
+	var hex_radius   := 58.0
+	var outward_dir  := Vector2.RIGHT
+	var is_hovered   := false
+	var is_selected  := false
+	var _htween      : Tween
+	var _t           := 0.0
 
 	func _ready() -> void:
 		pivot_offset = size * 0.5
-		var lbl := Label.new()
-		lbl.text = label_text
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 11)
-		lbl.add_theme_color_override("font_color", Color.WHITE)
-		lbl.anchor_left   = 0.0; lbl.anchor_right  = 1.0
-		lbl.anchor_top    = 0.0; lbl.anchor_bottom = 0.0
-		lbl.offset_top    = 63;  lbl.offset_bottom = 87
-		lbl.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-		add_child(lbl)
+		var ico := Label.new()
+		ico.text = icon_text
+		ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+		ico.add_theme_font_size_override("font_size", 40)
+		ico.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		ico.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(ico)
 		mouse_entered.connect(_on_enter)
 		mouse_exited.connect(_on_exit)
 
@@ -349,6 +347,69 @@ class HexItem extends Control:
 			4: _hexa(c, true,  false)
 			5: _hexa(c, true,  true)
 			_: _round(c, false)
+		_callout(c)
+
+	func _callout(c: Vector2) -> void:
+		var font := ThemeDB.fallback_font
+		var fsz  := 13
+		var r    := hex_radius * (0.78 if tier <= 2 else 0.92)
+
+		var text_w  := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsz).x
+		var bar_len := text_w + 60.0
+
+		var p0       := c + outward_dir * r
+		var p1       := c + outward_dir * (r + 28.0)
+		var bd       := 1.0 if outward_dir.x >= 0.0 else -1.0
+		var p2       := p1 + Vector2(bd * bar_len, 0.0)
+		var stem_len := p0.distance_to(p1)
+		var total    := stem_len + bar_len
+
+		var black := Color(0.0, 0.0, 0.0, 0.40)
+		var base  := Color(tier_color.r, tier_color.g, tier_color.b,
+				0.72 + 0.10 * sin(_t * 1.8))
+
+		# Glow de fond (respire)
+		var glow := Color(tier_color.r, tier_color.g, tier_color.b,
+				0.08 + 0.05 * sin(_t * 1.5))
+		draw_line(p0, p1, glow, 8.0, true)
+		draw_line(p1, p2, glow, 8.0, true)
+
+		# Outline + trait principal
+		draw_line(p0, p1, black, 3.0, true)
+		draw_line(p1, p2, black, 3.0, true)
+		draw_line(p0, p1, base, 1.5, true)
+		draw_line(p1, p2, base, 1.5, true)
+
+		# Dot de départ qui respire
+		var dot_r := 2.0 + 0.7 * sin(_t * 3.2)
+		draw_circle(p0, dot_r + 1.5, black)
+		draw_circle(p0, dot_r, base)
+
+		# Pulse qui voyage de p0 → p1 → p2 en boucle
+		var prog := fmod(_t * 0.55, 1.0)
+		var dist := prog * total
+		var pp   : Vector2
+		if dist <= stem_len:
+			pp = p0.lerp(p1, dist / stem_len)
+		else:
+			pp = p1.lerp(p2, (dist - stem_len) / bar_len)
+		var pa   := sin(prog * PI)  # fade entrée/sortie
+		var pc   := tier_color.lightened(0.45); pc.a = pa * 0.85
+		var pcg  := Color(pc.r, pc.g, pc.b, pa * 0.25)
+		draw_circle(pp, 5.5, pcg)
+		draw_circle(pp, 2.8, pc)
+		draw_circle(pp, 1.2, Color(1.0, 1.0, 1.0, pa * 0.90))
+
+		# Texte centré sur la barre, outline léger
+		var tx  := minf(p1.x, p2.x)
+		var tp  := Vector2(tx, p1.y - 6.0)
+		var tco := Color(0.0, 0.0, 0.0, 0.50)
+		for ofs: Vector2 in [Vector2(1,0), Vector2(-1,0), Vector2(0,1), Vector2(0,-1)]:
+			draw_string(font, tp + ofs, label_text,
+					HORIZONTAL_ALIGNMENT_CENTER, bar_len, fsz, tco)
+		draw_string(font, tp, label_text,
+				HORIZONTAL_ALIGNMENT_CENTER, bar_len, fsz,
+				tier_color.lightened(0.35))
 
 	# ── Tier 1 & 2 : boutons ronds ────────────────────────────
 	func _round(c: Vector2, with_fx: bool) -> void:
@@ -642,7 +703,7 @@ func _build_tier0(creature: Dictionary) -> void:
 	add_child(_ring)
 
 	var lname := Label.new()
-	lname.text = creature.get("name", "Héro") as String
+	lname.text = "Village"
 	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lname.add_theme_font_size_override("font_size", 15)
 	lname.add_theme_color_override("font_color", TIER_0_COLOR.lightened(0.2))
@@ -683,7 +744,7 @@ func _build_hub(creature: Dictionary, tier: int) -> void:
 	_hub_root.add_child(_ring)
 
 	var lname := Label.new()
-	lname.text = creature.get("name", "Héro") as String
+	lname.text = "Village"
 	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lname.add_theme_font_size_override("font_size", 17)
 	lname.add_theme_color_override("font_color", tcolor)
@@ -1252,11 +1313,12 @@ func _on_hero_click() -> void:
 # ─── Factory hexagone ─────────────────────────────────────────
 func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Callable, panel_id: String) -> void:
 	var item := HexItem.new()
-	item.icon_text  = icon
-	item.label_text = lbl
-	item.tier_color = tcolor
-	item.tier       = _current_tier()
-	item.callback   = cb
+	item.icon_text   = icon
+	item.label_text  = lbl
+	item.tier_color  = tcolor
+	item.tier        = _current_tier()
+	item.outward_dir = pos.normalized()
+	item.callback    = cb
 	_center(item, pos, HEX_SIZE)
 	item.pivot_offset = HEX_SIZE * 0.5   # centrage du scale x1.2
 	_hub_root.add_child(item)
