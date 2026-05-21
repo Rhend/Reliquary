@@ -654,8 +654,9 @@ var _hub_root        : Control
 var _rp_root         : Control
 var _rp_content      : VBoxContainer
 var _rp_title        : Label
-var _active_panel_id := ""
-var _hex_items       : Dictionary = {}   # panel_id → HexItem
+var _active_panel_id      := ""
+var _adv_selected_biome_id := ""
+var _hex_items            : Dictionary = {}   # panel_id → HexItem
 
 # ─── Init ─────────────────────────────────────────────────────
 func _ready() -> void:
@@ -893,7 +894,7 @@ func _build_panel_frame(panel_id: String) -> void:
 func _fill_panel_content(panel_id: String) -> void:
 	match panel_id:
 		"hero":       _panel_hero()
-		"adventure":  _panel_nav("Lancer une expédition", "⚔", "res://scenes/village/adventure_select.tscn")
+		"adventure":  _panel_adventure()
 		"evolutions": _panel_nav("Accéder aux Évolutions", "▲", "res://scenes/village/evolution_hall.tscn")
 		"forge":      _panel_nav("Ouvrir la Forge",        "🔨", "res://scenes/village/forge.tscn")
 		"sanctuary":  _panel_soon("SANCTUAIRE")
@@ -1270,6 +1271,250 @@ func _panel_nav(desc_text: String, icon: String, scene_path: String) -> void:
 	btn.add_theme_font_size_override("font_size", 14)
 	btn.pressed.connect(func() -> void: get_tree().change_scene_to_file(scene_path))
 	_rp_content.add_child(btn)
+
+# ═══════════════════════════════════════════════════════════
+#  Panneau Expéditions — sélection de biome intégrée
+# ═══════════════════════════════════════════════════════════
+
+func _panel_adventure() -> void:
+	var tier   := _current_tier()
+	var tcolor := UIColors.tier_color(tier)
+
+	if _adv_selected_biome_id.is_empty() or GameData.get_entity(_adv_selected_biome_id).is_empty():
+		_adv_selected_biome_id = _adv_first_biome_id()
+
+	# ── Gros bouton "Partir en Expédition" ────────────────────
+	var btn := Button.new()
+	btn.text = "⚔   PARTIR EN EXPÉDITION"
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size   = Vector2(0, 52)
+	btn.add_theme_font_size_override("font_size", 17)
+	btn.add_theme_color_override("font_color", tcolor)
+	var s_n := StyleBoxFlat.new()
+	s_n.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.14)
+	s_n.border_color = tcolor
+	s_n.set_border_width_all(2)
+	s_n.set_corner_radius_all(6)
+	btn.add_theme_stylebox_override("normal", s_n)
+	var s_h := s_n.duplicate() as StyleBoxFlat
+	s_h.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.30)
+	btn.add_theme_stylebox_override("hover", s_h)
+	btn.pressed.connect(_on_start_selected_expedition)
+	_rp_content.add_child(btn)
+
+	# ── Séparateur ────────────────────────────────────────────
+	_rp_content.add_child(HSeparator.new())
+
+	# ── Liste des biomes ──────────────────────────────────────
+	_rp_content.add_child(_section_header("◆  BIOMES DISPONIBLES", tcolor))
+
+	for eid: String in GameData.entities:
+		var e := GameData.entities[eid] as Dictionary
+		if e.get("entity_type", "") == "biome":
+			_rp_content.add_child(_adv_biome_card(eid, e, tcolor))
+
+func _adv_first_biome_id() -> String:
+	for eid in GameData.entities:
+		if GameData.entities[eid].get("entity_type", "") == "biome":
+			return eid
+	return ""
+
+func _on_start_selected_expedition() -> void:
+	if _adv_selected_biome_id.is_empty():
+		return
+	GameData.player["active_biome_id"] = _adv_selected_biome_id
+	AdventureSystem.start_adventure(_adv_selected_biome_id)
+	get_tree().change_scene_to_file("res://scenes/Biome.tscn")
+
+func _adv_biome_card(biome_id: String, biome: Dictionary, village_color: Color) -> Control:
+	var btier  := biome.get("current_tier", 0) as int
+	var bcolor := UIColors.tier_color(btier)
+	var bdisp  := MasteryRegistry.get_mastery_display(biome_id)
+	var pools  := MasteryRegistry.get_biome_entity_pools(biome_id)
+	var is_sel := (biome_id == _adv_selected_biome_id)
+
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var cs := StyleBoxFlat.new()
+	cs.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.16 if is_sel else 0.05)
+	cs.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 1.0  if is_sel else 0.38)
+	cs.set_border_width_all(2 if is_sel else 1)
+	cs.set_corner_radius_all(5)
+	card.add_theme_stylebox_override("panel", cs)
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+			_adv_selected_biome_id = biome_id
+			_swap_panel_content("adventure")
+	)
+
+	var m := MarginContainer.new()
+	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+		m.add_theme_constant_override(s, 10)
+	card.add_child(m)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	m.add_child(vb)
+
+	# ── Header nom + tier ─────────────────────────────────────
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 8)
+	vb.add_child(hdr)
+
+	var name_lbl := Label.new()
+	name_lbl.text = biome.get("name", biome_id).to_upper()
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 14)
+	name_lbl.add_theme_color_override("font_color", bcolor)
+	hdr.add_child(name_lbl)
+
+	if is_sel:
+		var sl := Label.new()
+		sl.text = "● SÉLECTIONNÉ"
+		sl.add_theme_font_size_override("font_size", 10)
+		sl.add_theme_color_override("font_color", village_color)
+		hdr.add_child(sl)
+
+	var tlbl := Label.new()
+	tlbl.text = GameData.get_tier_name(btier)
+	tlbl.add_theme_font_size_override("font_size", 11)
+	tlbl.add_theme_color_override("font_color", bcolor)
+	hdr.add_child(tlbl)
+
+	# ── XP biome ──────────────────────────────────────────────
+	if not bdisp.is_empty():
+		if bdisp["at_max"]:
+			var ml := Label.new()
+			ml.text = "▲ RANG MAX"
+			ml.add_theme_font_size_override("font_size", 10)
+			ml.add_theme_color_override("font_color", bcolor)
+			ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			vb.add_child(ml)
+		else:
+			var bar := ProgressBar.new()
+			bar.min_value = 0.0; bar.max_value = bdisp["xp_max"]
+			bar.value     = minf(bdisp["xp"], bdisp["xp_max"])
+			bar.show_percentage = false
+			bar.custom_minimum_size = Vector2(0, 8)
+			var fs := StyleBoxFlat.new(); fs.bg_color = bcolor; fs.set_corner_radius_all(2)
+			var bs_bar := StyleBoxFlat.new(); bs_bar.bg_color = UIColors.BG_BAR; bs_bar.set_corner_radius_all(2)
+			bar.add_theme_stylebox_override("fill", fs)
+			bar.add_theme_stylebox_override("background", bs_bar)
+			vb.add_child(bar)
+			var xl := Label.new()
+			xl.text = "XP  %s / %s" % [_xp_fmt(int(bdisp["xp"])), _xp_fmt(int(bdisp["xp_max"]))]
+			xl.add_theme_font_size_override("font_size", 10)
+			xl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+			xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			vb.add_child(xl)
+
+	# ── Ligne fine de séparation ──────────────────────────────
+	var line := ColorRect.new()
+	line.color = Color(bcolor.r, bcolor.g, bcolor.b, 0.25)
+	line.custom_minimum_size = Vector2(0, 1)
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(line)
+
+	# ── Pools de contenu ──────────────────────────────────────
+	_adv_pool_section(vb, "CRÉATURES",   pools["creatures"],  UIColors.TYPE_CREATURE)
+	_adv_pool_section(vb, "PIÈGES",      pools["traps"],      UIColors.TYPE_TRAP)
+	_adv_pool_section(vb, "ÉVÉNEMENTS",  pools["events"],     UIColors.TYPE_EVENT_POS)
+	_adv_pool_section(vb, "ÉQUIPEMENTS", pools["equipment"],  UIColors.STAT_ATK)
+
+	return card
+
+func _adv_pool_section(parent: VBoxContainer, label: String, pool: Array, color: Color) -> void:
+	if pool.is_empty():
+		return
+	var sec := VBoxContainer.new()
+	sec.add_theme_constant_override("separation", 3)
+	parent.add_child(sec)
+
+	var hdr := Label.new()
+	hdr.text = label
+	hdr.add_theme_font_size_override("font_size", 10)
+	hdr.add_theme_color_override("font_color", color.lerp(UIColors.TEXT_MUTED, 0.40))
+	sec.add_child(hdr)
+
+	var total := pool.size()
+	for i: int in range(total):
+		var entry    := pool[i] as Dictionary
+		var entry_id := entry.get("id", "") as String
+		var is_known := MasteryRegistry.is_discovered(entry_id)
+
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		sec.add_child(row)
+
+		var bullet := Label.new()
+		bullet.text = "•"
+		bullet.add_theme_font_size_override("font_size", 11)
+		bullet.add_theme_color_override("font_color", color if is_known else UIColors.TEXT_MUTED)
+		row.add_child(bullet)
+
+		if is_known:
+			var entity      := GameData.get_entity(entry_id)
+			var bentry      := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
+			var is_equip    := entity.get("entity_type", "") == "equipment"
+			var entity_tier := 0
+			var entity_xp   := 0.0
+			var at_max      := false
+
+			if not entity.is_empty() and not is_equip:
+				# Entité chargée dans GameData (biome, passive…) : maîtrise complète
+				entity_tier = entity.get("current_tier", 0)
+				entity_xp   = entity.get("current_xp",   0.0)
+				at_max      = entity_tier >= GameData.MAX_TIER
+			elif not bentry.is_empty():
+				# Créature / piège / événement : fallback sur le bestiaire
+				entity_tier = bentry.get("tier", entry.get("tier", 0))
+				entity_xp   = bentry.get("xp",   0.0)
+				at_max      = entity_tier >= GameData.MAX_TIER
+			else:
+				entity_tier = entry.get("tier", 0)
+
+			var ec := UIColors.tier_color(entity_tier)
+
+			var name_lbl := Label.new()
+			name_lbl.text = entry.get("name", "?")
+			name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			name_lbl.add_theme_font_size_override("font_size", 11)
+			name_lbl.add_theme_color_override("font_color", ec)
+			row.add_child(name_lbl)
+
+			var tbadge := Label.new()
+			tbadge.text = GameData.get_tier_name(entity_tier)
+			tbadge.add_theme_font_size_override("font_size", 10)
+			tbadge.add_theme_color_override("font_color", ec)
+			row.add_child(tbadge)
+
+			if not is_equip:
+				if at_max:
+					var ml := Label.new()
+					ml.text = "MAX"
+					ml.add_theme_font_size_override("font_size", 9)
+					ml.add_theme_color_override("font_color", ec)
+					row.add_child(ml)
+				else:
+					var xp_need := float(GameData.xp_thresholds[mini(entity_tier + 1, GameData.xp_thresholds.size() - 1)])
+					var bar := ProgressBar.new()
+					bar.min_value = 0.0; bar.max_value = xp_need
+					bar.value     = minf(entity_xp, xp_need)
+					bar.show_percentage = false
+					bar.custom_minimum_size = Vector2(70, 8)
+					bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+					var fs2 := StyleBoxFlat.new(); fs2.bg_color = ec; fs2.set_corner_radius_all(2)
+					var bs2 := StyleBoxFlat.new(); bs2.bg_color = UIColors.BG_BAR; bs2.set_corner_radius_all(2)
+					bar.add_theme_stylebox_override("fill", fs2)
+					bar.add_theme_stylebox_override("background", bs2)
+					row.add_child(bar)
+		else:
+			var unk := Label.new()
+			unk.text = "???? — %d / %d" % [i + 1, total]
+			unk.add_theme_font_size_override("font_size", 11)
+			unk.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+			row.add_child(unk)
 
 func _panel_soon(label: String) -> void:
 	var lbl := Label.new()
