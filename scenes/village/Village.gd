@@ -1305,13 +1305,46 @@ func _panel_adventure() -> void:
 	# ── Séparateur ────────────────────────────────────────────
 	_rp_content.add_child(HSeparator.new())
 
-	# ── Liste des biomes ──────────────────────────────────────
+	# ── Liste des biomes (accordéon) ──────────────────────────
 	_rp_content.add_child(_section_header("◆  BIOMES DISPONIBLES", tcolor))
+
+	# Références partagées entre les closures pour l'accordéon
+	var contents: Dictionary = {}   # biome_id → VBoxContainer (détail)
+	var arrows:   Dictionary = {}   # biome_id → Label (▶ / ▼)
 
 	for eid: String in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
-		if e.get("entity_type", "") == "biome":
-			_rp_content.add_child(_adv_biome_card(eid, e, tcolor))
+		if e.get("entity_type", "") != "biome":
+			continue
+		var bid := eid
+
+		var result  := _adv_biome_card(bid, e)
+		var card    := result["card"]    as Control
+		var content := result["content"] as VBoxContainer
+		var arrow   := result["arrow"]   as Label
+		contents[bid] = content
+		arrows[bid]   = arrow
+
+		card.gui_input.connect(func(ev: InputEvent) -> void:
+			if not (ev is InputEventMouseButton \
+					and ev.button_index == MOUSE_BUTTON_LEFT \
+					and ev.pressed):
+				return
+			if bid == _adv_selected_biome_id:
+				# Même biome : toggle local, sans rebuild
+				content.visible = not content.visible
+				arrow.text = "  ▼" if content.visible else "  ▶"
+			else:
+				# Nouveau biome : ferme le précédent, ouvre le nouveau
+				if _adv_selected_biome_id in contents \
+						and is_instance_valid(contents[_adv_selected_biome_id]):
+					contents[_adv_selected_biome_id].visible = false
+					arrows[_adv_selected_biome_id].text = "  ▶"
+				_adv_selected_biome_id = bid
+				content.visible = true
+				arrow.text = "  ▼"
+		)
+		_rp_content.add_child(card)
 
 func _adv_first_biome_id() -> String:
 	for eid in GameData.entities:
@@ -1326,27 +1359,22 @@ func _on_start_selected_expedition() -> void:
 	AdventureSystem.start_adventure(_adv_selected_biome_id)
 	get_tree().change_scene_to_file("res://scenes/Biome.tscn")
 
-func _adv_biome_card(biome_id: String, biome: Dictionary, village_color: Color) -> Control:
+# Retourne { card, content, arrow } — le gui_input est connecté par _panel_adventure.
+func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	var btier  := biome.get("current_tier", 0) as int
 	var bcolor := UIColors.tier_color(btier)
 	var bdisp  := MasteryRegistry.get_mastery_display(biome_id)
 	var pools  := MasteryRegistry.get_biome_entity_pools(biome_id)
-	var is_sel := (biome_id == _adv_selected_biome_id)
 
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var cs := StyleBoxFlat.new()
-	cs.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.16 if is_sel else 0.05)
-	cs.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 1.0  if is_sel else 0.38)
-	cs.set_border_width_all(2 if is_sel else 1)
+	cs.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.05)
+	cs.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 0.38)
+	cs.set_border_width_all(1)
 	cs.set_corner_radius_all(5)
 	card.add_theme_stylebox_override("panel", cs)
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
-			_adv_selected_biome_id = biome_id
-			_swap_panel_content("adventure")
-	)
 
 	var m := MarginContainer.new()
 	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
@@ -1357,7 +1385,7 @@ func _adv_biome_card(biome_id: String, biome: Dictionary, village_color: Color) 
 	vb.add_theme_constant_override("separation", 6)
 	m.add_child(vb)
 
-	# ── Header nom + tier ─────────────────────────────────────
+	# ── Header : nom + tier + flèche ──────────────────────────
 	var hdr := HBoxContainer.new()
 	hdr.add_theme_constant_override("separation", 8)
 	vb.add_child(hdr)
@@ -1369,20 +1397,19 @@ func _adv_biome_card(biome_id: String, biome: Dictionary, village_color: Color) 
 	name_lbl.add_theme_color_override("font_color", bcolor)
 	hdr.add_child(name_lbl)
 
-	if is_sel:
-		var sl := Label.new()
-		sl.text = "● SÉLECTIONNÉ"
-		sl.add_theme_font_size_override("font_size", 10)
-		sl.add_theme_color_override("font_color", village_color)
-		hdr.add_child(sl)
-
 	var tlbl := Label.new()
 	tlbl.text = GameData.get_tier_name(btier)
 	tlbl.add_theme_font_size_override("font_size", 11)
 	tlbl.add_theme_color_override("font_color", bcolor)
 	hdr.add_child(tlbl)
 
-	# ── XP biome ──────────────────────────────────────────────
+	var arrow := Label.new()
+	arrow.text = "  ▶"
+	arrow.add_theme_font_size_override("font_size", 10)
+	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	hdr.add_child(arrow)
+
+	# ── XP biome (toujours visible même replié) ───────────────
 	if not bdisp.is_empty():
 		if bdisp["at_max"]:
 			var ml := Label.new()
@@ -1409,20 +1436,24 @@ func _adv_biome_card(biome_id: String, biome: Dictionary, village_color: Color) 
 			xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			vb.add_child(xl)
 
-	# ── Ligne fine de séparation ──────────────────────────────
+	# ── Contenu replié par défaut ─────────────────────────────
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 6)
+	content.visible = false
+	vb.add_child(content)
+
 	var line := ColorRect.new()
 	line.color = Color(bcolor.r, bcolor.g, bcolor.b, 0.25)
 	line.custom_minimum_size = Vector2(0, 1)
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(line)
+	content.add_child(line)
 
-	# ── Pools de contenu ──────────────────────────────────────
-	_adv_pool_section(vb, "CRÉATURES",   pools["creatures"],  UIColors.TYPE_CREATURE)
-	_adv_pool_section(vb, "PIÈGES",      pools["traps"],      UIColors.TYPE_TRAP)
-	_adv_pool_section(vb, "ÉVÉNEMENTS",  pools["events"],     UIColors.TYPE_EVENT_POS)
-	_adv_pool_section(vb, "ÉQUIPEMENTS", pools["equipment"],  UIColors.STAT_ATK)
+	_adv_pool_section(content, "CRÉATURES",   pools["creatures"],  UIColors.TYPE_CREATURE)
+	_adv_pool_section(content, "PIÈGES",      pools["traps"],      UIColors.TYPE_TRAP)
+	_adv_pool_section(content, "ÉVÉNEMENTS",  pools["events"],     UIColors.TYPE_EVENT_POS)
+	_adv_pool_section(content, "ÉQUIPEMENTS", pools["equipment"],  UIColors.STAT_ATK)
 
-	return card
+	return {"card": card, "content": content, "arrow": arrow}
 
 func _adv_pool_section(parent: VBoxContainer, label: String, pool: Array, color: Color) -> void:
 	if pool.is_empty():
