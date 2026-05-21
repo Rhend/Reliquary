@@ -18,6 +18,8 @@ class CircleRing extends Control:
 
 	func _process(dt: float) -> void:
 		_t += dt
+		pivot_offset = size * 0.5
+		rotation += dt * 0.18   # rotation horaire douce (~10°/s)
 		queue_redraw()
 
 	func _base_w() -> float:
