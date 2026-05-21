@@ -1309,14 +1309,16 @@ func _panel_adventure() -> void:
 	_rp_content.add_child(_section_header("◆  BIOMES DISPONIBLES", tcolor))
 
 	# Références partagées entre les closures pour l'accordéon
-	var contents: Dictionary = {}   # biome_id → VBoxContainer (détail)
-	var arrows:   Dictionary = {}   # biome_id → Label (▶ / ▼)
+	var contents:     Dictionary = {}   # biome_id → VBoxContainer (détail)
+	var arrows:       Dictionary = {}   # biome_id → Label (▶ / ▼)
+	var biome_names:  Dictionary = {}   # biome_id → nom affiché (pour le bouton)
 
 	for eid: String in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
 		if e.get("entity_type", "") != "biome":
 			continue
 		var bid := eid
+		biome_names[bid] = e.get("name", bid).to_upper()
 
 		var result  := _adv_biome_card(bid, e)
 		var wrapper := result["wrapper"] as Control
@@ -1331,9 +1333,12 @@ func _panel_adventure() -> void:
 					and ev.button_index == MOUSE_BUTTON_LEFT \
 					and ev.pressed):
 				return
+			var bname := biome_names.get(bid, bid) as String
 			if bid == _adv_selected_biome_id:
 				section.visible = not section.visible
 				arrow.text = "  ▼" if section.visible else "  ▶"
+				btn.text = ("⚔   PARTIR EN EXPÉDITION — " + bname) if section.visible \
+						else "⚔   PARTIR EN EXPÉDITION"
 			else:
 				if _adv_selected_biome_id in contents \
 						and is_instance_valid(contents[_adv_selected_biome_id]):
@@ -1342,6 +1347,7 @@ func _panel_adventure() -> void:
 				_adv_selected_biome_id = bid
 				section.visible = true
 				arrow.text = "  ▼"
+				btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
 		)
 		_rp_content.add_child(wrapper)
 
@@ -1369,12 +1375,18 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	var bdisp  := MasteryRegistry.get_mastery_display(biome_id)
 	var pools  := MasteryRegistry.get_biome_entity_pools(biome_id)
 
+	var xp_fill := 0.0
+	if not bdisp.is_empty() and not bdisp.get("at_max", false) and bdisp.get("xp_max", 0.0) > 0.0:
+		xp_fill = clampf(bdisp["xp"] / bdisp["xp_max"], 0.0, 1.0)
+
 	var wrapper := VBoxContainer.new()
 	wrapper.add_theme_constant_override("separation", 2)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# ── Panneau principal (toujours visible) ──────────────────
-	var panel := PanelContainer.new()
+	# ── Panneau principal (toujours visible, XPCard avec fill XP) ──
+	var panel := XPCard.new()
+	panel.xp_fill    = xp_fill
+	panel.fill_color = bcolor
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var ps := StyleBoxFlat.new()
@@ -1418,30 +1430,16 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	hdr.add_child(arrow)
 
 	if not bdisp.is_empty():
-		if bdisp["at_max"]:
-			var ml := Label.new()
-			ml.text = "RANG MAX"
-			ml.add_theme_font_size_override("font_size", 10)
-			ml.add_theme_color_override("font_color", bcolor)
-			ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			pvb.add_child(ml)
+		var xp_lbl := Label.new()
+		if bdisp.get("at_max", false):
+			xp_lbl.text = "RANG MAX"
+			xp_lbl.add_theme_color_override("font_color", bcolor)
 		else:
-			var bar := ProgressBar.new()
-			bar.min_value = 0.0; bar.max_value = bdisp["xp_max"]
-			bar.value     = minf(bdisp["xp"], bdisp["xp_max"])
-			bar.show_percentage = false
-			bar.custom_minimum_size = Vector2(0, 8)
-			var fs := StyleBoxFlat.new(); fs.bg_color = bcolor; fs.set_corner_radius_all(2)
-			var bs := StyleBoxFlat.new(); bs.bg_color = UIColors.BG_BAR; bs.set_corner_radius_all(2)
-			bar.add_theme_stylebox_override("fill", fs)
-			bar.add_theme_stylebox_override("background", bs)
-			pvb.add_child(bar)
-			var xl := Label.new()
-			xl.text = "XP  %s / %s" % [_xp_fmt(int(bdisp["xp"])), _xp_fmt(int(bdisp["xp_max"]))]
-			xl.add_theme_font_size_override("font_size", 10)
-			xl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-			xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			pvb.add_child(xl)
+			xp_lbl.text = "XP  %s / %s" % [_xp_fmt(int(bdisp.get("xp", 0.0))), _xp_fmt(int(bdisp.get("xp_max", 0.0)))]
+			xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		xp_lbl.add_theme_font_size_override("font_size", 10)
+		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		pvb.add_child(xp_lbl)
 
 	# ── Section catégories (repliée par défaut) ───────────────
 	var section := VBoxContainer.new()
@@ -1540,23 +1538,13 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
 	)
 
-# Remplit parent avec les lignes d'entités du pool (bullet + nom + tier + XP).
+# Remplit parent avec des cartes XPCard par entité du pool (style _evo_row).
 func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 	var total := pool.size()
 	for i: int in range(total):
 		var entry    := pool[i] as Dictionary
 		var entry_id := entry.get("id", "") as String
 		var is_known := MasteryRegistry.is_discovered(entry_id)
-
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		parent.add_child(row)
-
-		var bullet := Label.new()
-		bullet.text = "•"
-		bullet.add_theme_font_size_override("font_size", 11)
-		bullet.add_theme_color_override("font_color", color if is_known else UIColors.TEXT_MUTED)
-		row.add_child(bullet)
 
 		if is_known:
 			var entity      := GameData.get_entity(entry_id)
@@ -1577,47 +1565,88 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 			else:
 				entity_tier = entry.get("tier", 0)
 
-			var ec := UIColors.tier_color(entity_tier)
+			var ec       := UIColors.tier_color(entity_tier)
+			var xp_need  := 0
+			var xp_fill  := 0.0
+			if not at_max and not is_equip and entity_tier + 1 < GameData.xp_thresholds.size():
+				xp_need = int(GameData.xp_thresholds[entity_tier + 1])
+				if xp_need > 0:
+					xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
+
+			var panel := XPCard.new()
+			panel.xp_fill    = xp_fill
+			panel.fill_color = ec
+			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var style := StyleBoxFlat.new()
+			style.bg_color     = Color(ec.r, ec.g, ec.b, 0.06)
+			style.border_color = Color(ec.r, ec.g, ec.b, 0.38)
+			style.set_border_width_all(1)
+			for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
+					"corner_radius_bottom_left", "corner_radius_bottom_right"]:
+				style.set(prop, 3)
+			panel.add_theme_stylebox_override("panel", style)
+			parent.add_child(panel)
+
+			var pm := MarginContainer.new()
+			for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+				pm.add_theme_constant_override(s, 4)
+			panel.add_child(pm)
+
+			var hb := HBoxContainer.new()
+			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			pm.add_child(hb)
 
 			var name_lbl := Label.new()
 			name_lbl.text = entry.get("name", "?")
 			name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			name_lbl.add_theme_font_size_override("font_size", 11)
-			name_lbl.add_theme_color_override("font_color", ec)
-			row.add_child(name_lbl)
+			name_lbl.add_theme_color_override("font_color", Color.WHITE)
+			hb.add_child(name_lbl)
 
 			var tbadge := Label.new()
 			tbadge.text = GameData.get_tier_name(entity_tier)
 			tbadge.add_theme_font_size_override("font_size", 10)
 			tbadge.add_theme_color_override("font_color", ec)
-			row.add_child(tbadge)
+			hb.add_child(tbadge)
 
 			if not is_equip:
-				if at_max:
-					var ml := Label.new()
-					ml.text = "MAX"
-					ml.add_theme_font_size_override("font_size", 9)
-					ml.add_theme_color_override("font_color", ec)
-					row.add_child(ml)
-				else:
-					var xp_need := float(GameData.xp_thresholds[mini(entity_tier + 1, GameData.xp_thresholds.size() - 1)])
-					var bar := ProgressBar.new()
-					bar.min_value = 0.0; bar.max_value = xp_need
-					bar.value     = minf(entity_xp, xp_need)
-					bar.show_percentage = false
-					bar.custom_minimum_size = Vector2(70, 8)
-					bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-					var fs2 := StyleBoxFlat.new(); fs2.bg_color = ec; fs2.set_corner_radius_all(2)
-					var bs2 := StyleBoxFlat.new(); bs2.bg_color = UIColors.BG_BAR; bs2.set_corner_radius_all(2)
-					bar.add_theme_stylebox_override("fill", fs2)
-					bar.add_theme_stylebox_override("background", bs2)
-					row.add_child(bar)
+				var xp_text := "RANG MAX" if at_max \
+						else "%s / %s XP" % [_xp_fmt(int(entity_xp)), _xp_fmt(xp_need)]
+				var xp_lbl := Label.new()
+				xp_lbl.text = xp_text
+				xp_lbl.add_theme_font_size_override("font_size", 9)
+				xp_lbl.add_theme_color_override("font_color", ec if at_max else UIColors.TEXT_MUTED)
+				xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				hb.add_child(xp_lbl)
 		else:
+			# Entité non découverte — style "À DÉBLOQUER"
+			var panel := PanelContainer.new()
+			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var style := StyleBoxFlat.new()
+			style.bg_color     = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g,
+					UIColors.TEXT_MUTED.b, 0.04)
+			style.border_color = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g,
+					UIColors.TEXT_MUTED.b, 0.20)
+			style.set_border_width_all(1)
+			style.set_corner_radius_all(3)
+			panel.add_theme_stylebox_override("panel", style)
+			parent.add_child(panel)
+
+			var pm := MarginContainer.new()
+			for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+				pm.add_theme_constant_override(s, 4)
+			panel.add_child(pm)
+
+			var hb := HBoxContainer.new()
+			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			pm.add_child(hb)
+
 			var unk := Label.new()
-			unk.text = "???? — %d / %d" % [i + 1, total]
+			unk.text = "????   %d / %d" % [i + 1, total]
+			unk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			unk.add_theme_font_size_override("font_size", 11)
 			unk.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-			row.add_child(unk)
+			hb.add_child(unk)
 
 func _panel_soon(label: String) -> void:
 	var lbl := Label.new()
