@@ -1652,19 +1652,43 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 			unk.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 			hb.add_child(unk)
 
-# Feedback hover sur n'importe quelle carte cliquable (modulate léger au survol).
+# Feedback hover + press sur n'importe quelle carte cliquable.
+# Hover  : scale x1.03 avec overshoot (TRANS_BACK) + brightnes x1.30.
+# Press  : scale down x0.95 + flash x1.55, puis spring-back vers état hover.
 # Appeler juste après avoir mis CURSOR_POINTING_HAND.
 func _add_hover_feedback(panel: Control) -> void:
 	var htween: Tween
 	panel.mouse_entered.connect(func() -> void:
+		panel.pivot_offset = panel.size * 0.5
 		if is_instance_valid(htween): htween.kill()
-		htween = panel.create_tween().set_ease(Tween.EASE_OUT)
-		htween.tween_property(panel, "modulate", Color(1.18, 1.18, 1.18), 0.10)
+		htween = panel.create_tween()
+		htween.set_parallel(true)
+		htween.tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.13) \
+				.set_ease(Tween.EASE_OUT)
+		htween.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.16) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	)
 	panel.mouse_exited.connect(func() -> void:
 		if is_instance_valid(htween): htween.kill()
-		htween = panel.create_tween().set_ease(Tween.EASE_OUT)
-		htween.tween_property(panel, "modulate", Color.WHITE, 0.15)
+		htween = panel.create_tween()
+		htween.set_parallel(true)
+		htween.tween_property(panel, "modulate", Color.WHITE, 0.20).set_ease(Tween.EASE_OUT)
+		htween.tween_property(panel, "scale", Vector2.ONE, 0.20).set_ease(Tween.EASE_OUT)
+	)
+	panel.gui_input.connect(func(ev: InputEvent) -> void:
+		if not (ev is InputEventMouseButton \
+				and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
+			return
+		if is_instance_valid(htween): htween.kill()
+		htween = panel.create_tween()
+		# Enfoncement rapide
+		htween.tween_property(panel, "scale", Vector2(0.95, 0.95), 0.06) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		htween.parallel().tween_property(panel, "modulate", Color(1.55, 1.55, 1.55), 0.06)
+		# Spring-back vers état hover
+		htween.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.18) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		htween.parallel().tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.14)
 	)
 
 func _panel_soon(label: String) -> void:
