@@ -1476,12 +1476,13 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	cat_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(cat_wrap)
 
+	var nc := UIColors.CARD_NEUTRAL
 	var cat_panel := PanelContainer.new()
 	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var cps := StyleBoxFlat.new()
-	cps.bg_color     = Color(color.r, color.g, color.b, 0.06)
-	cps.border_color = Color(color.r, color.g, color.b, 0.45)
+	cps.bg_color     = Color(nc.r, nc.g, nc.b, 0.06)
+	cps.border_color = Color(nc.r, nc.g, nc.b, 0.38)
 	cps.set_border_width_all(1)
 	cps.set_corner_radius_all(3)
 	cat_panel.add_theme_stylebox_override("panel", cps)
@@ -1500,7 +1501,7 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	clbl.text = label
 	clbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clbl.add_theme_font_size_override("font_size", 11)
-	clbl.add_theme_color_override("font_color", color)
+	clbl.add_theme_color_override("font_color", color)   # label texte garde la couleur type
 	chdr.add_child(clbl)
 
 	var count_lbl := Label.new()
@@ -1565,8 +1566,7 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 			else:
 				entity_tier = entry.get("tier", 0)
 
-			var ec       := UIColors.tier_color(entity_tier)   # couleur tier : badge + XP seulement
-			var nc       := UIColors.CARD_NEUTRAL               # couleur carte : fond + bord + fill
+			var ec       := UIColors.tier_color(entity_tier)   # couleur tier : carte + badge + XP
 			var xp_need  := 0
 			var xp_fill  := 0.0
 			if not at_max and not is_equip and entity_tier + 1 < GameData.xp_thresholds.size():
@@ -1576,11 +1576,11 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 
 			var panel := XPCard.new()
 			panel.xp_fill    = xp_fill
-			panel.fill_color = nc
+			panel.fill_color = ec
 			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			var style := StyleBoxFlat.new()
-			style.bg_color     = Color(nc.r, nc.g, nc.b, 0.06)
-			style.border_color = Color(nc.r, nc.g, nc.b, 0.38)
+			style.bg_color     = Color(ec.r, ec.g, ec.b, 0.06)
+			style.border_color = Color(ec.r, ec.g, ec.b, 0.38)
 			style.set_border_width_all(1)
 			for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
 					"corner_radius_bottom_left", "corner_radius_bottom_right"]:
