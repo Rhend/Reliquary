@@ -1066,6 +1066,7 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	panel.add_theme_stylebox_override("panel", style)
 	if has_evos:
 		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		_add_hover_feedback(panel)
 	wrapper.add_child(panel)
 
 	var m := MarginContainer.new()
@@ -1389,6 +1390,7 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	panel.fill_color = bcolor
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_add_hover_feedback(panel)
 	var ps := StyleBoxFlat.new()
 	ps.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.07)
 	ps.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 0.60)
@@ -1480,6 +1482,7 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	var cat_panel := PanelContainer.new()
 	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_add_hover_feedback(cat_panel)
 	var cps := StyleBoxFlat.new()
 	cps.bg_color     = Color(nc.r, nc.g, nc.b, 0.06)
 	cps.border_color = Color(nc.r, nc.g, nc.b, 0.38)
@@ -1648,6 +1651,21 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 			unk.add_theme_font_size_override("font_size", 11)
 			unk.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 			hb.add_child(unk)
+
+# Feedback hover sur n'importe quelle carte cliquable (modulate léger au survol).
+# Appeler juste après avoir mis CURSOR_POINTING_HAND.
+func _add_hover_feedback(panel: Control) -> void:
+	var htween: Tween
+	panel.mouse_entered.connect(func() -> void:
+		if is_instance_valid(htween): htween.kill()
+		htween = panel.create_tween().set_ease(Tween.EASE_OUT)
+		htween.tween_property(panel, "modulate", Color(1.18, 1.18, 1.18), 0.10)
+	)
+	panel.mouse_exited.connect(func() -> void:
+		if is_instance_valid(htween): htween.kill()
+		htween = panel.create_tween().set_ease(Tween.EASE_OUT)
+		htween.tween_property(panel, "modulate", Color.WHITE, 0.15)
+	)
 
 func _panel_soon(label: String) -> void:
 	var lbl := Label.new()
