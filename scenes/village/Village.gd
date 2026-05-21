@@ -632,21 +632,21 @@ const XP_PER_CLICK := 20.0
 
 # [label, icon, tier_min, callback_name, panel_id]
 const MENU_ITEMS: Array = [
-	["HÉRO",        "👤", 1, "_go_hero",       "hero"       ],
-	["EXPÉDITIONS", "⚔",  1, "_go_adventure",  "adventure"  ],
-	["ÉVOLUTIONS",  "▲",  2, "_go_evolutions", "evolutions" ],
-	["FORGE",       "🔨", 3, "_go_forge",      "forge"      ],
-	["SANCTUAIRE",  "✦",  4, "_go_sanctuary",  "sanctuary"  ],
-	["RELIQUE",     "◈",  5, "_go_relic",      "relic"      ],
+	["HÉRO",        "👤", 1, "_go_hero",      "hero"      ],
+	["EXPÉDITIONS", "⚔",  1, "_go_adventure", "adventure" ],
+	["FORGE",       "🔨", 2, "_go_forge",     "forge"     ],
+	["SANCTUAIRE",  "✦",  3, "_go_sanctuary", "sanctuary" ],
+	["RELIQUE",     "◈",  4, "_go_relic",     "relic"     ],
+	["?",           "?",  5, "_go_tbd",       "tbd"       ],
 ]
 
 const PANEL_TITLES: Dictionary = {
-	"hero":       "HÉRO",
-	"adventure":  "EXPÉDITIONS",
-	"evolutions": "ÉVOLUTIONS",
-	"forge":      "FORGE",
-	"sanctuary":  "SANCTUAIRE",
-	"relic":      "RELIQUE",
+	"hero":      "HÉRO",
+	"adventure": "EXPÉDITIONS",
+	"forge":     "FORGE",
+	"sanctuary": "SANCTUAIRE",
+	"relic":     "RELIQUE",
+	"tbd":       "?",
 }
 
 # ─── État ─────────────────────────────────────────────────────
@@ -895,12 +895,12 @@ func _build_panel_frame(panel_id: String) -> void:
 # ─── Contenu des panneaux ─────────────────────────────────────
 func _fill_panel_content(panel_id: String) -> void:
 	match panel_id:
-		"hero":       _panel_hero()
-		"adventure":  _panel_adventure()
-		"evolutions": _panel_nav("Accéder aux Évolutions", "▲", "res://scenes/village/evolution_hall.tscn")
-		"forge":      _panel_nav("Ouvrir la Forge",        "🔨", "res://scenes/village/forge.tscn")
-		"sanctuary":  _panel_soon("SANCTUAIRE")
-		"relic":      _panel_soon("RELIQUE")
+		"hero":      _panel_hero()
+		"adventure": _panel_adventure()
+		"forge":     _panel_nav("Ouvrir la Forge", "🔨", "res://scenes/village/forge.tscn")
+		"sanctuary": _panel_soon("SANCTUAIRE")
+		"relic":     _panel_soon("RELIQUE")
+		"tbd":       _panel_soon("?")
 
 func _panel_hero() -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
@@ -1788,10 +1788,10 @@ func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Calla
 # ─── Navigation → panneaux ────────────────────────────────────
 func _go_hero()       -> void: _open_panel("hero")
 func _go_adventure()  -> void: _open_panel("adventure")
-func _go_evolutions() -> void: _open_panel("evolutions")
-func _go_forge()      -> void: _open_panel("forge")
-func _go_sanctuary()  -> void: _open_panel("sanctuary")
-func _go_relic()      -> void: _open_panel("relic")
+func _go_forge()     -> void: _open_panel("forge")
+func _go_sanctuary() -> void: _open_panel("sanctuary")
+func _go_relic()     -> void: _open_panel("relic")
+func _go_tbd()       -> void: _open_panel("tbd")
 
 # ─── Utils ────────────────────────────────────────────────────
 func _center(ctrl: Control, pos: Vector2, sz: Vector2) -> void:
