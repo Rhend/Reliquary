@@ -18,6 +18,8 @@ class CircleRing extends Control:
 
 	func _process(dt: float) -> void:
 		_t += dt
+		pivot_offset = size * 0.5
+		rotation += dt * 0.18   # rotation horaire douce (~10°/s)
 		queue_redraw()
 
 	func _base_w() -> float:
@@ -654,8 +656,9 @@ var _hub_root        : Control
 var _rp_root         : Control
 var _rp_content      : VBoxContainer
 var _rp_title        : Label
-var _active_panel_id := ""
-var _hex_items       : Dictionary = {}   # panel_id → HexItem
+var _active_panel_id      := ""
+var _adv_selected_biome_id := ""
+var _hex_items            : Dictionary = {}   # panel_id → HexItem
 
 # ─── Init ─────────────────────────────────────────────────────
 func _ready() -> void:
@@ -893,7 +896,7 @@ func _build_panel_frame(panel_id: String) -> void:
 func _fill_panel_content(panel_id: String) -> void:
 	match panel_id:
 		"hero":       _panel_hero()
-		"adventure":  _panel_nav("Lancer une expédition", "⚔", "res://scenes/village/adventure_select.tscn")
+		"adventure":  _panel_adventure()
 		"evolutions": _panel_nav("Accéder aux Évolutions", "▲", "res://scenes/village/evolution_hall.tscn")
 		"forge":      _panel_nav("Ouvrir la Forge",        "🔨", "res://scenes/village/forge.tscn")
 		"sanctuary":  _panel_soon("SANCTUAIRE")
@@ -1065,6 +1068,7 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	panel.add_theme_stylebox_override("panel", style)
 	if has_evos:
 		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		_add_hover_feedback(panel)
 	wrapper.add_child(panel)
 
 	var m := MarginContainer.new()
@@ -1270,6 +1274,426 @@ func _panel_nav(desc_text: String, icon: String, scene_path: String) -> void:
 	btn.add_theme_font_size_override("font_size", 14)
 	btn.pressed.connect(func() -> void: get_tree().change_scene_to_file(scene_path))
 	_rp_content.add_child(btn)
+
+# ═══════════════════════════════════════════════════════════
+#  Panneau Expéditions — sélection de biome intégrée
+# ═══════════════════════════════════════════════════════════
+
+func _panel_adventure() -> void:
+	var tier   := _current_tier()
+	var tcolor := UIColors.tier_color(tier)
+
+	if _adv_selected_biome_id.is_empty() or GameData.get_entity(_adv_selected_biome_id).is_empty():
+		_adv_selected_biome_id = _adv_first_biome_id()
+
+	# ── Gros bouton "Partir en Expédition" ────────────────────
+	var btn := Button.new()
+	btn.text = "⚔   PARTIR EN EXPÉDITION"
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size   = Vector2(0, 52)
+	btn.add_theme_font_size_override("font_size", 17)
+	btn.add_theme_color_override("font_color", tcolor)
+	var s_n := StyleBoxFlat.new()
+	s_n.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.14)
+	s_n.border_color = tcolor
+	s_n.set_border_width_all(2)
+	s_n.set_corner_radius_all(6)
+	btn.add_theme_stylebox_override("normal", s_n)
+	var s_h := s_n.duplicate() as StyleBoxFlat
+	s_h.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.30)
+	btn.add_theme_stylebox_override("hover", s_h)
+	btn.pressed.connect(_on_start_selected_expedition)
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_add_hover_feedback(btn)
+	_rp_content.add_child(btn)
+
+	# ── Séparateur ────────────────────────────────────────────
+	_rp_content.add_child(HSeparator.new())
+
+	# ── Liste des biomes (accordéon) ──────────────────────────
+	_rp_content.add_child(_section_header("◆  BIOMES DISPONIBLES", tcolor))
+
+	# Références partagées entre les closures pour l'accordéon
+	var contents:     Dictionary = {}   # biome_id → VBoxContainer (détail)
+	var arrows:       Dictionary = {}   # biome_id → Label (▶ / ▼)
+	var biome_names:  Dictionary = {}   # biome_id → nom affiché (pour le bouton)
+
+	for eid: String in GameData.entities:
+		var e := GameData.entities[eid] as Dictionary
+		if e.get("entity_type", "") != "biome":
+			continue
+		var bid := eid
+		biome_names[bid] = e.get("name", bid).to_upper()
+
+		var result  := _adv_biome_card(bid, e)
+		var wrapper := result["wrapper"] as Control
+		var panel   := result["panel"]   as Control
+		var section := result["section"] as VBoxContainer
+		var arrow   := result["arrow"]   as Label
+		contents[bid] = section
+		arrows[bid]   = arrow
+
+		panel.gui_input.connect(func(ev: InputEvent) -> void:
+			if not (ev is InputEventMouseButton \
+					and ev.button_index == MOUSE_BUTTON_LEFT \
+					and ev.pressed):
+				return
+			var bname := biome_names.get(bid, bid) as String
+			if bid == _adv_selected_biome_id:
+				section.visible = not section.visible
+				arrow.text = "  ▼" if section.visible else "  ▶"
+				btn.text = ("⚔   PARTIR EN EXPÉDITION — " + bname) if section.visible \
+						else "⚔   PARTIR EN EXPÉDITION"
+			else:
+				if _adv_selected_biome_id in contents \
+						and is_instance_valid(contents[_adv_selected_biome_id]):
+					contents[_adv_selected_biome_id].visible = false
+					arrows[_adv_selected_biome_id].text = "  ▶"
+				_adv_selected_biome_id = bid
+				section.visible = true
+				arrow.text = "  ▼"
+				btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+		)
+		_rp_content.add_child(wrapper)
+
+func _adv_first_biome_id() -> String:
+	for eid in GameData.entities:
+		if GameData.entities[eid].get("entity_type", "") == "biome":
+			return eid
+	return ""
+
+func _on_start_selected_expedition() -> void:
+	if _adv_selected_biome_id.is_empty():
+		return
+	GameData.player["active_biome_id"] = _adv_selected_biome_id
+	AdventureSystem.start_adventure(_adv_selected_biome_id)
+	get_tree().change_scene_to_file("res://scenes/Biome.tscn")
+
+# Retourne { wrapper, panel, section, arrow }.
+# wrapper = VBoxContainer à ajouter au parent.
+# panel   = PanelContainer cliquable (gui_input connecté par _panel_adventure).
+# section = VBoxContainer des catégories (caché par défaut).
+# arrow   = Label ▶/▼.
+func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
+	var btier  := biome.get("current_tier", 0) as int
+	var bcolor := UIColors.tier_color(btier)
+	var bdisp  := MasteryRegistry.get_mastery_display(biome_id)
+	var pools  := MasteryRegistry.get_biome_entity_pools(biome_id)
+
+	var xp_fill := 0.0
+	if not bdisp.is_empty() and not bdisp.get("at_max", false) and bdisp.get("xp_max", 0.0) > 0.0:
+		xp_fill = clampf(bdisp["xp"] / bdisp["xp_max"], 0.0, 1.0)
+
+	var wrapper := VBoxContainer.new()
+	wrapper.add_theme_constant_override("separation", 2)
+	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	# ── Panneau principal (toujours visible, XPCard avec fill XP) ──
+	var panel := XPCard.new()
+	panel.xp_fill    = xp_fill
+	panel.fill_color = bcolor
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_add_hover_feedback(panel)
+	var ps := StyleBoxFlat.new()
+	ps.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.07)
+	ps.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 0.60)
+	ps.set_border_width_all(1)
+	ps.set_corner_radius_all(4)
+	panel.add_theme_stylebox_override("panel", ps)
+	wrapper.add_child(panel)
+
+	var pm := MarginContainer.new()
+	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+		pm.add_theme_constant_override(s, 8)
+	panel.add_child(pm)
+
+	var pvb := VBoxContainer.new()
+	pvb.add_theme_constant_override("separation", 4)
+	pm.add_child(pvb)
+
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 8)
+	pvb.add_child(hdr)
+
+	var name_lbl := Label.new()
+	name_lbl.text = biome.get("name", biome_id).to_upper()
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	hdr.add_child(name_lbl)
+
+	var tlbl := Label.new()
+	tlbl.text = GameData.get_tier_name(btier)
+	tlbl.add_theme_font_size_override("font_size", 11)
+	tlbl.add_theme_color_override("font_color", bcolor)
+	hdr.add_child(tlbl)
+
+	var arrow := Label.new()
+	arrow.text = "  ▶"
+	arrow.add_theme_font_size_override("font_size", 10)
+	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	hdr.add_child(arrow)
+
+	if not bdisp.is_empty():
+		var xp_lbl := Label.new()
+		if bdisp.get("at_max", false):
+			xp_lbl.text = "RANG MAX"
+			xp_lbl.add_theme_color_override("font_color", bcolor)
+		else:
+			xp_lbl.text = "XP  %s / %s" % [_xp_fmt(int(bdisp.get("xp", 0.0))), _xp_fmt(int(bdisp.get("xp_max", 0.0)))]
+			xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		xp_lbl.add_theme_font_size_override("font_size", 10)
+		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		pvb.add_child(xp_lbl)
+
+	# ── Section catégories (repliée par défaut) ───────────────
+	var section := VBoxContainer.new()
+	section.add_theme_constant_override("separation", 2)
+	section.visible = false
+	wrapper.add_child(section)
+
+	var indent := MarginContainer.new()
+	indent.add_theme_constant_override("margin_left", 12)
+	indent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section.add_child(indent)
+
+	var cat_vb := VBoxContainer.new()
+	cat_vb.add_theme_constant_override("separation", 3)
+	indent.add_child(cat_vb)
+
+	_adv_category_card(cat_vb, "CRÉATURES",   pools["creatures"],  UIColors.TYPE_CREATURE)
+	_adv_category_card(cat_vb, "PIÈGES",      pools["traps"],      UIColors.TYPE_TRAP)
+	_adv_category_card(cat_vb, "ÉVÉNEMENTS",  pools["events"],     UIColors.TYPE_EVENT_POS)
+	_adv_category_card(cat_vb, "ÉQUIPEMENTS", pools["equipment"],  UIColors.STAT_ATK)
+
+	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
+
+# Carte catégorie cliquable (Créatures / Pièges / Événements / Équipements).
+# Même pattern que _passive_card : panneau cliquable + liste repliée en dessous.
+func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color: Color) -> void:
+	if pool.is_empty():
+		return
+	var total      := pool.size()
+	var discovered := MasteryRegistry.count_discovered(pool)
+
+	var cat_wrap := VBoxContainer.new()
+	cat_wrap.add_theme_constant_override("separation", 2)
+	cat_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(cat_wrap)
+
+	var nc := UIColors.CARD_NEUTRAL
+	var cat_panel := PanelContainer.new()
+	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_add_hover_feedback(cat_panel)
+	var cps := StyleBoxFlat.new()
+	cps.bg_color     = Color(nc.r, nc.g, nc.b, 0.06)
+	cps.border_color = Color(nc.r, nc.g, nc.b, 0.38)
+	cps.set_border_width_all(1)
+	cps.set_corner_radius_all(3)
+	cat_panel.add_theme_stylebox_override("panel", cps)
+	cat_wrap.add_child(cat_panel)
+
+	var cpm := MarginContainer.new()
+	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+		cpm.add_theme_constant_override(s, 6)
+	cat_panel.add_child(cpm)
+
+	var chdr := HBoxContainer.new()
+	chdr.add_theme_constant_override("separation", 8)
+	cpm.add_child(chdr)
+
+	var clbl := Label.new()
+	clbl.text = label
+	clbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clbl.add_theme_font_size_override("font_size", 11)
+	clbl.add_theme_color_override("font_color", nc)
+	chdr.add_child(clbl)
+
+	var count_lbl := Label.new()
+	count_lbl.text = "%d / %d" % [discovered, total]
+	count_lbl.add_theme_font_size_override("font_size", 10)
+	count_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	chdr.add_child(count_lbl)
+
+	var cat_arrow := Label.new()
+	cat_arrow.text = "  ▶"
+	cat_arrow.add_theme_font_size_override("font_size", 10)
+	cat_arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	chdr.add_child(cat_arrow)
+
+	# Liste des entités (repliée par défaut)
+	var ent_section := VBoxContainer.new()
+	ent_section.add_theme_constant_override("separation", 3)
+	ent_section.visible = false
+	cat_wrap.add_child(ent_section)
+
+	var ent_indent := MarginContainer.new()
+	ent_indent.add_theme_constant_override("margin_left", 10)
+	ent_indent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ent_section.add_child(ent_indent)
+
+	var ent_vb := VBoxContainer.new()
+	ent_vb.add_theme_constant_override("separation", 3)
+	ent_indent.add_child(ent_vb)
+
+	_adv_entity_rows(ent_vb, pool, color)
+
+	cat_panel.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+			ent_section.visible = not ent_section.visible
+			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
+	)
+
+# Remplit parent avec des cartes XPCard par entité du pool (style _evo_row).
+func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
+	var total := pool.size()
+	for i: int in range(total):
+		var entry    := pool[i] as Dictionary
+		var entry_id := entry.get("id", "") as String
+		var is_known := MasteryRegistry.is_discovered(entry_id)
+
+		if is_known:
+			var entity      := GameData.get_entity(entry_id)
+			var bentry      := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
+			var is_equip    : bool = entity.get("entity_type", "") == "equipment"
+			var entity_tier := 0
+			var entity_xp   := 0.0
+			var at_max      := false
+
+			if not entity.is_empty() and not is_equip:
+				entity_tier = entity.get("current_tier", 0)
+				entity_xp   = entity.get("current_xp",   0.0)
+				at_max      = entity_tier >= GameData.MAX_TIER
+			elif not bentry.is_empty():
+				entity_tier = bentry.get("tier", entry.get("tier", 0))
+				entity_xp   = bentry.get("xp",   0.0)
+				at_max      = entity_tier >= GameData.MAX_TIER
+			else:
+				entity_tier = entry.get("tier", 0)
+
+			var ec       := UIColors.tier_color(entity_tier)   # couleur tier : carte + badge + XP
+			var xp_need  := 0
+			var xp_fill  := 0.0
+			if not at_max and not is_equip and entity_tier + 1 < GameData.xp_thresholds.size():
+				xp_need = int(GameData.xp_thresholds[entity_tier + 1])
+				if xp_need > 0:
+					xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
+
+			var panel := XPCard.new()
+			panel.xp_fill    = xp_fill
+			panel.fill_color = ec
+			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var style := StyleBoxFlat.new()
+			style.bg_color     = Color(ec.r, ec.g, ec.b, 0.06)
+			style.border_color = Color(ec.r, ec.g, ec.b, 0.38)
+			style.set_border_width_all(1)
+			for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
+					"corner_radius_bottom_left", "corner_radius_bottom_right"]:
+				style.set(prop, 3)
+			panel.add_theme_stylebox_override("panel", style)
+			parent.add_child(panel)
+
+			var pm := MarginContainer.new()
+			for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+				pm.add_theme_constant_override(s, 4)
+			panel.add_child(pm)
+
+			var hb := HBoxContainer.new()
+			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			pm.add_child(hb)
+
+			var name_lbl := Label.new()
+			name_lbl.text = entry.get("name", "?")
+			name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			name_lbl.add_theme_font_size_override("font_size", 11)
+			name_lbl.add_theme_color_override("font_color", Color.WHITE)
+			hb.add_child(name_lbl)
+
+			var tbadge := Label.new()
+			tbadge.text = GameData.get_tier_name(entity_tier)
+			tbadge.add_theme_font_size_override("font_size", 10)
+			tbadge.add_theme_color_override("font_color", ec)   # tier color : badge maîtrise
+			hb.add_child(tbadge)
+
+			if not is_equip:
+				var xp_text := "RANG MAX" if at_max \
+						else "%s / %s XP" % [_xp_fmt(int(entity_xp)), _xp_fmt(xp_need)]
+				var xp_lbl := Label.new()
+				xp_lbl.text = xp_text
+				xp_lbl.add_theme_font_size_override("font_size", 9)
+				xp_lbl.add_theme_color_override("font_color", ec if at_max else UIColors.TEXT_MUTED)
+				xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				hb.add_child(xp_lbl)
+		else:
+			# Entité non découverte — style "À DÉBLOQUER"
+			var panel := PanelContainer.new()
+			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var style := StyleBoxFlat.new()
+			style.bg_color     = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g,
+					UIColors.TEXT_MUTED.b, 0.04)
+			style.border_color = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g,
+					UIColors.TEXT_MUTED.b, 0.20)
+			style.set_border_width_all(1)
+			style.set_corner_radius_all(3)
+			panel.add_theme_stylebox_override("panel", style)
+			parent.add_child(panel)
+
+			var pm := MarginContainer.new()
+			for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+				pm.add_theme_constant_override(s, 4)
+			panel.add_child(pm)
+
+			var hb := HBoxContainer.new()
+			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			pm.add_child(hb)
+
+			var unk := Label.new()
+			unk.text = "????   %d / %d" % [i + 1, total]
+			unk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			unk.add_theme_font_size_override("font_size", 11)
+			unk.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+			hb.add_child(unk)
+
+# Feedback hover + press sur n'importe quelle carte cliquable.
+# Hover  : scale x1.03 avec overshoot (TRANS_BACK) + brightnes x1.30.
+# Press  : scale down x0.95 + flash x1.55, puis spring-back vers état hover.
+# Appeler juste après avoir mis CURSOR_POINTING_HAND.
+func _add_hover_feedback(panel: Control) -> void:
+	var htween: Tween
+	panel.mouse_entered.connect(func() -> void:
+		panel.pivot_offset = panel.size * 0.5
+		if is_instance_valid(htween): htween.kill()
+		htween = panel.create_tween()
+		htween.set_parallel(true)
+		htween.tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.13) \
+				.set_ease(Tween.EASE_OUT)
+		htween.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.16) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	)
+	panel.mouse_exited.connect(func() -> void:
+		if is_instance_valid(htween): htween.kill()
+		htween = panel.create_tween()
+		htween.set_parallel(true)
+		htween.tween_property(panel, "modulate", Color.WHITE, 0.20).set_ease(Tween.EASE_OUT)
+		htween.tween_property(panel, "scale", Vector2.ONE, 0.20).set_ease(Tween.EASE_OUT)
+	)
+	panel.gui_input.connect(func(ev: InputEvent) -> void:
+		if not (ev is InputEventMouseButton \
+				and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
+			return
+		if is_instance_valid(htween): htween.kill()
+		htween = panel.create_tween()
+		# Enfoncement rapide
+		htween.tween_property(panel, "scale", Vector2(0.95, 0.95), 0.06) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		htween.parallel().tween_property(panel, "modulate", Color(1.55, 1.55, 1.55), 0.06)
+		# Spring-back vers état hover
+		htween.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.18) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		htween.parallel().tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.14)
+	)
 
 func _panel_soon(label: String) -> void:
 	var lbl := Label.new()

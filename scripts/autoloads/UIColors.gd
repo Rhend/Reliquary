@@ -70,6 +70,9 @@ const TIER_EPIQUE     := Color(0.72, 0.28, 1.00)   # 3 — Épique
 const TIER_LEGENDAIRE := Color(1.00, 0.78, 0.08)   # 4 — Légendaire
 const TIER_UNIQUE     := Color(1.00, 0.10, 0.18)   # 5 — Unique
 
+# ── Carte neutre (sans rareté native) ───────────────────────
+const CARD_NEUTRAL := Color(0.42, 0.52, 0.68)   # acier-bleu sobre, ni tier ni catégorie
+
 # ── Texte UI générique ──────────────────────────────────────
 const TEXT_MUTED  := Color(0.48, 0.48, 0.52)
 const TEXT_HEADER := Color(0.75, 0.85, 1.00)
