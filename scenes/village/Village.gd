@@ -1319,32 +1319,31 @@ func _panel_adventure() -> void:
 		var bid := eid
 
 		var result  := _adv_biome_card(bid, e)
-		var card    := result["card"]    as Control
-		var content := result["content"] as VBoxContainer
+		var wrapper := result["wrapper"] as Control
+		var panel   := result["panel"]   as Control
+		var section := result["section"] as VBoxContainer
 		var arrow   := result["arrow"]   as Label
-		contents[bid] = content
+		contents[bid] = section
 		arrows[bid]   = arrow
 
-		card.gui_input.connect(func(ev: InputEvent) -> void:
+		panel.gui_input.connect(func(ev: InputEvent) -> void:
 			if not (ev is InputEventMouseButton \
 					and ev.button_index == MOUSE_BUTTON_LEFT \
 					and ev.pressed):
 				return
 			if bid == _adv_selected_biome_id:
-				# Même biome : toggle local, sans rebuild
-				content.visible = not content.visible
-				arrow.text = "  ▼" if content.visible else "  ▶"
+				section.visible = not section.visible
+				arrow.text = "  ▼" if section.visible else "  ▶"
 			else:
-				# Nouveau biome : ferme le précédent, ouvre le nouveau
 				if _adv_selected_biome_id in contents \
 						and is_instance_valid(contents[_adv_selected_biome_id]):
 					contents[_adv_selected_biome_id].visible = false
 					arrows[_adv_selected_biome_id].text = "  ▶"
 				_adv_selected_biome_id = bid
-				content.visible = true
+				section.visible = true
 				arrow.text = "  ▼"
 		)
-		_rp_content.add_child(card)
+		_rp_content.add_child(wrapper)
 
 func _adv_first_biome_id() -> String:
 	for eid in GameData.entities:
@@ -1359,42 +1358,51 @@ func _on_start_selected_expedition() -> void:
 	AdventureSystem.start_adventure(_adv_selected_biome_id)
 	get_tree().change_scene_to_file("res://scenes/Biome.tscn")
 
-# Retourne { card, content, arrow } — le gui_input est connecté par _panel_adventure.
+# Retourne { wrapper, panel, section, arrow }.
+# wrapper = VBoxContainer à ajouter au parent.
+# panel   = PanelContainer cliquable (gui_input connecté par _panel_adventure).
+# section = VBoxContainer des catégories (caché par défaut).
+# arrow   = Label ▶/▼.
 func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	var btier  := biome.get("current_tier", 0) as int
 	var bcolor := UIColors.tier_color(btier)
 	var bdisp  := MasteryRegistry.get_mastery_display(biome_id)
 	var pools  := MasteryRegistry.get_biome_entity_pools(biome_id)
 
-	var card := PanelContainer.new()
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var cs := StyleBoxFlat.new()
-	cs.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.05)
-	cs.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 0.38)
-	cs.set_border_width_all(1)
-	cs.set_corner_radius_all(5)
-	card.add_theme_stylebox_override("panel", cs)
-	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var wrapper := VBoxContainer.new()
+	wrapper.add_theme_constant_override("separation", 2)
+	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	var m := MarginContainer.new()
+	# ── Panneau principal (toujours visible) ──────────────────
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var ps := StyleBoxFlat.new()
+	ps.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.07)
+	ps.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 0.60)
+	ps.set_border_width_all(1)
+	ps.set_corner_radius_all(4)
+	panel.add_theme_stylebox_override("panel", ps)
+	wrapper.add_child(panel)
+
+	var pm := MarginContainer.new()
 	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		m.add_theme_constant_override(s, 10)
-	card.add_child(m)
+		pm.add_theme_constant_override(s, 8)
+	panel.add_child(pm)
 
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 6)
-	m.add_child(vb)
+	var pvb := VBoxContainer.new()
+	pvb.add_theme_constant_override("separation", 4)
+	pm.add_child(pvb)
 
-	# ── Header : nom + tier + flèche ──────────────────────────
 	var hdr := HBoxContainer.new()
 	hdr.add_theme_constant_override("separation", 8)
-	vb.add_child(hdr)
+	pvb.add_child(hdr)
 
 	var name_lbl := Label.new()
 	name_lbl.text = biome.get("name", biome_id).to_upper()
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 14)
-	name_lbl.add_theme_color_override("font_color", bcolor)
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	hdr.add_child(name_lbl)
 
 	var tlbl := Label.new()
@@ -1409,15 +1417,14 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	hdr.add_child(arrow)
 
-	# ── XP biome (toujours visible même replié) ───────────────
 	if not bdisp.is_empty():
 		if bdisp["at_max"]:
 			var ml := Label.new()
-			ml.text = "▲ RANG MAX"
+			ml.text = "RANG MAX"
 			ml.add_theme_font_size_override("font_size", 10)
 			ml.add_theme_color_override("font_color", bcolor)
 			ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			vb.add_child(ml)
+			pvb.add_child(ml)
 		else:
 			var bar := ProgressBar.new()
 			bar.min_value = 0.0; bar.max_value = bdisp["xp_max"]
@@ -1425,49 +1432,116 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 			bar.show_percentage = false
 			bar.custom_minimum_size = Vector2(0, 8)
 			var fs := StyleBoxFlat.new(); fs.bg_color = bcolor; fs.set_corner_radius_all(2)
-			var bs_bar := StyleBoxFlat.new(); bs_bar.bg_color = UIColors.BG_BAR; bs_bar.set_corner_radius_all(2)
+			var bs := StyleBoxFlat.new(); bs.bg_color = UIColors.BG_BAR; bs.set_corner_radius_all(2)
 			bar.add_theme_stylebox_override("fill", fs)
-			bar.add_theme_stylebox_override("background", bs_bar)
-			vb.add_child(bar)
+			bar.add_theme_stylebox_override("background", bs)
+			pvb.add_child(bar)
 			var xl := Label.new()
 			xl.text = "XP  %s / %s" % [_xp_fmt(int(bdisp["xp"])), _xp_fmt(int(bdisp["xp_max"]))]
 			xl.add_theme_font_size_override("font_size", 10)
 			xl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 			xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			vb.add_child(xl)
+			pvb.add_child(xl)
 
-	# ── Contenu replié par défaut ─────────────────────────────
-	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 6)
-	content.visible = false
-	vb.add_child(content)
+	# ── Section catégories (repliée par défaut) ───────────────
+	var section := VBoxContainer.new()
+	section.add_theme_constant_override("separation", 2)
+	section.visible = false
+	wrapper.add_child(section)
 
-	var line := ColorRect.new()
-	line.color = Color(bcolor.r, bcolor.g, bcolor.b, 0.25)
-	line.custom_minimum_size = Vector2(0, 1)
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_child(line)
+	var indent := MarginContainer.new()
+	indent.add_theme_constant_override("margin_left", 12)
+	indent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section.add_child(indent)
 
-	_adv_pool_section(content, "CRÉATURES",   pools["creatures"],  UIColors.TYPE_CREATURE)
-	_adv_pool_section(content, "PIÈGES",      pools["traps"],      UIColors.TYPE_TRAP)
-	_adv_pool_section(content, "ÉVÉNEMENTS",  pools["events"],     UIColors.TYPE_EVENT_POS)
-	_adv_pool_section(content, "ÉQUIPEMENTS", pools["equipment"],  UIColors.STAT_ATK)
+	var cat_vb := VBoxContainer.new()
+	cat_vb.add_theme_constant_override("separation", 3)
+	indent.add_child(cat_vb)
 
-	return {"card": card, "content": content, "arrow": arrow}
+	_adv_category_card(cat_vb, "CRÉATURES",   pools["creatures"],  UIColors.TYPE_CREATURE)
+	_adv_category_card(cat_vb, "PIÈGES",      pools["traps"],      UIColors.TYPE_TRAP)
+	_adv_category_card(cat_vb, "ÉVÉNEMENTS",  pools["events"],     UIColors.TYPE_EVENT_POS)
+	_adv_category_card(cat_vb, "ÉQUIPEMENTS", pools["equipment"],  UIColors.STAT_ATK)
 
-func _adv_pool_section(parent: VBoxContainer, label: String, pool: Array, color: Color) -> void:
+	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
+
+# Carte catégorie cliquable (Créatures / Pièges / Événements / Équipements).
+# Même pattern que _passive_card : panneau cliquable + liste repliée en dessous.
+func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color: Color) -> void:
 	if pool.is_empty():
 		return
-	var sec := VBoxContainer.new()
-	sec.add_theme_constant_override("separation", 3)
-	parent.add_child(sec)
+	var total      := pool.size()
+	var discovered := MasteryRegistry.count_discovered(pool)
 
-	var hdr := Label.new()
-	hdr.text = label
-	hdr.add_theme_font_size_override("font_size", 10)
-	hdr.add_theme_color_override("font_color", color.lerp(UIColors.TEXT_MUTED, 0.40))
-	sec.add_child(hdr)
+	var cat_wrap := VBoxContainer.new()
+	cat_wrap.add_theme_constant_override("separation", 2)
+	cat_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(cat_wrap)
 
+	var cat_panel := PanelContainer.new()
+	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var cps := StyleBoxFlat.new()
+	cps.bg_color     = Color(color.r, color.g, color.b, 0.06)
+	cps.border_color = Color(color.r, color.g, color.b, 0.45)
+	cps.set_border_width_all(1)
+	cps.set_corner_radius_all(3)
+	cat_panel.add_theme_stylebox_override("panel", cps)
+	cat_wrap.add_child(cat_panel)
+
+	var cpm := MarginContainer.new()
+	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
+		cpm.add_theme_constant_override(s, 6)
+	cat_panel.add_child(cpm)
+
+	var chdr := HBoxContainer.new()
+	chdr.add_theme_constant_override("separation", 8)
+	cpm.add_child(chdr)
+
+	var clbl := Label.new()
+	clbl.text = label
+	clbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clbl.add_theme_font_size_override("font_size", 11)
+	clbl.add_theme_color_override("font_color", color)
+	chdr.add_child(clbl)
+
+	var count_lbl := Label.new()
+	count_lbl.text = "%d / %d" % [discovered, total]
+	count_lbl.add_theme_font_size_override("font_size", 10)
+	count_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	chdr.add_child(count_lbl)
+
+	var cat_arrow := Label.new()
+	cat_arrow.text = "  ▶"
+	cat_arrow.add_theme_font_size_override("font_size", 10)
+	cat_arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	chdr.add_child(cat_arrow)
+
+	# Liste des entités (repliée par défaut)
+	var ent_section := VBoxContainer.new()
+	ent_section.add_theme_constant_override("separation", 3)
+	ent_section.visible = false
+	cat_wrap.add_child(ent_section)
+
+	var ent_indent := MarginContainer.new()
+	ent_indent.add_theme_constant_override("margin_left", 10)
+	ent_indent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ent_section.add_child(ent_indent)
+
+	var ent_vb := VBoxContainer.new()
+	ent_vb.add_theme_constant_override("separation", 3)
+	ent_indent.add_child(ent_vb)
+
+	_adv_entity_rows(ent_vb, pool, color)
+
+	cat_panel.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+			ent_section.visible = not ent_section.visible
+			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
+	)
+
+# Remplit parent avec les lignes d'entités du pool (bullet + nom + tier + XP).
+func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 	var total := pool.size()
 	for i: int in range(total):
 		var entry    := pool[i] as Dictionary
@@ -1476,7 +1550,7 @@ func _adv_pool_section(parent: VBoxContainer, label: String, pool: Array, color:
 
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
-		sec.add_child(row)
+		parent.add_child(row)
 
 		var bullet := Label.new()
 		bullet.text = "•"
@@ -1493,12 +1567,10 @@ func _adv_pool_section(parent: VBoxContainer, label: String, pool: Array, color:
 			var at_max      := false
 
 			if not entity.is_empty() and not is_equip:
-				# Entité chargée dans GameData (biome, passive…) : maîtrise complète
 				entity_tier = entity.get("current_tier", 0)
 				entity_xp   = entity.get("current_xp",   0.0)
 				at_max      = entity_tier >= GameData.MAX_TIER
 			elif not bentry.is_empty():
-				# Créature / piège / événement : fallback sur le bestiaire
 				entity_tier = bentry.get("tier", entry.get("tier", 0))
 				entity_xp   = bentry.get("xp",   0.0)
 				at_max      = entity_tier >= GameData.MAX_TIER
