@@ -1456,7 +1456,7 @@ func _adv_pool_section(parent: VBoxContainer, label: String, pool: Array, color:
 		if is_known:
 			var entity      := GameData.get_entity(entry_id)
 			var bentry      := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
-			var is_equip    := entity.get("entity_type", "") == "equipment"
+			var is_equip    : bool = entity.get("entity_type", "") == "equipment"
 			var entity_tier := 0
 			var entity_xp   := 0.0
 			var at_max      := false
