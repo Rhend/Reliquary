@@ -44,11 +44,11 @@ var player: Dictionary = {
 	"active_biome_id":    "",
 	"active_passives":    [],
 	"equipped": {
-		"weapon": "equip_epee_bois",   # équipement de départ
-		"shield": "equip_bouclier",
-		"boots":  "equip_bottes",
-		"armor":  ""
+		"weapon":    "equip_epee_bois",
+		"armor":     "",
+		"accessory": "equip_bouclier"
 	},
+	"equipment_inventory": [],
 	"bestiary": {}   # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
 }
 
@@ -296,11 +296,31 @@ func craft(recipe: Dictionary) -> bool:
 		var item_id = ing.get("item_id", "")
 		var qty     = int(ing.get("qty", 0))
 		player["resources"][item_id] = int(player["resources"].get(item_id, 0)) - qty
-	# Équipe directement l'objet résultant dans son slot dédié
-	var slot = recipe.get("result_slot", "weapon")
-	player["equipped"][slot] = recipe.get("result_id", "")
+	var result_id = recipe.get("result_id", "")
+	if result_id != "":
+		player["equipment_inventory"].append(result_id)
 	EventBus.resources_changed.emit()
 	return true
+
+func equip_item(item_id: String) -> void:
+	var item = get_entity(item_id)
+	var slot = item.get("base_stats", {}).get("slot", "")
+	if slot == "" or not player["equipped"].has(slot):
+		return
+	var old_id = player["equipped"].get(slot, "")
+	if old_id != "":
+		player["equipment_inventory"].append(old_id)
+	player["equipment_inventory"].erase(item_id)
+	player["equipped"][slot] = item_id
+	EventBus.equipment_changed.emit()
+
+func unequip_item(slot: String) -> void:
+	var item_id = player["equipped"].get(slot, "")
+	if item_id == "":
+		return
+	player["equipment_inventory"].append(item_id)
+	player["equipped"][slot] = ""
+	EventBus.equipment_changed.emit()
 
 # ═══════════════════════════════════════════════════════════
 #  Ressources

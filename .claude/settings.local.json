@@ -9,7 +9,9 @@
       "Bash(git commit -m 'feat: contenu Plage, équipements mid/late, Forge améliorée *)",
       "Bash(git merge *)",
       "Bash(git branch *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Skill(update-config)",
+      "PowerShell(Remove-Item *)"
     ]
   }
 }

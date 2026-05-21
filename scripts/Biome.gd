@@ -496,7 +496,7 @@ func _on_xp_gained(entity_id: String, _amount: float) -> void:
 
 func _on_exit_pressed() -> void:
 	AdventureSystem.stop_adventure()
-	_fade_to("res://scenes/Village.tscn")
+	_fade_to("res://scenes/village/village.tscn")
 
 # ═══════════════════════════════════════════════════════════
 #  Indicateur XP du biome
@@ -668,7 +668,7 @@ func _show_cycle_summary(result: Dictionary) -> void:
 	btn.pressed.connect(func():
 		if is_instance_valid(overlay):
 			overlay.queue_free()
-		_fade_to("res://scenes/Village.tscn")
+		_fade_to("res://scenes/village/village.tscn")
 	)
 	_run_summary_countdown(overlay, countdown_lbl)
 
@@ -680,7 +680,7 @@ func _run_summary_countdown(overlay: Control, lbl: Label) -> void:
 		secs -= 1
 	if is_instance_valid(overlay):
 		overlay.queue_free()
-		_fade_to("res://scenes/Village.tscn")
+		_fade_to("res://scenes/village/village.tscn")
 
 # ═══════════════════════════════════════════════════════════
 #  Gestion des barres HP
