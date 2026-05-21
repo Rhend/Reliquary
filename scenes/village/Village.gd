@@ -729,7 +729,7 @@ func _build_tier0(creature: Dictionary) -> void:
 	add_child(_xp_label)
 
 # ─── Tier 1+ : hub hexagonal ──────────────────────────────────
-func _build_hub(creature: Dictionary, tier: int) -> void:
+func _build_hub(_creature: Dictionary, tier: int) -> void:
 	var vp     := get_viewport_rect().size
 	var tcolor := UIColors.tier_color(tier)
 	var _diam_margins := [70.0, 70.0, 82.0, 104.0, 136.0, 164.0]
@@ -1256,7 +1256,8 @@ func _tier_effects(pdata: Dictionary, t: int) -> Array:
 
 func _xp_fmt(xp: int) -> String:
 	if xp >= 1000:
-		return "%d %03d" % [xp / 1000, xp % 1000]
+		var s := str(xp)
+		return s.left(s.length() - 3) + " " + s.right(3)
 	return str(xp)
 
 func _panel_nav(desc_text: String, icon: String, scene_path: String) -> void:
@@ -1547,7 +1548,7 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	)
 
 # Remplit parent avec des cartes XPCard par entité du pool (style _evo_row).
-func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
+func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void:
 	var total := pool.size()
 	for i: int in range(total):
 		var entry    := pool[i] as Dictionary
@@ -1661,38 +1662,44 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 # Press  : scale down x0.95 + flash x1.55, puis spring-back vers état hover.
 # Appeler juste après avoir mis CURSOR_POINTING_HAND.
 func _add_hover_feedback(panel: Control) -> void:
-	var htween: Tween
+	# Array utilisé comme conteneur mutable partagé entre les lambdas.
+	# Évite le warning CONFUSABLE_CAPTURE_REASSIGNMENT sur une variable Tween locale.
+	var h: Array = [null]
+
 	panel.mouse_entered.connect(func() -> void:
 		panel.pivot_offset = panel.size * 0.5
-		if is_instance_valid(htween): htween.kill()
-		htween = panel.create_tween()
-		htween.set_parallel(true)
-		htween.tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.13) \
+		if is_instance_valid(h[0]): (h[0] as Tween).kill()
+		h[0] = panel.create_tween()
+		var tw := h[0] as Tween
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.13) \
 				.set_ease(Tween.EASE_OUT)
-		htween.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.16) \
+		tw.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.16) \
 				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	)
 	panel.mouse_exited.connect(func() -> void:
-		if is_instance_valid(htween): htween.kill()
-		htween = panel.create_tween()
-		htween.set_parallel(true)
-		htween.tween_property(panel, "modulate", Color.WHITE, 0.20).set_ease(Tween.EASE_OUT)
-		htween.tween_property(panel, "scale", Vector2.ONE, 0.20).set_ease(Tween.EASE_OUT)
+		if is_instance_valid(h[0]): (h[0] as Tween).kill()
+		h[0] = panel.create_tween()
+		var tw := h[0] as Tween
+		tw.set_parallel(true)
+		tw.tween_property(panel, "modulate", Color.WHITE, 0.20).set_ease(Tween.EASE_OUT)
+		tw.tween_property(panel, "scale", Vector2.ONE, 0.20).set_ease(Tween.EASE_OUT)
 	)
 	panel.gui_input.connect(func(ev: InputEvent) -> void:
 		if not (ev is InputEventMouseButton \
 				and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
 			return
-		if is_instance_valid(htween): htween.kill()
-		htween = panel.create_tween()
+		if is_instance_valid(h[0]): (h[0] as Tween).kill()
+		h[0] = panel.create_tween()
+		var tw := h[0] as Tween
 		# Enfoncement rapide
-		htween.tween_property(panel, "scale", Vector2(0.95, 0.95), 0.06) \
+		tw.tween_property(panel, "scale", Vector2(0.95, 0.95), 0.06) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		htween.parallel().tween_property(panel, "modulate", Color(1.55, 1.55, 1.55), 0.06)
+		tw.parallel().tween_property(panel, "modulate", Color(1.55, 1.55, 1.55), 0.06)
 		# Spring-back vers état hover
-		htween.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.18) \
+		tw.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.18) \
 				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		htween.parallel().tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.14)
+		tw.parallel().tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.14)
 	)
 
 func _panel_soon(label: String) -> void:

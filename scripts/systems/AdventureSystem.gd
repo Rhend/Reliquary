@@ -70,12 +70,19 @@ var _combat_start_hp:  float = 0.0
 
 # ─── Statistiques du cycle en cours ─────────────────────────
 
-var _cycle_luck:        int   = 0    # Luck temporaire accumulée par les events positifs
-var _cycle_xp:          float = 0.0  # XP totale gagnée par le héro ce cycle
-var _cycle_loot:        int   = 0    # Nombre total d'objets droppés
-var _cycle_combo_max:   int   = 0    # Meilleur combo atteint
-var _cycle_combats_won: int   = 0    # Combats remportés
-var _cycle_events:      int   = 0    # Événements totaux (hors combats)
+var _cycle_luck:               int        = 0    # Luck temporaire accumulée par les events positifs
+var _cycle_xp:                 float      = 0.0  # XP totale gagnée ce cycle (base combat)
+var _cycle_loot:               int        = 0    # Nombre total d'objets droppés
+var _cycle_combo_max:          int        = 0    # Meilleur combo atteint
+var _cycle_combats_won:        int        = 0    # Combats remportés
+var _cycle_events:             int        = 0    # Événements non-combat (positifs + pièges)
+var _cycle_events_total:       int        = 0    # Tous les événements (combat inclus)
+var _cycle_positive_events:    int        = 0    # Événements positifs déclenchés
+var _cycle_traps_triggered:    int        = 0    # Pièges déclenchés (non ignorés)
+var _cycle_xp_hero:            float      = 0.0  # XP allouée au héro (20 % de base)
+var _cycle_xp_biome:           float      = 0.0  # XP reçue par le biome (après modificateur)
+var _cycle_xp_passives_total:  float      = 0.0  # XP totale reçue par les passifs actifs
+var _cycle_xp_passives_detail: Dictionary = {}   # passive_id → xp reçue ce cycle
 
 func _ready() -> void:
 	_event_timer          = Timer.new()
@@ -83,6 +90,7 @@ func _ready() -> void:
 	_event_timer.timeout.connect(_on_event_timer)
 	add_child(_event_timer)
 	EventBus.combat_ended.connect(_on_combat_ended)
+	EventBus.xp_gained.connect(_on_xp_gained_tracking)
 
 # ═══════════════════════════════════════════════════════════
 #  Interface publique
@@ -104,12 +112,19 @@ func start_adventure(biome_id: String) -> void:
 	_combo_count     = 0
 
 	# Réinitialise les statistiques du cycle
-	_cycle_luck        = 0
-	_cycle_xp          = 0.0
-	_cycle_loot        = 0
-	_cycle_combo_max   = 0
-	_cycle_combats_won = 0
-	_cycle_events      = 0
+	_cycle_luck               = 0
+	_cycle_xp                 = 0.0
+	_cycle_loot               = 0
+	_cycle_combo_max          = 0
+	_cycle_combats_won        = 0
+	_cycle_events             = 0
+	_cycle_events_total       = 0
+	_cycle_positive_events    = 0
+	_cycle_traps_triggered    = 0
+	_cycle_xp_hero            = 0.0
+	_cycle_xp_biome           = 0.0
+	_cycle_xp_passives_total  = 0.0
+	_cycle_xp_passives_detail = {}
 
 	_pick_modifier()
 
@@ -124,6 +139,27 @@ func stop_adventure() -> void:
 	_event_timer.stop()
 	if CombatPlayer.is_playing:
 		CombatPlayer.stop()
+	_cycle_combo_max = maxi(_cycle_combo_max, _combo_count)
+	# Sauvegarde le résumé partiel pour CycleSummaryScreen (sortie volontaire).
+	CycleData.last_cycle_summary = {
+		"victory":              false,
+		"biome_id":             current_biome_id,
+		"creature_id":          GameData.player.get("active_creature_id", ""),
+		"modifier":             current_modifier,
+		"xp_total":             _cycle_xp,
+		"xp_hero":              _cycle_xp_hero,
+		"xp_biome":             _cycle_xp_biome,
+		"xp_passives_total":    _cycle_xp_passives_total,
+		"xp_passives_detail":   _cycle_xp_passives_detail,
+		"loot_total":           _cycle_loot,
+		"combo_max":            _cycle_combo_max,
+		"combats_won":          _cycle_combats_won,
+		"events":               _cycle_events,
+		"events_total":         _cycle_events_total,
+		"positive_events":      _cycle_positive_events,
+		"traps_triggered":      _cycle_traps_triggered,
+		"cycle_luck":           _cycle_luck,
+	}
 	EventBus.adventure_stopped.emit()
 
 # Bonus ATK/DEF du modificateur de cycle + bonus de combo.
@@ -148,6 +184,7 @@ func _on_event_timer() -> void:
 		_process_event()
 
 func _process_event() -> void:
+	_cycle_events_total += 1
 	var creature_id = GameData.player.get("active_creature_id", "")
 	var event_type  = _roll_event_type()
 	var event_data  = {
@@ -163,9 +200,12 @@ func _process_event() -> void:
 
 # ─── Combat ──────────────────────────────────────────────────
 
-func _handle_combat_event(creature_id: String, event_data: Dictionary) -> void:
-	var biome   = GameData.get_entity(current_biome_id)
-	var enemies = biome.get("base_stats", {}).get("enemies", [])
+func _handle_combat_event(_creature_id: String, event_data: Dictionary) -> void:
+	var biome       = GameData.get_entity(current_biome_id)
+	var all_enemies = biome.get("base_stats", {}).get("enemies", [])
+	var enemies: Array = all_enemies.filter(func(e: Dictionary) -> bool:
+		return not e.get("locked", false)
+	)
 
 	if enemies.is_empty():
 		_schedule_next_event()
@@ -194,7 +234,8 @@ func _handle_positive_event(creature_id: String, event_data: Dictionary) -> void
 			evt.get("id", ""), evt.get("name", "?"), "Événement", current_biome_id, 5.0
 		)
 		_apply_positive_effect(evt)
-		_cycle_events += 1
+		_cycle_events          += 1
+		_cycle_positive_events += 1
 
 	EventBus.adventure_event_resolved.emit(event_data)
 	_apply_regen(creature_id)
@@ -238,7 +279,8 @@ func _handle_trap_event(creature_id: String, event_data: Dictionary) -> void:
 		_apply_regen(creature_id)
 		_schedule_next_event()
 	else:
-		_cycle_events += 1
+		_cycle_events          += 1
+		_cycle_traps_triggered += 1
 		current_hp = maxf(current_hp - float(trap.get("damage", 10)), 0.0)
 		GameData.record_encounter(
 			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
@@ -300,6 +342,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 
 	# Statistiques du cycle
 	_cycle_xp          += xp_earned
+	_cycle_xp_hero     += xp_earned * 0.20
 	_cycle_combats_won += 1
 	_cycle_combo_max    = maxi(_cycle_combo_max, _combo_count)
 
@@ -393,15 +436,38 @@ func _end_adventure(victory: bool) -> void:
 	_event_timer.stop()
 	_cycle_combo_max = maxi(_cycle_combo_max, _combo_count)
 
-	EventBus.adventure_cycle_ended.emit({
-		"victory":      victory,
-		"biome_id":     current_biome_id,
-		"creature_id":  GameData.player.get("active_creature_id", ""),
-		"modifier":     current_modifier,
-		"xp_total":     _cycle_xp,
-		"loot_total":   _cycle_loot,
-		"combo_max":    _cycle_combo_max,
-		"combats_won":  _cycle_combats_won,
-		"events":       _cycle_events,
-		"cycle_luck":   _cycle_luck,
-	})
+	var summary := {
+		"victory":              victory,
+		"biome_id":             current_biome_id,
+		"creature_id":          GameData.player.get("active_creature_id", ""),
+		"modifier":             current_modifier,
+		"xp_total":             _cycle_xp,
+		"xp_hero":              _cycle_xp_hero,
+		"xp_biome":             _cycle_xp_biome,
+		"xp_passives_total":    _cycle_xp_passives_total,
+		"xp_passives_detail":   _cycle_xp_passives_detail,
+		"loot_total":           _cycle_loot,
+		"combo_max":            _cycle_combo_max,
+		"combats_won":          _cycle_combats_won,
+		"events":               _cycle_events,
+		"events_total":         _cycle_events_total,
+		"positive_events":      _cycle_positive_events,
+		"traps_triggered":      _cycle_traps_triggered,
+		"cycle_luck":           _cycle_luck,
+	}
+	CycleData.last_cycle_summary = summary
+	EventBus.adventure_cycle_ended.emit(summary)
+
+# Suit l'XP réellement reçue (après modificateurs de tier) par le biome et les passifs.
+func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
+	if not is_running:
+		return
+	var entity = GameData.get_entity(entity_id)
+	match entity.get("entity_type", ""):
+		"passive":
+			_cycle_xp_passives_total += amount
+			_cycle_xp_passives_detail[entity_id] = \
+				_cycle_xp_passives_detail.get(entity_id, 0.0) + amount
+		"biome":
+			if entity_id == current_biome_id:
+				_cycle_xp_biome += amount

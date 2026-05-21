@@ -446,7 +446,9 @@ func _on_cycle_ended(result: Dictionary) -> void:
 		"— Cycle terminé : %s" % ("Victoire !" if victory else "Défaite"),
 		UIColors.LOG_VICTORY if victory else UIColors.LOG_DEFEAT
 	)
-	_show_cycle_summary(result)
+	# Petite pause pour que le joueur lise le dernier log avant la transition.
+	await get_tree().create_timer(0.6).timeout
+	_fade_to("res://scenes/cycle/CycleSummaryScreen.tscn")
 
 func _on_loot_dropped(drops: Array, enemy_name: String) -> void:
 	var parts: Array = []
@@ -496,7 +498,7 @@ func _on_xp_gained(entity_id: String, _amount: float) -> void:
 
 func _on_exit_pressed() -> void:
 	AdventureSystem.stop_adventure()
-	_fade_to("res://scenes/village/village.tscn")
+	_fade_to("res://scenes/cycle/CycleSummaryScreen.tscn")
 
 # ═══════════════════════════════════════════════════════════
 #  Indicateur XP du biome
@@ -531,156 +533,6 @@ func _set_turn_indicator(next_attacker: String) -> void:
 	else:
 		_turn_indicator.text = "↩ ENNEMI RIPOSTE"
 		_turn_indicator.add_theme_color_override("font_color", UIColors.DMG_BY_ENEMY)
-
-# ═══════════════════════════════════════════════════════════
-#  Résumé de cycle
-# ═══════════════════════════════════════════════════════════
-
-func _show_cycle_summary(result: Dictionary) -> void:
-	var victory     = result.get("victory", false)
-	var biome       = GameData.get_entity(result.get("biome_id", ""))
-	var modifier    = result.get("modifier", {})
-	var xp_total    = result.get("xp_total", 0.0)
-	var loot_total  = result.get("loot_total", 0)
-	var combo_max   = result.get("combo_max", 0)
-	var combats_won = result.get("combats_won", 0)
-	var cycle_luck  = result.get("cycle_luck", 0)
-
-	# Container global — intercepte les clics pour bloquer l'interface en dessous
-	var overlay = Control.new()
-	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(overlay)
-
-	# Fond semi-transparent
-	var bg_rect = ColorRect.new()
-	bg_rect.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	bg_rect.color = Color(0.0, 0.0, 0.0, 0.80)
-	overlay.add_child(bg_rect)
-
-	# CenterContainer pour centrer le panel
-	var center = CenterContainer.new()
-	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	overlay.add_child(center)
-
-	var panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(440, 0)
-	center.add_child(panel)
-
-	var m = MarginContainer.new()
-	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		m.add_theme_constant_override(side, 28)
-	panel.add_child(m)
-
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 14)
-	m.add_child(vbox)
-
-	# Titre victoire / défaite
-	var title_lbl = Label.new()
-	title_lbl.text = "VICTOIRE !" if victory else "DÉFAITE..."
-	title_lbl.add_theme_font_size_override("font_size", 28)
-	title_lbl.add_theme_color_override("font_color",
-		UIColors.VICTORY_GLOW if victory else UIColors.LOG_DEFEAT)
-	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(title_lbl)
-
-	# Contexte : biome + modificateur
-	var ctx_lbl = Label.new()
-	ctx_lbl.text = "%s   •   %s" % [biome.get("name", "?"), modifier.get("name", "—")]
-	ctx_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ctx_lbl.add_theme_font_size_override("font_size", 13)
-	ctx_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	vbox.add_child(ctx_lbl)
-
-	vbox.add_child(HSeparator.new())
-
-	# Statistiques du cycle
-	var stats = [
-		["XP gagnée",       "%.0f" % xp_total,  UIColors.FILTER_ON],
-		["Combats gagnés",  "%d"   % combats_won, UIColors.LOG_VICTORY],
-		["Meilleur combo",  "x%d"  % combo_max,  UIColors.COMBO_COLOR],
-		["Objets ramassés", "%d"   % loot_total, UIColors.LOG_LOOT],
-	]
-	if cycle_luck > 0:
-		stats.append(["Luck accumulée", "+%d" % cycle_luck, UIColors.LOG_LOOT])
-
-	for stat in stats:
-		var row = HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		vbox.add_child(row)
-
-		var key = Label.new()
-		key.text = stat[0]
-		key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		key.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		key.add_theme_font_size_override("font_size", 13)
-		row.add_child(key)
-
-		var val = Label.new()
-		val.text = stat[1]
-		val.add_theme_color_override("font_color", stat[2])
-		val.add_theme_font_size_override("font_size", 14)
-		row.add_child(val)
-
-	# Entités prêtes à évoluer — calculé en temps réel sur GameData
-	var ready_names: Array = []
-	for eid in GameData.entities:
-		var e = GameData.entities[eid]
-		if e.get("entity_type") not in ["hero", "biome"]:
-			continue
-		var e_tier = e.get("current_tier", 0)
-		if e_tier >= GameData.MAX_TIER:
-			continue
-		var next_thresh = float(GameData.xp_thresholds[e_tier + 1])
-		if e.get("current_xp", 0.0) >= next_thresh:
-			ready_names.append(e.get("name", eid))
-
-	if not ready_names.is_empty():
-		vbox.add_child(HSeparator.new())
-		var evo_lbl = Label.new()
-		evo_lbl.text = "▲ Prêt à évoluer : " + ", ".join(PackedStringArray(ready_names))
-		evo_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
-		evo_lbl.add_theme_font_size_override("font_size", 12)
-		evo_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		evo_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vbox.add_child(evo_lbl)
-
-	vbox.add_child(HSeparator.new())
-
-	# Bouton retour + countdown automatique
-	var btn = Button.new()
-	btn.text = "Retour au Village"
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_child(btn)
-
-	var countdown_lbl = Label.new()
-	countdown_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	countdown_lbl.add_theme_font_size_override("font_size", 11)
-	countdown_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	vbox.add_child(countdown_lbl)
-
-	# Fondu d'entrée de l'overlay
-	overlay.modulate.a = 0.0
-	var tw_in = create_tween().set_ease(Tween.EASE_OUT)
-	tw_in.tween_property(overlay, "modulate:a", 1.0, 0.40)
-
-	btn.pressed.connect(func():
-		if is_instance_valid(overlay):
-			overlay.queue_free()
-		_fade_to("res://scenes/village/village.tscn")
-	)
-	_run_summary_countdown(overlay, countdown_lbl)
-
-func _run_summary_countdown(overlay: Control, lbl: Label) -> void:
-	var secs = 6
-	while secs > 0 and is_instance_valid(overlay):
-		lbl.text = "Retour automatique dans %d s..." % secs
-		await get_tree().create_timer(1.0).timeout
-		secs -= 1
-	if is_instance_valid(overlay):
-		overlay.queue_free()
-		_fade_to("res://scenes/village/village.tscn")
 
 # ═══════════════════════════════════════════════════════════
 #  Gestion des barres HP
