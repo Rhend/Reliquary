@@ -1301,6 +1301,8 @@ func _panel_adventure() -> void:
 	s_h.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.30)
 	btn.add_theme_stylebox_override("hover", s_h)
 	btn.pressed.connect(_on_start_selected_expedition)
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_add_hover_feedback(btn)
 	_rp_content.add_child(btn)
 
 	# ── Séparateur ────────────────────────────────────────────
