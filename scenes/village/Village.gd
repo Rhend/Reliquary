@@ -1501,7 +1501,7 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	clbl.text = label
 	clbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clbl.add_theme_font_size_override("font_size", 11)
-	clbl.add_theme_color_override("font_color", color)   # label texte garde la couleur type
+	clbl.add_theme_color_override("font_color", nc)
 	chdr.add_child(clbl)
 
 	var count_lbl := Label.new()
