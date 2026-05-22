@@ -846,8 +846,7 @@ func _update_hex_selection(active_id: String) -> void:
 
 # Vide _rp_content et réinjecte le contenu pour panel_id (panneau déjà ouvert).
 func _swap_panel_content(panel_id: String) -> void:
-	for child in _rp_content.get_children():
-		child.queue_free()
+	UIHelpers.clear_children(_rp_content)
 	_fill_panel_content(panel_id)
 
 # ─── Construction du cadre JRPG ──────────────────────────────
@@ -895,10 +894,8 @@ func _build_panel_frame(panel_id: String) -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	frame.add_child(scroll)
 
-	var margin := MarginContainer.new()
+	var margin := UIHelpers.margin_of(12)
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for s: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(s, 12)
 	scroll.add_child(margin)
 
 	_rp_content = VBoxContainer.new()
@@ -939,7 +936,7 @@ func _panel_hero() -> void:
 	_rp_content.add_child(lname)
 
 	# ── Sous-section STATISTIQUES ─────────────────────────────
-	_rp_content.add_child(_section_header("◆  STATISTIQUES", tcolor))
+	_rp_content.add_child(UIHelpers.section_header("◆  STATISTIQUES", tcolor))
 
 	var eq  := GameData.get_equipment_bonuses()
 	var eff := GameData.get_effective_stats(cid)
@@ -977,18 +974,7 @@ func _panel_hero() -> void:
 
 	if tier < GameData.MAX_TIER:
 		var xp_color := UIColors.FILTER_ON if can_ev else UIColors.STAT_HP
-		var bar := ProgressBar.new()
-		bar.min_value = 0.0; bar.max_value = xpmax
-		bar.value     = minf(xp, xpmax)
-		bar.show_percentage = true
-		bar.custom_minimum_size = Vector2(0.0, 16.0)
-		var sf := StyleBoxFlat.new(); sf.bg_color = xp_color
-		var sb := StyleBoxFlat.new(); sb.bg_color = UIColors.BG_BAR
-		bar.add_theme_stylebox_override("fill", sf)
-		bar.add_theme_stylebox_override("background", sb)
-		bar.add_theme_color_override("font_color", Color.WHITE)
-		bar.add_theme_font_size_override("font_size", 10)
-		_rp_content.add_child(bar)
+		_rp_content.add_child(UIHelpers.xp_bar(xp, xpmax, xp_color))
 
 		var xl := Label.new()
 		xl.text = "XP  %.0f / %.0f" % [xp, xpmax]
@@ -1016,7 +1002,7 @@ func _panel_hero() -> void:
 		_rp_content.add_child(ml)
 
 	# ── Sous-section PASSIFS ──────────────────────────────────
-	_rp_content.add_child(_section_header("◆  PASSIFS", tcolor))
+	_rp_content.add_child(UIHelpers.section_header("◆  PASSIFS", tcolor))
 
 	var unlocked: Array = c.get("unlocked_passives", [])
 
@@ -1033,26 +1019,6 @@ func _panel_hero() -> void:
 			if not pdata.is_empty():
 				_rp_content.add_child(_passive_card(pdata, tcolor))
 
-
-# ─── Helpers sous-sections ────────────────────────────────────
-# Retourne un VBoxContainer avec un Label titre coloré + un trait horizontal.
-func _section_header(title: String, color: Color) -> Control:
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 4)
-
-	var lbl := Label.new()
-	lbl.text = title
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", color)
-	vb.add_child(lbl)
-
-	var line := ColorRect.new()
-	line.color = Color(color.r, color.g, color.b, 0.38)
-	line.custom_minimum_size = Vector2(0.0, 1.0)
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(line)
-
-	return vb
 
 # Retourne une XPCard pour un passif : nom, badge tier, barre XP, effets du palier.
 func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
@@ -1078,22 +1044,13 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	var panel := XPCard.new()
 	panel.xp_fill    = xp_fill
 	panel.fill_color = rcolor
-	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(rcolor.r, rcolor.g, rcolor.b, 0.07)
-	style.border_color = Color(rcolor.r, rcolor.g, rcolor.b, 0.60)
-	style.set_border_width_all(1)
-	for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
-			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
-		style.set(prop, 4)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(rcolor))
 	if has_evos:
 		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		_add_hover_feedback(panel)
 	wrapper.add_child(panel)
 
-	var m := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		m.add_theme_constant_override(s, 6)
+	var m := UIHelpers.margin_of(6)
 	panel.add_child(m)
 
 	var vb := VBoxContainer.new()
@@ -1215,19 +1172,10 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	var panel := XPCard.new()
 	panel.xp_fill    = xp_fill
 	panel.fill_color = tc
-	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(tc.r, tc.g, tc.b, 0.06)
-	style.border_color = Color(tc.r, tc.g, tc.b, 0.38)
-	style.set_border_width_all(1)
-	for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
-			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
-		style.set(prop, 3)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(tc, 0.06, 0.38, 1, 3))
 	margin.add_child(panel)
 
-	var pm := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		pm.add_theme_constant_override(s, 4)
+	var pm := UIHelpers.margin_of(4)
 	panel.add_child(pm)
 
 	var vb := VBoxContainer.new()
@@ -1302,12 +1250,7 @@ func _panel_adventure() -> void:
 	placeholder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	placeholder.custom_minimum_size   = Vector2(0, 52)
 	placeholder.visible = no_biome_selected
-	var ph_style := StyleBoxFlat.new()
-	ph_style.bg_color     = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g, UIColors.TEXT_MUTED.b, 0.06)
-	ph_style.border_color = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g, UIColors.TEXT_MUTED.b, 0.25)
-	ph_style.set_border_width_all(1)
-	ph_style.set_corner_radius_all(6)
-	placeholder.add_theme_stylebox_override("panel", ph_style)
+	placeholder.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.25, 1, 6))
 	var ph_lbl := Label.new()
 	ph_lbl.text = "Choisir un biome pour partir en expédition"
 	ph_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1331,15 +1274,8 @@ func _panel_adventure() -> void:
 		btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
 	else:
 		btn.text = "⚔   PARTIR EN EXPÉDITION"
-	var s_n := StyleBoxFlat.new()
-	s_n.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.14)
-	s_n.border_color = tcolor
-	s_n.set_border_width_all(2)
-	s_n.set_corner_radius_all(6)
-	btn.add_theme_stylebox_override("normal", s_n)
-	var s_h := s_n.duplicate() as StyleBoxFlat
-	s_h.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.30)
-	btn.add_theme_stylebox_override("hover", s_h)
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	btn.pressed.connect(_on_start_selected_expedition)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_add_hover_feedback(btn)
@@ -1349,7 +1285,7 @@ func _panel_adventure() -> void:
 	_rp_content.add_child(HSeparator.new())
 
 	# ── Liste des biomes (accordéon) ──────────────────────────
-	_rp_content.add_child(_section_header("◆  BIOMES DISPONIBLES", tcolor))
+	_rp_content.add_child(UIHelpers.section_header("◆  BIOMES DISPONIBLES", tcolor))
 
 	# Références partagées entre les closures pour l'accordéon
 	var contents:     Dictionary = {}   # biome_id → VBoxContainer (détail)
@@ -1427,17 +1363,10 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_add_hover_feedback(panel)
-	var ps := StyleBoxFlat.new()
-	ps.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.07)
-	ps.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 0.60)
-	ps.set_border_width_all(1)
-	ps.set_corner_radius_all(4)
-	panel.add_theme_stylebox_override("panel", ps)
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(bcolor))
 	wrapper.add_child(panel)
 
-	var pm := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		pm.add_theme_constant_override(s, 8)
+	var pm := UIHelpers.margin_of(8)
 	panel.add_child(pm)
 
 	var pvb := VBoxContainer.new()
@@ -1519,17 +1448,10 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_add_hover_feedback(cat_panel)
-	var cps := StyleBoxFlat.new()
-	cps.bg_color     = Color(nc.r, nc.g, nc.b, 0.06)
-	cps.border_color = Color(nc.r, nc.g, nc.b, 0.38)
-	cps.set_border_width_all(1)
-	cps.set_corner_radius_all(3)
-	cat_panel.add_theme_stylebox_override("panel", cps)
+	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
 	cat_wrap.add_child(cat_panel)
 
-	var cpm := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		cpm.add_theme_constant_override(s, 6)
+	var cpm := UIHelpers.margin_of(6)
 	cat_panel.add_child(cpm)
 
 	var chdr := HBoxContainer.new()
@@ -1617,19 +1539,10 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 			panel.xp_fill    = xp_fill
 			panel.fill_color = ec
 			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var style := StyleBoxFlat.new()
-			style.bg_color     = Color(ec.r, ec.g, ec.b, 0.06)
-			style.border_color = Color(ec.r, ec.g, ec.b, 0.38)
-			style.set_border_width_all(1)
-			for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
-					"corner_radius_bottom_left", "corner_radius_bottom_right"]:
-				style.set(prop, 3)
-			panel.add_theme_stylebox_override("panel", style)
+			panel.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.38, 1, 3))
 			parent.add_child(panel)
 
-			var pm := MarginContainer.new()
-			for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-				pm.add_theme_constant_override(s, 4)
+			var pm := UIHelpers.margin_of(4)
 			panel.add_child(pm)
 
 			var hb := HBoxContainer.new()
@@ -1662,19 +1575,10 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 			# Entité non découverte — style "À DÉBLOQUER"
 			var panel := PanelContainer.new()
 			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var style := StyleBoxFlat.new()
-			style.bg_color     = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g,
-					UIColors.TEXT_MUTED.b, 0.04)
-			style.border_color = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g,
-					UIColors.TEXT_MUTED.b, 0.20)
-			style.set_border_width_all(1)
-			style.set_corner_radius_all(3)
-			panel.add_theme_stylebox_override("panel", style)
+			panel.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.04, 0.20, 1, 3))
 			parent.add_child(panel)
 
-			var pm := MarginContainer.new()
-			for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-				pm.add_theme_constant_override(s, 4)
+			var pm := UIHelpers.margin_of(4)
 			panel.add_child(pm)
 
 			var hb := HBoxContainer.new()
@@ -1707,17 +1611,10 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	if not locked:
 		cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		_add_hover_feedback(cat_panel)
-	var cps := StyleBoxFlat.new()
-	cps.bg_color     = Color(nc.r, nc.g, nc.b, 0.06)
-	cps.border_color = Color(nc.r, nc.g, nc.b, 0.38)
-	cps.set_border_width_all(1)
-	cps.set_corner_radius_all(3)
-	cat_panel.add_theme_stylebox_override("panel", cps)
+	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
 	cat_wrap.add_child(cat_panel)
 
-	var cpm := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		cpm.add_theme_constant_override(s, 6)
+	var cpm := UIHelpers.margin_of(6)
 	cat_panel.add_child(cpm)
 
 	var chdr := HBoxContainer.new()

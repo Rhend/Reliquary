@@ -41,16 +41,7 @@ func _ready() -> void:
 
 # Assemble les trois zones : info bar, cercles, footer + overlay summary.
 func _build_ui() -> void:
-	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = UIColors.BG_DARK
-	add_child(bg)
-
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 0)
-	add_child(root)
-
+	var root := UIHelpers.fullscreen_root(self)
 	root.add_child(_build_info_bar())
 	root.add_child(_build_circles_area())
 	root.add_child(_build_footer())
@@ -84,25 +75,16 @@ func _build_circles_area() -> Control:
 func _build_footer() -> Control:
 	var tcolor := _hero_tier_color()
 
-	var m := MarginContainer.new()
-	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		m.add_theme_constant_override(side, 8)
+	var m := UIHelpers.margin_of(8)
 
 	_flee_btn = Button.new()
-	_flee_btn.text = "⚔  Mettre fin à l'expédition"
-	_flee_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_flee_btn.custom_minimum_size   = Vector2(0, 48)
+	_flee_btn.text                   = "⚔  Mettre fin à l'expédition"
+	_flee_btn.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
+	_flee_btn.custom_minimum_size    = Vector2(0, 48)
 	_flee_btn.add_theme_font_size_override("font_size", 16)
 	_flee_btn.add_theme_color_override("font_color", tcolor)
-	var s_n := StyleBoxFlat.new()
-	s_n.bg_color     = Color(tcolor.r, tcolor.g, tcolor.b, 0.14)
-	s_n.border_color = tcolor
-	s_n.set_border_width_all(2)
-	s_n.set_corner_radius_all(6)
-	_flee_btn.add_theme_stylebox_override("normal", s_n)
-	var s_h := s_n.duplicate() as StyleBoxFlat
-	s_h.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.30)
-	_flee_btn.add_theme_stylebox_override("hover", s_h)
+	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
+	_flee_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	_flee_btn.pressed.connect(_on_flee_pressed)
 	m.add_child(_flee_btn)
 	return m
@@ -113,56 +95,17 @@ func _build_footer() -> Control:
 func _build_info_bar() -> Control:
 	var tcolor := _hero_tier_color()
 
-	var outer := MarginContainer.new()
-	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		outer.add_theme_constant_override(side, 8)
+	var outer := UIHelpers.margin_of(8)
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 8)
 	outer.add_child(hbox)
 
-	hbox.add_child(_build_info_panel("◆  XP CE CYCLE",   tcolor, func(vb): _build_xp_section(vb)))
-	hbox.add_child(_build_info_panel("◆  EFFETS ACTIFS", tcolor, func(vb): _build_buffs_section(vb)))
-	hbox.add_child(_build_info_panel("◆  ÉQUIPEMENT",    tcolor, func(vb): _build_equip_section(vb)))
+	hbox.add_child(UIHelpers.info_panel("◆  XP CE CYCLE",   tcolor, func(vb): _build_xp_section(vb)))
+	hbox.add_child(UIHelpers.info_panel("◆  EFFETS ACTIFS", tcolor, func(vb): _build_buffs_section(vb)))
+	hbox.add_child(UIHelpers.info_panel("◆  ÉQUIPEMENT",    tcolor, func(vb): _build_equip_section(vb)))
 
 	return outer
-
-# Construit un panel avec header coloré tier + séparateur + contenu fourni par builder.
-# Même DA que _passive_card / _adv_biome_card dans Village.gd.
-func _build_info_panel(title: String, tcolor: Color, builder: Callable) -> Control:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var sbox := StyleBoxFlat.new()
-	sbox.bg_color     = Color(tcolor.r, tcolor.g, tcolor.b, 0.07)
-	sbox.border_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.60)
-	sbox.set_border_width_all(1)
-	sbox.set_corner_radius_all(4)
-	panel.add_theme_stylebox_override("panel", sbox)
-
-	var m := MarginContainer.new()
-	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		m.add_theme_constant_override(side, 8)
-	panel.add_child(m)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 5)
-	m.add_child(vbox)
-
-	# Titre — même style que _section_header du Village
-	var title_lbl := Label.new()
-	title_lbl.text = title
-	title_lbl.add_theme_font_size_override("font_size", 11)
-	title_lbl.add_theme_color_override("font_color", tcolor)
-	vbox.add_child(title_lbl)
-
-	var line := ColorRect.new()
-	line.color = Color(tcolor.r, tcolor.g, tcolor.b, 0.38)
-	line.custom_minimum_size     = Vector2(0, 1)
-	line.size_flags_horizontal   = Control.SIZE_EXPAND_FILL
-	vbox.add_child(line)
-
-	builder.call(vbox)
-	return panel
 
 # Crée le label XP du cycle dans le panel correspondant.
 func _build_xp_section(parent: VBoxContainer) -> void:
@@ -203,12 +146,8 @@ func _build_summary_overlay() -> Control:
 	panel.add_theme_stylebox_override("panel", style)
 	overlay.add_child(panel)
 
-	var margins := MarginContainer.new()
+	var margins := UIHelpers.margin_of(20)
 	margins.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margins.add_theme_constant_override("margin_left",   20)
-	margins.add_theme_constant_override("margin_right",  20)
-	margins.add_theme_constant_override("margin_top",    20)
-	margins.add_theme_constant_override("margin_bottom", 20)
 	panel.add_child(margins)
 
 	_summary_vbox = VBoxContainer.new()
@@ -369,7 +308,7 @@ func _update_xp_label() -> void:
 func _rebuild_buffs() -> void:
 	if not _buffs_vbox:
 		return
-	_clear_vbox(_buffs_vbox)
+	UIHelpers.clear_children(_buffs_vbox)
 
 	var bonuses := PassiveSystem.get_combat_bonuses()
 	var equip   := GameData.get_equipment_bonuses()
@@ -390,17 +329,17 @@ func _rebuild_buffs() -> void:
 		lbl.text = str(row[0]) + " " + sign + str(int(val))
 		lbl.add_theme_font_size_override("font_size", 13)
 		lbl.add_theme_color_override("font_color",
-			UIColors.TYPE_EVENT_POS if val > 0 else UIColors.LOG_DEFEAT)
+			UIColors.LOG_VICTORY if val > 0 else UIColors.LOG_DEFEAT)
 		_buffs_vbox.add_child(lbl)
 
 	if not found:
-		_add_none_label(_buffs_vbox)
+		_buffs_vbox.add_child(UIHelpers.none_label(13))
 
 # Reconstruit la liste des objets équipés dans _equip_vbox.
 func _rebuild_equip() -> void:
 	if not _equip_vbox:
 		return
-	_clear_vbox(_equip_vbox)
+	UIHelpers.clear_children(_equip_vbox)
 
 	var equipped: Dictionary = GameData.player.get("equipped", {})
 	var found := false
@@ -419,7 +358,7 @@ func _rebuild_equip() -> void:
 		_equip_vbox.add_child(lbl)
 
 	if not found:
-		_add_none_label(_equip_vbox)
+		_equip_vbox.add_child(UIHelpers.none_label(13))
 
 # ═══════════════════════════════════════════════════════════
 #  Résumé de fin de cycle
@@ -427,7 +366,7 @@ func _rebuild_equip() -> void:
 
 # Peuple et affiche l'overlay de résumé ; navigation automatique après 6 s.
 func _show_summary(result: Dictionary) -> void:
-	_clear_vbox(_summary_vbox)
+	UIHelpers.clear_children(_summary_vbox)
 
 	var victory: bool = result.get("victory", false)
 
@@ -436,7 +375,7 @@ func _show_summary(result: Dictionary) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color",
-		UIColors.TYPE_EVENT_POS if victory else UIColors.LOG_DEFEAT)
+		UIColors.LOG_VICTORY if victory else UIColors.LOG_DEFEAT)
 	_summary_vbox.add_child(title)
 
 	_summary_vbox.add_child(HSeparator.new())
@@ -480,19 +419,6 @@ func _hero_tier_color() -> Color:
 	var cid  := GameData.player.get("active_creature_id", "") as String
 	var tier := int(GameData.get_entity(cid).get("current_tier", 0))
 	return UIColors.tier_color(tier)
-
-# Vide tous les enfants d'un VBoxContainer et libère leur mémoire.
-func _clear_vbox(vbox: VBoxContainer) -> void:
-	for c in vbox.get_children():
-		c.queue_free()
-
-# Ajoute un label "Aucun" en TEXT_MUTED dans le VBoxContainer donné.
-func _add_none_label(vbox: VBoxContainer) -> void:
-	var lbl := Label.new()
-	lbl.text = "Aucun"
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	vbox.add_child(lbl)
 
 # ═══════════════════════════════════════════════════════════
 #  Navigation
