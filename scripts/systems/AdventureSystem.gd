@@ -95,6 +95,21 @@ func _ready() -> void:
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.xp_gained.connect(_on_xp_gained_tracking)
 
+# Accumule l'XP biome et passifs pour le résumé de cycle.
+# Appelé par EventBus.xp_gained à chaque attribution MasterySystem.
+# Ignoré hors aventure et pour les héros (déjà comptés dans _resolve_victory).
+func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
+	if not is_running:
+		return
+	var entity := GameData.get_entity(entity_id)
+	match entity.get("entity_type", ""):
+		"biome":
+			_cycle_xp_biome += amount
+		"passive":
+			_cycle_xp_passives_total               += amount
+			_cycle_xp_passives_detail[entity_id]    = \
+				_cycle_xp_passives_detail.get(entity_id, 0.0) + amount
+
 # ═══════════════════════════════════════════════════════════
 #  Interface publique
 # ═══════════════════════════════════════════════════════════
@@ -199,6 +214,8 @@ func _process_encounter() -> void:
 		"hero_id":  hero_id
 	}
 
+	_cycle_events_total += 1
+
 	match enc_type:
 		"creature":    _handle_creature_encounter(hero_id, enc_data)
 		"benediction": _handle_benediction_encounter(hero_id, enc_data)
@@ -239,7 +256,8 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 			bene.get("id", ""), bene.get("name", "?"), "Bénédiction", current_biome_id, 5.0
 		)
 		_apply_benediction_effect(bene)
-		_cycle_events += 1
+		_cycle_events          += 1
+		_cycle_positive_events += 1
 
 	EventBus.adventure_event_resolved.emit(enc_data)
 	_apply_regen(hero_id)
