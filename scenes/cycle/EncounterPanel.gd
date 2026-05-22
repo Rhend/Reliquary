@@ -247,7 +247,8 @@ func _on_combat_started(_creature_id: String, enemy: Dictionary,
 	_set_hero_hp(creature_hp)
 
 func _on_step_started(step: CombatStep) -> void:
-	var step_dur := CombatPlayer.BASE_STEP_DURATION * GameSettings.combat_speed
+	var ticks := maxi(step.tick_time - 0, 5)  # fallback 5 ticks (VIT=20 baseline)
+	var step_dur := float(ticks) * CombatPlayer.TICK_DURATION * GameSettings.combat_speed
 
 	if step.attacker == "hero":
 		# Éteint le glow ennemi du step précédent avant d'allumer le héro

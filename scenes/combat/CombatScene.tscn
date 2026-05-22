@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://combatscene"]
+
+[ext_resource type="Script" path="res://scripts/combat/CombatScene.gd" id="1_cs"]
+
+[node name="CombatScene" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_cs")
