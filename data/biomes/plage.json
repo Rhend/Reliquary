@@ -10,7 +10,7 @@
 		"enemies": [
 			{
 				"id": "enemy_crabe", "name": "Crabe Géant",
-				"atk": 14, "def": 6, "hp": 55, "tier": 0, "xp_reward": 14,
+				"atk": 14, "def": 6, "hp": 55, "vit": 16, "tier": 0, "xp_reward": 14,
 				"loot_table": [
 					{ "item_id": "res_ecaille",      "chance": 0.40 },
 					{ "item_id": "res_perle_marine", "chance": 0.20 }
@@ -18,7 +18,7 @@
 			},
 			{
 				"id": "enemy_sirene", "name": "Sirène Hostile",
-				"atk": 18, "def": 4, "hp": 70, "tier": 1, "xp_reward": 22,
+				"atk": 18, "def": 4, "hp": 70, "vit": 24, "tier": 1, "xp_reward": 22,
 				"loot_table": [
 					{ "item_id": "res_ecaille",       "chance": 0.30 },
 					{ "item_id": "res_herbe_magique",  "chance": 0.25 },
@@ -27,7 +27,7 @@
 			},
 			{
 				"id": "enemy_requin", "name": "Requin Marteau",
-				"atk": 24, "def": 8, "hp": 120, "tier": 2, "xp_reward": 40,
+				"atk": 24, "def": 8, "hp": 120, "vit": 20, "tier": 2, "xp_reward": 40,
 				"loot_table": [
 					{ "item_id": "res_os_corail",    "chance": 0.55 },
 					{ "item_id": "res_ecaille",       "chance": 0.35 },

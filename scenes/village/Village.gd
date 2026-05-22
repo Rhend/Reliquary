@@ -1283,16 +1283,47 @@ func _panel_adventure() -> void:
 	var tier   := _current_tier()
 	var tcolor := UIColors.tier_color(tier)
 
-	if _adv_selected_biome_id.is_empty() or GameData.get_entity(_adv_selected_biome_id).is_empty():
-		_adv_selected_biome_id = _adv_first_biome_id()
+	# Invalide la sélection si l'entité n'existe plus (pas d'auto-select)
+	if not _adv_selected_biome_id.is_empty() and GameData.get_entity(_adv_selected_biome_id).is_empty():
+		_adv_selected_biome_id = ""
 
-	# ── Gros bouton "Partir en Expédition" ────────────────────
+	# ── Slot supérieur : placeholder OU bouton ────────────────
+	var no_biome_selected := _adv_selected_biome_id.is_empty()
+
+	# Encadré neutre (aucun biome choisi)
+	var placeholder := PanelContainer.new()
+	placeholder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	placeholder.custom_minimum_size   = Vector2(0, 52)
+	placeholder.visible = no_biome_selected
+	var ph_style := StyleBoxFlat.new()
+	ph_style.bg_color     = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g, UIColors.TEXT_MUTED.b, 0.06)
+	ph_style.border_color = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g, UIColors.TEXT_MUTED.b, 0.25)
+	ph_style.set_border_width_all(1)
+	ph_style.set_corner_radius_all(6)
+	placeholder.add_theme_stylebox_override("panel", ph_style)
+	var ph_lbl := Label.new()
+	ph_lbl.text = "Choisir un biome pour partir en expédition"
+	ph_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ph_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	ph_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ph_lbl.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	ph_lbl.add_theme_font_size_override("font_size", 13)
+	ph_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	placeholder.add_child(ph_lbl)
+	_rp_content.add_child(placeholder)
+
+	# Bouton actif (biome sélectionné)
 	var btn := Button.new()
-	btn.text = "⚔   PARTIR EN EXPÉDITION"
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size   = Vector2(0, 52)
 	btn.add_theme_font_size_override("font_size", 17)
 	btn.add_theme_color_override("font_color", tcolor)
+	btn.visible = not no_biome_selected
+	if not no_biome_selected:
+		var bname: String = str(GameData.get_entity(_adv_selected_biome_id).get("name", _adv_selected_biome_id)).to_upper()
+		btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+	else:
+		btn.text = "⚔   PARTIR EN EXPÉDITION"
 	var s_n := StyleBoxFlat.new()
 	s_n.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.14)
 	s_n.border_color = tcolor
@@ -1353,6 +1384,8 @@ func _panel_adventure() -> void:
 				section.visible = true
 				arrow.text = "  ▼"
 				btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+				placeholder.visible = false
+				btn.visible = true
 		)
 		_rp_content.add_child(wrapper)
 
@@ -1367,7 +1400,7 @@ func _on_start_selected_expedition() -> void:
 		return
 	GameData.player["active_biome_id"] = _adv_selected_biome_id
 	AdventureSystem.start_adventure(_adv_selected_biome_id)
-	get_tree().change_scene_to_file("res://scenes/Biome.tscn")
+	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
 
 # Retourne { wrapper, panel, section, arrow }.
 # wrapper = VBoxContainer à ajouter au parent.

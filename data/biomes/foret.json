@@ -10,14 +10,14 @@
 		"enemies": [
 			{
 				"id": "enemy_rat", "name": "Rat des Égouts",
-				"atk": 6, "def": 1, "hp": 25, "tier": 0, "xp_reward": 8,
+				"atk": 6, "def": 1, "hp": 25, "vit": 30, "tier": 0, "xp_reward": 8,
 				"loot_table": [
 					{ "item_id": "res_fourrure", "chance": 0.30 }
 				]
 			},
 			{
 				"id": "enemy_gobelin", "name": "Gobelin",
-				"atk": 10, "def": 3, "hp": 45, "tier": 1, "xp_reward": 18,
+				"atk": 10, "def": 3, "hp": 45, "vit": 20, "tier": 1, "xp_reward": 18,
 				"loot_table": [
 					{ "item_id": "res_dent_gobelin", "chance": 0.40 },
 					{ "item_id": "res_mineral_fer",  "chance": 0.15 }
@@ -25,7 +25,7 @@
 			},
 			{
 				"id": "enemy_loup", "name": "Loup Sombre",
-				"atk": 18, "def": 6, "hp": 80, "tier": 2, "xp_reward": 35,
+				"atk": 18, "def": 6, "hp": 80, "vit": 25, "tier": 2, "xp_reward": 35,
 				"loot_table": [
 					{ "item_id": "res_fourrure",     "chance": 0.50 },
 					{ "item_id": "res_dent_gobelin", "chance": 0.20 }
@@ -33,7 +33,7 @@
 			},
 			{
 				"id": "enemy_sanglier", "name": "Sanglier Épique",
-				"atk": 28, "def": 12, "hp": 140, "tier": 3, "xp_reward": 70,
+				"atk": 28, "def": 12, "hp": 140, "vit": 15, "tier": 3, "xp_reward": 70,
 				"loot_table": [
 					{ "item_id": "res_defense_sanglier", "chance": 0.45 },
 					{ "item_id": "res_fourrure",         "chance": 0.35 }
@@ -41,7 +41,7 @@
 			},
 			{
 				"id": "enemy_ours", "name": "Ours Légendaire",
-				"atk": 45, "def": 20, "hp": 260, "tier": 4, "xp_reward": 140,
+				"atk": 45, "def": 20, "hp": 260, "vit": 12, "tier": 4, "xp_reward": 140,
 				"loot_table": [
 					{ "item_id": "res_mineral_fer",      "chance": 0.50 },
 					{ "item_id": "res_defense_sanglier", "chance": 0.30 }
@@ -49,7 +49,7 @@
 			},
 			{
 				"id": "enemy_dragon", "name": "Dragon Ancien",
-				"atk": 75, "def": 35, "hp": 500, "tier": 5, "xp_reward": 280,
+				"atk": 75, "def": 35, "hp": 500, "vit": 18, "tier": 5, "xp_reward": 280,
 				"loot_table": [
 					{ "item_id": "res_defense_sanglier", "chance": 0.60 },
 					{ "item_id": "res_mineral_fer",      "chance": 0.50 }

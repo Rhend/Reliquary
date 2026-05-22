@@ -36,11 +36,7 @@ func _build_ui() -> void:
 
 	body.add_child(_build_biome_list())
 	body.add_child(_build_content_panel())
-
-	# Sélectionne le premier biome par défaut
-	var first_biome := _first_biome_id()
-	if first_biome != "":
-		_select_biome(first_biome)
+	_refresh_content()  # affiche le placeholder "choisir un biome"
 
 func _header_bar() -> Control:
 	var bar = PanelContainer.new()
@@ -145,6 +141,13 @@ func _refresh_content() -> void:
 		child.queue_free()
 
 	if _selected_biome_id == "":
+		var hint := Label.new()
+		hint.text = "Sélectionnez un biome dans la liste."
+		hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		hint.add_theme_font_size_override("font_size", 14)
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_content_vbox.add_child(hint)
 		return
 
 	var biome  = GameData.get_entity(_selected_biome_id)
@@ -256,7 +259,7 @@ func _on_start_adventure() -> void:
 		return
 	GameData.player["active_biome_id"] = _selected_biome_id
 	AdventureSystem.start_adventure(_selected_biome_id)
-	get_tree().change_scene_to_file("res://scenes/Biome.tscn")
+	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
 
 func _first_biome_id() -> String:
 	for eid in GameData.entities:

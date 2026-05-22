@@ -1,50 +1,75 @@
 # ============================================================
-# CombatResolver — Résolution instantanée d'un combat.
+# CombatResolver — Résolution instantanée d'un combat VIT-based.
 #
-# Calcule toute la séquence d'échanges en une frame.
-# Aucun signal, aucun timer, aucun effet de bord.
-# Premier attaquant : le Héro (pas d'initiative variable pour l'instant).
+# Chaque entité accumule +VIT par tick dans sa jauge d'action.
+# Quand jauge >= GAUGE_THRESHOLD, l'entité attaque et la jauge revient à 0.
+# En cas d'égalité simultanée, le Héro agit en premier.
 # ============================================================
 class_name CombatResolver
 
-const DAMAGE_VARIANCE: float = 0.10
-const HERO_MIN_DAMAGE: float  = 1.0
-const ENEMY_MIN_DAMAGE: float = 1.0
-const MAX_STEPS: int          = 300   # garde-fou anti-boucle infinie
+const GAUGE_THRESHOLD:  float = 100.0
+const CRIT_CHANCE:      float = 0.10
+const CRIT_MULTIPLIER:  float = 2.0
+const MAX_STEPS:        int   = 500
 
-static func resolve(
-		hero_atk:  float, hero_def:  float, hero_hp:  float,
-		enemy_atk: float, enemy_def: float, enemy_hp: float
-	) -> Array:
-
+# hero_stats et enemy_stats : dictionnaires avec clés hp, atk, def, vit
+static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary) -> Array:
 	var steps: Array = []
-	var h_hp := hero_hp
-	var e_hp := enemy_hp
+
+	var h_hp  := float(hero_stats.get("hp",  100))
+	var h_atk := float(hero_stats.get("atk", 10))
+	var h_def := float(hero_stats.get("def", 5))
+	var h_vit := maxf(float(hero_stats.get("vit", 20)), 1.0)
+
+	var e_hp  := float(enemy_stats.get("hp",  50))
+	var e_atk := float(enemy_stats.get("atk", 8))
+	var e_def := float(enemy_stats.get("def", 2))
+	var e_vit := maxf(float(enemy_stats.get("vit", 20)), 1.0)
+
+	var h_gauge := 0.0
+	var e_gauge := 0.0
+	var current_tick := 0
 
 	while h_hp > 0.0 and e_hp > 0.0 and steps.size() < MAX_STEPS:
-		# ── Tour du Héro ─────────────────────────────────────
-		var h_dmg := _calc(hero_atk, enemy_def, HERO_MIN_DAMAGE)
-		e_hp = maxf(e_hp - h_dmg, 0.0)
-		var s1 := CombatStep.new()
-		s1.attacker        = "hero"
-		s1.damage          = int(h_dmg)
-		s1.target_hp_after = int(e_hp)
-		s1.is_killing_blow = (e_hp <= 0.0)
-		steps.append(s1)
-		if e_hp <= 0.0:
-			break
+		current_tick += 1
+		h_gauge += h_vit
+		e_gauge += e_vit
 
-		# ── Riposte de l'ennemi ───────────────────────────────
-		var e_dmg := _calc(enemy_atk, hero_def, ENEMY_MIN_DAMAGE)
-		h_hp = maxf(h_hp - e_dmg, 0.0)
-		var s2 := CombatStep.new()
-		s2.attacker        = "enemy"
-		s2.damage          = int(e_dmg)
-		s2.target_hp_after = int(h_hp)
-		s2.is_killing_blow = (h_hp <= 0.0)
-		steps.append(s2)
+		# Héro a priorité si les deux jauges atteignent le seuil simultanément
+		if h_gauge >= GAUGE_THRESHOLD:
+			h_gauge -= GAUGE_THRESHOLD
+			var step := _make_step("hero", h_atk, h_def, e_atk, e_def, e_hp)
+			step.tick_time = current_tick
+			e_hp = float(step.target_hp_after)
+			steps.append(step)
+			if e_hp <= 0.0:
+				break
+
+		if e_gauge >= GAUGE_THRESHOLD and h_hp > 0.0:
+			e_gauge -= GAUGE_THRESHOLD
+			var step := _make_step("enemy", e_atk, e_def, h_atk, h_def, h_hp)
+			step.tick_time = current_tick
+			h_hp = float(step.target_hp_after)
+			steps.append(step)
 
 	return steps
 
-static func _calc(atk: float, def: float, min_dmg: float) -> float:
-	return maxf(atk * randf_range(1.0 - DAMAGE_VARIANCE, 1.0 + DAMAGE_VARIANCE) - def, min_dmg)
+static func _make_step(
+		attacker: String,
+		atk: float, _own_def: float,
+		_enemy_atk: float, target_def: float,
+		target_hp: float
+	) -> CombatStep:
+
+	var is_crit := randf() < CRIT_CHANCE
+	var base_dmg := maxf(atk - target_def, 1.0)
+	var damage := base_dmg * (CRIT_MULTIPLIER if is_crit else 1.0)
+	var new_hp := maxf(target_hp - damage, 0.0)
+
+	var step := CombatStep.new()
+	step.attacker        = attacker
+	step.damage          = int(damage)
+	step.target_hp_after = int(new_hp)
+	step.is_killing_blow = (new_hp <= 0.0)
+	step.is_crit         = is_crit
+	return step

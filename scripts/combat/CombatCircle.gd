@@ -1,0 +1,378 @@
+# ============================================================
+# CombatCircle — Cercle de combat, DA identique au CircleRing du Village.
+#
+# Le RING lui-même est la jauge de PV : il se vide dans le sens
+# horaire depuis le haut à mesure que les PV baissent.
+# Le ghost ring (plein, 15% alpha) montre le maximum.
+# La rotation s'applique uniquement au dessin (draw_set_transform),
+# pas aux nœuds enfants (labels, chiffres flottants).
+#
+# Différenciation par type :
+#   CREATURE → rotation normale, styles tier du village
+#   TRAP     → rotation très lente, corona froide, lignes radiales
+#   EVENT    → pas de rotation, glow externe pulsant fort
+# ============================================================
+class_name CombatCircle extends Control
+
+# ─── Géométrie ───────────────────────────────────────────────
+const CIRCLE_RADIUS := 115.0
+const RING_WIDTH    := 14.0
+const NAME_HEIGHT   := 32.0
+const CTRL_PADDING  := 55.0   # marge pour corona des hauts tiers
+
+# ─── Couleurs paliers ────────────────────────────────────────
+const TIER_COLORS: Array = [
+	Color("#808080"),  # 0 Commun
+	Color("#2ecc71"),  # 1 Peu Commun
+	Color("#3498db"),  # 2 Rare
+	Color("#9b59b6"),  # 3 Épique
+	Color("#e67e22"),  # 4 Légendaire
+	Color("#f39c12"),  # 5 Unique
+]
+
+enum EntityType { CREATURE, TRAP, EVENT }
+
+# ─── État entité ─────────────────────────────────────────────
+var entity_name: String     = ""
+var current_hp:  float      = 100.0
+var max_hp:      float      = 100.0
+var tier:        int        = 0
+var entity_type: EntityType = EntityType.CREATURE
+var is_hero:     bool       = false
+
+# ─── Nœuds enfants ───────────────────────────────────────────
+var _name_label: Label
+var _hp_label:   Label
+var _dmg_layer:  Control
+var _circle_center: Vector2
+
+# ─── Animation ───────────────────────────────────────────────
+var _t:           float   = 0.0   # horloge générale
+var _ring_rot:    float   = 0.0   # rotation du ring
+var _shake:       Vector2 = Vector2.ZERO
+var _flash_col:   Color   = Color.TRANSPARENT
+var _flash_alpha: float   = 0.0
+
+# ─── Action bar (remplie par CombatScene) ────────────────────
+var action_progress: float = 0.0   # 0..1
+
+# ═══════════════════════════════════════════════════════════
+func _ready() -> void:
+	var w := CIRCLE_RADIUS * 2.0 + CTRL_PADDING * 2.0
+	var h := CIRCLE_RADIUS * 2.0 + CTRL_PADDING * 2.0 + NAME_HEIGHT
+	custom_minimum_size = Vector2(w, h)
+	_circle_center = Vector2(w * 0.5, NAME_HEIGHT + CTRL_PADDING + CIRCLE_RADIUS)
+
+	_name_label = Label.new()
+	_name_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	_name_label.add_theme_font_size_override("font_size", 16)
+	_name_label.custom_minimum_size  = Vector2(0, NAME_HEIGHT)
+	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_name_label)
+
+	_hp_label = Label.new()
+	_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hp_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	_hp_label.add_theme_font_size_override("font_size", 17)
+	_hp_label.add_theme_color_override("font_color", Color.WHITE)
+	_hp_label.custom_minimum_size = Vector2(140, 24)
+	_hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hp_label.position = _circle_center + Vector2(-70.0, -12.0)
+	add_child(_hp_label)
+
+	_dmg_layer = Control.new()
+	_dmg_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_dmg_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_dmg_layer)
+
+	set_process(true)
+
+# ═══════════════════════════════════════════════════════════
+#  API publique
+# ═══════════════════════════════════════════════════════════
+
+func setup(p_name: String, p_hp: float, p_max_hp: float,
+		p_tier: int, p_type: EntityType, p_is_hero: bool = false) -> void:
+	entity_name  = p_name
+	current_hp   = p_hp
+	max_hp       = p_max_hp
+	tier         = clampi(p_tier, 0, TIER_COLORS.size() - 1)
+	entity_type  = p_type
+	is_hero      = p_is_hero
+	modulate     = Color.WHITE
+	scale        = Vector2.ONE
+	_t           = 0.0
+	_ring_rot    = 0.0
+	action_progress = 0.0
+	_refresh_labels()
+	queue_redraw()
+
+func update_hp(new_hp: float) -> void:
+	current_hp = clampf(new_hp, 0.0, max_hp)
+	_refresh_labels()
+	queue_redraw()
+
+func take_damage(amount: int, is_crit: bool) -> void:
+	_flash_col   = Color("#f1c40f") if is_crit else Color("#cc2200")
+	_flash_alpha = 0.7
+	_shake       = Vector2(randf_range(-1, 1), randf_range(-0.5, 0.5)).normalized() \
+	               * (12.0 if is_crit else 6.0)
+	_spawn_number(str(amount), is_crit, false)
+
+func receive_heal(amount: int) -> void:
+	_flash_col   = Color("#2ecc71")
+	_flash_alpha = 0.5
+	_spawn_number("+" + str(amount), false, true)
+
+func celebrate() -> void:
+	var tw := create_tween()
+	tw.tween_property(self, "scale", Vector2(1.12, 1.12), 0.18).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(self, "scale", Vector2(1.0, 1.0), 0.18)
+	tw.tween_property(self, "scale", Vector2(1.08, 1.08), 0.14)
+	tw.tween_property(self, "scale", Vector2(1.0, 1.0), 0.14)
+
+func die() -> void:
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(self, "scale",      Vector2(0.0, 0.0), 0.5).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(self, "modulate:a", 0.0, 0.5)
+
+# ═══════════════════════════════════════════════════════════
+#  Traitement frame
+# ═══════════════════════════════════════════════════════════
+
+func _process(delta: float) -> void:
+	_t += delta
+
+	match entity_type:
+		EntityType.CREATURE: _ring_rot += delta * 0.18
+		EntityType.TRAP:     _ring_rot += delta * 0.04
+		EntityType.EVENT:    pass
+
+	if _flash_alpha > 0.0:
+		_flash_alpha = maxf(_flash_alpha - delta * 5.5, 0.0)
+
+	if _shake.length_squared() > 0.5:
+		_shake = _shake.lerp(Vector2.ZERO, delta * 16.0)
+		_hp_label.position = _circle_center + Vector2(-70.0, -12.0) + _shake
+
+	queue_redraw()
+
+# ═══════════════════════════════════════════════════════════
+#  Dessin
+# ═══════════════════════════════════════════════════════════
+
+func _draw() -> void:
+	var center := _circle_center + _shake
+	var tier_color: Color = TIER_COLORS[tier] if tier < TIER_COLORS.size() else TIER_COLORS[0]
+	var hp_pct := current_hp / max_hp if max_hp > 0.0 else 0.0
+
+	# ── Rotation du ring (affecte uniquement le dessin) ──────
+	draw_set_transform(center, _ring_rot, Vector2.ONE)
+
+	# HP arc dans le repère rotatif.
+	# a_end = haut fixe en coordonnées écran (compense la rotation).
+	# a_start recule en sens anti-horaire → le vide croît dans le sens horaire.
+	var a_end   := -PI * 0.5 - _ring_rot
+	var a_start := a_end - TAU * hp_pct
+
+	# Ghost ring (silhouette du max PV)
+	var ghost := Color(tier_color, 0.15)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS, 0.0, TAU, 96, ghost, RING_WIDTH, true)
+
+	# Anneau HP avec effets par tier
+	if hp_pct > 0.001:
+		match entity_type:
+			EntityType.CREATURE: _ring_creature(a_start, a_end, tier_color)
+			EntityType.TRAP:     _ring_trap(a_start, a_end, tier_color)
+			EntityType.EVENT:    _ring_event(a_start, a_end, tier_color)
+
+	# Action bar — arc intérieur, sens horaire depuis le haut
+	if action_progress > 0.001:
+		var bar_col := tier_color.lightened(0.5)
+		bar_col.a = 0.85
+		draw_arc(Vector2.ZERO, CIRCLE_RADIUS - RING_WIDTH - 6.0,
+				a_end, a_end + TAU * action_progress, 64, bar_col, 3.0, true)
+
+	# Flash dégâts / soin
+	if _flash_alpha > 0.001:
+		draw_circle(Vector2.ZERO, CIRCLE_RADIUS, Color(_flash_col, _flash_alpha * 0.4))
+
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+# ═══════════════════════════════════════════════════════════
+#  Styles par type d'entité
+# ═══════════════════════════════════════════════════════════
+
+func _ring_creature(a0: float, a1: float, c: Color) -> void:
+	match tier:
+		0: _tier_commun(a0, a1, c)
+		1: _tier_peu_commun(a0, a1, c)
+		2: _tier_rare(a0, a1, c)
+		3: _tier_epique(a0, a1, c)
+		4: _tier_legendaire(a0, a1, c)
+		5: _tier_unique(a0, a1, c)
+		_: _tier_commun(a0, a1, c)
+
+func _ring_trap(a0: float, a1: float, c: Color) -> void:
+	# Aspect froid/mécanique : corona fine, main sobre, pas de shimmer organique
+	var corona := Color(c, 0.06 + 0.02 * sin(_t * 0.8))
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 8.0, a0, a1, 64, corona, RING_WIDTH * 1.5, true)
+	var main := Color(c, 0.60 + 0.12 * sin(_t * 1.0))
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS, a0, a1, 96, main, RING_WIDTH, true)
+	_arc_borders(a0, a1, c)
+	# Lignes radiales rigides (aspect engrenage)
+	var num_lines := 6
+	for i in num_lines:
+		var angle := a0 + float(i) * (a1 - a0) / float(num_lines - 1)
+		if i == 0 or i == num_lines - 1:
+			continue
+		var p_in  := Vector2(cos(angle), sin(angle)) * (CIRCLE_RADIUS - RING_WIDTH * 0.5 - 2.0)
+		var p_out := Vector2(cos(angle), sin(angle)) * (CIRCLE_RADIUS + RING_WIDTH * 0.5 + 2.0)
+		var tick := Color(c.lightened(0.3), 0.45)
+		draw_line(p_in, p_out, tick, 1.5, true)
+
+func _ring_event(a0: float, a1: float, c: Color) -> void:
+	# Glow externe fort, anneau lumineux pulsant
+	var pulse := 0.65 + (sin(_t * 1.8) + 1.0) * 0.175
+	for i in range(5, 0, -1):
+		var gr := CIRCLE_RADIUS + float(i) * 7.0
+		var ga := pulse * 0.10 * float(6 - i) / 5.0
+		draw_arc(Vector2.ZERO, gr, a0, a1, 64, Color(c, ga), 4.0, true)
+	var main := Color(c, 0.72 + 0.22 * sin(_t * 2.0))
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS, a0, a1, 128, main, RING_WIDTH, true)
+	_arc_borders(a0, a1, c)
+	# Particules flottantes le long de l'arc
+	for i in 5:
+		var frac := float(i) / 4.0
+		var angle := a0 + (a1 - a0) * frac
+		var alpha := 0.4 + sin(_t * 2.0 + float(i)) * 0.3
+		var pt := Vector2(cos(angle), sin(angle)) * (CIRCLE_RADIUS + RING_WIDTH * 0.5 + 8.0)
+		draw_circle(pt, 2.5 + sin(_t * 3.0 + float(i)) * 1.0, Color(c, alpha))
+
+# ═══════════════════════════════════════════════════════════
+#  Styles par tier (portés depuis Village.gd, adaptés en arcs)
+# ═══════════════════════════════════════════════════════════
+
+func _tier_commun(a0: float, a1: float, c: Color) -> void:
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 8.0,  a0, a1, 64, Color(c, 0.07 + 0.03 * sin(_t * 1.2)), RING_WIDTH * 1.6, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS,         a0, a1, 96, Color(c, 0.55 + 0.18 * sin(_t * 1.3)), RING_WIDTH, true)
+	_arc_borders(a0, a1, c)
+	var sa := _t * 0.50
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + 0.65, 10, Color(c.lightened(0.35), 0.50), RING_WIDTH * 0.45, true)
+
+func _tier_peu_commun(a0: float, a1: float, c: Color) -> void:
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 10.0, a0, a1, 96,  Color(c, 0.12 + 0.06 * sin(_t * 1.4)), RING_WIDTH * 2.0, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS,         a0, a1, 128, Color(c, 0.72 + 0.22 * sin(_t * 1.9)), RING_WIDTH, true)
+	_arc_borders(a0, a1, c)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + RING_WIDTH * 0.5 - 1.0, a0, a1, 64, Color(c.lightened(0.3), 0.50), 1.0, true)
+	var sa := _t * 0.75
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + 1.1, 24, Color(c.lightened(0.55), 0.75), RING_WIDTH * 0.55, true)
+
+func _tier_rare(a0: float, a1: float, c: Color) -> void:
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 12.0, a0, a1, 96,  Color(c, 0.14 + 0.07 * sin(_t * 1.6)), RING_WIDTH * 2.4, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS,         a0, a1, 128, Color(c, 0.75 + 0.20 * sin(_t * 2.0)), RING_WIDTH, true)
+	_arc_borders(a0, a1, c)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS - 22.0,  a0, a1, 64,  Color(c, 0.38 + 0.14 * sin(_t * 1.5 + 1.0)), 2.0, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + RING_WIDTH * 0.5 - 1.0, a0, a1, 64, Color(c.lightened(0.4), 0.55), 1.2, true)
+	for i in 2:
+		var sa := _t * (0.85 + i * 0.25) + i * PI
+		draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + (1.1 - i * 0.3), 20, Color(c.lightened(0.45 + i * 0.1), 0.75 - i * 0.22), RING_WIDTH * (0.58 - i * 0.14), true)
+
+func _tier_epique(a0: float, a1: float, c: Color) -> void:
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 24.0, a0, a1, 64,  Color(c, 0.08 + 0.05 * sin(_t * 1.2)), RING_WIDTH * 3.8, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 10.0, a0, a1, 96,  Color(c, 0.18 + 0.08 * sin(_t * 1.8)), RING_WIDTH * 2.2, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS,         a0, a1, 128, Color(c, 0.78 + 0.18 * sin(_t * 2.0)), RING_WIDTH, true)
+	_arc_borders(a0, a1, c)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS - 22.0,  a0, a1, 64,  Color(c, 0.40 + 0.15 * sin(_t * 1.7 + 0.5)), 2.5, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + RING_WIDTH * 0.5 - 1.0, a0, a1, 64, Color(c.lightened(0.45), 0.62), 1.5, true)
+	for i in 3:
+		var sa := _t * (0.9 + i * 0.15) + i * TAU / 3.0
+		draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + (1.0 - i * 0.1), 18, Color(c.lightened(0.45 + i * 0.1), 0.68 - i * 0.12), RING_WIDTH * (0.58 - i * 0.10), true)
+	# Orbes orbitaux
+	for i in 3:
+		var angle := _t * 0.80 + i * TAU / 3.0
+		var op := Vector2(cos(angle), sin(angle)) * (CIRCLE_RADIUS + 34.0)
+		draw_circle(op, 9.0, Color(c, 0.22))
+		draw_circle(op, 3.5 + 1.0 * sin(_t * 2.5 + i), Color(c, 0.80 + 0.18 * sin(_t * 2.0 + i * 1.5)))
+
+func _tier_legendaire(a0: float, a1: float, c: Color) -> void:
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 40.0, a0, a1, 64, Color(c, 0.05 + 0.03 * sin(_t * 1.0)), RING_WIDTH * 5.5, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 22.0, a0, a1, 96, Color(c, 0.12 + 0.06 * sin(_t * 1.4)), RING_WIDTH * 3.2, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS +  8.0, a0, a1, 96, Color(c, 0.22 + 0.10 * sin(_t * 1.9)), RING_WIDTH * 2.0, true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS,         a0, a1, 128, Color(c, 0.85 + 0.14 * sin(_t * 2.2)), RING_WIDTH, true)
+	_arc_borders(a0, a1, c)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS - 25.0, a0, a1, 64, Color(c, 0.45 + 0.18 * sin(_t * 1.8 + 0.3)), 3.0, true)
+	# Rayons clignotants
+	for i in 8:
+		var angle := i * TAU / 8.0 + _t * 0.10
+		var blink := 0.5 + 0.5 * sin(_t * 2.8 + i * 0.85)
+		if blink > 0.28:
+			var ray_c := Color(c.lightened(0.6), blink * 0.50)
+			var p1 := Vector2(cos(angle), sin(angle)) * (CIRCLE_RADIUS + RING_WIDTH * 0.5 + 3.0)
+			var p2 := Vector2(cos(angle), sin(angle)) * (CIRCLE_RADIUS + RING_WIDTH * 0.5 + 14.0 + blink * 10.0)
+			draw_line(p1, p2, ray_c, 1.8, true)
+	for i in 4:
+		var sa := _t * (0.92 + i * 0.13) + i * TAU / 4.0
+		draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + (0.9 - i * 0.08), 18, Color(c.lightened(0.38 + i * 0.08), 0.72 - i * 0.12), RING_WIDTH * (0.55 - i * 0.08), true)
+	for i in 3:
+		var angle := _t * 0.9 + i * TAU / 3.0
+		var op := Vector2(cos(angle), sin(angle)) * (CIRCLE_RADIUS + 36.0)
+		draw_circle(op, 11.0, Color(c, 0.25))
+		draw_circle(op, 4.0 + 1.2 * sin(_t * 2.5 + i), Color(c, 0.88))
+
+func _tier_unique(a0: float, a1: float, c: Color) -> void:
+	# Golden / prismatique — corona massive, oscillation lente
+	for i in range(6, 0, -1):
+		var dist := float(i) * 10.0
+		var alpha := (0.06 - i * 0.005) + 0.04 * sin(_t * (1.0 + i * 0.2))
+		draw_arc(Vector2.ZERO, CIRCLE_RADIUS + dist, a0, a1, 64, Color(c, alpha), RING_WIDTH * (6.0 - i * 0.6), true)
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS, a0, a1, 128, Color(c, 0.90 + 0.10 * sin(_t * 2.5)), RING_WIDTH, true)
+	_arc_borders(a0, a1, c)
+	for i in 5:
+		var sa := _t * (0.95 + i * 0.12) + i * TAU / 5.0
+		draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + (0.85 - i * 0.06), 16, Color(c.lightened(0.4 + i * 0.06), 0.75 - i * 0.1), RING_WIDTH * (0.55 - i * 0.07), true)
+	for i in 5:
+		var angle := _t * (0.9 + i * 0.1) + i * TAU / 5.0
+		var op := Vector2(cos(angle), sin(angle)) * (CIRCLE_RADIUS + 42.0)
+		draw_circle(op, 10.0, Color(c, 0.28))
+		draw_circle(op, 4.5 + 1.0 * sin(_t * 2.5 + i), Color(c, 0.92))
+
+# ─── Utilitaires de dessin ───────────────────────────────────
+
+func _arc_borders(a0: float, a1: float, c: Color) -> void:
+	var inner := c.darkened(0.15); inner.a = 0.45
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS - RING_WIDTH * 0.5, a0, a1, 64, inner, 1.5, true)
+	var outer := c.lightened(0.3); outer.a = 0.55
+	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + RING_WIDTH * 0.5, a0, a1, 64, outer, 1.5, true)
+
+func _refresh_labels() -> void:
+	if _name_label:
+		_name_label.text = entity_name
+	if _hp_label:
+		_hp_label.text = "%d / %d" % [int(current_hp), int(max_hp)]
+
+func _spawn_number(text: String, is_crit: bool, is_heal: bool) -> void:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 36 if is_crit else 24)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if is_heal:
+		lbl.add_theme_color_override("font_color", Color("#2ecc71"))
+	elif is_crit:
+		lbl.add_theme_color_override("font_color", Color("#f1c40f"))
+	else:
+		lbl.add_theme_color_override("font_color", Color.WHITE)
+
+	var sx := _circle_center.x + randf_range(-20.0, 20.0) - 22.0
+	var sy := _circle_center.y - 14.0
+	lbl.position = Vector2(sx, sy)
+	_dmg_layer.add_child(lbl)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lbl, "position:y", sy - 65.0, 0.9).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.9).set_delay(0.30)
+	tw.chain().tween_callback(lbl.queue_free)

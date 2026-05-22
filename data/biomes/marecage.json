@@ -10,14 +10,14 @@
 		"enemies": [
 			{
 				"id": "enemy_grenouille", "name": "Grenouille Géante",
-				"atk": 12, "def": 4, "hp": 55, "tier": 0, "xp_reward": 14,
+				"atk": 12, "def": 4, "hp": 55, "vit": 22, "tier": 0, "xp_reward": 14,
 				"loot_table": [
 					{ "item_id": "res_slime", "chance": 0.45 }
 				]
 			},
 			{
 				"id": "enemy_serpent", "name": "Serpent des Marais",
-				"atk": 20, "def": 3, "hp": 75, "tier": 1, "xp_reward": 22,
+				"atk": 20, "def": 3, "hp": 75, "vit": 28, "tier": 1, "xp_reward": 22,
 				"loot_table": [
 					{ "item_id": "res_venin",   "chance": 0.40 },
 					{ "item_id": "res_ecaille", "chance": 0.25 }
@@ -25,7 +25,7 @@
 			},
 			{
 				"id": "enemy_hydre", "name": "Hydre",
-				"atk": 26, "def": 10, "hp": 160, "tier": 2, "xp_reward": 55,
+				"atk": 26, "def": 10, "hp": 160, "vit": 14, "tier": 2, "xp_reward": 55,
 				"loot_table": [
 					{ "item_id": "res_venin",       "chance": 0.70 },
 					{ "item_id": "res_ecaille",     "chance": 0.50 },
