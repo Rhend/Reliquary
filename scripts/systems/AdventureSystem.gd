@@ -489,15 +489,24 @@ func _end_adventure(victory: bool) -> void:
 	_encounter_timer.stop()
 	_cycle_combo_max = maxi(_cycle_combo_max, _combo_count)
 
-	EventBus.adventure_cycle_ended.emit({
-		"victory":      victory,
-		"biome_id":     current_biome_id,
-		"hero_id":      GameData.player.get("active_creature_id", ""),
-		"modifier":     current_modifier,
-		"xp_total":     _cycle_xp,
-		"loot_total":   _cycle_loot,
-		"combo_max":    _cycle_combo_max,
-		"combats_won":  _cycle_combats_won,
-		"events":       _cycle_events,
-		"cycle_luck":   _cycle_luck,
-	})
+	var summary := {
+		"victory":              victory,
+		"biome_id":             current_biome_id,
+		"creature_id":          GameData.player.get("active_creature_id", ""),
+		"modifier":             current_modifier,
+		"xp_total":             _cycle_xp,
+		"xp_hero":              _cycle_xp_hero,
+		"xp_biome":             _cycle_xp_biome,
+		"xp_passives_total":    _cycle_xp_passives_total,
+		"xp_passives_detail":   _cycle_xp_passives_detail,
+		"loot_total":           _cycle_loot,
+		"combo_max":            _cycle_combo_max,
+		"combats_won":          _cycle_combats_won,
+		"events":               _cycle_events,
+		"events_total":         _cycle_events_total,
+		"positive_events":      _cycle_positive_events,
+		"traps_triggered":      _cycle_traps_triggered,
+		"cycle_luck":           _cycle_luck,
+	}
+	CycleData.last_cycle_summary = summary
+	EventBus.adventure_cycle_ended.emit(summary)

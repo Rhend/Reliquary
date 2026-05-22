@@ -15,8 +15,6 @@ class_name CombatScene extends Control
 var _hero_circle:  CombatCircle  # cercle du héro actif
 var _enemy_circle: CombatCircle  # cercle de l'ennemi / piège / événement courant
 var _flee_btn:     Button        # bouton "Mettre fin à l'expédition"
-var _summary:      Control       # overlay de résumé de fin de cycle
-var _summary_vbox: VBoxContainer # contenu de l'overlay summary
 
 # Info bar
 var _xp_value_label: Label          # label XP gagné ce cycle
@@ -45,10 +43,6 @@ func _build_ui() -> void:
 	root.add_child(_build_info_bar())
 	root.add_child(_build_circles_area())
 	root.add_child(_build_footer())
-
-	_summary = _build_summary_overlay()
-	add_child(_summary)
-	_summary.hide()
 
 # ── Circles ────────────────────────────────────────────────
 
@@ -127,35 +121,6 @@ func _build_equip_section(parent: VBoxContainer) -> void:
 	_equip_vbox.add_theme_constant_override("separation", 2)
 	parent.add_child(_equip_vbox)
 
-# ── Summary overlay ────────────────────────────────────────
-
-# Construit l'overlay de fin de cycle (centré, semi-transparent).
-func _build_summary_overlay() -> Control:
-	var overlay := ColorRect.new()
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.color = Color(UIColors.BG_DARK, 0.85)
-
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(400, 320)
-	var style := StyleBoxFlat.new()
-	style.bg_color = UIColors.BG_CARD
-	style.border_color = Color(UIColors.TEXT_HEADER, 0.25)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(10)
-	panel.add_theme_stylebox_override("panel", style)
-	overlay.add_child(panel)
-
-	var margins := UIHelpers.margin_of(20)
-	margins.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.add_child(margins)
-
-	_summary_vbox = VBoxContainer.new()
-	_summary_vbox.add_theme_constant_override("separation", 10)
-	margins.add_child(_summary_vbox)
-
-	return overlay
-
 # ═══════════════════════════════════════════════════════════
 #  Connexions signaux
 # ═══════════════════════════════════════════════════════════
@@ -178,7 +143,6 @@ func _connect_signals() -> void:
 
 # Réinitialise l'UI au démarrage d'une nouvelle aventure (reset XP, buffs, équipement, cercle héro).
 func _on_adventure_started(_biome_id: String) -> void:
-	_summary.hide()
 	_flee_btn.disabled = false
 	_cycle_xp = 0.0
 	_update_xp_label()
@@ -280,16 +244,16 @@ func _on_heal_applied(amount: float, new_hp: float) -> void:
 	_hero_circle.update_hp(new_hp)
 	_hero_circle.receive_heal(int(amount))
 
-# Affiche l'overlay de résumé à la fin du cycle et désactive le bouton Fuir.
+# Navigue vers le résumé de fin de cycle quand le cycle se termine naturellement.
 func _on_cycle_ended(result: Dictionary) -> void:
 	_flee_btn.disabled = true
 	_cycle_xp = float(result.get("xp_total", 0.0))
 	_update_xp_label()
-	_show_summary(result)
+	_navigate_to_summary()
 
-# Déclenche la navigation vers le village quand AdventureSystem stoppe l'aventure.
+# Navigue vers le résumé quand le joueur arrête l'expédition manuellement.
 func _on_adventure_stopped() -> void:
-	_navigate_to_village()
+	_navigate_to_summary()
 
 # Demande à AdventureSystem de stopper l'aventure en cours.
 func _on_flee_pressed() -> void:
@@ -364,52 +328,6 @@ func _rebuild_equip() -> void:
 #  Résumé de fin de cycle
 # ═══════════════════════════════════════════════════════════
 
-# Peuple et affiche l'overlay de résumé ; navigation automatique après 6 s.
-func _show_summary(result: Dictionary) -> void:
-	UIHelpers.clear_children(_summary_vbox)
-
-	var victory: bool = result.get("victory", false)
-
-	var title := Label.new()
-	title.text               = "VICTOIRE !" if victory else "DÉFAITE"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color",
-		UIColors.LOG_VICTORY if victory else UIColors.LOG_DEFEAT)
-	_summary_vbox.add_child(title)
-
-	_summary_vbox.add_child(HSeparator.new())
-	_add_stat("XP gagnée",       "%d" % int(result.get("xp_total",    0)))
-	_add_stat("Combats gagnés",   "%d" % int(result.get("combats_won", 0)))
-	_add_stat("Meilleur combo",   "×%d" % int(result.get("combo_max",  0)))
-	_add_stat("Objets récupérés", "%d" % int(result.get("loot_total",  0)))
-	_summary_vbox.add_child(HSeparator.new())
-
-	var btn := Button.new()
-	btn.text = "Retour au Village"
-	btn.pressed.connect(_navigate_to_village)
-	_summary_vbox.add_child(btn)
-
-	get_tree().create_timer(6.0).timeout.connect(_navigate_to_village)
-	_summary.show()
-
-# Ajoute une ligne label/valeur dans _summary_vbox.
-func _add_stat(label_text: String, value_text: String) -> void:
-	var row := HBoxContainer.new()
-	var lbl := Label.new()
-	lbl.text = label_text
-	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl.add_theme_font_size_override("font_size", 14)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	row.add_child(lbl)
-	var val := Label.new()
-	val.text = value_text
-	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	val.add_theme_font_size_override("font_size", 14)
-	val.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
-	row.add_child(val)
-	_summary_vbox.add_child(row)
-
 # ═══════════════════════════════════════════════════════════
 #  Helpers
 # ═══════════════════════════════════════════════════════════
@@ -424,10 +342,10 @@ func _hero_tier_color() -> Color:
 #  Navigation
 # ═══════════════════════════════════════════════════════════
 
-# Navigue vers le village. Le guard _navigating empêche les appels multiples
-# (timer auto + bouton + signal adventure_stopped peuvent déclencher simultanément).
-func _navigate_to_village() -> void:
+# Navigue vers le résumé de fin de cycle. Le guard _navigating empêche les
+# appels multiples (adventure_cycle_ended + adventure_stopped peuvent co-déclencher).
+func _navigate_to_summary() -> void:
 	if _navigating:
 		return
 	_navigating = true
-	get_tree().change_scene_to_file("res://scenes/Village.tscn")
+	get_tree().change_scene_to_file("res://scenes/cycle/CycleSummaryScreen.tscn")
