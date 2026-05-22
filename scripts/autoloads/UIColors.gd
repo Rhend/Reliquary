@@ -33,10 +33,10 @@ const STAT_DEF := Color(0.30, 0.70, 1.00)
 const STAT_HP  := Color(0.20, 0.85, 0.35)
 
 # ── Hall des Évolutions — couleur par type de rencontre ────
-const TYPE_CREATURE  := Color(0.95, 0.58, 0.12)
-const TYPE_TRAP      := Color(0.88, 0.22, 0.22)
-const TYPE_EVENT_POS := Color(0.20, 0.80, 0.42)
-const TYPE_BIOME     := Color(0.22, 0.72, 0.90)
+const TYPE_CREATURE   := Color(0.95, 0.58, 0.12)
+const TYPE_TRAP       := Color(0.88, 0.22, 0.22)
+const TYPE_BENEDICTION := Color(0.20, 0.80, 0.42)
+const TYPE_BIOME      := Color(0.22, 0.72, 0.90)
 
 # ── Journal de combat ───────────────────────────────────────
 const LOG_COMBAT   := Color(0.95, 0.58, 0.12)
@@ -118,16 +118,16 @@ func tier_color(tier: int) -> Color:
 # Couleur d'une entrée du Hall des Évolutions selon son type.
 func encounter(enc_type: String) -> Color:
 	match enc_type:
-		"Créature":  return TYPE_CREATURE
-		"Piège":     return TYPE_TRAP
-		"Événement": return TYPE_EVENT_POS
-		"Biome":     return TYPE_BIOME
-		_:           return Color.WHITE
+		"Créature":   return TYPE_CREATURE
+		"Piège":      return TYPE_TRAP
+		"Bénédiction": return TYPE_BENEDICTION
+		"Biome":      return TYPE_BIOME
+		_:            return Color.WHITE
 
 # Préfixe icône + couleur pour le bandeau d'événement.
 func event_banner(event_type: String) -> Array:
 	match event_type:
-		"combat":   return ["⚔ ", LOG_COMBAT]
-		"positive": return ["✦ ", LOG_EVENT]
-		"trap":     return ["▲ ", LOG_TRAP]
-		_:          return ["", Color.WHITE]
+		"creature":    return ["⚔ ", LOG_COMBAT]
+		"benediction": return ["✦ ", LOG_EVENT]
+		"trap":        return ["▲ ", LOG_TRAP]
+		_:             return ["", Color.WHITE]
