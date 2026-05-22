@@ -20,16 +20,6 @@ const RING_WIDTH    := 14.0
 const NAME_HEIGHT   := 32.0
 const CTRL_PADDING  := 55.0   # marge pour corona des hauts tiers
 
-# ─── Couleurs paliers ────────────────────────────────────────
-const TIER_COLORS: Array = [
-	Color("#808080"),  # 0 Commun
-	Color("#2ecc71"),  # 1 Peu Commun
-	Color("#3498db"),  # 2 Rare
-	Color("#9b59b6"),  # 3 Épique
-	Color("#e67e22"),  # 4 Légendaire
-	Color("#f39c12"),  # 5 Unique
-]
-
 enum EntityType { CREATURE, TRAP, BENEDICTION }
 
 # ─── État entité ─────────────────────────────────────────────
@@ -102,7 +92,7 @@ func setup(p_name: String, p_hp: float, p_max_hp: float,
 	entity_name  = p_name
 	current_hp   = p_hp
 	max_hp       = p_max_hp
-	tier         = clampi(p_tier, 0, TIER_COLORS.size() - 1)
+	tier         = clampi(p_tier, 0, 5)
 	entity_type  = p_type
 	is_hero      = p_is_hero
 	modulate     = Color.WHITE
@@ -178,7 +168,7 @@ func _process(delta: float) -> void:
 # Point d'entrée du rendu custom : ghost ring, anneau HP, action bar, flash.
 func _draw() -> void:
 	var center := _circle_center + _shake
-	var tier_color: Color = TIER_COLORS[tier] if tier < TIER_COLORS.size() else TIER_COLORS[0]
+	var tier_color: Color = UIColors.tier_color(tier)
 	var hp_pct := current_hp / max_hp if max_hp > 0.0 else 0.0
 
 	# ── Rotation du ring (affecte uniquement le dessin) ──────
