@@ -30,33 +30,35 @@ const TIER_COLORS: Array = [
 	Color("#f39c12"),  # 5 Unique
 ]
 
-enum EntityType { CREATURE, TRAP, EVENT }
+enum EntityType { CREATURE, TRAP, BENEDICTION }
 
 # ─── État entité ─────────────────────────────────────────────
-var entity_name: String     = ""
-var current_hp:  float      = 100.0
-var max_hp:      float      = 100.0
-var tier:        int        = 0
-var entity_type: EntityType = EntityType.CREATURE
-var is_hero:     bool       = false
+var entity_name: String     = ""                  # nom affiché dans le label du haut
+var current_hp:  float      = 100.0               # PV actuels, mis à jour via update_hp()
+var max_hp:      float      = 100.0               # PV maximum, fixé lors du setup()
+var tier:        int        = 0                   # palier 0-5 — détermine couleur et style du ring
+var entity_type: EntityType = EntityType.CREATURE  # détermine le style visuel du ring
+var is_hero:     bool       = false               # vrai si ce cercle représente le héro
 
 # ─── Nœuds enfants ───────────────────────────────────────────
-var _name_label: Label
-var _hp_label:   Label
-var _dmg_layer:  Control
-var _circle_center: Vector2
+var _name_label:    Label   # label du nom en haut du cercle
+var _hp_label:      Label   # label "HP actuels / HP max" au centre
+var _dmg_layer:     Control # couche transparente pour les chiffres flottants
+var _circle_center: Vector2 # position du centre géométrique du cercle dans l'espace local
 
 # ─── Animation ───────────────────────────────────────────────
-var _t:           float   = 0.0   # horloge générale
-var _ring_rot:    float   = 0.0   # rotation du ring
-var _shake:       Vector2 = Vector2.ZERO
-var _flash_col:   Color   = Color.TRANSPARENT
-var _flash_alpha: float   = 0.0
+var _t:           float   = 0.0              # horloge générale — pilote shimmer, pulse et orbes
+var _ring_rot:    float   = 0.0              # angle de rotation du ring (rad)
+var _shake:       Vector2 = Vector2.ZERO     # offset de tremblement appliqué lors d'un impact
+var _flash_col:   Color   = Color.TRANSPARENT # couleur du flash (rouge=dégâts, or=crit, vert=soin)
+var _flash_alpha: float   = 0.0             # alpha du flash, décroît automatiquement dans _process()
 
 # ─── Action bar (remplie par CombatScene) ────────────────────
-var action_progress: float = 0.0   # 0..1
+var action_progress: float = 0.0   # 0..1 — progression de l'arc intérieur d'anticipation d'attaque
 
 # ═══════════════════════════════════════════════════════════
+# Construit les nœuds enfants (labels, couche de dégâts) et
+# calcule le centre géométrique en fonction des constantes de taille.
 func _ready() -> void:
 	var w := CIRCLE_RADIUS * 2.0 + CTRL_PADDING * 2.0
 	var h := CIRCLE_RADIUS * 2.0 + CTRL_PADDING * 2.0 + NAME_HEIGHT
@@ -93,6 +95,8 @@ func _ready() -> void:
 #  API publique
 # ═══════════════════════════════════════════════════════════
 
+# Initialise ou réinitialise le cercle pour un nouveau combattant.
+# Doit être appelé avant chaque combat pour mettre à jour nom, PV, tier et type.
 func setup(p_name: String, p_hp: float, p_max_hp: float,
 		p_tier: int, p_type: EntityType, p_is_hero: bool = false) -> void:
 	entity_name  = p_name
@@ -109,23 +113,28 @@ func setup(p_name: String, p_hp: float, p_max_hp: float,
 	_refresh_labels()
 	queue_redraw()
 
+# Met à jour les PV courants et rafraîchit le label et le ring HP.
 func update_hp(new_hp: float) -> void:
 	current_hp = clampf(new_hp, 0.0, max_hp)
 	_refresh_labels()
 	queue_redraw()
 
+# Déclenche le flash de dégâts (or si critique, rouge sinon) et le tremblement.
+# Fait apparaître le chiffre flottant correspondant.
 func take_damage(amount: int, is_crit: bool) -> void:
-	_flash_col   = Color("#f1c40f") if is_crit else Color("#cc2200")
+	_flash_col   = UIColors.FILTER_ON if is_crit else UIColors.LOG_DEFEAT
 	_flash_alpha = 0.7
 	_shake       = Vector2(randf_range(-1, 1), randf_range(-0.5, 0.5)).normalized() \
 	               * (12.0 if is_crit else 6.0)
 	_spawn_number(str(amount), is_crit, false)
 
+# Déclenche le flash de soin (vert) et fait apparaître le chiffre flottant "+N".
 func receive_heal(amount: int) -> void:
-	_flash_col   = Color("#2ecc71")
+	_flash_col   = UIColors.HEAL_COLOR
 	_flash_alpha = 0.5
 	_spawn_number("+" + str(amount), false, true)
 
+# Animation de victoire : double pulse de scale (spring-back).
 func celebrate() -> void:
 	var tw := create_tween()
 	tw.tween_property(self, "scale", Vector2(1.12, 1.12), 0.18).set_trans(Tween.TRANS_BACK)
@@ -133,6 +142,7 @@ func celebrate() -> void:
 	tw.tween_property(self, "scale", Vector2(1.08, 1.08), 0.14)
 	tw.tween_property(self, "scale", Vector2(1.0, 1.0), 0.14)
 
+# Animation de défaite : rétrécissement et fade-out simultanés.
 func die() -> void:
 	var tw := create_tween()
 	tw.set_parallel(true)
@@ -143,13 +153,14 @@ func die() -> void:
 #  Traitement frame
 # ═══════════════════════════════════════════════════════════
 
+# Avance l'horloge, fait tourner le ring, décroît le flash et applique le shake.
 func _process(delta: float) -> void:
 	_t += delta
 
 	match entity_type:
 		EntityType.CREATURE: _ring_rot += delta * 0.18
 		EntityType.TRAP:     _ring_rot += delta * 0.04
-		EntityType.EVENT:    pass
+		EntityType.BENEDICTION:    pass
 
 	if _flash_alpha > 0.0:
 		_flash_alpha = maxf(_flash_alpha - delta * 5.5, 0.0)
@@ -164,6 +175,7 @@ func _process(delta: float) -> void:
 #  Dessin
 # ═══════════════════════════════════════════════════════════
 
+# Point d'entrée du rendu custom : ghost ring, anneau HP, action bar, flash.
 func _draw() -> void:
 	var center := _circle_center + _shake
 	var tier_color: Color = TIER_COLORS[tier] if tier < TIER_COLORS.size() else TIER_COLORS[0]
@@ -187,7 +199,7 @@ func _draw() -> void:
 		match entity_type:
 			EntityType.CREATURE: _ring_creature(a_start, a_end, tier_color)
 			EntityType.TRAP:     _ring_trap(a_start, a_end, tier_color)
-			EntityType.EVENT:    _ring_event(a_start, a_end, tier_color)
+			EntityType.BENEDICTION:    _ring_benediction(a_start, a_end, tier_color)
 
 	# Action bar — arc intérieur, sens horaire depuis le haut
 	if action_progress > 0.001:
@@ -206,6 +218,7 @@ func _draw() -> void:
 #  Styles par type d'entité
 # ═══════════════════════════════════════════════════════════
 
+# Délègue au style tier correspondant (portés depuis Village.gd).
 func _ring_creature(a0: float, a1: float, c: Color) -> void:
 	match tier:
 		0: _tier_commun(a0, a1, c)
@@ -216,8 +229,8 @@ func _ring_creature(a0: float, a1: float, c: Color) -> void:
 		5: _tier_unique(a0, a1, c)
 		_: _tier_commun(a0, a1, c)
 
+# Aspect froid/mécanique : corona fine, main sobre, lignes radiales rigides.
 func _ring_trap(a0: float, a1: float, c: Color) -> void:
-	# Aspect froid/mécanique : corona fine, main sobre, pas de shimmer organique
 	var corona := Color(c, 0.06 + 0.02 * sin(_t * 0.8))
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 8.0, a0, a1, 64, corona, RING_WIDTH * 1.5, true)
 	var main := Color(c, 0.60 + 0.12 * sin(_t * 1.0))
@@ -234,8 +247,8 @@ func _ring_trap(a0: float, a1: float, c: Color) -> void:
 		var tick := Color(c.lightened(0.3), 0.45)
 		draw_line(p_in, p_out, tick, 1.5, true)
 
-func _ring_event(a0: float, a1: float, c: Color) -> void:
-	# Glow externe fort, anneau lumineux pulsant
+# Glow externe fort pulsant + particules orbitales le long de l'arc.
+func _ring_benediction(a0: float, a1: float, c: Color) -> void:
 	var pulse := 0.65 + (sin(_t * 1.8) + 1.0) * 0.175
 	for i in range(5, 0, -1):
 		var gr := CIRCLE_RADIUS + float(i) * 7.0
@@ -256,6 +269,7 @@ func _ring_event(a0: float, a1: float, c: Color) -> void:
 #  Styles par tier (portés depuis Village.gd, adaptés en arcs)
 # ═══════════════════════════════════════════════════════════
 
+# Tier 0 — Commun : corona subtile, anneau sobre, shimmer lent.
 func _tier_commun(a0: float, a1: float, c: Color) -> void:
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 8.0,  a0, a1, 64, Color(c, 0.07 + 0.03 * sin(_t * 1.2)), RING_WIDTH * 1.6, true)
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS,         a0, a1, 96, Color(c, 0.55 + 0.18 * sin(_t * 1.3)), RING_WIDTH, true)
@@ -263,6 +277,7 @@ func _tier_commun(a0: float, a1: float, c: Color) -> void:
 	var sa := _t * 0.50
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + 0.65, 10, Color(c.lightened(0.35), 0.50), RING_WIDTH * 0.45, true)
 
+# Tier 1 — Peu Commun : corona plus visible, shimmer plus rapide, ligne fine.
 func _tier_peu_commun(a0: float, a1: float, c: Color) -> void:
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 10.0, a0, a1, 96,  Color(c, 0.12 + 0.06 * sin(_t * 1.4)), RING_WIDTH * 2.0, true)
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS,         a0, a1, 128, Color(c, 0.72 + 0.22 * sin(_t * 1.9)), RING_WIDTH, true)
@@ -271,6 +286,7 @@ func _tier_peu_commun(a0: float, a1: float, c: Color) -> void:
 	var sa := _t * 0.75
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + 1.1, 24, Color(c.lightened(0.55), 0.75), RING_WIDTH * 0.55, true)
 
+# Tier 2 — Rare : corona étendue, anneau intérieur, double shimmer.
 func _tier_rare(a0: float, a1: float, c: Color) -> void:
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 12.0, a0, a1, 96,  Color(c, 0.14 + 0.07 * sin(_t * 1.6)), RING_WIDTH * 2.4, true)
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS,         a0, a1, 128, Color(c, 0.75 + 0.20 * sin(_t * 2.0)), RING_WIDTH, true)
@@ -281,6 +297,7 @@ func _tier_rare(a0: float, a1: float, c: Color) -> void:
 		var sa := _t * (0.85 + i * 0.25) + i * PI
 		draw_arc(Vector2.ZERO, CIRCLE_RADIUS, sa, sa + (1.1 - i * 0.3), 20, Color(c.lightened(0.45 + i * 0.1), 0.75 - i * 0.22), RING_WIDTH * (0.58 - i * 0.14), true)
 
+# Tier 3 — Épique : double corona, triple shimmer, orbes orbitaux.
 func _tier_epique(a0: float, a1: float, c: Color) -> void:
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 24.0, a0, a1, 64,  Color(c, 0.08 + 0.05 * sin(_t * 1.2)), RING_WIDTH * 3.8, true)
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 10.0, a0, a1, 96,  Color(c, 0.18 + 0.08 * sin(_t * 1.8)), RING_WIDTH * 2.2, true)
@@ -298,6 +315,7 @@ func _tier_epique(a0: float, a1: float, c: Color) -> void:
 		draw_circle(op, 9.0, Color(c, 0.22))
 		draw_circle(op, 3.5 + 1.0 * sin(_t * 2.5 + i), Color(c, 0.80 + 0.18 * sin(_t * 2.0 + i * 1.5)))
 
+# Tier 4 — Légendaire : corona massive, rayons clignotants, orbes brillants.
 func _tier_legendaire(a0: float, a1: float, c: Color) -> void:
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 40.0, a0, a1, 64, Color(c, 0.05 + 0.03 * sin(_t * 1.0)), RING_WIDTH * 5.5, true)
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + 22.0, a0, a1, 96, Color(c, 0.12 + 0.06 * sin(_t * 1.4)), RING_WIDTH * 3.2, true)
@@ -323,8 +341,8 @@ func _tier_legendaire(a0: float, a1: float, c: Color) -> void:
 		draw_circle(op, 11.0, Color(c, 0.25))
 		draw_circle(op, 4.0 + 1.2 * sin(_t * 2.5 + i), Color(c, 0.88))
 
+# Tier 5 — Unique : golden/prismatique, corona massive multi-couches, 5 orbes.
 func _tier_unique(a0: float, a1: float, c: Color) -> void:
-	# Golden / prismatique — corona massive, oscillation lente
 	for i in range(6, 0, -1):
 		var dist := float(i) * 10.0
 		var alpha := (0.06 - i * 0.005) + 0.04 * sin(_t * (1.0 + i * 0.2))
@@ -342,27 +360,30 @@ func _tier_unique(a0: float, a1: float, c: Color) -> void:
 
 # ─── Utilitaires de dessin ───────────────────────────────────
 
+# Trace les lisérés intérieur (sombre) et extérieur (clair) de l'arc HP.
 func _arc_borders(a0: float, a1: float, c: Color) -> void:
 	var inner := c.darkened(0.15); inner.a = 0.45
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS - RING_WIDTH * 0.5, a0, a1, 64, inner, 1.5, true)
 	var outer := c.lightened(0.3); outer.a = 0.55
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + RING_WIDTH * 0.5, a0, a1, 64, outer, 1.5, true)
 
+# Met à jour les textes du label nom et du label PV.
 func _refresh_labels() -> void:
 	if _name_label:
 		_name_label.text = entity_name
 	if _hp_label:
 		_hp_label.text = "%d / %d" % [int(current_hp), int(max_hp)]
 
+# Crée un chiffre flottant animé (monte et disparaît en 0.9 s) dans _dmg_layer.
 func _spawn_number(text: String, is_crit: bool, is_heal: bool) -> void:
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.add_theme_font_size_override("font_size", 36 if is_crit else 24)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if is_heal:
-		lbl.add_theme_color_override("font_color", Color("#2ecc71"))
+		lbl.add_theme_color_override("font_color", UIColors.HEAL_COLOR)
 	elif is_crit:
-		lbl.add_theme_color_override("font_color", Color("#f1c40f"))
+		lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
 	else:
 		lbl.add_theme_color_override("font_color", Color.WHITE)
 

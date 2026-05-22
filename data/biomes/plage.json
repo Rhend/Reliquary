@@ -3,9 +3,9 @@
 	"name": "Plage Sauvage",
 	"base_stats": {
 		"event_table": {
-			"combat":   0.65,
-			"positive": 0.20,
-			"trap":     0.15
+			"creature":    0.65,
+			"benediction": 0.20,
+			"trap":        0.15
 		},
 		"enemies": [
 			{
@@ -21,8 +21,8 @@
 				"atk": 18, "def": 4, "hp": 70, "vit": 24, "tier": 1, "xp_reward": 22,
 				"loot_table": [
 					{ "item_id": "res_ecaille",       "chance": 0.30 },
-					{ "item_id": "res_herbe_magique",  "chance": 0.25 },
-					{ "item_id": "res_perle_marine",   "chance": 0.30 }
+					{ "item_id": "res_herbe_magique", "chance": 0.25 },
+					{ "item_id": "res_perle_marine",  "chance": 0.30 }
 				]
 			},
 			{
@@ -30,12 +30,12 @@
 				"atk": 24, "def": 8, "hp": 120, "vit": 20, "tier": 2, "xp_reward": 40,
 				"loot_table": [
 					{ "item_id": "res_os_corail",    "chance": 0.55 },
-					{ "item_id": "res_ecaille",       "chance": 0.35 },
-					{ "item_id": "res_perle_marine",  "chance": 0.20 }
+					{ "item_id": "res_ecaille",      "chance": 0.35 },
+					{ "item_id": "res_perle_marine", "chance": 0.20 }
 				]
 			}
 		],
-		"positive_events": [
+		"benedictions": [
 			{ "id": "sea_shell",   "name": "Coquillage Magique", "effect": "luck", "value": 8  },
 			{ "id": "tide_pool",   "name": "Mare Régénératrice", "effect": "heal", "value": 30 },
 			{ "id": "drift_chest", "name": "Coffre à la Dérive", "effect": "luck", "value": 5  }
@@ -45,10 +45,10 @@
 			{ "id": "jellyfish", "name": "Méduse Venimeuse", "damage": 18 },
 			{ "id": "rip_tide",  "name": "Courant Violent",  "damage": 25 }
 		],
-		"equipment_pool": [
-			"equip_trident_mer",
-			"equip_armure_ecailles",
-			"equip_bouclier_ecailles"
+		"ingredient_pool": [
+			{ "item_id": "res_ecaille",      "name": "Écaille",      "tier": 0, "qty_min": 1, "qty_max": 3, "chance": 0.25 },
+			{ "item_id": "res_perle_marine", "name": "Perle Marine", "tier": 1, "qty_min": 1, "qty_max": 2, "chance": 0.15 },
+			{ "item_id": "res_os_corail",    "name": "Os de Corail", "tier": 2, "qty_min": 1, "qty_max": 1, "chance": 0.10 }
 		]
 	},
 	"passive_slots": [

@@ -43,6 +43,7 @@ var player: Dictionary = {
 	"active_creature_id": "hero",
 	"active_biome_id":    "",
 	"active_passives":    [],
+	"village_tier":       0,           # tier du village — débloque l'ingredient_pool à 2+
 	"equipped": {
 		"weapon":    "equip_epee_bois",
 		"armor":     "",
@@ -60,32 +61,6 @@ func _ready() -> void:
 	_load_mastery_config()
 	_load_all_entities()
 	_seed_test_bestiary()
-
-func _seed_test_passives() -> void:
-	# XP initiale — ne s'applique que si le passif n'a pas encore d'XP (premier démarrage)
-	var xp_seeds := {
-		"passive_combat_mastery": 30.0,
-	}
-	var tier_seeds := {
-		"passive_fortification": {"tier": 1, "xp": 180.0},
-		"passive_resistance":    {"tier": 4, "xp": 12400.0},
-	}
-	for pid in xp_seeds:
-		if entities.has(pid) and entities[pid].get("current_xp", 0.0) == 0.0:
-			entities[pid]["current_xp"] = xp_seeds[pid]
-	for pid in tier_seeds:
-		if entities.has(pid) and entities[pid].get("current_xp", 0.0) == 0.0:
-			entities[pid]["current_tier"] = tier_seeds[pid]["tier"]
-			entities[pid]["current_xp"]   = tier_seeds[pid]["xp"]
-
-	# Débloque ces passifs sur le héro (idempotent — n'ajoute que ce qui manque)
-	if entities.has("hero"):
-		var to_unlock := ["passive_resistance", "passive_combat_mastery", "passive_fortification"]
-		var unlocked: Array = entities["hero"].get("unlocked_passives", [])
-		for pid in to_unlock:
-			if entities.has(pid) and pid not in unlocked:
-				unlocked.append(pid)
-		entities["hero"]["unlocked_passives"] = unlocked
 
 # Données de test — couvre les 6 tiers de rareté pour le Hall des Évolutions.
 func _seed_test_bestiary() -> void:

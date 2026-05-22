@@ -3,9 +3,9 @@
 	"name": "Marécage Putride",
 	"base_stats": {
 		"event_table": {
-			"combat":   0.60,
-			"positive": 0.10,
-			"trap":     0.30
+			"creature":    0.60,
+			"benediction": 0.10,
+			"trap":        0.30
 		},
 		"enemies": [
 			{
@@ -33,7 +33,7 @@
 				]
 			}
 		],
-		"positive_events": [
+		"benedictions": [
 			{ "id": "boue_curative",      "name": "Boue Curative",      "effect": "heal", "value": 20 },
 			{ "id": "champignon_magique", "name": "Champignon Magique", "effect": "luck", "value": 10 }
 		],
@@ -42,11 +42,10 @@
 			{ "id": "miasmes",       "name": "Miasmes Toxiques",   "damage": 30 },
 			{ "id": "lianes",        "name": "Lianes Tranchantes", "damage": 25 }
 		],
-		"equipment_pool": [
-			"equip_lame_venimeuse",
-			"equip_armure_hydre",
-			"equip_bottes_vif",
-			"equip_lame_hydre"
+		"ingredient_pool": [
+			{ "item_id": "res_slime",   "name": "Slime Visqueux", "tier": 0, "qty_min": 1, "qty_max": 4, "chance": 0.30 },
+			{ "item_id": "res_venin",   "name": "Venin",          "tier": 1, "qty_min": 1, "qty_max": 2, "chance": 0.20 },
+			{ "item_id": "res_ecaille", "name": "Écaille",        "tier": 1, "qty_min": 1, "qty_max": 2, "chance": 0.15 }
 		]
 	},
 	"passive_slots": [
