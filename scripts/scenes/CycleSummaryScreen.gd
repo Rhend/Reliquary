@@ -243,39 +243,38 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 	vb.add_child(sh2)
 	_fade_register(sh2)
 
-	var xp_hero     := data.get("xp_hero",          0.0) as float
-	var xp_biome    := data.get("xp_biome",          0.0) as float
-	var xp_passives := data.get("xp_passives_total", 0.0) as float
-	var xp_max      := maxf(maxf(xp_hero, xp_biome), maxf(xp_passives, 1.0))
+	var xp_hero  := data.get("xp_hero",  0.0) as float
+	var xp_biome := data.get("xp_biome", 0.0) as float
+	var detail   := data.get("xp_passives_detail", {}) as Dictionary
 
-	var hero_card  := _xp_card("⚔", "Héro",     xp_max, UIColors.STAT_ATK,   tcolor)
+	# Héro — barre vs seuil du prochain tier héro
+	var hero_thresh := _next_tier_threshold(GameData.get_entity(cid))
+	var hero_card   := _xp_card("⚔", "Héro", hero_thresh, UIColors.STAT_ATK, tcolor)
 	vb.add_child(hero_card["container"])
 	_fade_register(hero_card["container"])
 	_xp_anims.append({"bar": hero_card["bar"], "xp_label": hero_card["xp_label"],
-		"target": xp_hero, "max_val": xp_max})
+		"target": xp_hero, "max_val": hero_thresh})
 
-	var biome_card := _xp_card("🌿", biome_name, xp_max, UIColors.TYPE_BIOME, tcolor)
+	# Biome — barre vs seuil du prochain tier biome
+	var biome_entity := GameData.get_entity(data.get("biome_id", "") as String)
+	var biome_thresh := _next_tier_threshold(biome_entity)
+	var biome_card   := _xp_card("🌿", biome_name, biome_thresh, UIColors.TYPE_BIOME, tcolor)
 	vb.add_child(biome_card["container"])
 	_fade_register(biome_card["container"])
 	_xp_anims.append({"bar": biome_card["bar"], "xp_label": biome_card["xp_label"],
-		"target": xp_biome, "max_val": xp_max})
+		"target": xp_biome, "max_val": biome_thresh})
 
-	var detail: Dictionary = data.get("xp_passives_detail", {})
-	var p_label := ("Passifs actifs (%d)" % detail.size()) \
-		if detail.size() > 0 else "Passifs actifs"
-	var pass_card  := _xp_card("⚡", p_label,   xp_max, UIColors.COMBO_COLOR, tcolor)
-	vb.add_child(pass_card["container"])
-	_fade_register(pass_card["container"])
-	_xp_anims.append({"bar": pass_card["bar"], "xp_label": pass_card["xp_label"],
-		"target": xp_passives, "max_val": xp_max})
-
+	# Passifs — une carte par passif vs son propre seuil de tier-up
 	for passive_id: String in detail:
-		var p      := GameData.get_entity(passive_id)
-		var p_name := p.get("name", passive_id) as String
-		var p_xp   := detail[passive_id] as float
-		var drow   := _detail_row("   • %s" % p_name, "+%.0f XP" % p_xp)
-		vb.add_child(drow)
-		_fade_register(drow)
+		var p_entity := GameData.get_entity(passive_id)
+		var p_name   := p_entity.get("name", passive_id) as String
+		var p_xp     := detail[passive_id] as float
+		var p_thresh := _next_tier_threshold(p_entity)
+		var p_card   := _xp_card("⚡", p_name, p_thresh, UIColors.COMBO_COLOR, tcolor)
+		vb.add_child(p_card["container"])
+		_fade_register(p_card["container"])
+		_xp_anims.append({"bar": p_card["bar"], "xp_label": p_card["xp_label"],
+			"target": p_xp, "max_val": p_thresh})
 
 	# ── ◆ ÉVOLUTION DISPONIBLE ───────────────────────────────
 	var ready_names: Array = []
@@ -426,6 +425,15 @@ func _add_hover_feedback(node: Control) -> void:
 # ═══════════════════════════════════════════════════════════
 #  Helpers UI — style Village.gd
 # ═══════════════════════════════════════════════════════════
+
+# Retourne le seuil XP du prochain tier de l'entité.
+# Si l'entité est au tier max, retourne le dernier seuil (barre pleine = déjà max).
+func _next_tier_threshold(entity: Dictionary) -> float:
+	var entity_tier := entity.get("current_tier", 0) as int
+	var next_idx    := entity_tier + 1
+	if entity_tier >= GameData.MAX_TIER or next_idx >= GameData.xp_thresholds.size():
+		return float(GameData.xp_thresholds.back())
+	return float(GameData.xp_thresholds[next_idx])
 
 func _section_header(title: String, color: Color) -> Control:
 	var vb := VBoxContainer.new()
