@@ -2,10 +2,9 @@
 # CombatScene — Scène principale de combat.
 #
 # Layout :
-#   Header  : nom du biome + modificateur actif
+#   InfoBar : XP cycle | Effets actifs | Équipement  (haut)
 #   Circles : HeroCircle ←→ EnemyCircle (grands, DA village)
-#   InfoBar : XP cycle | Effets actifs | Équipement
-#   Footer  : bouton Fuir
+#   Footer  : bouton "Mettre fin à l'expédition"
 #
 # La barre d'action est dessinée directement dans CombatCircle
 # via action_progress (0..1). CombatScene la pilote via tween.
@@ -13,22 +12,24 @@
 class_name CombatScene extends Control
 
 # ─── Nœuds ───────────────────────────────────────────────────
-var _hero_circle:    CombatCircle
-var _enemy_circle:   CombatCircle
-var _flee_btn:       Button
-var _summary:        Control
-var _summary_vbox:   VBoxContainer
+var _hero_circle:  CombatCircle  # cercle du héro actif
+var _enemy_circle: CombatCircle  # cercle de l'ennemi / piège / événement courant
+var _flee_btn:     Button        # bouton "Mettre fin à l'expédition"
+var _summary:      Control       # overlay de résumé de fin de cycle
+var _summary_vbox: VBoxContainer # contenu de l'overlay summary
 
 # Info bar
-var _xp_value_label:   Label
-var _buffs_vbox:       VBoxContainer
-var _equip_vbox:       VBoxContainer
+var _xp_value_label: Label          # label XP gagné ce cycle
+var _buffs_vbox:     VBoxContainer  # liste des bonus actifs (passifs + équipement)
+var _equip_vbox:     VBoxContainer  # liste des objets équipés
 
 # ─── État ────────────────────────────────────────────────────
-var _cycle_xp:       float = 0.0
-var _prev_tick:      int   = 0
+var _cycle_xp:   float = 0.0   # XP accumulée depuis le début du cycle en cours
+var _prev_tick:  int   = 0     # tick du dernier step vu — synchronise l'action bar avec CombatPlayer
+var _navigating: bool  = false # garde-fou contre les doubles appels à change_scene_to_file
 
 # ═══════════════════════════════════════════════════════════
+# Construit l'UI et connecte tous les signaux au démarrage.
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
@@ -38,6 +39,7 @@ func _ready() -> void:
 #  Construction de l'UI
 # ═══════════════════════════════════════════════════════════
 
+# Assemble les trois zones : info bar, cercles, footer + overlay summary.
 func _build_ui() -> void:
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -59,6 +61,7 @@ func _build_ui() -> void:
 
 # ── Circles ────────────────────────────────────────────────
 
+# Crée la zone centrale contenant les deux CombatCircle côte à côte.
 func _build_circles_area() -> Control:
 	var center := CenterContainer.new()
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -77,11 +80,9 @@ func _build_circles_area() -> Control:
 
 # ── Footer ─────────────────────────────────────────────────
 
+# Crée le bouton "Mettre fin à l'expédition" coloré selon le tier du héro actif.
 func _build_footer() -> Control:
-	var cid    := GameData.player.get("active_creature_id", "") as String
-	var c      := GameData.get_entity(cid)
-	var tier   := int(c.get("current_tier", 0))
-	var tcolor := UIColors.tier_color(tier)
+	var tcolor := _hero_tier_color()
 
 	var m := MarginContainer.new()
 	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
@@ -108,11 +109,9 @@ func _build_footer() -> Control:
 
 # ── Info bar : XP | Effets actifs | Équipement ─────────────
 
+# Crée la rangée de trois panels en haut de scène.
 func _build_info_bar() -> Control:
-	var cid    := GameData.player.get("active_creature_id", "") as String
-	var c      := GameData.get_entity(cid)
-	var tier   := int(c.get("current_tier", 0))
-	var tcolor := UIColors.tier_color(tier)
+	var tcolor := _hero_tier_color()
 
 	var outer := MarginContainer.new()
 	for side in ["margin_left","margin_right","margin_top","margin_bottom"]:
@@ -128,7 +127,8 @@ func _build_info_bar() -> Control:
 
 	return outer
 
-# Même DA que _passive_card / _adv_biome_card dans Village.gd
+# Construit un panel avec header coloré tier + séparateur + contenu fourni par builder.
+# Même DA que _passive_card / _adv_biome_card dans Village.gd.
 func _build_info_panel(title: String, tcolor: Color, builder: Callable) -> Control:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -164,6 +164,7 @@ func _build_info_panel(title: String, tcolor: Color, builder: Callable) -> Contr
 	builder.call(vbox)
 	return panel
 
+# Crée le label XP du cycle dans le panel correspondant.
 func _build_xp_section(parent: VBoxContainer) -> void:
 	_xp_value_label = Label.new()
 	_xp_value_label.text = "0 XP"
@@ -171,11 +172,13 @@ func _build_xp_section(parent: VBoxContainer) -> void:
 	_xp_value_label.add_theme_color_override("font_color", UIColors.FILTER_ON)
 	parent.add_child(_xp_value_label)
 
+# Crée le VBoxContainer des buffs actifs (rempli dynamiquement par _rebuild_buffs).
 func _build_buffs_section(parent: VBoxContainer) -> void:
 	_buffs_vbox = VBoxContainer.new()
 	_buffs_vbox.add_theme_constant_override("separation", 2)
 	parent.add_child(_buffs_vbox)
 
+# Crée le VBoxContainer de l'équipement (rempli dynamiquement par _rebuild_equip).
 func _build_equip_section(parent: VBoxContainer) -> void:
 	_equip_vbox = VBoxContainer.new()
 	_equip_vbox.add_theme_constant_override("separation", 2)
@@ -183,6 +186,7 @@ func _build_equip_section(parent: VBoxContainer) -> void:
 
 # ── Summary overlay ────────────────────────────────────────
 
+# Construit l'overlay de fin de cycle (centré, semi-transparent).
 func _build_summary_overlay() -> Control:
 	var overlay := ColorRect.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -217,13 +221,13 @@ func _build_summary_overlay() -> Control:
 #  Connexions signaux
 # ═══════════════════════════════════════════════════════════
 
+# Branche tous les signaux EventBus et CombatPlayer nécessaires à la scène.
 func _connect_signals() -> void:
 	EventBus.adventure_started.connect(_on_adventure_started)
 	EventBus.adventure_event_resolved.connect(_on_event_resolved)
 	EventBus.combat_started.connect(_on_combat_started)
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.heal_applied.connect(_on_heal_applied)
-	EventBus.modifier_activated.connect(_on_modifier_activated)
 	EventBus.adventure_cycle_ended.connect(_on_cycle_ended)
 	EventBus.adventure_stopped.connect(_on_adventure_stopped)
 	CombatPlayer.step_started.connect(_on_step_started)
@@ -233,6 +237,7 @@ func _connect_signals() -> void:
 #  Handlers signaux
 # ═══════════════════════════════════════════════════════════
 
+# Réinitialise l'UI au démarrage d'une nouvelle aventure (reset XP, buffs, équipement, cercle héro).
 func _on_adventure_started(_biome_id: String) -> void:
 	_summary.hide()
 	_flee_btn.disabled = false
@@ -250,9 +255,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 		hero_tier, CombatCircle.EntityType.CREATURE, true
 	)
 
-func _on_modifier_activated(_modifier: Dictionary) -> void:
-	pass
-
+# Met à jour le cercle ennemi selon le type d'événement résolu (piège, positif, combat).
 func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
 		"trap":
@@ -265,16 +268,17 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 				var dmg := int(trap.get("damage", 0))
 				_hero_circle.update_hp(AdventureSystem.current_hp)
 				_hero_circle.take_damage(dmg, false)
-		"positive":
-			var evt := event_data.get("effect", {}) as Dictionary
+		"benediction":
+			var bene := event_data.get("effect", {}) as Dictionary
 			_enemy_circle.setup(
-				evt.get("name", "Événement"), 1.0, 1.0, 0,
-				CombatCircle.EntityType.EVENT, false
+				bene.get("name", "Bénédiction"), 1.0, 1.0, 0,
+				CombatCircle.EntityType.BENEDICTION, false
 			)
-		"combat":
+		"creature":
 			# handled by _on_combat_started
 			pass
 
+# Initialise les deux cercles au début d'un combat et remet les barres d'action à zéro.
 func _on_combat_started(creature_id: String, enemy: Dictionary,
 		hero_hp: float, enemy_hp: float) -> void:
 	var creature  := GameData.get_entity(creature_id)
@@ -292,8 +296,8 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_flee_btn.disabled = false
 	_prev_tick = 0
 
+# Met à jour les HP de la cible et anime la barre d'action de l'attaquant sur la durée du step.
 func _on_step_started(step: CombatStep) -> void:
-	# Met à jour les HP
 	if step.attacker == "hero":
 		_enemy_circle.update_hp(float(step.target_hp_after))
 		_enemy_circle.take_damage(step.damage, step.is_crit)
@@ -301,7 +305,7 @@ func _on_step_started(step: CombatStep) -> void:
 		_hero_circle.update_hp(float(step.target_hp_after))
 		_hero_circle.take_damage(step.damage, step.is_crit)
 
-	# Anime la barre d'action du cercle attaquant (durée calée sur les ticks VIT réels)
+	# Anime la barre d'action du cercle attaquant, calée sur les ticks VIT réels
 	var ticks := maxi(step.tick_time - _prev_tick, 1)
 	_prev_tick = step.tick_time
 	var step_dur := maxf(float(ticks) * CombatPlayer.TICK_DURATION * GameSettings.combat_speed,
@@ -311,10 +315,12 @@ func _on_step_started(step: CombatStep) -> void:
 	var tw := create_tween()
 	tw.tween_property(attacker_circle, "action_progress", 1.0, step_dur).set_ease(Tween.EASE_IN)
 
+# Remet les barres d'action à zéro entre les steps.
 func _on_step_ended(_step: CombatStep) -> void:
 	_hero_circle.action_progress  = 0.0
 	_enemy_circle.action_progress = 0.0
 
+# Déclenche celebrate/die sur les cercles selon le résultat et met à jour le label XP.
 func _on_combat_ended(result: Dictionary) -> void:
 	_hero_circle.action_progress  = 0.0
 	_enemy_circle.action_progress = 0.0
@@ -330,19 +336,23 @@ func _on_combat_ended(result: Dictionary) -> void:
 		var tw := create_tween()
 		tw.tween_property(_hero_circle, "modulate", Color(0.45, 0.45, 0.45, 0.55), 0.5)
 
+# Met à jour le cercle héro lors d'un soin en cours d'aventure.
 func _on_heal_applied(amount: float, new_hp: float) -> void:
 	_hero_circle.update_hp(new_hp)
 	_hero_circle.receive_heal(int(amount))
 
+# Affiche l'overlay de résumé à la fin du cycle et désactive le bouton Fuir.
 func _on_cycle_ended(result: Dictionary) -> void:
 	_flee_btn.disabled = true
 	_cycle_xp = float(result.get("xp_total", 0.0))
 	_update_xp_label()
 	_show_summary(result)
 
+# Déclenche la navigation vers le village quand AdventureSystem stoppe l'aventure.
 func _on_adventure_stopped() -> void:
 	_navigate_to_village()
 
+# Demande à AdventureSystem de stopper l'aventure en cours.
 func _on_flee_pressed() -> void:
 	AdventureSystem.stop_adventure()
 
@@ -350,15 +360,16 @@ func _on_flee_pressed() -> void:
 #  Info bar — mise à jour
 # ═══════════════════════════════════════════════════════════
 
+# Rafraîchit le label XP avec la valeur courante de _cycle_xp.
 func _update_xp_label() -> void:
 	if _xp_value_label:
 		_xp_value_label.text = "%d XP" % int(_cycle_xp)
 
+# Reconstruit la liste des bonus actifs (passifs + équipement) dans _buffs_vbox.
 func _rebuild_buffs() -> void:
 	if not _buffs_vbox:
 		return
-	for c in _buffs_vbox.get_children():
-		c.queue_free()
+	_clear_vbox(_buffs_vbox)
 
 	var bonuses := PassiveSystem.get_combat_bonuses()
 	var equip   := GameData.get_equipment_bonuses()
@@ -368,10 +379,12 @@ func _rebuild_buffs() -> void:
 		["DEF", float(bonuses.get("def_bonus", 0.0))],
 		["PV",  float(bonuses.get("hp_bonus",  0.0)) + float(equip.get("hp", 0.0))],
 	]
+	var found := false
 	for row in rows:
 		var val: float = float(row[1])
 		if val == 0.0:
 			continue
+		found = true
 		var lbl := Label.new()
 		var sign := "+" if val > 0 else ""
 		lbl.text = str(row[0]) + " " + sign + str(int(val))
@@ -380,18 +393,14 @@ func _rebuild_buffs() -> void:
 			UIColors.TYPE_EVENT_POS if val > 0 else UIColors.LOG_DEFEAT)
 		_buffs_vbox.add_child(lbl)
 
-	if _buffs_vbox.get_child_count() == 0:
-		var none_lbl := Label.new()
-		none_lbl.text = "Aucun"
-		none_lbl.add_theme_font_size_override("font_size", 13)
-		none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		_buffs_vbox.add_child(none_lbl)
+	if not found:
+		_add_none_label(_buffs_vbox)
 
+# Reconstruit la liste des objets équipés dans _equip_vbox.
 func _rebuild_equip() -> void:
 	if not _equip_vbox:
 		return
-	for c in _equip_vbox.get_children():
-		c.queue_free()
+	_clear_vbox(_equip_vbox)
 
 	var equipped: Dictionary = GameData.player.get("equipped", {})
 	var found := false
@@ -410,19 +419,15 @@ func _rebuild_equip() -> void:
 		_equip_vbox.add_child(lbl)
 
 	if not found:
-		var none_lbl := Label.new()
-		none_lbl.text = "Aucun"
-		none_lbl.add_theme_font_size_override("font_size", 13)
-		none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		_equip_vbox.add_child(none_lbl)
+		_add_none_label(_equip_vbox)
 
 # ═══════════════════════════════════════════════════════════
 #  Résumé de fin de cycle
 # ═══════════════════════════════════════════════════════════
 
+# Peuple et affiche l'overlay de résumé ; navigation automatique après 6 s.
 func _show_summary(result: Dictionary) -> void:
-	for c in _summary_vbox.get_children():
-		c.queue_free()
+	_clear_vbox(_summary_vbox)
 
 	var victory: bool = result.get("victory", false)
 
@@ -449,6 +454,7 @@ func _show_summary(result: Dictionary) -> void:
 	get_tree().create_timer(6.0).timeout.connect(_navigate_to_village)
 	_summary.show()
 
+# Ajoute une ligne label/valeur dans _summary_vbox.
 func _add_stat(label_text: String, value_text: String) -> void:
 	var row := HBoxContainer.new()
 	var lbl := Label.new()
@@ -466,8 +472,36 @@ func _add_stat(label_text: String, value_text: String) -> void:
 	_summary_vbox.add_child(row)
 
 # ═══════════════════════════════════════════════════════════
+#  Helpers
+# ═══════════════════════════════════════════════════════════
+
+# Retourne la couleur tier du héro actif — utilisée pour teinter panels et boutons.
+func _hero_tier_color() -> Color:
+	var cid  := GameData.player.get("active_creature_id", "") as String
+	var tier := int(GameData.get_entity(cid).get("current_tier", 0))
+	return UIColors.tier_color(tier)
+
+# Vide tous les enfants d'un VBoxContainer et libère leur mémoire.
+func _clear_vbox(vbox: VBoxContainer) -> void:
+	for c in vbox.get_children():
+		c.queue_free()
+
+# Ajoute un label "Aucun" en TEXT_MUTED dans le VBoxContainer donné.
+func _add_none_label(vbox: VBoxContainer) -> void:
+	var lbl := Label.new()
+	lbl.text = "Aucun"
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	vbox.add_child(lbl)
+
+# ═══════════════════════════════════════════════════════════
 #  Navigation
 # ═══════════════════════════════════════════════════════════
 
+# Navigue vers le village. Le guard _navigating empêche les appels multiples
+# (timer auto + bouton + signal adventure_stopped peuvent déclencher simultanément).
 func _navigate_to_village() -> void:
+	if _navigating:
+		return
+	_navigating = true
 	get_tree().change_scene_to_file("res://scenes/Village.tscn")

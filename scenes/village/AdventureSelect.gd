@@ -174,10 +174,10 @@ func _refresh_content() -> void:
 	_content_vbox.add_child(HSeparator.new())
 
 	# ── Sections de contenu ───────────────────────────────────
-	_add_pool_section("Créatures",           pools["creatures"],  UIColors.TYPE_CREATURE)
-	_add_pool_section("Pièges",              pools["traps"],      UIColors.TYPE_TRAP)
-	_add_pool_section("Événements positifs", pools["events"],     UIColors.TYPE_EVENT_POS)
-	_add_pool_section("Équipements",         pools["equipment"],  UIColors.STAT_ATK)
+	_add_pool_section("Créatures",   pools["creatures"],    UIColors.TYPE_CREATURE)
+	_add_pool_section("Pièges",      pools["traps"],        UIColors.TYPE_TRAP)
+	_add_pool_section("Bénédictions",pools["benedictions"], UIColors.TYPE_EVENT_POS)
+	_add_ingredient_section(pools["ingredients"])
 
 	# ── Bouton Partir ─────────────────────────────────────────
 	var btn = Button.new()
@@ -254,6 +254,61 @@ func _add_pool_section(label: String, pool: Array, color: Color) -> void:
 			slot_lbl.add_theme_font_size_override("font_size", 12)
 			row.add_child(slot_lbl)
 
+func _add_ingredient_section(pool: Array) -> void:
+	var section = VBoxContainer.new()
+	section.add_theme_constant_override("separation", 6)
+	_content_vbox.add_child(section)
+
+	var header = Label.new()
+	header.text = "INGRÉDIENTS"
+	header.add_theme_font_size_override("font_size", 12)
+	header.add_theme_color_override("font_color", UIColors.RESOURCE_QTY)
+	section.add_child(header)
+
+	if GameData.player.get("village_tier", 0) < 2:
+		var locked = Label.new()
+		locked.text = "Débloqué au Village Tier 2"
+		locked.add_theme_font_size_override("font_size", 12)
+		locked.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		section.add_child(locked)
+		return
+
+	if pool.is_empty():
+		var none = Label.new()
+		none.text = "Aucun ingrédient dans ce biome"
+		none.add_theme_font_size_override("font_size", 12)
+		none.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		section.add_child(none)
+		return
+
+	for entry in pool:
+		var tier_col := UIColors.tier_color(int(entry.get("tier", 0)))
+		var row = HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		section.add_child(row)
+
+		var name_lbl = Label.new()
+		name_lbl.text = entry.get("name", "?")
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.add_theme_color_override("font_color", tier_col)
+		name_lbl.add_theme_font_size_override("font_size", 12)
+		row.add_child(name_lbl)
+
+		var qty_min: int = int(entry.get("qty_min", 1))
+		var qty_max: int = int(entry.get("qty_max", 1))
+		var qty_text: String = str(qty_min) if qty_min == qty_max else "%d–%d" % [qty_min, qty_max]
+		var qty_lbl = Label.new()
+		qty_lbl.text = "×%s" % qty_text
+		qty_lbl.add_theme_font_size_override("font_size", 11)
+		qty_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		row.add_child(qty_lbl)
+
+		var chance_lbl = Label.new()
+		chance_lbl.text = "%d%%" % int(float(entry.get("chance", 0.0)) * 100.0)
+		chance_lbl.add_theme_font_size_override("font_size", 11)
+		chance_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		row.add_child(chance_lbl)
+
 func _on_start_adventure() -> void:
 	if _selected_biome_id == "":
 		return
@@ -261,8 +316,3 @@ func _on_start_adventure() -> void:
 	AdventureSystem.start_adventure(_selected_biome_id)
 	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
 
-func _first_biome_id() -> String:
-	for eid in GameData.entities:
-		if GameData.entities[eid].get("entity_type", "") == "biome":
-			return eid
-	return ""
