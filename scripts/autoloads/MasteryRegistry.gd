@@ -9,7 +9,7 @@
 extends Node
 
 # Types d'entités soumises à la Maîtrise (le Héro est exclu).
-const MASTERY_TYPES := ["creature", "biome", "passive", "equipment", "trap", "event"]
+const MASTERY_TYPES := ["creature", "biome", "passive", "equipment", "trap", "benediction"]
 
 # ═══════════════════════════════════════════════════════════
 #  Requêtes publiques
@@ -54,17 +54,11 @@ func get_entities_by_type(entity_type: String) -> Array:
 func get_biome_entity_pools(biome_id: String) -> Dictionary:
 	var biome  = GameData.get_entity(biome_id)
 	var bstats = biome.get("base_stats", {})
-	# equipment_pool : liste d'item_id — on construit des dicts pour compatibilité
-	var equip_pool: Array = []
-	for item_id in bstats.get("equipment_pool", []):
-		var item = GameData.get_entity(item_id)
-		if not item.is_empty():
-			equip_pool.append({"id": item_id, "name": item.get("name", item_id)})
 	return {
-		"creatures": bstats.get("enemies",        []),
-		"traps":     bstats.get("traps",           []),
-		"events":    bstats.get("positive_events", []),
-		"equipment": equip_pool,
+		"creatures":    bstats.get("enemies",          []),
+		"traps":        bstats.get("traps",            []),
+		"benedictions": bstats.get("benedictions",     []),
+		"ingredients":  bstats.get("ingredient_pool",  []),
 	}
 
 # Nombre d'entités découvertes parmi une liste de Dictionaries (issues du pool biome).

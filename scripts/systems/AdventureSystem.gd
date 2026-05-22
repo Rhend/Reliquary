@@ -3,12 +3,13 @@
 #
 # Fonctionnement général :
 #   1. start_adventure() initialise l'état et tire un modificateur.
-#   2. _schedule_next_event() démarre un timer de 2 s.
-#   3. À l'expiration, _process_event() tire le type d'événement
-#      (combat / positif / piège) selon la table du biome.
-#   4. Les événements de combat délèguent à CombatSystem et
+#   2. _schedule_next_encounter() démarre un timer (1 s pour le
+#      premier, 2 s pour les suivants).
+#   3. À l'expiration, _process_encounter() tire le type de rencontre
+#      (créature / bénédiction / piège) selon la table du biome.
+#   4. Les rencontres de type créature délèguent à CombatPlayer et
 #      attendent le signal combat_ended avant de continuer.
-#   5. Après chaque événement, le héro régénère REGEN_PCT de
+#   5. Après chaque rencontre, le héro régénère REGEN_PCT de
 #      ses PV max (modifiable par le modificateur de cycle).
 #
 # Modificateurs de cycle :
@@ -21,7 +22,7 @@
 #   (+5 % par niveau de combo au-dessus de 1).
 #
 # Luck de cycle :
-#   Accumulée temporairement via les événements positifs de type "luck".
+#   Accumulée temporairement via les bénédictions de type "luck".
 #   Elle s'ajoute à la luck permanente du joueur pour les rolls du cycle
 #   et est réinitialisée à chaque nouvelle aventure.
 # ============================================================
@@ -29,7 +30,8 @@ extends Node
 
 # ─── Constantes ─────────────────────────────────────────────
 
-const BETWEEN_EVENTS_DELAY: float = 2.0
+const FIRST_ENCOUNTER_DELAY: float = 1.0   # délai avant la toute première rencontre du cycle
+const BETWEEN_ENCOUNTERS_DELAY: float = 2.0 # délai entre chaque rencontre suivante
 const DEFAULT_REGEN_PCT:    float = 0.15
 const COMBO_HP_THRESHOLD:   float = 0.25
 const COMBO_ATK_BONUS_PCT:  float = 0.05   # +5 % ATK par niveau de combo au-dessus de 1
@@ -59,36 +61,30 @@ const CYCLE_MODIFIERS: Array = [
 
 # ─── État runtime ────────────────────────────────────────────
 
-var is_running:        bool       = false
-var current_biome_id:  String     = ""
-var current_hp:        float      = 0.0
-var current_modifier:  Dictionary = {}
+var is_running:               bool       = false  # vrai pendant qu'une aventure est en cours
+var current_biome_id:         String     = ""     # id du biome actuellement exploré
+var current_hp:               float      = 0.0    # PV courants du héro
+var current_modifier:         Dictionary = {}     # modificateur de cycle actif
 
-var _event_timer:      Timer
-var _combo_count:      int   = 0
-var _combat_start_hp:  float = 0.0
+var _encounter_timer:         Timer              # timer qui cadence les rencontres
+var _first_encounter_pending: bool  = false      # vrai uniquement pour la toute première rencontre du cycle
+var _combo_count:             int   = 0          # combo courant (remis à 0 si trop de dégâts reçus)
+var _combat_start_hp:         float = 0.0        # PV du héro au début du combat (pour calcul combo)
 
 # ─── Statistiques du cycle en cours ─────────────────────────
 
-var _cycle_luck:               int        = 0    # Luck temporaire accumulée par les events positifs
-var _cycle_xp:                 float      = 0.0  # XP totale gagnée ce cycle (base combat)
-var _cycle_loot:               int        = 0    # Nombre total d'objets droppés
-var _cycle_combo_max:          int        = 0    # Meilleur combo atteint
-var _cycle_combats_won:        int        = 0    # Combats remportés
-var _cycle_events:             int        = 0    # Événements non-combat (positifs + pièges)
-var _cycle_events_total:       int        = 0    # Tous les événements (combat inclus)
-var _cycle_positive_events:    int        = 0    # Événements positifs déclenchés
-var _cycle_traps_triggered:    int        = 0    # Pièges déclenchés (non ignorés)
-var _cycle_xp_hero:            float      = 0.0  # XP allouée au héro (20 % de base)
-var _cycle_xp_biome:           float      = 0.0  # XP reçue par le biome (après modificateur)
-var _cycle_xp_passives_total:  float      = 0.0  # XP totale reçue par les passifs actifs
-var _cycle_xp_passives_detail: Dictionary = {}   # passive_id → xp reçue ce cycle
+var _cycle_luck:        int   = 0    # Luck temporaire accumulée par les bénédictions de type "luck"
+var _cycle_xp:          float = 0.0  # XP totale gagnée par le héro ce cycle
+var _cycle_loot:        int   = 0    # Nombre total d'objets droppés
+var _cycle_combo_max:   int   = 0    # Meilleur combo atteint
+var _cycle_combats_won: int   = 0    # Combats remportés
+var _cycle_events:      int   = 0    # Rencontres totales (hors créatures)
 
 func _ready() -> void:
-	_event_timer          = Timer.new()
-	_event_timer.one_shot = true
-	_event_timer.timeout.connect(_on_event_timer)
-	add_child(_event_timer)
+	_encounter_timer          = Timer.new()
+	_encounter_timer.one_shot = true
+	_encounter_timer.timeout.connect(_on_encounter_timer)
+	add_child(_encounter_timer)
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.xp_gained.connect(_on_xp_gained_tracking)
 
@@ -96,20 +92,22 @@ func _ready() -> void:
 #  Interface publique
 # ═══════════════════════════════════════════════════════════
 
+# Lance une nouvelle aventure dans le biome donné. Réinitialise tous les stats du cycle.
 func start_adventure(biome_id: String) -> void:
-	var biome       = GameData.get_entity(biome_id)
-	var creature_id = GameData.player.get("active_creature_id", "")
-	var creature    = GameData.get_entity(creature_id)
+	var biome   = GameData.get_entity(biome_id)
+	var hero_id = GameData.player.get("active_creature_id", "")
+	var hero    = GameData.get_entity(hero_id)
 
-	if biome.is_empty() or creature.is_empty():
-		push_error("AdventureSystem: biome ou créature manquant pour démarrer")
+	if biome.is_empty() or hero.is_empty():
+		push_error("AdventureSystem: biome ou héro manquant pour démarrer")
 		return
 
-	current_biome_id = biome_id   # Nécessaire avant _get_max_hp()
+	current_biome_id = biome_id
 	is_running       = true
 	current_hp       = _get_max_hp()
 
-	_combo_count     = 0
+	_combo_count             = 0
+	_first_encounter_pending = true
 
 	# Réinitialise les statistiques du cycle
 	_cycle_luck               = 0
@@ -130,13 +128,14 @@ func start_adventure(biome_id: String) -> void:
 
 	GameData.player["active_biome_id"] = biome_id
 	EventBus.adventure_started.emit(biome_id)
-	_schedule_next_event()
+	_schedule_next_encounter()
 
+# Interrompt l'aventure en cours (bouton "Mettre fin à l'expédition").
 func stop_adventure() -> void:
 	if not is_running:
 		return
 	is_running = false
-	_event_timer.stop()
+	_encounter_timer.stop()
 	if CombatPlayer.is_playing:
 		CombatPlayer.stop()
 	_cycle_combo_max = maxi(_cycle_combo_max, _combo_count)
@@ -176,108 +175,108 @@ func _get_effective_luck() -> int:
 	return int(GameData.player.get("luck", 0)) + _cycle_luck
 
 # ═══════════════════════════════════════════════════════════
-#  Boucle d'événements
+#  Boucle de rencontres
 # ═══════════════════════════════════════════════════════════
 
-func _on_event_timer() -> void:
+func _on_encounter_timer() -> void:
 	if is_running:
-		_process_event()
+		_process_encounter()
 
-func _process_event() -> void:
-	_cycle_events_total += 1
-	var creature_id = GameData.player.get("active_creature_id", "")
-	var event_type  = _roll_event_type()
-	var event_data  = {
-		"type":        event_type,
-		"biome_id":    current_biome_id,
-		"creature_id": creature_id
+# Tire le type de rencontre et délègue au handler correspondant.
+func _process_encounter() -> void:
+	var hero_id      = GameData.player.get("active_creature_id", "")
+	var enc_type     = _roll_encounter_type()
+	var enc_data     = {
+		"type":    enc_type,
+		"biome_id": current_biome_id,
+		"hero_id":  hero_id
 	}
 
-	match event_type:
-		"combat":   _handle_combat_event(creature_id, event_data)
-		"positive": _handle_positive_event(creature_id, event_data)
-		"trap":     _handle_trap_event(creature_id, event_data)
+	match enc_type:
+		"creature":    _handle_creature_encounter(hero_id, enc_data)
+		"benediction": _handle_benediction_encounter(hero_id, enc_data)
+		"trap":        _handle_trap_encounter(hero_id, enc_data)
 
-# ─── Combat ──────────────────────────────────────────────────
+# ─── Rencontre Créature ───────────────────────────────────────
 
-func _handle_combat_event(_creature_id: String, event_data: Dictionary) -> void:
-	var biome       = GameData.get_entity(current_biome_id)
-	var all_enemies = biome.get("base_stats", {}).get("enemies", [])
-	var enemies: Array = all_enemies.filter(func(e: Dictionary) -> bool:
-		return not e.get("locked", false)
-	)
+# Tire un ennemi aléatoire dans le pool du biome et lance le combat.
+func _handle_creature_encounter(hero_id: String, enc_data: Dictionary) -> void:
+	var biome   = GameData.get_entity(current_biome_id)
+	var enemies = biome.get("base_stats", {}).get("enemies", [])
 
 	if enemies.is_empty():
-		_schedule_next_event()
+		_schedule_next_encounter()
 		return
 
-	var enemy           = enemies[randi() % enemies.size()].duplicate()
-	event_data["enemy"] = enemy
-	_combat_start_hp    = current_hp
+	var enemy          = enemies[randi() % enemies.size()].duplicate()
+	enc_data["enemy"]  = enemy
+	_combat_start_hp   = current_hp
 
 	GameData.record_encounter(
 		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, 0.0
 	)
-	EventBus.adventure_event_resolved.emit(event_data)
+	EventBus.adventure_event_resolved.emit(enc_data)
 	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses())
 
-# ─── Événement positif ───────────────────────────────────────
+# ─── Rencontre Bénédiction ────────────────────────────────────
 
-func _handle_positive_event(creature_id: String, event_data: Dictionary) -> void:
-	var biome  = GameData.get_entity(current_biome_id)
-	var events = biome.get("base_stats", {}).get("positive_events", [])
+# Tire une bénédiction aléatoire et applique son effet immédiatement.
+func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> void:
+	var biome       = GameData.get_entity(current_biome_id)
+	var benedictions = biome.get("base_stats", {}).get("benedictions", [])
 
-	if not events.is_empty():
-		var evt              = events[randi() % events.size()]
-		event_data["effect"] = evt
+	if not benedictions.is_empty():
+		var bene             = benedictions[randi() % benedictions.size()]
+		enc_data["effect"]   = bene
 		GameData.record_encounter(
-			evt.get("id", ""), evt.get("name", "?"), "Événement", current_biome_id, 5.0
+			bene.get("id", ""), bene.get("name", "?"), "Bénédiction", current_biome_id, 5.0
 		)
-		_apply_positive_effect(evt)
-		_cycle_events          += 1
-		_cycle_positive_events += 1
+		_apply_benediction_effect(bene)
+		_cycle_events += 1
 
-	EventBus.adventure_event_resolved.emit(event_data)
-	_apply_regen(creature_id)
-	_schedule_next_event()
+	EventBus.adventure_event_resolved.emit(enc_data)
+	_apply_regen(hero_id)
+	_schedule_next_encounter()
 
-func _apply_positive_effect(evt: Dictionary) -> void:
-	var effect_type  = evt.get("effect", "")
-	var effect_value = float(evt.get("value", 0.0))
+# Applique l'effet d'une bénédiction (soin ou bonus de luck).
+func _apply_benediction_effect(bene: Dictionary) -> void:
+	var effect_type  = bene.get("effect", "")
+	var effect_value = float(bene.get("value", 0.0))
 
 	match effect_type:
 		"heal":
-			var max_hp      = _get_max_hp()
-			var healed      = minf(effect_value, max_hp - current_hp)
-			current_hp      = minf(current_hp + effect_value, max_hp)
+			var max_hp = _get_max_hp()
+			var healed = minf(effect_value, max_hp - current_hp)
+			current_hp = minf(current_hp + effect_value, max_hp)
 			EventBus.heal_applied.emit(healed, current_hp)
 
 		"luck":
 			_cycle_luck += int(effect_value)
 			EventBus.luck_boosted.emit(_cycle_luck)
 
-# ─── Piège ────────────────────────────────────────────────────
+# ─── Rencontre Piège ──────────────────────────────────────────
 
-func _handle_trap_event(creature_id: String, event_data: Dictionary) -> void:
+# Tire un piège aléatoire et applique ses dégâts (sauf si modificateur "Fantôme").
+func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	var biome = GameData.get_entity(current_biome_id)
 	var traps = biome.get("base_stats", {}).get("traps", [])
 
 	if traps.is_empty():
-		EventBus.adventure_event_resolved.emit(event_data)
-		_schedule_next_event()
+		EventBus.adventure_event_resolved.emit(enc_data)
+		_schedule_next_encounter()
 		return
 
 	var trap           = traps[randi() % traps.size()]
-	event_data["trap"] = trap
+	enc_data["trap"]   = trap
 
 	if current_modifier.get("ignore_traps", false):
-		event_data["ignored"] = true
+		enc_data["ignored"] = true
 		GameData.record_encounter(
 			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
 		)
-		EventBus.adventure_event_resolved.emit(event_data)
-		_apply_regen(creature_id)
-		_schedule_next_event()
+		EventBus.adventure_event_resolved.emit(enc_data)
+		_apply_regen(hero_id)
+		_schedule_next_encounter()
 	else:
 		_cycle_events          += 1
 		_cycle_traps_triggered += 1
@@ -285,17 +284,18 @@ func _handle_trap_event(creature_id: String, event_data: Dictionary) -> void:
 		GameData.record_encounter(
 			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
 		)
-		EventBus.adventure_event_resolved.emit(event_data)
+		EventBus.adventure_event_resolved.emit(enc_data)
 		if current_hp <= 0.0:
 			_end_adventure(false)
 		else:
-			_apply_regen(creature_id)
-			_schedule_next_event()
+			_apply_regen(hero_id)
+			_schedule_next_encounter()
 
 # ═══════════════════════════════════════════════════════════
 #  Résultat de combat
 # ═══════════════════════════════════════════════════════════
 
+# Reçoit le résultat de combat et continue l'aventure ou l'arrête.
 func _on_combat_ended(result: Dictionary) -> void:
 	if not is_running:
 		return
@@ -307,11 +307,12 @@ func _on_combat_ended(result: Dictionary) -> void:
 	else:
 		_end_adventure(false)
 
+# Distribue l'XP, le loot et les ingrédients après une victoire.
 func _resolve_victory(enemy: Dictionary) -> void:
-	var xp_base    = float(enemy.get("xp_reward", 10))
-	var gen_tier   = int(enemy.get("tier", 0))
-	var xp_mult    = float(current_modifier.get("xp_mult", 1.0))
-	var xp_earned  = xp_base * xp_mult
+	var xp_base   = float(enemy.get("xp_reward", 10))
+	var gen_tier  = int(enemy.get("tier", 0))
+	var xp_mult   = float(current_modifier.get("xp_mult", 1.0))
+	var xp_earned = xp_base * xp_mult
 
 	# XP aux passifs actifs
 	MasterySystem.add_xp_to_all_active(xp_earned, gen_tier)
@@ -319,17 +320,21 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	# XP au biome (40 % de l'XP du cycle)
 	MasterySystem.add_xp_to_entity(current_biome_id, xp_earned * 0.40, gen_tier)
 
-	# XP au héro (20 % de l'XP du cycle — 2× plus lent que le biome)
-	var creature_id = GameData.player.get("active_creature_id", "")
-	MasterySystem.add_xp_to_entity(creature_id, xp_earned * 0.20, gen_tier)
+	# XP au héro (20 % de l'XP du cycle)
+	var hero_id = GameData.player.get("active_creature_id", "")
+	MasterySystem.add_xp_to_entity(hero_id, xp_earned * 0.20, gen_tier)
 
 	# Hall des Évolutions
 	GameData.record_encounter(
 		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, xp_base
 	)
 
-	# Loot
+	# Loot ennemi
 	_drop_loot(enemy)
+
+	# Ingrédients biome (uniquement si Village Tier ≥ 2)
+	if GameData.player.get("village_tier", 0) >= 2:
+		_drop_ingredients()
 
 	# Combo
 	var max_hp      = _get_max_hp()
@@ -346,51 +351,58 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_cycle_combats_won += 1
 	_cycle_combo_max    = maxi(_cycle_combo_max, _combo_count)
 
-	_apply_regen(creature_id)
-	_schedule_next_event()
+	_apply_regen(hero_id)
+	_schedule_next_encounter()
 
 # ═══════════════════════════════════════════════════════════
 #  Utilitaires internes
 # ═══════════════════════════════════════════════════════════
 
-func _apply_regen(_creature_id: String) -> void:
+# Régénère regen_pct% des PV max après chaque rencontre.
+func _apply_regen(_hero_id: String) -> void:
 	var regen_pct = float(current_modifier.get("regen_pct", DEFAULT_REGEN_PCT))
 	var max_hp    = _get_max_hp()
 	current_hp    = minf(current_hp + max_hp * regen_pct, max_hp)
 
+# Calcule les PV max effectifs du héro (stats de base + équipement + passifs).
 func _get_max_hp() -> float:
-	var creature_id = GameData.player.get("active_creature_id", "")
-	var equip_hp    = GameData.get_equipment_bonuses().get("hp", 0.0)
-	var hp_bonus    = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
-	return float(GameData.get_effective_stats(creature_id).get("hp", 100)) + equip_hp + hp_bonus
+	var hero_id  = GameData.player.get("active_creature_id", "")
+	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)
+	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
+	return float(GameData.get_effective_stats(hero_id).get("hp", 100)) + equip_hp + hp_bonus
 
-func _schedule_next_event() -> void:
+# Programme la prochaine rencontre — 1 s pour la première, 2 s pour les suivantes.
+func _schedule_next_encounter() -> void:
 	if not is_running:
 		return
-	_event_timer.wait_time = BETWEEN_EVENTS_DELAY
-	_event_timer.start()
+	var delay := FIRST_ENCOUNTER_DELAY if _first_encounter_pending else BETWEEN_ENCOUNTERS_DELAY
+	_first_encounter_pending  = false
+	_encounter_timer.wait_time = delay
+	_encounter_timer.start()
 
-func _roll_event_type() -> String:
+# Tire le type de rencontre selon les probabilités du biome, ajustées par la luck.
+func _roll_encounter_type() -> String:
 	var biome       = GameData.get_entity(current_biome_id)
 	var event_table = biome.get("base_stats", {}).get("event_table", {
-		"combat": 0.70, "positive": 0.15, "trap": 0.15
+		"creature": 0.70, "benediction": 0.15, "trap": 0.15
 	})
 
 	var luck        = float(_get_effective_luck())
 	var trap_base   = float(event_table.get("trap", 0.15))
 	var luck_shift  = minf(luck * 0.01, trap_base)
 
-	var combat_chance   = float(event_table.get("combat",   0.70))
-	var positive_chance = float(event_table.get("positive", 0.15)) + luck_shift
+	var creature_chance    = float(event_table.get("creature",    0.70))
+	var benediction_chance = float(event_table.get("benediction", 0.15)) + luck_shift
 
 	var roll = randf()
-	if roll < combat_chance:
-		return "combat"
-	elif roll < combat_chance + positive_chance:
-		return "positive"
+	if roll < creature_chance:
+		return "creature"
+	elif roll < creature_chance + benediction_chance:
+		return "benediction"
 	else:
 		return "trap"
 
+# Tire le modificateur de cycle par tirage pondéré.
 func _pick_modifier() -> void:
 	var total_weight: int = 0
 	for m in CYCLE_MODIFIERS:
@@ -405,6 +417,7 @@ func _pick_modifier() -> void:
 			break
 	EventBus.modifier_activated.emit(current_modifier)
 
+# Drop le loot spécifique à l'ennemi vaincu (loot_table de l'ennemi).
 func _drop_loot(enemy: Dictionary) -> void:
 	var loot_table = enemy.get("loot_table", [])
 	if loot_table.is_empty():
@@ -431,43 +444,53 @@ func _drop_loot(enemy: Dictionary) -> void:
 		_cycle_loot += drops.size()
 		EventBus.loot_dropped.emit(drops, enemy.get("name", "?"))
 
+# Drop des ingrédients depuis l'ingredient_pool du biome.
+# Chaque ingrédient tombe en quantité aléatoire entre qty_min et qty_max.
+# Disponible uniquement si Village Tier ≥ 2 (appelé depuis _resolve_victory).
+func _drop_ingredients() -> void:
+	var biome = GameData.get_entity(current_biome_id)
+	var pool: Array = biome.get("base_stats", {}).get("ingredient_pool", [])
+	if pool.is_empty():
+		return
+
+	var drops:      Array = []
+	var luck_bonus: float = float(_get_effective_luck()) * 0.01
+
+	for entry in pool:
+		var roll_threshold = minf(float(entry.get("chance", 0.0)) + luck_bonus, 1.0)
+		if randf() < roll_threshold:
+			var item_id: String = entry.get("item_id", "")
+			if item_id == "":
+				continue
+			var qty_min: int = int(entry.get("qty_min", 1))
+			var qty_max: int = int(entry.get("qty_max", 1))
+			var qty:     int = randi_range(qty_min, qty_max)
+			GameData.add_resource(item_id, qty)
+			drops.append({
+				"item_id": item_id,
+				"name":    entry.get("name", item_id),
+				"qty":     qty
+			})
+
+	if not drops.is_empty():
+		_cycle_loot += drops.size()
+		EventBus.loot_dropped.emit(drops, "Biome")
+
+# Clôt le cycle et émet adventure_cycle_ended avec toutes les statistiques.
 func _end_adventure(victory: bool) -> void:
 	is_running = false
-	_event_timer.stop()
+	_encounter_timer.stop()
 	_cycle_combo_max = maxi(_cycle_combo_max, _combo_count)
 
-	var summary := {
-		"victory":              victory,
-		"biome_id":             current_biome_id,
-		"creature_id":          GameData.player.get("active_creature_id", ""),
-		"modifier":             current_modifier,
-		"xp_total":             _cycle_xp,
-		"xp_hero":              _cycle_xp_hero,
-		"xp_biome":             _cycle_xp_biome,
-		"xp_passives_total":    _cycle_xp_passives_total,
-		"xp_passives_detail":   _cycle_xp_passives_detail,
-		"loot_total":           _cycle_loot,
-		"combo_max":            _cycle_combo_max,
-		"combats_won":          _cycle_combats_won,
-		"events":               _cycle_events,
-		"events_total":         _cycle_events_total,
-		"positive_events":      _cycle_positive_events,
-		"traps_triggered":      _cycle_traps_triggered,
-		"cycle_luck":           _cycle_luck,
-	}
-	CycleData.last_cycle_summary = summary
-	EventBus.adventure_cycle_ended.emit(summary)
-
-# Suit l'XP réellement reçue (après modificateurs de tier) par le biome et les passifs.
-func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
-	if not is_running:
-		return
-	var entity = GameData.get_entity(entity_id)
-	match entity.get("entity_type", ""):
-		"passive":
-			_cycle_xp_passives_total += amount
-			_cycle_xp_passives_detail[entity_id] = \
-				_cycle_xp_passives_detail.get(entity_id, 0.0) + amount
-		"biome":
-			if entity_id == current_biome_id:
-				_cycle_xp_biome += amount
+	EventBus.adventure_cycle_ended.emit({
+		"victory":      victory,
+		"biome_id":     current_biome_id,
+		"hero_id":      GameData.player.get("active_creature_id", ""),
+		"modifier":     current_modifier,
+		"xp_total":     _cycle_xp,
+		"loot_total":   _cycle_loot,
+		"combo_max":    _cycle_combo_max,
+		"combats_won":  _cycle_combats_won,
+		"events":       _cycle_events,
+		"cycle_luck":   _cycle_luck,
+	})

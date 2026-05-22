@@ -33,7 +33,7 @@ CombatPlayer="*res://systems/combat/combat_player.gd"
 AdventureSystem="*res://scripts/systems/AdventureSystem.gd"
 PassiveSystem="*res://scripts/systems/PassiveSystem.gd"
 MasteryRegistry="*res://scripts/autoloads/MasteryRegistry.gd"
-RecipeRegistry="*res://scripts/autoloads/RecipeRegistry.gd"
+UIHelpers="*res://scripts/autoloads/UIHelpers.gd"
 
 [display]
 

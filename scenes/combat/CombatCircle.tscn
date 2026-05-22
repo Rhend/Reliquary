@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://combatcircle"]
+
+[ext_resource type="Script" path="res://scripts/combat/CombatCircle.gd" id="1_cc"]
+
+[node name="CombatCircle" type="Control"]
+script = ExtResource("1_cc")

@@ -1,18 +1,26 @@
 # ============================================================
-# Village.gd — Hub circulaire JRPG style SNES.
-# Tier 0  : orbe cliquable → déblocage Tier 1.
-# Tier 1+ : hexagones + panneau JRPG droite (40/60).
+# Village.gd — Hub central du jeu.
+#
+# Tier 0  : orbe cliquable → XP manual → déblocage Tier 1.
+# Tier 1+ : hub hexagonal + panneau JRPG glissant (40/60 viewport).
+#
+# Inner classes :
+#   CircleRing — anneau XP animé autour du hub.
+#   ClickOrb   — orbe cliquable (tier 0 uniquement).
+#   HexItem    — bouton hexagonal interactif (tier 1+).
+#   JRPGPanel  — cadre dessiné du panneau droit.
+#   XPCard     — PanelContainer avec barre XP animée en fond.
 # ============================================================
 extends Control
 
 # ─── Anneau animé ─────────────────────────────────────────────
 class CircleRing extends Control:
-	var ring_color    := Color.WHITE
-	var ring_radius   := 0.0
-	var ring_width    := 13.0
-	var fill_fraction := 0.0
-	var tier          := 0
-	var _t            := 0.0
+	var ring_color    := Color.WHITE   # teinte principale de l'anneau (= couleur du tier)
+	var ring_radius   := 0.0           # rayon en pixels ; 0 = auto depuis la taille du Control
+	var ring_width    := 13.0          # épaisseur de l'arc principal (pixels)
+	var fill_fraction := 0.0           # fraction XP affichée [0..1] en arc de progression
+	var tier          := 0             # tier actuel — détermine quelle méthode _draw utilise
+	var _t            := 0.0           # accumulateur de temps pour les animations cycliques
 
 	const _SPARKS := [0.4, 1.2, 2.1, 2.9, 3.8, 4.6, 5.4]
 
@@ -219,11 +227,11 @@ class CircleRing extends Control:
 
 # ─── Orbe cliquable (tier 0) ──────────────────────────────────
 class ClickOrb extends Control:
-	var tier_color := Color.WHITE
-	var callback   : Callable
-	var is_hovered := false
-	var _t         := 0.0
-	var _ptween    : Tween
+	var tier_color := Color.WHITE   # teinte de l'orbe (= TIER_0_COLOR au tier 0)
+	var callback   : Callable       # appelé à chaque clic gauche
+	var is_hovered := false         # true si la souris est sur l'orbe (hover visuel)
+	var _t         := 0.0           # accumulateur de temps pour les animations cycliques
+	var _ptween    : Tween          # tween du pulse de clic — tué avant chaque nouveau clic
 
 	func _ready() -> void:
 		pivot_offset = size * 0.5
@@ -287,17 +295,17 @@ class ClickOrb extends Control:
 
 # ─── Hexagone interactif ──────────────────────────────────────
 class HexItem extends Control:
-	var icon_text    := ""
-	var label_text   := ""
-	var tier_color   := Color.WHITE
-	var tier         := 1
-	var callback     : Callable
-	var hex_radius   := 58.0
-	var outward_dir  := Vector2.RIGHT
-	var is_hovered   := false
-	var is_selected  := false
-	var _htween      : Tween
-	var _t           := 0.0
+	var icon_text    := ""              # emoji affiché au centre du bouton
+	var label_text   := ""              # texte du callout (ex: "HÉRO", "EXPÉDITIONS")
+	var tier_color   := Color.WHITE     # couleur du tier — teinte toute la forme et le callout
+	var tier         := 1               # tier du héro — détermine le rendu (rond vs hexagone)
+	var callback     : Callable         # appelé après l'animation de press
+	var hex_radius   := 58.0            # rayon de l'hexagone (utilisé pour les tiers 3–5)
+	var outward_dir  := Vector2.RIGHT   # direction du callout depuis le centre du hub
+	var is_hovered   := false           # état hover — affiche la corona et le contour
+	var is_selected  := false           # état sélectionné — affiche un glow plus marqué
+	var _htween      : Tween            # tween hover/press — tué avant chaque nouveau
+	var _t           := 0.0             # accumulateur de temps pour les animations cycliques
 
 	func _ready() -> void:
 		pivot_offset = size * 0.5
@@ -511,8 +519,8 @@ class HexItem extends Control:
 
 # ─── Cadre JRPG (panneau droit) ───────────────────────────────
 class JRPGPanel extends Control:
-	var panel_color := Color.WHITE
-	var _t          := 0.0
+	var panel_color := Color.WHITE   # couleur du cadre (= couleur du tier actif)
+	var _t          := 0.0           # accumulateur de temps pour le shimmer et le séparateur animé
 
 	func _process(dt: float) -> void:
 		_t += dt
@@ -564,9 +572,9 @@ class JRPGPanel extends Control:
 		]), c)
 
 class XPCard extends PanelContainer:
-	var xp_fill    := 0.0
-	var fill_color := Color.WHITE
-	var _t         := 0.0
+	var xp_fill    := 0.0           # fraction [0..1] de la largeur remplie par la barre XP
+	var fill_color := Color.WHITE   # couleur de la barre et des bulles (= couleur du tier)
+	var _t         := 0.0           # accumulateur de temps pour l'animation des bulles montantes
 
 	# [x_fraction, radius, vitesse, phase]
 	const _BUBBLES: Array = [
@@ -650,31 +658,33 @@ const PANEL_TITLES: Dictionary = {
 }
 
 # ─── État ─────────────────────────────────────────────────────
-var _ring            : CircleRing
-var _xp_label        : Label
-var _hub_root        : Control
-var _rp_root         : Control
-var _rp_content      : VBoxContainer
-var _rp_title        : Label
-var _active_panel_id      := ""
-var _adv_selected_biome_id := ""
-var _hex_items            : Dictionary = {}   # panel_id → HexItem
+var _ring            : CircleRing         # anneau animé central (XP fill + tier visuel)
+var _xp_label        : Label              # label "X / Y XP" sous l'orbe (tier 0 uniquement)
+var _hub_root        : Control            # conteneur du hub hexagonal (tier 1+)
+var _rp_root         : Control            # panneau droit JRPG — null si fermé
+var _rp_content      : VBoxContainer      # zone de contenu scrollable du panneau droit
+var _rp_title        : Label              # label titre dans la barre du panneau droit
+var _active_panel_id      := ""           # id du panneau ouvert ("hero", "adventure", …)
+var _adv_selected_biome_id := ""          # biome sélectionné dans le panneau Expéditions
+var _hex_items            : Dictionary = {}   # panel_id → HexItem, pour gérer l'état sélectionné
 
 # ─── Init ─────────────────────────────────────────────────────
+# Construit l'UI au démarrage (la sauvegarde est déjà chargée par Main.gd).
 func _ready() -> void:
-	SaveManager.load_save()
-	GameData._seed_test_passives()
 	_build_ui()
 
+# Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
 func _active_creature() -> Dictionary:
 	var cid := GameData.player.get("active_creature_id", "") as String
 	if cid.is_empty(): return {}
 	return GameData.get_entity(cid)
 
+# Tier actuel de la créature active — détermine le layout et les couleurs du hub.
 func _current_tier() -> int:
 	return _active_creature().get("current_tier", 0) as int
 
 # ─── Construction principale ──────────────────────────────────
+# Point d'entrée de construction : tier 0 → orbe cliquable, tier 1+ → hub hexagonal.
 func _build_ui() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	var bg := ColorRect.new()
@@ -729,7 +739,8 @@ func _build_tier0(creature: Dictionary) -> void:
 	add_child(_xp_label)
 
 # ─── Tier 1+ : hub hexagonal ──────────────────────────────────
-func _build_hub(_creature: Dictionary, tier: int) -> void:
+# Construit le hub circulaire avec les hexagones débloqués par le tier.
+func _build_hub(creature: Dictionary, tier: int) -> void:
 	var vp     := get_viewport_rect().size
 	var tcolor := UIColors.tier_color(tier)
 	var _diam_margins := [70.0, 70.0, 82.0, 104.0, 136.0, 164.0]
@@ -771,6 +782,7 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 		_make_hex(d[0], d[1], tcolor, pos, Callable(self, d[3]), d[4])
 
 # ─── Panneau droite ───────────────────────────────────────────
+# Ouvre le panneau JRPG pour panel_id. Re-clic sur le même id → ferme (toggle).
 func _open_panel(panel_id: String) -> void:
 	var vp := get_viewport_rect().size
 
@@ -804,6 +816,7 @@ func _open_panel(panel_id: String) -> void:
 	var pt := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	pt.tween_property(_rp_root, "position:x", vp.x * 0.4, 0.35)
 
+# Ferme le panneau droit avec une animation de glissement vers la droite.
 func _close_panel() -> void:
 	if _rp_root == null:
 		return
@@ -824,18 +837,20 @@ func _close_panel() -> void:
 	var ht := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	ht.tween_property(_hub_root, "size:x", vp.x, 0.25)
 
+# Met à jour l'état is_selected de tous les HexItems selon le panneau ouvert.
 func _update_hex_selection(active_id: String) -> void:
 	for pid in _hex_items:
 		var item := _hex_items[pid] as HexItem
 		item.is_selected = (pid == active_id)
 		item.queue_redraw()
 
+# Vide _rp_content et réinjecte le contenu pour panel_id (panneau déjà ouvert).
 func _swap_panel_content(panel_id: String) -> void:
-	for child in _rp_content.get_children():
-		child.queue_free()
+	UIHelpers.clear_children(_rp_content)
 	_fill_panel_content(panel_id)
 
 # ─── Construction du cadre JRPG ──────────────────────────────
+# Crée le JRPGPanel, le titre, le bouton fermer et la zone scrollable.
 func _build_panel_frame(panel_id: String) -> void:
 	var tcolor := UIColors.tier_color(_current_tier())
 
@@ -879,10 +894,8 @@ func _build_panel_frame(panel_id: String) -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	frame.add_child(scroll)
 
-	var margin := MarginContainer.new()
+	var margin := UIHelpers.margin_of(12)
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for s: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(s, 12)
 	scroll.add_child(margin)
 
 	_rp_content = VBoxContainer.new()
@@ -893,15 +906,17 @@ func _build_panel_frame(panel_id: String) -> void:
 	_fill_panel_content(panel_id)
 
 # ─── Contenu des panneaux ─────────────────────────────────────
+# Dispatch vers la fonction de contenu correspondant à panel_id.
 func _fill_panel_content(panel_id: String) -> void:
 	match panel_id:
 		"hero":      _panel_hero()
 		"adventure": _panel_adventure()
-		"forge":     _panel_nav("Ouvrir la Forge", "🔨", "res://scenes/village/forge.tscn")
+		"forge":     _panel_soon("FORGE")
 		"sanctuary": _panel_soon("SANCTUAIRE")
 		"relic":     _panel_soon("RELIQUE")
 		"tbd":       _panel_soon("?")
 
+# Panneau Héro : nom, tier, stats (base+bonus), barre XP, passifs débloqués.
 func _panel_hero() -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var c      := GameData.get_entity(cid)
@@ -921,7 +936,7 @@ func _panel_hero() -> void:
 	_rp_content.add_child(lname)
 
 	# ── Sous-section STATISTIQUES ─────────────────────────────
-	_rp_content.add_child(_section_header("◆  STATISTIQUES", tcolor))
+	_rp_content.add_child(UIHelpers.section_header("◆  STATISTIQUES", tcolor))
 
 	var eq  := GameData.get_equipment_bonuses()
 	var eff := GameData.get_effective_stats(cid)
@@ -959,18 +974,7 @@ func _panel_hero() -> void:
 
 	if tier < GameData.MAX_TIER:
 		var xp_color := UIColors.FILTER_ON if can_ev else UIColors.STAT_HP
-		var bar := ProgressBar.new()
-		bar.min_value = 0.0; bar.max_value = xpmax
-		bar.value     = minf(xp, xpmax)
-		bar.show_percentage = true
-		bar.custom_minimum_size = Vector2(0.0, 16.0)
-		var sf := StyleBoxFlat.new(); sf.bg_color = xp_color
-		var sb := StyleBoxFlat.new(); sb.bg_color = UIColors.BG_BAR
-		bar.add_theme_stylebox_override("fill", sf)
-		bar.add_theme_stylebox_override("background", sb)
-		bar.add_theme_color_override("font_color", Color.WHITE)
-		bar.add_theme_font_size_override("font_size", 10)
-		_rp_content.add_child(bar)
+		_rp_content.add_child(UIHelpers.xp_bar(xp, xpmax, xp_color))
 
 		var xl := Label.new()
 		xl.text = "XP  %.0f / %.0f" % [xp, xpmax]
@@ -998,7 +1002,7 @@ func _panel_hero() -> void:
 		_rp_content.add_child(ml)
 
 	# ── Sous-section PASSIFS ──────────────────────────────────
-	_rp_content.add_child(_section_header("◆  PASSIFS", tcolor))
+	_rp_content.add_child(UIHelpers.section_header("◆  PASSIFS", tcolor))
 
 	var unlocked: Array = c.get("unlocked_passives", [])
 
@@ -1016,25 +1020,7 @@ func _panel_hero() -> void:
 				_rp_content.add_child(_passive_card(pdata, tcolor))
 
 
-# ─── Helpers sous-sections ────────────────────────────────────
-func _section_header(title: String, color: Color) -> Control:
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 4)
-
-	var lbl := Label.new()
-	lbl.text = title
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", color)
-	vb.add_child(lbl)
-
-	var line := ColorRect.new()
-	line.color = Color(color.r, color.g, color.b, 0.38)
-	line.custom_minimum_size = Vector2(0.0, 1.0)
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(line)
-
-	return vb
-
+# Retourne une XPCard pour un passif : nom, badge tier, barre XP, effets du palier.
 func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	var rarity   := pdata.get("current_tier", 0) as int
 	var rcolor   := UIColors.tier_color(rarity)
@@ -1058,22 +1044,13 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	var panel := XPCard.new()
 	panel.xp_fill    = xp_fill
 	panel.fill_color = rcolor
-	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(rcolor.r, rcolor.g, rcolor.b, 0.07)
-	style.border_color = Color(rcolor.r, rcolor.g, rcolor.b, 0.60)
-	style.set_border_width_all(1)
-	for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
-			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
-		style.set(prop, 4)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(rcolor))
 	if has_evos:
 		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		_add_hover_feedback(panel)
 	wrapper.add_child(panel)
 
-	var m := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		m.add_theme_constant_override(s, 6)
+	var m := UIHelpers.margin_of(6)
 	panel.add_child(m)
 
 	var vb := VBoxContainer.new()
@@ -1195,19 +1172,10 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	var panel := XPCard.new()
 	panel.xp_fill    = xp_fill
 	panel.fill_color = tc
-	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(tc.r, tc.g, tc.b, 0.06)
-	style.border_color = Color(tc.r, tc.g, tc.b, 0.38)
-	style.set_border_width_all(1)
-	for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
-			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
-		style.set(prop, 3)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(tc, 0.06, 0.38, 1, 3))
 	margin.add_child(panel)
 
-	var pm := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		pm.add_theme_constant_override(s, 4)
+	var pm := UIHelpers.margin_of(4)
 	panel.add_child(pm)
 
 	var vb := VBoxContainer.new()
@@ -1247,6 +1215,7 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 
 	return margin
 
+# Retourne la liste d'effets pour le palier t, ou les effets de base si absent.
 func _tier_effects(pdata: Dictionary, t: int) -> Array:
 	var te_list: Array = pdata.get("tier_effects", [])
 	if t < te_list.size():
@@ -1254,55 +1223,60 @@ func _tier_effects(pdata: Dictionary, t: int) -> Array:
 		if not effs.is_empty(): return effs
 	return pdata.get("base_stats", {}).get("effects", [])
 
+# Formate un entier XP avec séparateur de milliers (ex: 1 234).
 func _xp_fmt(xp: int) -> String:
 	if xp >= 1000:
 		var s := str(xp)
 		return s.left(s.length() - 3) + " " + s.right(3)
 	return str(xp)
 
-func _panel_nav(desc_text: String, icon: String, scene_path: String) -> void:
-	var desc := Label.new()
-	desc.text = desc_text
-	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc.add_theme_font_size_override("font_size", 13)
-	desc.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_rp_content.add_child(desc)
-
-	var btn := Button.new()
-	btn.text = "%s  Entrer" % icon
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.add_theme_font_size_override("font_size", 14)
-	btn.pressed.connect(func() -> void: get_tree().change_scene_to_file(scene_path))
-	_rp_content.add_child(btn)
-
 # ═══════════════════════════════════════════════════════════
 #  Panneau Expéditions — sélection de biome intégrée
 # ═══════════════════════════════════════════════════════════
 
+# Panneau Expéditions : placeholder ou bouton de départ + accordéon des biomes disponibles.
 func _panel_adventure() -> void:
 	var tier   := _current_tier()
 	var tcolor := UIColors.tier_color(tier)
 
-	if _adv_selected_biome_id.is_empty() or GameData.get_entity(_adv_selected_biome_id).is_empty():
-		_adv_selected_biome_id = _adv_first_biome_id()
+	# Invalide la sélection si l'entité n'existe plus (pas d'auto-select)
+	if not _adv_selected_biome_id.is_empty() and GameData.get_entity(_adv_selected_biome_id).is_empty():
+		_adv_selected_biome_id = ""
 
-	# ── Gros bouton "Partir en Expédition" ────────────────────
+	# ── Slot supérieur : placeholder OU bouton ────────────────
+	var no_biome_selected := _adv_selected_biome_id.is_empty()
+
+	# Encadré neutre (aucun biome choisi)
+	var placeholder := PanelContainer.new()
+	placeholder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	placeholder.custom_minimum_size   = Vector2(0, 52)
+	placeholder.visible = no_biome_selected
+	placeholder.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.25, 1, 6))
+	var ph_lbl := Label.new()
+	ph_lbl.text = "Choisir un biome pour partir en expédition"
+	ph_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ph_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	ph_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ph_lbl.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	ph_lbl.add_theme_font_size_override("font_size", 13)
+	ph_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	placeholder.add_child(ph_lbl)
+	_rp_content.add_child(placeholder)
+
+	# Bouton actif (biome sélectionné)
 	var btn := Button.new()
-	btn.text = "⚔   PARTIR EN EXPÉDITION"
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size   = Vector2(0, 52)
 	btn.add_theme_font_size_override("font_size", 17)
 	btn.add_theme_color_override("font_color", tcolor)
-	var s_n := StyleBoxFlat.new()
-	s_n.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.14)
-	s_n.border_color = tcolor
-	s_n.set_border_width_all(2)
-	s_n.set_corner_radius_all(6)
-	btn.add_theme_stylebox_override("normal", s_n)
-	var s_h := s_n.duplicate() as StyleBoxFlat
-	s_h.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.30)
-	btn.add_theme_stylebox_override("hover", s_h)
+	btn.visible = not no_biome_selected
+	if not no_biome_selected:
+		var bname: String = str(GameData.get_entity(_adv_selected_biome_id).get("name", _adv_selected_biome_id)).to_upper()
+		btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+	else:
+		btn.text = "⚔   PARTIR EN EXPÉDITION"
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	btn.pressed.connect(_on_start_selected_expedition)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_add_hover_feedback(btn)
@@ -1312,7 +1286,7 @@ func _panel_adventure() -> void:
 	_rp_content.add_child(HSeparator.new())
 
 	# ── Liste des biomes (accordéon) ──────────────────────────
-	_rp_content.add_child(_section_header("◆  BIOMES DISPONIBLES", tcolor))
+	_rp_content.add_child(UIHelpers.section_header("◆  BIOMES DISPONIBLES", tcolor))
 
 	# Références partagées entre les closures pour l'accordéon
 	var contents:     Dictionary = {}   # biome_id → VBoxContainer (détail)
@@ -1354,27 +1328,21 @@ func _panel_adventure() -> void:
 				section.visible = true
 				arrow.text = "  ▼"
 				btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+				placeholder.visible = false
+				btn.visible = true
 		)
 		_rp_content.add_child(wrapper)
 
-func _adv_first_biome_id() -> String:
-	for eid in GameData.entities:
-		if GameData.entities[eid].get("entity_type", "") == "biome":
-			return eid
-	return ""
-
+# Lance l'aventure sur le biome sélectionné et bascule vers CombatScene.
 func _on_start_selected_expedition() -> void:
 	if _adv_selected_biome_id.is_empty():
 		return
 	GameData.player["active_biome_id"] = _adv_selected_biome_id
 	AdventureSystem.start_adventure(_adv_selected_biome_id)
-	get_tree().change_scene_to_file("res://scenes/Biome.tscn")
+	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
 
-# Retourne { wrapper, panel, section, arrow }.
-# wrapper = VBoxContainer à ajouter au parent.
-# panel   = PanelContainer cliquable (gui_input connecté par _panel_adventure).
-# section = VBoxContainer des catégories (caché par défaut).
-# arrow   = Label ▶/▼.
+# Construit la carte accordéon d'un biome avec ses catégories (créatures, pièges, etc.).
+# Retourne { wrapper, panel, section, arrow } pour que _panel_adventure connecte le gui_input.
 func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	var btier  := biome.get("current_tier", 0) as int
 	var bcolor := UIColors.tier_color(btier)
@@ -1396,17 +1364,10 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_add_hover_feedback(panel)
-	var ps := StyleBoxFlat.new()
-	ps.bg_color     = Color(bcolor.r, bcolor.g, bcolor.b, 0.07)
-	ps.border_color = Color(bcolor.r, bcolor.g, bcolor.b, 0.60)
-	ps.set_border_width_all(1)
-	ps.set_corner_radius_all(4)
-	panel.add_theme_stylebox_override("panel", ps)
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(bcolor))
 	wrapper.add_child(panel)
 
-	var pm := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		pm.add_theme_constant_override(s, 8)
+	var pm := UIHelpers.margin_of(8)
 	panel.add_child(pm)
 
 	var pvb := VBoxContainer.new()
@@ -1463,15 +1424,15 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	cat_vb.add_theme_constant_override("separation", 3)
 	indent.add_child(cat_vb)
 
-	_adv_category_card(cat_vb, "CRÉATURES",   pools["creatures"],  UIColors.TYPE_CREATURE)
-	_adv_category_card(cat_vb, "PIÈGES",      pools["traps"],      UIColors.TYPE_TRAP)
-	_adv_category_card(cat_vb, "ÉVÉNEMENTS",  pools["events"],     UIColors.TYPE_EVENT_POS)
-	_adv_category_card(cat_vb, "ÉQUIPEMENTS", pools["equipment"],  UIColors.STAT_ATK)
+	_adv_category_card(cat_vb, "CRÉATURES",    pools["creatures"],    UIColors.TYPE_CREATURE)
+	_adv_category_card(cat_vb, "PIÈGES",       pools["traps"],        UIColors.TYPE_TRAP)
+	_adv_category_card(cat_vb, "BÉNÉDICTIONS", pools["benedictions"], UIColors.TYPE_BENEDICTION)
+	_adv_ingredient_section(cat_vb, pools["ingredients"])
 
 	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
 
-# Carte catégorie cliquable (Créatures / Pièges / Événements / Équipements).
-# Même pattern que _passive_card : panneau cliquable + liste repliée en dessous.
+# Carte catégorie cliquable (Créatures / Pièges / Bénédictions) avec compteur de découverte.
+# Panneau cliquable + liste d'entités repliée en dessous.
 func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color: Color) -> void:
 	if pool.is_empty():
 		return
@@ -1488,17 +1449,10 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_add_hover_feedback(cat_panel)
-	var cps := StyleBoxFlat.new()
-	cps.bg_color     = Color(nc.r, nc.g, nc.b, 0.06)
-	cps.border_color = Color(nc.r, nc.g, nc.b, 0.38)
-	cps.set_border_width_all(1)
-	cps.set_corner_radius_all(3)
-	cat_panel.add_theme_stylebox_override("panel", cps)
+	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
 	cat_wrap.add_child(cat_panel)
 
-	var cpm := MarginContainer.new()
-	for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-		cpm.add_theme_constant_override(s, 6)
+	var cpm := UIHelpers.margin_of(6)
 	cat_panel.add_child(cpm)
 
 	var chdr := HBoxContainer.new()
@@ -1547,8 +1501,8 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
 	)
 
-# Remplit parent avec des cartes XPCard par entité du pool (style _evo_row).
-func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void:
+# Remplit parent avec une XPCard par entité du pool. Entités non découvertes → ligne "????".
+func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 	var total := pool.size()
 	for i: int in range(total):
 		var entry    := pool[i] as Dictionary
@@ -1586,19 +1540,10 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 			panel.xp_fill    = xp_fill
 			panel.fill_color = ec
 			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var style := StyleBoxFlat.new()
-			style.bg_color     = Color(ec.r, ec.g, ec.b, 0.06)
-			style.border_color = Color(ec.r, ec.g, ec.b, 0.38)
-			style.set_border_width_all(1)
-			for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
-					"corner_radius_bottom_left", "corner_radius_bottom_right"]:
-				style.set(prop, 3)
-			panel.add_theme_stylebox_override("panel", style)
+			panel.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.38, 1, 3))
 			parent.add_child(panel)
 
-			var pm := MarginContainer.new()
-			for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-				pm.add_theme_constant_override(s, 4)
+			var pm := UIHelpers.margin_of(4)
 			panel.add_child(pm)
 
 			var hb := HBoxContainer.new()
@@ -1631,19 +1576,10 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 			# Entité non découverte — style "À DÉBLOQUER"
 			var panel := PanelContainer.new()
 			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var style := StyleBoxFlat.new()
-			style.bg_color     = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g,
-					UIColors.TEXT_MUTED.b, 0.04)
-			style.border_color = Color(UIColors.TEXT_MUTED.r, UIColors.TEXT_MUTED.g,
-					UIColors.TEXT_MUTED.b, 0.20)
-			style.set_border_width_all(1)
-			style.set_corner_radius_all(3)
-			panel.add_theme_stylebox_override("panel", style)
+			panel.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.04, 0.20, 1, 3))
 			parent.add_child(panel)
 
-			var pm := MarginContainer.new()
-			for s: String in ["margin_left","margin_right","margin_top","margin_bottom"]:
-				pm.add_theme_constant_override(s, 4)
+			var pm := UIHelpers.margin_of(4)
 			panel.add_child(pm)
 
 			var hb := HBoxContainer.new()
@@ -1656,6 +1592,103 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 			unk.add_theme_font_size_override("font_size", 11)
 			unk.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 			hb.add_child(unk)
+
+# Carte catégorie dédiée aux ingrédients de biome.
+# Verrouillée tant que village_tier < 2 : affiche uniquement un message de prérequis.
+# Débloquée : liste nom (couleur tier), plage de quantité et chance de drop par item.
+func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
+	if pool.is_empty():
+		return
+	var locked: bool = GameData.player.get("village_tier", 0) < 2
+	var nc := UIColors.CARD_NEUTRAL
+
+	var cat_wrap := VBoxContainer.new()
+	cat_wrap.add_theme_constant_override("separation", 2)
+	cat_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(cat_wrap)
+
+	var cat_panel := PanelContainer.new()
+	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if not locked:
+		cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		_add_hover_feedback(cat_panel)
+	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
+	cat_wrap.add_child(cat_panel)
+
+	var cpm := UIHelpers.margin_of(6)
+	cat_panel.add_child(cpm)
+
+	var chdr := HBoxContainer.new()
+	chdr.add_theme_constant_override("separation", 8)
+	cpm.add_child(chdr)
+
+	var clbl := Label.new()
+	clbl.text = "INGRÉDIENTS"
+	clbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clbl.add_theme_font_size_override("font_size", 11)
+	clbl.add_theme_color_override("font_color", nc)
+	chdr.add_child(clbl)
+
+	if locked:
+		var lock_lbl := Label.new()
+		lock_lbl.text = "Village Tier 2"
+		lock_lbl.add_theme_font_size_override("font_size", 10)
+		lock_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		chdr.add_child(lock_lbl)
+		return
+
+	var cat_arrow := Label.new()
+	cat_arrow.text = "  ▶"
+	cat_arrow.add_theme_font_size_override("font_size", 10)
+	cat_arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	chdr.add_child(cat_arrow)
+
+	var ent_section := VBoxContainer.new()
+	ent_section.add_theme_constant_override("separation", 3)
+	ent_section.visible = false
+	cat_wrap.add_child(ent_section)
+
+	var ent_indent := MarginContainer.new()
+	ent_indent.add_theme_constant_override("margin_left", 10)
+	ent_indent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ent_section.add_child(ent_indent)
+
+	var ent_vb := VBoxContainer.new()
+	ent_vb.add_theme_constant_override("separation", 3)
+	ent_indent.add_child(ent_vb)
+
+	for entry: Dictionary in pool:
+		var ec := UIColors.tier_color(int(entry.get("tier", 0)))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		ent_vb.add_child(row)
+
+		var name_lbl := Label.new()
+		name_lbl.text = entry.get("name", "?")
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.add_theme_font_size_override("font_size", 11)
+		name_lbl.add_theme_color_override("font_color", ec)
+		row.add_child(name_lbl)
+
+		var qty_min := int(entry.get("qty_min", 1))
+		var qty_max := int(entry.get("qty_max", 1))
+		var qty_lbl := Label.new()
+		qty_lbl.text = ("×%d–%d" % [qty_min, qty_max]) if qty_min != qty_max else ("×%d" % qty_min)
+		qty_lbl.add_theme_font_size_override("font_size", 10)
+		qty_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		row.add_child(qty_lbl)
+
+		var chance_lbl := Label.new()
+		chance_lbl.text = "%d%%" % int(float(entry.get("chance", 0.0)) * 100.0)
+		chance_lbl.add_theme_font_size_override("font_size", 10)
+		chance_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		row.add_child(chance_lbl)
+
+	cat_panel.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+			ent_section.visible = not ent_section.visible
+			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
+	)
 
 # Feedback hover + press sur n'importe quelle carte cliquable.
 # Hover  : scale x1.03 avec overshoot (TRANS_BACK) + brightnes x1.30.
@@ -1702,6 +1735,7 @@ func _add_hover_feedback(panel: Control) -> void:
 		tw.parallel().tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.14)
 	)
 
+# Panneau générique "Bientôt disponible" pour les fonctionnalités non implémentées.
 func _panel_soon(label: String) -> void:
 	var lbl := Label.new()
 	lbl.text = "✦  %s  ✦\n\nBientôt disponible" % label
@@ -1711,6 +1745,7 @@ func _panel_soon(label: String) -> void:
 	_rp_content.add_child(lbl)
 
 # ─── Debug : boutons tier ─────────────────────────────────────
+# Ajoute les boutons "Tier +/-" pour tester visuellement les tiers sans sauvegarder.
 func _build_debug_buttons() -> void:
 	var hb := HBoxContainer.new()
 	hb.anchor_left = 0.0; hb.anchor_top    = 0.0
@@ -1730,6 +1765,7 @@ func _build_debug_buttons() -> void:
 	dn.pressed.connect(_debug_tier_down)
 	hb.add_child(dn)
 
+# Ajoute le bouton ⛶ en haut à droite pour basculer le plein écran.
 func _build_fullscreen_btn() -> void:
 	var btn := Button.new()
 	btn.text = "⛶"
@@ -1746,6 +1782,7 @@ func _build_fullscreen_btn() -> void:
 	btn.pressed.connect(func() -> void: GameSettings.set_fullscreen(not GameSettings.fullscreen))
 	add_child(btn)
 
+# Incrémente le tier du héro, réinitialise son XP et recharge la scène.
 func _debug_tier_up() -> void:
 	var hero := GameData.get_entity("hero")
 	var tier := hero.get("current_tier", 0) as int
@@ -1755,6 +1792,7 @@ func _debug_tier_up() -> void:
 		SaveManager.save()
 		get_tree().reload_current_scene()
 
+# Décrémente le tier du héro, réinitialise son XP et recharge la scène.
 func _debug_tier_down() -> void:
 	var hero := GameData.get_entity("hero")
 	var tier := hero.get("current_tier", 0) as int
@@ -1765,6 +1803,7 @@ func _debug_tier_down() -> void:
 		get_tree().reload_current_scene()
 
 # ─── Clicker (tier 0) ─────────────────────────────────────────
+# Ajoute XP_PER_CLICK XP au héro et évolue automatiquement si le seuil est atteint.
 func _on_hero_click() -> void:
 	var hero  := GameData.get_entity("hero")
 	var xp    := hero.get("current_xp", 0.0) as float + XP_PER_CLICK
@@ -1779,6 +1818,7 @@ func _on_hero_click() -> void:
 		get_tree().reload_current_scene()
 
 # ─── Factory hexagone ─────────────────────────────────────────
+# Crée un HexItem, le positionne sur le hub et l'enregistre dans _hex_items.
 func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Callable, panel_id: String) -> void:
 	var item := HexItem.new()
 	item.icon_text   = icon
@@ -1801,6 +1841,7 @@ func _go_relic()     -> void: _open_panel("relic")
 func _go_tbd()       -> void: _open_panel("tbd")
 
 # ─── Utils ────────────────────────────────────────────────────
+# Positionne ctrl centré sur pos avec la taille sz, en mode ancre centre.
 func _center(ctrl: Control, pos: Vector2, sz: Vector2) -> void:
 	ctrl.anchor_left   = 0.5; ctrl.anchor_right  = 0.5
 	ctrl.anchor_top    = 0.5; ctrl.anchor_bottom = 0.5
