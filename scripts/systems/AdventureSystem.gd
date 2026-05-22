@@ -73,12 +73,19 @@ var _combat_start_hp:         float = 0.0        # PV du héro au début du comb
 
 # ─── Statistiques du cycle en cours ─────────────────────────
 
-var _cycle_luck:        int   = 0    # Luck temporaire accumulée par les bénédictions de type "luck"
-var _cycle_xp:          float = 0.0  # XP totale gagnée par le héro ce cycle
-var _cycle_loot:        int   = 0    # Nombre total d'objets droppés
-var _cycle_combo_max:   int   = 0    # Meilleur combo atteint
-var _cycle_combats_won: int   = 0    # Combats remportés
-var _cycle_events:      int   = 0    # Rencontres totales (hors créatures)
+var _cycle_luck:               int        = 0    # Luck temporaire accumulée par les bénédictions de type "luck"
+var _cycle_xp:                 float      = 0.0  # XP totale gagnée par le héro ce cycle
+var _cycle_loot:               int        = 0    # Nombre total d'objets droppés
+var _cycle_combo_max:          int        = 0    # Meilleur combo atteint
+var _cycle_combats_won:        int        = 0    # Combats remportés
+var _cycle_events:             int        = 0    # Rencontres totales (hors créatures)
+var _cycle_events_total:       int        = 0
+var _cycle_positive_events:    int        = 0
+var _cycle_traps_triggered:    int        = 0
+var _cycle_xp_hero:            float      = 0.0
+var _cycle_xp_biome:           float      = 0.0
+var _cycle_xp_passives_total:  float      = 0.0
+var _cycle_xp_passives_detail: Dictionary = {}
 
 func _ready() -> void:
 	_encounter_timer          = Timer.new()
