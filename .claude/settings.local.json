@@ -11,7 +11,12 @@
       "Bash(git branch *)",
       "Bash(git stash *)",
       "Skill(update-config)",
-      "PowerShell(Remove-Item *)"
+      "PowerShell(Remove-Item *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\b.consol\\\\Downloads\\\\Divers\\\\ecole\\\\Dossier UE9\\\\IdleEvolution\" -Recurse -File | Where-Object {$_.Extension -match '\\\\.\\(tscn|gd|tres|res|json\\)$'} | Select-Object -ExpandProperty FullName | Sort-Object)",
+      "Bash(Get-ChildItem *)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\b.consol\\\\Downloads\\\\Divers\\\\ecole\\\\Dossier UE9\\\\IdleEvolution\\\\scripts\\\\combat\")",
+      "Bash(Out-Null)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\b.consol\\\\Downloads\\\\Divers\\\\ecole\\\\Dossier UE9\\\\IdleEvolution\\\\scenes\\\\combat\")"
     ]
   }
 }
