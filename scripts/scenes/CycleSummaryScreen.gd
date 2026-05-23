@@ -248,6 +248,7 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 	var detail   := data.get("xp_passives_detail", {}) as Dictionary
 
 	# Héro — barre vs seuil du prochain tier héro
+	var cid         := data.get("creature_id", "") as String
 	var hero_thresh := _next_tier_threshold(GameData.get_entity(cid))
 	var hero_card   := _xp_card("⚔", "Héro", hero_thresh, UIColors.STAT_ATK, tcolor)
 	vb.add_child(hero_card["container"])
