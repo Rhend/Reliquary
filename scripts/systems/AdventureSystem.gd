@@ -161,26 +161,7 @@ func stop_adventure() -> void:
 	if CombatPlayer.is_playing:
 		CombatPlayer.stop()
 	_cycle_combo_max = maxi(_cycle_combo_max, _combo_count)
-	# Sauvegarde le résumé partiel pour CycleSummaryScreen (sortie volontaire).
-	CycleData.last_cycle_summary = {
-		"victory":              false,
-		"biome_id":             current_biome_id,
-		"creature_id":          GameData.player.get("active_creature_id", ""),
-		"modifier":             current_modifier,
-		"xp_total":             _cycle_xp,
-		"xp_hero":              _cycle_xp_hero,
-		"xp_biome":             _cycle_xp_biome,
-		"xp_passives_total":    _cycle_xp_passives_total,
-		"xp_passives_detail":   _cycle_xp_passives_detail,
-		"loot_total":           _cycle_loot,
-		"combo_max":            _cycle_combo_max,
-		"combats_won":          _cycle_combats_won,
-		"events":               _cycle_events,
-		"events_total":         _cycle_events_total,
-		"positive_events":      _cycle_positive_events,
-		"traps_triggered":      _cycle_traps_triggered,
-		"cycle_luck":           _cycle_luck,
-	}
+	CycleData.last_cycle_summary = _build_summary(false)
 	EventBus.adventure_stopped.emit()
 
 # Bonus ATK/DEF du modificateur de cycle + bonus de combo.
@@ -506,8 +487,12 @@ func _end_adventure(victory: bool) -> void:
 	is_running = false
 	_encounter_timer.stop()
 	_cycle_combo_max = maxi(_cycle_combo_max, _combo_count)
+	var summary := _build_summary(victory)
+	CycleData.last_cycle_summary = summary
+	EventBus.adventure_cycle_ended.emit(summary)
 
-	var summary := {
+func _build_summary(victory: bool) -> Dictionary:
+	return {
 		"victory":              victory,
 		"biome_id":             current_biome_id,
 		"creature_id":          GameData.player.get("active_creature_id", ""),
@@ -526,5 +511,3 @@ func _end_adventure(victory: bool) -> void:
 		"traps_triggered":      _cycle_traps_triggered,
 		"cycle_luck":           _cycle_luck,
 	}
-	CycleData.last_cycle_summary = summary
-	EventBus.adventure_cycle_ended.emit(summary)
