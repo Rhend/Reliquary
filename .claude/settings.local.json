@@ -16,7 +16,13 @@
       "Bash(Get-ChildItem *)",
       "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\b.consol\\\\Downloads\\\\Divers\\\\ecole\\\\Dossier UE9\\\\IdleEvolution\\\\scripts\\\\combat\")",
       "Bash(Out-Null)",
-      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\b.consol\\\\Downloads\\\\Divers\\\\ecole\\\\Dossier UE9\\\\IdleEvolution\\\\scenes\\\\combat\")"
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\b.consol\\\\Downloads\\\\Divers\\\\ecole\\\\Dossier UE9\\\\IdleEvolution\\\\scenes\\\\combat\")",
+      "Bash(git rm *)",
+      "Bash(git commit *)",
+      "Bash(Get-Content *)",
+      "Bash(\"/d/Godot/Godot_v4.5.1-stable_win64.exe\" --headless --path \"D:/Godot Project/Idles Games/IdleEvolution\" --quit)",
+      "Bash(/d/Godot/Godot_v4.5.1-stable_win64.exe *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('xp_thresholds:', d.get\\('xp_thresholds'\\)\\)\")"
     ]
   }
 }
