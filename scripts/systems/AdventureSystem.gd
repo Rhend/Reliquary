@@ -4,7 +4,7 @@
 # Fonctionnement général :
 #   1. start_adventure() initialise l'état et tire un modificateur.
 #   2. _schedule_next_encounter() démarre un timer (1 s pour le
-#      premier, 2 s pour les suivants).
+#      premier, 2.5 s après un combat, 1 s après piège ou bénédiction).
 #   3. À l'expiration, _process_encounter() tire le type de rencontre
 #      (créature / bénédiction / piège) selon la table du biome.
 #   4. Les rencontres de type créature délèguent à CombatPlayer et
@@ -31,7 +31,8 @@ extends Node
 # ─── Constantes ─────────────────────────────────────────────
 
 const FIRST_ENCOUNTER_DELAY: float = 1.0   # délai avant la toute première rencontre du cycle
-const BETWEEN_ENCOUNTERS_DELAY: float = 2.0 # délai entre chaque rencontre suivante
+const COMBAT_POST_DELAY:     float = 2.5   # pause après la fin d'un combat
+const INSTANT_EVENT_DELAY:   float = 1.0   # pause après piège ou bénédiction
 const DEFAULT_REGEN_PCT:    float = 0.15
 const COMBO_HP_THRESHOLD:   float = 0.25
 const COMBO_ATK_BONUS_PCT:  float = 0.05   # +5 % ATK par niveau de combo au-dessus de 1
@@ -358,7 +359,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_cycle_combo_max    = maxi(_cycle_combo_max, _combo_count)
 
 	_apply_regen(hero_id)
-	_schedule_next_encounter()
+	_schedule_next_encounter(COMBAT_POST_DELAY)
 
 # ═══════════════════════════════════════════════════════════
 #  Utilitaires internes
@@ -377,13 +378,14 @@ func _get_max_hp() -> float:
 	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
 	return float(GameData.get_effective_stats(hero_id).get("hp", 100)) + equip_hp + hp_bonus
 
-# Programme la prochaine rencontre — 1 s pour la première, 2 s pour les suivantes.
-func _schedule_next_encounter() -> void:
+# Programme la prochaine rencontre.
+# Utilise FIRST_ENCOUNTER_DELAY pour la toute première, sinon le délai fourni.
+func _schedule_next_encounter(delay: float = INSTANT_EVENT_DELAY) -> void:
 	if not is_running:
 		return
-	var delay := FIRST_ENCOUNTER_DELAY if _first_encounter_pending else BETWEEN_ENCOUNTERS_DELAY
-	_first_encounter_pending  = false
-	_encounter_timer.wait_time = delay
+	var actual_delay := FIRST_ENCOUNTER_DELAY if _first_encounter_pending else delay
+	_first_encounter_pending   = false
+	_encounter_timer.wait_time = actual_delay
 	_encounter_timer.start()
 
 # Tire le type de rencontre selon les probabilités du biome, ajustées par la luck.

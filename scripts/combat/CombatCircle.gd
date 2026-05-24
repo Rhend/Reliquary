@@ -20,6 +20,9 @@ const RING_WIDTH    := 14.0
 const NAME_HEIGHT   := 32.0
 const CTRL_PADDING  := 55.0   # marge pour corona des hauts tiers
 
+const IDLE_PULSE_SCALE:  float = 1.08  # scale max pendant la pulsation idle
+const IDLE_PULSE_PERIOD: float = 2.0   # durée d'un cycle complet (s)
+
 enum EntityType { CREATURE, TRAP, BENEDICTION }
 
 # ─── État entité ─────────────────────────────────────────────
@@ -44,6 +47,10 @@ var _shake_time:     float   = 0.0               # durée de tremblement restant
 var _shake_amplitude: float  = 0.0               # amplitude max du tremblement en cours (px)
 var _flash_col:      Color   = Color.TRANSPARENT # couleur du flash (blanc=fort, or=crit, vert=soin)
 var _flash_alpha:    float   = 0.0               # alpha du flash, décroît automatiquement dans _process()
+
+# ─── État idle (entre deux événements) ──────────────────────
+var is_idle: bool  = false  # vrai pendant l'attente entre événements
+var _idle_t: float = 0.0    # horloge dédiée à la pulsation et aux motes ambiantes
 
 # ─── Action bar (remplie par CombatScene) ────────────────────
 var action_progress: float = 0.0   # 0..1 — progression de l'arc intérieur d'anticipation d'attaque
@@ -105,6 +112,9 @@ func setup(p_name: String, p_hp: float, p_max_hp: float,
 	_shake_time      = 0.0
 	_shake_amplitude = 0.0
 	_flash_alpha     = 0.0
+	is_idle          = false
+	_idle_t          = 0.0
+	scale            = Vector2.ONE
 	action_progress  = 0.0
 	_refresh_labels()
 	queue_redraw()
@@ -114,6 +124,16 @@ func update_hp(new_hp: float) -> void:
 	current_hp = clampf(new_hp, 0.0, max_hp)
 	_refresh_labels()
 	queue_redraw()
+
+# Active la pulsation idle et les motes ambiantes.
+func start_idle() -> void:
+	is_idle = true
+	_idle_t = 0.0
+
+# Arrête l'état idle et remet le cercle à son scale nominal.
+func stop_idle() -> void:
+	is_idle = false
+	scale   = Vector2.ONE
 
 # Déclenche le feedback proportionnel au pourcentage de HP infligé.
 # Catégories : faible (<10%), moyen (10-20%), fort (>20%), critique (futur).
@@ -189,6 +209,11 @@ func _process(delta: float) -> void:
 							 randf_range(-_shake_amplitude, _shake_amplitude))
 		_hp_label.position = _circle_center + Vector2(-70.0, -12.0) + _shake
 
+	if is_idle:
+		_idle_t += delta
+		var s := 1.0 + (IDLE_PULSE_SCALE - 1.0) * (0.5 - 0.5 * cos(TAU * _idle_t / IDLE_PULSE_PERIOD))
+		scale = Vector2(s, s)
+
 	queue_redraw()
 
 # ═══════════════════════════════════════════════════════════
@@ -233,6 +258,16 @@ func _draw() -> void:
 		draw_circle(Vector2.ZERO, CIRCLE_RADIUS, Color(_flash_col, _flash_alpha * 0.4))
 
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	# Motes ambiantes idle : 8 points orbitaux à alpha et taille pulsants
+	if is_idle:
+		var tc := UIColors.tier_color(tier)
+		for i in 8:
+			var angle := _idle_t * 0.35 + float(i) * TAU / 8.0
+			var r := CIRCLE_RADIUS + RING_WIDTH + 14.0 + sin(_idle_t * 1.6 + float(i) * 0.9) * 4.0
+			var pt := _circle_center + Vector2(cos(angle), sin(angle)) * r
+			var a  := 0.18 + 0.12 * sin(_idle_t * 2.1 + float(i) * 1.2)
+			draw_circle(pt, 1.6 + 0.6 * sin(_idle_t * 1.9 + float(i) * 0.7), Color(tc, a))
 
 # ═══════════════════════════════════════════════════════════
 #  Styles par type d'entité
