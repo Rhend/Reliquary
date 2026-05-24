@@ -51,6 +51,14 @@ signal modifier_activated(modifier: Dictionary)
 @warning_ignore("unused_signal")
 signal combo_changed(count: int)
 
+# Émis quand le compteur de bonus strike change (incrément ou remise à zéro après un break).
+@warning_ignore("unused_signal")
+signal bonus_strike_changed(new_strike: int)
+
+# Émis quand un coup ennemi lourd brise la série de bonus strikes.
+@warning_ignore("unused_signal")
+signal bonus_strike_broken()
+
 # Émis quand un événement positif de soin restaure des PV.
 # amount = PV effectivement restaurés, new_hp = PV après soin.
 @warning_ignore("unused_signal")
