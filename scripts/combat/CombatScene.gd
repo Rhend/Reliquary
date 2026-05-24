@@ -26,6 +26,11 @@ var _cycle_xp:   float = 0.0   # XP accumulée depuis le début du cycle en cour
 var _prev_tick:  int   = 0     # tick du dernier step vu — synchronise l'action bar avec CombatPlayer
 var _navigating: bool  = false # garde-fou contre les doubles appels à change_scene_to_file
 
+# ─── Idle (entre événements) ─────────────────────────────────
+var _idle_label:  Label = null  # label "En exploration..." visible si attente > 1.2 s
+var _idle_active: bool  = false # vrai pendant l'état d'attente entre deux événements
+var _idle_tw:     Tween = null  # tween du fade-in du label idle
+
 # ═══════════════════════════════════════════════════════════
 # Construit l'UI et connecte tous les signaux au démarrage.
 func _ready() -> void:
@@ -46,20 +51,34 @@ func _build_ui() -> void:
 
 # ── Circles ────────────────────────────────────────────────
 
-# Crée la zone centrale contenant les deux CombatCircle côte à côte.
+# Crée la zone centrale : cercles côte à côte + label idle en dessous.
 func _build_circles_area() -> Control:
 	var center := CenterContainer.new()
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 12)
+	center.add_child(vbox)
+
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 60)
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	center.add_child(hbox)
+	vbox.add_child(hbox)
 
 	_hero_circle  = CombatCircle.new()
 	_enemy_circle = CombatCircle.new()
 	hbox.add_child(_hero_circle)
 	hbox.add_child(_enemy_circle)
+
+	_idle_label = Label.new()
+	_idle_label.text = "En exploration..."
+	_idle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_idle_label.add_theme_font_size_override("font_size", 17)
+	_idle_label.add_theme_color_override("font_color", Color.WHITE)
+	_idle_label.modulate.a = 0.0
+	_idle_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(_idle_label)
 
 	return center
 
@@ -143,6 +162,7 @@ func _connect_signals() -> void:
 
 # Réinitialise l'UI au démarrage d'une nouvelle aventure (reset XP, buffs, équipement, cercle héro).
 func _on_adventure_started(_biome_id: String) -> void:
+	_stop_idle_state()
 	_flee_btn.disabled = false
 	_cycle_xp = 0.0
 	_update_xp_label()
@@ -160,6 +180,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 
 # Met à jour le cercle ennemi selon le type d'événement résolu (piège, positif, combat).
 func _on_event_resolved(event_data: Dictionary) -> void:
+	_stop_idle_state()
 	match event_data.get("type", ""):
 		"trap":
 			var trap := event_data.get("trap", {}) as Dictionary
@@ -171,12 +192,14 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 				var dmg := int(trap.get("damage", 0))
 				_hero_circle.update_hp(AdventureSystem.current_hp)
 				_hero_circle.take_damage(dmg, false)
+			_start_idle_state()
 		"benediction":
 			var bene := event_data.get("effect", {}) as Dictionary
 			_enemy_circle.setup(
 				bene.get("name", "Bénédiction"), 1.0, 1.0, 0,
 				CombatCircle.EntityType.BENEDICTION, false
 			)
+			_start_idle_state()
 		"creature":
 			# handled by _on_combat_started
 			pass
@@ -184,6 +207,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 # Initialise les deux cercles au début d'un combat et remet les barres d'action à zéro.
 func _on_combat_started(creature_id: String, enemy: Dictionary,
 		hero_hp: float, enemy_hp: float) -> void:
+	_stop_idle_state()
 	var creature  := GameData.get_entity(creature_id)
 	var hero_tier := int(creature.get("current_tier", 0))
 	_hero_circle.setup(
@@ -234,6 +258,8 @@ func _on_combat_ended(result: Dictionary) -> void:
 		# donc _cycle_xp est déjà mis à jour quand on arrive ici.
 		_cycle_xp = AdventureSystem._cycle_xp
 		_update_xp_label()
+		# Démarre l'idle après la fin de l'animation celebrate (~0.65s)
+		get_tree().create_timer(0.7).timeout.connect(_start_idle_state, CONNECT_ONE_SHOT)
 	else:
 		_enemy_circle.celebrate()
 		var tw := create_tween()
@@ -246,6 +272,7 @@ func _on_heal_applied(amount: float, new_hp: float) -> void:
 
 # Navigue vers le résumé de fin de cycle quand le cycle se termine naturellement.
 func _on_cycle_ended(result: Dictionary) -> void:
+	_stop_idle_state()
 	_flee_btn.disabled = true
 	_cycle_xp = float(result.get("xp_total", 0.0))
 	_update_xp_label()
@@ -253,11 +280,39 @@ func _on_cycle_ended(result: Dictionary) -> void:
 
 # Navigue vers le résumé quand le joueur arrête l'expédition manuellement.
 func _on_adventure_stopped() -> void:
+	_stop_idle_state()
 	_navigate_to_summary()
 
 # Demande à AdventureSystem de stopper l'aventure en cours.
 func _on_flee_pressed() -> void:
 	AdventureSystem.stop_adventure()
+
+# ═══════════════════════════════════════════════════════════
+#  Idle entre événements
+# ═══════════════════════════════════════════════════════════
+
+# Démarre la pulsation du cercle héro et programme l'apparition du label si gap > 1.2s.
+func _start_idle_state() -> void:
+	_idle_active = true
+	_hero_circle.start_idle()
+	get_tree().create_timer(1.2).timeout.connect(_on_idle_label_timer, CONNECT_ONE_SHOT)
+
+# Arrête la pulsation et cache immédiatement le label.
+func _stop_idle_state() -> void:
+	_idle_active = false
+	_hero_circle.stop_idle()
+	if _idle_tw:
+		_idle_tw.kill()
+		_idle_tw = null
+	if _idle_label:
+		_idle_label.modulate.a = 0.0
+
+# Appelée après le seuil de 1.2s — affiche le label si l'état idle est toujours actif.
+func _on_idle_label_timer() -> void:
+	if not _idle_active or not _idle_label:
+		return
+	_idle_tw = create_tween()
+	_idle_tw.tween_property(_idle_label, "modulate:a", 0.6, 0.4)
 
 # ═══════════════════════════════════════════════════════════
 #  Info bar — mise à jour
