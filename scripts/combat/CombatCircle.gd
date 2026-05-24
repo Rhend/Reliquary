@@ -37,11 +37,13 @@ var _dmg_layer:     Control # couche transparente pour les chiffres flottants
 var _circle_center: Vector2 # position du centre géométrique du cercle dans l'espace local
 
 # ─── Animation ───────────────────────────────────────────────
-var _t:           float   = 0.0              # horloge générale — pilote shimmer, pulse et orbes
-var _ring_rot:    float   = 0.0              # angle de rotation du ring (rad)
-var _shake:       Vector2 = Vector2.ZERO     # offset de tremblement appliqué lors d'un impact
-var _flash_col:   Color   = Color.TRANSPARENT # couleur du flash (rouge=dégâts, or=crit, vert=soin)
-var _flash_alpha: float   = 0.0             # alpha du flash, décroît automatiquement dans _process()
+var _t:              float   = 0.0               # horloge générale — pilote shimmer, pulse et orbes
+var _ring_rot:       float   = 0.0               # angle de rotation du ring (rad)
+var _shake:          Vector2 = Vector2.ZERO      # offset de tremblement courant
+var _shake_time:     float   = 0.0               # durée de tremblement restante (s)
+var _shake_amplitude: float  = 0.0               # amplitude max du tremblement en cours (px)
+var _flash_col:      Color   = Color.TRANSPARENT # couleur du flash (blanc=fort, or=crit, vert=soin)
+var _flash_alpha:    float   = 0.0               # alpha du flash, décroît automatiquement dans _process()
 
 # ─── Action bar (remplie par CombatScene) ────────────────────
 var action_progress: float = 0.0   # 0..1 — progression de l'arc intérieur d'anticipation d'attaque
@@ -95,11 +97,15 @@ func setup(p_name: String, p_hp: float, p_max_hp: float,
 	tier         = clampi(p_tier, 0, 5)
 	entity_type  = p_type
 	is_hero      = p_is_hero
-	modulate     = Color.WHITE
-	scale        = Vector2.ONE
-	_t           = 0.0
-	_ring_rot    = 0.0
-	action_progress = 0.0
+	modulate         = Color.WHITE
+	scale            = Vector2.ONE
+	_t               = 0.0
+	_ring_rot        = 0.0
+	_shake           = Vector2.ZERO
+	_shake_time      = 0.0
+	_shake_amplitude = 0.0
+	_flash_alpha     = 0.0
+	action_progress  = 0.0
 	_refresh_labels()
 	queue_redraw()
 
@@ -109,20 +115,38 @@ func update_hp(new_hp: float) -> void:
 	_refresh_labels()
 	queue_redraw()
 
-# Déclenche le flash de dégâts (or si critique, rouge sinon) et le tremblement.
-# Fait apparaître le chiffre flottant correspondant.
+# Déclenche le feedback proportionnel au pourcentage de HP infligé.
+# Catégories : faible (<10%), moyen (10-20%), fort (>20%), critique (futur).
 func take_damage(amount: int, is_crit: bool) -> void:
-	_flash_col   = UIColors.FILTER_ON if is_crit else UIColors.LOG_DEFEAT
-	_flash_alpha = 0.7
-	_shake       = Vector2(randf_range(-1, 1), randf_range(-0.5, 0.5)).normalized() \
-	               * (12.0 if is_crit else 6.0)
-	_spawn_number(str(amount), is_crit, false)
+	var dmg_pct    := float(amount) / max_hp if max_hp > 0.0 else 0.0
+	var hero_deals := not is_hero
+
+	if is_crit:
+		_flash_col       = Color.WHITE
+		_flash_alpha     = 0.55
+		_shake_time      = 0.20
+		_shake_amplitude = 10.0
+		_spawn_number(str(amount), 48, Color.WHITE)
+	elif dmg_pct >= 0.20:
+		_flash_col       = Color.WHITE
+		_flash_alpha     = 0.55
+		_shake_time      = 0.15
+		_shake_amplitude = 6.0
+		var c := UIColors.DMG_HEAVY_HERO if hero_deals else UIColors.DMG_HEAVY_ENEMY
+		_spawn_number(str(amount), 36, c)
+	elif dmg_pct >= 0.10:
+		_shake_time      = 0.10
+		_shake_amplitude = 3.0
+		_spawn_number(str(amount), 29, UIColors.FILTER_ON)
+	else:
+		var c := Color.WHITE if hero_deals else UIColors.LOG_DEFEAT
+		_spawn_number(str(amount), 24, c)
 
 # Déclenche le flash de soin (vert) et fait apparaître le chiffre flottant "+N".
 func receive_heal(amount: int) -> void:
 	_flash_col   = UIColors.HEAL_COLOR
 	_flash_alpha = 0.5
-	_spawn_number("+" + str(amount), false, true)
+	_spawn_number("+" + str(amount), 24, UIColors.HEAL_COLOR)
 
 # Animation de victoire : double pulse de scale (spring-back).
 func celebrate() -> void:
@@ -155,8 +179,14 @@ func _process(delta: float) -> void:
 	if _flash_alpha > 0.0:
 		_flash_alpha = maxf(_flash_alpha - delta * 5.5, 0.0)
 
-	if _shake.length_squared() > 0.5:
-		_shake = _shake.lerp(Vector2.ZERO, delta * 16.0)
+	if _shake_time > 0.0:
+		_shake_time -= delta
+		if _shake_time <= 0.0:
+			_shake_time = 0.0
+			_shake      = Vector2.ZERO
+		else:
+			_shake = Vector2(randf_range(-_shake_amplitude, _shake_amplitude),
+							 randf_range(-_shake_amplitude, _shake_amplitude))
 		_hp_label.position = _circle_center + Vector2(-70.0, -12.0) + _shake
 
 	queue_redraw()
@@ -365,17 +395,12 @@ func _refresh_labels() -> void:
 		_hp_label.text = "%d / %d" % [int(current_hp), int(max_hp)]
 
 # Crée un chiffre flottant animé (monte et disparaît en 0.9 s) dans _dmg_layer.
-func _spawn_number(text: String, is_crit: bool, is_heal: bool) -> void:
+func _spawn_number(text: String, font_size: int, color: Color) -> void:
 	var lbl := Label.new()
 	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 36 if is_crit else 24)
+	lbl.add_theme_font_size_override("font_size", font_size)
+	lbl.add_theme_color_override("font_color", color)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if is_heal:
-		lbl.add_theme_color_override("font_color", UIColors.HEAL_COLOR)
-	elif is_crit:
-		lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	else:
-		lbl.add_theme_color_override("font_color", Color.WHITE)
 
 	var sx := _circle_center.x + randf_range(-20.0, 20.0) - 22.0
 	var sy := _circle_center.y - 14.0
