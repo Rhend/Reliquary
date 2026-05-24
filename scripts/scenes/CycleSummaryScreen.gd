@@ -38,7 +38,6 @@ func _build_ui() -> void:
 
 	var biome      := GameData.get_entity(data.get("biome_id", "") as String)
 	var biome_name := biome.get("name", "Biome Inconnu") as String
-	var victory    := data.get("victory", false) as bool
 
 	# ── Fond BG_DARK ────────────────────────────────────────
 	var bg := ColorRect.new()
@@ -100,15 +99,6 @@ func _build_ui() -> void:
 	title_lbl.add_theme_color_override("font_color", Color.WHITE)
 	title_hb.add_child(title_lbl)
 
-	var badge := Label.new()
-	badge.text = "Victoire !" if victory else "Défaite"
-	badge.add_theme_font_size_override("font_size", 12)
-	badge.add_theme_color_override("font_color",
-		UIColors.LOG_VICTORY if victory else UIColors.LOG_DEFEAT)
-	badge.custom_minimum_size  = Vector2(72, 0)
-	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	badge.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	title_hb.add_child(badge)
 
 	# ── Séparateur ──────────────────────────────────────────
 	var sep_color := tcolor; sep_color.a = 0.55

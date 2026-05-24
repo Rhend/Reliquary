@@ -27,9 +27,12 @@ var _prev_tick:  int   = 0     # tick du dernier step vu — synchronise l'actio
 var _navigating: bool  = false # garde-fou contre les doubles appels à change_scene_to_file
 
 # ─── Idle (entre événements) ─────────────────────────────────
-var _idle_label:  Label = null  # label "En exploration..." visible si attente > 1.2 s
-var _idle_active: bool  = false # vrai pendant l'état d'attente entre deux événements
-var _idle_tw:     Tween = null  # tween du fade-in du label idle
+var _idle_label:   Label = null  # label "En exploration..." visible si attente > 1.2 s
+var _idle_active:  bool  = false # vrai pendant l'état d'attente entre deux événements
+var _idle_tw:      Tween = null  # tween du fade-in du label idle
+
+# ─── Combat ───────────────────────────────────────────────────
+var _combat_label: Label = null  # label "En combat..." affiché pendant un duel
 
 # ═══════════════════════════════════════════════════════════
 # Construit l'UI et connecte tous les signaux au démarrage.
@@ -60,6 +63,15 @@ func _build_circles_area() -> Control:
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 12)
 	center.add_child(vbox)
+
+	_combat_label = Label.new()
+	_combat_label.text = "En combat..."
+	_combat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_combat_label.add_theme_font_size_override("font_size", 17)
+	_combat_label.add_theme_color_override("font_color", Color.WHITE)
+	_combat_label.modulate.a = 0.0
+	_combat_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(_combat_label)
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 60)
@@ -208,6 +220,8 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 func _on_combat_started(creature_id: String, enemy: Dictionary,
 		hero_hp: float, enemy_hp: float) -> void:
 	_stop_idle_state()
+	if _combat_label:
+		_combat_label.modulate.a = 1.0
 	var creature  := GameData.get_entity(creature_id)
 	var hero_tier := int(creature.get("current_tier", 0))
 	_hero_circle.setup(
@@ -249,6 +263,8 @@ func _on_step_ended(_step: CombatStep) -> void:
 
 # Déclenche celebrate/die sur les cercles selon le résultat et met à jour le label XP.
 func _on_combat_ended(result: Dictionary) -> void:
+	if _combat_label:
+		_combat_label.modulate.a = 0.0
 	_hero_circle.action_progress  = 0.0
 	_enemy_circle.action_progress = 0.0
 	if result.get("victory", false):
