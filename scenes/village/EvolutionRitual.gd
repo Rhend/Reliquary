@@ -50,7 +50,7 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
-	bg.color = Color.BLACK
+	bg.color = UIColors.BG_DARK
 	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	add_child(bg)
 
