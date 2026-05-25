@@ -366,8 +366,12 @@ func _panel_hero() -> void:
 			eb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			eb.add_theme_color_override("font_color", UIColors.FILTER_ON)
 			eb.pressed.connect(func() -> void:
+				var from_t := c.get("current_tier", 0) as int
 				if MasterySystem.evolve_entity(cid):
-					get_tree().reload_current_scene()
+					SaveManager.save()
+					_launch_evolution_ritual(
+						c.get("entity_type", "creature"), cid,
+						c.get("name", cid), from_t, from_t + 1)
 			)
 			_rp_content.add_child(eb)
 	else:
@@ -1190,9 +1194,34 @@ func _on_hero_click() -> void:
 	_xp_label.text      = "%d / %d XP" % [int(xp), int(xpmax)]
 	EventBus.xp_gained.emit("hero", XP_PER_CLICK)
 	if MasterySystem.can_evolve("hero"):
+		var from_t := hero.get("current_tier", 0) as int
 		MasterySystem.evolve_entity("hero")
 		SaveManager.save()
-		get_tree().reload_current_scene()
+		_launch_evolution_ritual("hero", "hero",
+			hero.get("name", "Héro"), from_t, from_t + 1)
+
+# ─── Rituel d'ascension ──────────────────────────────────────
+# Stocke les paramètres dans GameData puis fond vers noir avant de changer de scène.
+func _launch_evolution_ritual(entity_type: String, entity_id: String,
+		entity_name: String, from_tier: int, to_tier: int) -> void:
+	GameData.pending_evolution = {
+		"entity_type": entity_type,
+		"entity_id":   entity_id,
+		"entity_name": entity_name,
+		"from_tier":   from_tier,
+		"to_tier":     to_tier,
+	}
+	var overlay := ColorRect.new()
+	overlay.color = Color.BLACK
+	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	overlay.modulate.a = 0.0
+	overlay.z_index = 500
+	add_child(overlay)
+	var tw := create_tween()
+	tw.tween_property(overlay, "modulate:a", 1.0, 0.25).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		get_tree().change_scene_to_file("res://scenes/village/EvolutionRitual.tscn")
+	)
 
 # ─── Factory hexagone ─────────────────────────────────────────
 # Crée un HexItem, le positionne sur le hub et l'enregistre dans _hex_items.
