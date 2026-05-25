@@ -1171,7 +1171,7 @@ func _debug_tier_up() -> void:
 		hero["current_tier"] = tier + 1
 		hero["current_xp"]   = 0.0
 		SaveManager.save()
-		get_tree().reload_current_scene()
+		_launch_evolution_ritual("village", "hero", "Village", tier, tier + 1)
 
 # Décrémente le tier du héro, réinitialise son XP et recharge la scène.
 func _debug_tier_down() -> void:
@@ -1181,7 +1181,7 @@ func _debug_tier_down() -> void:
 		hero["current_tier"] = tier - 1
 		hero["current_xp"]   = 0.0
 		SaveManager.save()
-		get_tree().reload_current_scene()
+		_launch_evolution_ritual("village", "hero", "Village", tier, tier - 1)
 
 # ─── Clicker (tier 0) ─────────────────────────────────────────
 # Ajoute XP_PER_CLICK XP au héro et évolue automatiquement si le seuil est atteint.
