@@ -3,12 +3,13 @@
 #
 # Lit GameData.pending_evolution au démarrage puis joue :
 #   Phase 2 (0.5s)  : carte apparaît (fade + scale in)
-#   Phase 3 (2.0s)  : 3 battements cardiaques + couleur + drone
-#   Phase 4 (0.7s)  : flash + gros texte tombe remplacer l'ancien
-#   Phase 5 (1.5s)  : carte monte + texte bonus apparaît en dessous
+#   Phase 3 (2.0s)  : pulse fluide ×2 + couleur + drone
+#   Phase 4 (1.0s)  : flash + gros texte haut (élastique) + descente dans carte
+#   Phase 5 (0.75s) : carte remonte au 1/3 supérieur + texte bonus surgit en dessous
+#   Stable (1.6s)   : célébration — skipable dès l'apparition du texte bonus
 #   Phase 6 (0.3s)  : fondu noir → retour Village
 #
-# Skipable dès la Phase 4 (clic, Espace, Échap, Entrée).
+# Skipable uniquement dès la Phase 5 stable (clic, Espace, Échap, Entrée).
 # ============================================================
 extends Control
 
@@ -127,15 +128,14 @@ func _build_tier_label() -> void:
 	_tier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tier_label.add_theme_font_size_override("font_size", 56)
 	_tier_label.add_theme_color_override("font_color", Color.WHITE)
-	_tier_label.add_theme_constant_override("font_size", 56)
 	_tier_label.add_theme_constant_override("outline_size", 5)
 	_tier_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
-	# Centré horizontalement, 80 px au-dessus de la carte
+	# En haut de l'écran (~100px depuis le top), centré horizontalement (±280px)
 	_tier_label.anchor_left   = 0.5; _tier_label.anchor_right  = 0.5
-	_tier_label.anchor_top    = 0.5; _tier_label.anchor_bottom = 0.5
-	_tier_label.offset_left   = -220.0; _tier_label.offset_right  = 220.0
-	_tier_label.offset_top    = -215.0; _tier_label.offset_bottom = -155.0
-	_tier_label.pivot_offset  = Vector2(220.0, 30.0)
+	_tier_label.anchor_top    = 0.0; _tier_label.anchor_bottom = 0.0
+	_tier_label.offset_left   = -280.0; _tier_label.offset_right  = 280.0
+	_tier_label.offset_top    = 70.0;   _tier_label.offset_bottom = 150.0
+	_tier_label.pivot_offset  = Vector2(280.0, 40.0)
 	_tier_label.modulate.a    = 0.0
 	_tier_label.scale         = Vector2(0.5, 0.5)
 	_tier_label.z_index       = 100
@@ -263,16 +263,23 @@ func _run_sequence() -> void:
 	_phase3_ascension_start()
 	await get_tree().create_timer(2.0).timeout
 
-	# Phase 4 — révélation + descente du texte (0.7 s) ; skip activé
-	_can_skip = true
+	# Phase 4 — flash + texte haut (élastique 0.3 s) + pause (0.25 s) + descente (0.4 s)
+	#            → total ~1.0 s avant que la carte soit prête à remonter
 	_phase4_revelation()
-	await get_tree().create_timer(0.7).timeout
+	await get_tree().create_timer(1.0).timeout
 
 	if _skip_triggered: return
 
-	# Phase 5 — carte monte + bonus (1.5 s)
+	# Phase 5 — carte remonte (0.4 s) + texte bonus surgit (délai 0.35 s + fade 0.3 s)
+	#            → attendre 0.75 s avant d'activer le skip
 	_phase5_celebration()
-	await get_tree().create_timer(1.5).timeout
+	await get_tree().create_timer(0.75).timeout
+
+	if _skip_triggered: return
+
+	# Célébration stable — skip maintenant autorisé (1.6 s pour lire le texte)
+	_can_skip = true
+	await get_tree().create_timer(1.6).timeout
 
 	_phase6_return()
 
@@ -291,15 +298,13 @@ func _phase3_ascension_start() -> void:
 	create_tween().set_ease(Tween.EASE_IN_OUT) \
 		.tween_property(_drone, "pitch_scale", 1.8, 2.0)
 
-	# Battement cardiaque × 3 : montée rapide, chute, rebond (0.66 s/cycle ≈ 2 s)
+	# Pulse fluide × 2 : montée et descente organiques (1.0 s/cycle × 2 = 2 s)
 	var pulse := create_tween()
-	for _i: int in 3:
-		pulse.tween_property(_card, "scale", Vector2(1.20, 1.20), 0.12) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-		pulse.tween_property(_card, "scale", Vector2(0.94, 0.94), 0.18) \
-			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		pulse.tween_property(_card, "scale", Vector2.ONE, 0.36) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	pulse.set_loops(2)
+	pulse.tween_property(_card, "scale", Vector2(1.20, 1.20), 0.5) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	pulse.tween_property(_card, "scale", Vector2.ONE, 0.5) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 
 	# Transition de couleur de la carte (from_tier → to_tier)
 	var from_color := UIColors.tier_color(_params.get("from_tier", 0) as int)
@@ -320,12 +325,15 @@ func _phase4_revelation() -> void:
 	create_tween().tween_property(_flash, "modulate:a", 0.0, 0.2)
 	_crystal.play()
 
-	# Grand texte palier : apparaît (0.25 s), puis descend dans la carte (0.4 s)
+	# Grand texte palier : apparaît en deux temps élastiques, puis descend dans la carte
 	_tier_label.modulate.a = 1.0
 	_tier_label.scale      = Vector2(0.5, 0.5)
 	var appear_tw := create_tween()
-	appear_tw.tween_property(_tier_label, "scale", Vector2.ONE, 0.25) \
+	appear_tw.tween_property(_tier_label, "scale", Vector2(1.2, 1.2), 0.2) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	appear_tw.tween_property(_tier_label, "scale", Vector2.ONE, 0.1) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	appear_tw.tween_interval(0.25)  # pause visible en haut avant la descente
 	appear_tw.tween_callback(_start_tier_descent)
 
 func _start_tier_descent() -> void:
@@ -379,39 +387,40 @@ func _finish_tier_replacement() -> void:
 	_from_tier_lbl.add_theme_color_override("font_color", to_color)
 	create_tween().tween_property(_from_tier_lbl, "modulate:a", 1.0, 0.15)
 
-# ─── Phase 5 : carte monte + texte bonus ────────────────────
+# ─── Phase 5 : carte remonte au tiers supérieur + texte bonus surgit ────────
 func _phase5_celebration() -> void:
-	# Carte glisse vers le tiers supérieur de l'écran
-	var slide := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	# Carte glisse vers le tiers supérieur avec effet élastique d'arrivée
+	var slide := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	slide.set_parallel(true)
-	slide.tween_property(_card, "offset_top",    -210.0, 0.5)
-	slide.tween_property(_card, "offset_bottom",  -70.0, 0.5)
+	slide.tween_property(_card, "offset_top",    -210.0, 0.4)
+	slide.tween_property(_card, "offset_bottom",  -70.0, 0.4)
 
-	# Texte bonus en dessous (après 0.35 s)
+	# Texte bonus : 24px blanc, 120px sous la carte (offset_top=50 → 40 pour effet surgit)
 	var bonus_text := _get_evolution_text()
 	if not bonus_text.is_empty():
-		var to_tier  := _params.get("to_tier", 1) as int
-		var to_color := UIColors.tier_color(to_tier)
-
 		var bonus := Label.new()
 		bonus.text                 = bonus_text
 		bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
-		bonus.add_theme_font_size_override("font_size", 15)
-		bonus.add_theme_color_override("font_color", to_color.lerp(Color.WHITE, 0.4))
+		bonus.add_theme_font_size_override("font_size", 24)
+		bonus.add_theme_color_override("font_color", Color.WHITE)
 		bonus.add_theme_constant_override("outline_size", 3)
-		bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+		bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 		bonus.anchor_left   = 0.5; bonus.anchor_right  = 0.5
 		bonus.anchor_top    = 0.5; bonus.anchor_bottom = 0.5
-		bonus.offset_left   = -230.0; bonus.offset_right  = 230.0
-		bonus.offset_top    = -20.0;  bonus.offset_bottom = 80.0
+		bonus.offset_left   = -300.0; bonus.offset_right  = 300.0
+		bonus.offset_top    =   60.0; bonus.offset_bottom = 160.0  # surgit : part de 60 → 50
 		bonus.modulate.a    = 0.0
 		bonus.z_index       = 50
 		add_child(bonus)
 
-		var bonus_tw := create_tween()
-		bonus_tw.tween_interval(0.35)
-		bonus_tw.tween_property(bonus, "modulate:a", 1.0, 0.4)
+		# Fade in + légère remontée simultanés, après délai de 0.35 s
+		var bonus_tw := create_tween().set_parallel(true)
+		bonus_tw.tween_property(bonus, "modulate:a",    1.0,  0.3).set_delay(0.35)
+		bonus_tw.tween_property(bonus, "offset_top",   50.0,  0.3) \
+			.set_delay(0.35).set_ease(Tween.EASE_OUT)
+		bonus_tw.tween_property(bonus, "offset_bottom", 150.0, 0.3) \
+			.set_delay(0.35).set_ease(Tween.EASE_OUT)
 
 # Retourne le texte explicatif du passage au nouveau palier,
 # selon l'entité et le tier cible.
@@ -450,6 +459,8 @@ func _get_evolution_text() -> String:
 			var pname := pdata.get("name", pid) as String
 			lines.append("Passif débloqué : " + pname)
 
+	if lines.is_empty():
+		return "Nouveau palier atteint — Capacités améliorées"
 	return "\n".join(lines)
 
 # ─── Phase 6 : fondu noir + changement de scène ─────────────
