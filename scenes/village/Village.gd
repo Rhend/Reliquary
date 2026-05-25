@@ -37,6 +37,7 @@ const PANEL_TITLES: Dictionary = {
 # ─── État ─────────────────────────────────────────────────────
 var _ring            : CircleRing         # anneau animé central (XP fill + tier visuel)
 var _xp_label        : Label              # label "X / Y XP" sous l'orbe (tier 0 uniquement)
+var _evolve_btn      : Button            = null  # bouton ÉVOLUER (tier 0, visible quand XP plein)
 var _hub_root        : Control            # conteneur du hub hexagonal (tier 1+)
 var _rp_root         : Control            # panneau droit JRPG — null si fermé
 var _rp_content      : VBoxContainer      # zone de contenu scrollable du panneau droit
@@ -114,6 +115,19 @@ func _build_tier0(creature: Dictionary) -> void:
 	_xp_label.add_theme_color_override("font_color", TIER_0_COLOR.lightened(0.3))
 	_center(_xp_label, Vector2(0.0, 56.0), Vector2(160.0, 20.0))
 	add_child(_xp_label)
+
+	var from_t := creature.get("current_tier", 0) as int
+	_evolve_btn = Button.new()
+	_evolve_btn.text    = "ÉVOLUER ▲"
+	_evolve_btn.visible = MasterySystem.can_evolve("hero")
+	_evolve_btn.add_theme_color_override("font_color", UIColors.FILTER_ON)
+	_evolve_btn.pressed.connect(func() -> void:
+		MasterySystem.evolve_entity("hero")
+		SaveManager.save()
+		_launch_evolution_ritual("village", "hero", "Village", from_t, from_t + 1)
+	)
+	_center(_evolve_btn, Vector2(0.0, 88.0), Vector2(160.0, 34.0))
+	add_child(_evolve_btn)
 
 # ─── Tier 1+ : hub hexagonal ──────────────────────────────────
 # Construit le hub circulaire avec les hexagones débloqués par le tier.
@@ -1194,11 +1208,8 @@ func _on_hero_click() -> void:
 	_xp_label.text      = "%d / %d XP" % [int(xp), int(xpmax)]
 	EventBus.xp_gained.emit("hero", XP_PER_CLICK)
 	if MasterySystem.can_evolve("hero"):
-		var from_t := hero.get("current_tier", 0) as int
-		MasterySystem.evolve_entity("hero")
-		SaveManager.save()
-		_launch_evolution_ritual("village", "hero",
-			"Village", from_t, from_t + 1)
+		if is_instance_valid(_evolve_btn):
+			_evolve_btn.visible = true
 
 # ─── Rituel d'ascension ──────────────────────────────────────
 # Stocke les paramètres dans GameData puis fond vers noir avant de changer de scène.

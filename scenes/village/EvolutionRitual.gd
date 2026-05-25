@@ -277,8 +277,9 @@ func _run_sequence() -> void:
 
 	if _skip_triggered: return
 
-	# Célébration stable — skip maintenant autorisé (1.6 s pour lire le texte)
+	# Célébration stable — bouton visible, skip autorisé
 	_can_skip = true
+	_show_return_button()
 	await get_tree().create_timer(1.6).timeout
 
 	_phase6_return()
@@ -479,6 +480,37 @@ func _get_evolution_text() -> String:
 	if lines.is_empty():
 		return "Nouveau palier atteint — Capacités améliorées"
 	return "\n".join(lines)
+
+# ─── Bouton retour village ───────────────────────────────────
+func _show_return_button() -> void:
+	var to_tier  := _params.get("to_tier", 1) as int
+	var to_color := UIColors.tier_color(to_tier)
+
+	var btn_style := StyleBoxFlat.new()
+	btn_style.bg_color     = Color(to_color.r, to_color.g, to_color.b, 0.15)
+	btn_style.border_color = Color(to_color.r, to_color.g, to_color.b, 0.70)
+	btn_style.border_width_left   = 2; btn_style.border_width_right  = 2
+	btn_style.border_width_top    = 2; btn_style.border_width_bottom = 2
+	btn_style.corner_radius_top_left     = 6; btn_style.corner_radius_top_right    = 6
+	btn_style.corner_radius_bottom_left  = 6; btn_style.corner_radius_bottom_right = 6
+
+	var btn := Button.new()
+	btn.text = "REVENIR AU VILLAGE"
+	btn.add_theme_stylebox_override("normal",  btn_style)
+	btn.add_theme_stylebox_override("hover",   btn_style)
+	btn.add_theme_stylebox_override("pressed", btn_style)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+	btn.add_theme_font_size_override("font_size", 14)
+	btn.anchor_left   = 0.5; btn.anchor_right  = 0.5
+	btn.anchor_top    = 1.0; btn.anchor_bottom = 1.0
+	btn.offset_left   = -120.0; btn.offset_right  = 120.0
+	btn.offset_top    = -60.0;  btn.offset_bottom = -24.0
+	btn.modulate.a    = 0.0
+	btn.z_index       = 60
+	btn.pressed.connect(_phase6_return)
+	add_child(btn)
+
+	create_tween().tween_property(btn, "modulate:a", 1.0, 0.4)
 
 # ─── Phase 6 : fondu noir + changement de scène ─────────────
 func _phase6_return() -> void:
