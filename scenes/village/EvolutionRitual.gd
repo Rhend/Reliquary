@@ -2,11 +2,11 @@
 # EvolutionRitual.gd — Séquence cinématique d'ascension de palier.
 #
 # Lit GameData.pending_evolution au démarrage puis joue :
-#   Phase 2 (0.5s) : carte apparaît (fade + scale in)
-#   Phase 3 (2.0s) : particules + pulsation + couleur + drone
-#   Phase 4 (0.5s) : flash blanc + texte palier + son cristallin
-#   Phase 5 (1.0s) : célébration stable
-#   Phase 6 (0.3s) : fondu noir → retour Village
+#   Phase 2 (0.5s)  : carte apparaît (fade + scale in)
+#   Phase 3 (2.0s)  : 3 battements cardiaques + couleur + drone
+#   Phase 4 (0.7s)  : flash + gros texte tombe remplacer l'ancien
+#   Phase 5 (1.5s)  : carte monte + texte bonus apparaît en dessous
+#   Phase 6 (0.3s)  : fondu noir → retour Village
 #
 # Skipable dès la Phase 4 (clic, Espace, Échap, Entrée).
 # ============================================================
@@ -15,13 +15,14 @@ extends Control
 const VILLAGE_SCENE := "res://scenes/village/village.tscn"
 
 # ─── Nœuds UI ────────────────────────────────────────────────
-var _card:          Control          = null
-var _card_style:    StyleBoxFlat     = null
-var _tier_label:    Label            = null
-var _flash:         ColorRect        = null
-var _particles:     CPUParticles2D   = null
-var _drone:         AudioStreamPlayer = null
-var _crystal:       AudioStreamPlayer = null
+var _card:           Control           = null
+var _card_style:     StyleBoxFlat      = null
+var _from_tier_lbl:  Label             = null   # label tier à l'intérieur de la carte
+var _tier_label:     Label             = null   # grand texte palier (en haut)
+var _flash:          ColorRect         = null
+var _particles:      CPUParticles2D    = null
+var _drone:          AudioStreamPlayer = null
+var _crystal:        AudioStreamPlayer = null
 
 # ─── État séquence ───────────────────────────────────────────
 var _params:         Dictionary = {}
@@ -70,8 +71,8 @@ func _build_entity_card() -> void:
 	var from_color := UIColors.tier_color(from_tier)
 
 	_card_style = StyleBoxFlat.new()
-	_card_style.bg_color     = Color(from_color.r, from_color.g, from_color.b, 0.12)
-	_card_style.border_color = Color(from_color.r, from_color.g, from_color.b, 0.80)
+	_card_style.bg_color      = Color(from_color.r, from_color.g, from_color.b, 0.12)
+	_card_style.border_color  = Color(from_color.r, from_color.g, from_color.b, 0.80)
 	_card_style.border_width_left  = 3
 	_card_style.border_width_right = 3
 	_card_style.border_width_top   = 3
@@ -108,12 +109,12 @@ func _build_entity_card() -> void:
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	vb.add_child(name_lbl)
 
-	var from_lbl := Label.new()
-	from_lbl.text = GameData.get_tier_name(from_tier).to_upper()
-	from_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	from_lbl.add_theme_font_size_override("font_size", 13)
-	from_lbl.add_theme_color_override("font_color", from_color)
-	vb.add_child(from_lbl)
+	_from_tier_lbl = Label.new()
+	_from_tier_lbl.text = GameData.get_tier_name(from_tier).to_upper()
+	_from_tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_from_tier_lbl.add_theme_font_size_override("font_size", 13)
+	_from_tier_lbl.add_theme_color_override("font_color", from_color)
+	vb.add_child(_from_tier_lbl)
 
 	add_child(card)
 	_card = card
@@ -122,13 +123,14 @@ func _build_tier_label() -> void:
 	var to_tier := _params.get("to_tier", 1) as int
 
 	_tier_label = Label.new()
-	_tier_label.text                   = GameData.get_tier_name(to_tier).to_upper()
-	_tier_label.horizontal_alignment   = HORIZONTAL_ALIGNMENT_CENTER
+	_tier_label.text                 = GameData.get_tier_name(to_tier).to_upper()
+	_tier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tier_label.add_theme_font_size_override("font_size", 56)
 	_tier_label.add_theme_color_override("font_color", Color.WHITE)
+	_tier_label.add_theme_constant_override("font_size", 56)
 	_tier_label.add_theme_constant_override("outline_size", 5)
 	_tier_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
-	# 80 px au-dessus de la carte (card top = center − 70, label bottom = center − 150)
+	# Centré horizontalement, 80 px au-dessus de la carte
 	_tier_label.anchor_left   = 0.5; _tier_label.anchor_right  = 0.5
 	_tier_label.anchor_top    = 0.5; _tier_label.anchor_bottom = 0.5
 	_tier_label.offset_left   = -220.0; _tier_label.offset_right  = 220.0
@@ -146,7 +148,7 @@ func _build_particles() -> void:
 
 	_particles = CPUParticles2D.new()
 	_particles.emitting              = false
-	_particles.amount                = 50
+	_particles.amount                = 60
 	_particles.lifetime              = 2.5
 	_particles.explosiveness         = 0.0
 	_particles.emission_shape        = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
@@ -158,15 +160,14 @@ func _build_particles() -> void:
 	_particles.initial_velocity_min  = 80.0
 	_particles.initial_velocity_max  = 120.0
 	_particles.scale_amount_min      = 0.4
-	_particles.scale_amount_max      = 0.8
+	_particles.scale_amount_max      = 0.9
 	_particles.color                 = Color.WHITE
 	_particles.texture               = _make_particle_texture()
 
-	# Gradient : transparent → opaque (15%) → opaque (70%) → transparent
 	var gradient := Gradient.new()
-	gradient.set_color(0, Color(color.r, color.g, color.b, 0.0))
+	gradient.set_color(0,  Color(color.r, color.g, color.b, 0.0))
 	gradient.set_offset(0, 0.0)
-	gradient.set_color(1, Color(color.r, color.g, color.b, 0.0))
+	gradient.set_color(1,  Color(color.r, color.g, color.b, 0.0))
 	gradient.set_offset(1, 1.0)
 	gradient.add_point(0.15, Color(color.r, color.g, color.b, 1.0))
 	gradient.add_point(0.70, Color(color.r, color.g, color.b, 1.0))
@@ -194,9 +195,9 @@ func _get_tier_particle_color(tier: int) -> Color:
 
 func _build_sounds() -> void:
 	_drone = AudioStreamPlayer.new()
-	_drone.volume_db    = -8.0
-	_drone.pitch_scale  = 0.7
-	_drone.stream       = _generate_drone_wav()
+	_drone.volume_db   = -8.0
+	_drone.pitch_scale = 0.7
+	_drone.stream      = _generate_drone_wav()
 	add_child(_drone)
 
 	_crystal = AudioStreamPlayer.new()
@@ -204,8 +205,6 @@ func _build_sounds() -> void:
 	_crystal.stream    = _generate_crystal_wav()
 	add_child(_crystal)
 
-# Drone grave 160 Hz, 3 s à 11025 Hz — génération rapide en GDScript.
-# pitch_scale est tweené 0.7 → 1.8 pendant la montée (fréquence perçue monte).
 func _generate_drone_wav() -> AudioStreamWAV:
 	var sr        := 11025
 	var frequency := 160.0
@@ -228,7 +227,6 @@ func _generate_drone_wav() -> AudioStreamWAV:
 	wav.data     = data
 	return wav
 
-# Son cristallin 2400 Hz, 0.6 s avec décroissance exponentielle + harmoniques.
 func _generate_crystal_wav() -> AudioStreamWAV:
 	var sr        := 11025
 	var frequency := 2400.0
@@ -265,15 +263,16 @@ func _run_sequence() -> void:
 	_phase3_ascension_start()
 	await get_tree().create_timer(2.0).timeout
 
-	# Phase 4 — révélation ; skip activé
+	# Phase 4 — révélation + descente du texte (0.7 s) ; skip activé
 	_can_skip = true
 	_phase4_revelation()
-	await get_tree().create_timer(0.5).timeout
+	await get_tree().create_timer(0.7).timeout
 
 	if _skip_triggered: return
 
-	# Phase 5 — célébration stable (1.0 s)
-	await get_tree().create_timer(1.0).timeout
+	# Phase 5 — carte monte + bonus (1.5 s)
+	_phase5_celebration()
+	await get_tree().create_timer(1.5).timeout
 
 	_phase6_return()
 
@@ -284,23 +283,25 @@ func _phase2_card_appear() -> void:
 	tw.tween_property(_card, "modulate:a", 1.0, 0.5)
 	tw.tween_property(_card, "scale",      Vector2.ONE, 0.5)
 
-# ─── Phase 3 : particules + pulsation + couleur + drone ─────
+# ─── Phase 3 : 3 battements cardiaques + couleur + drone ────
 func _phase3_ascension_start() -> void:
 	_particles.emitting = true
 
-	# Drone : pitch_scale 0.7 → 1.8 sur 2 s (fréquence perçue monte)
 	_drone.play()
 	create_tween().set_ease(Tween.EASE_IN_OUT) \
 		.tween_property(_drone, "pitch_scale", 1.8, 2.0)
 
-	# Pulsation carte : 1.0 → 1.05 → 1.0, 2 cycles de 1.0 s chacun
-	var pulse := create_tween().set_loops(2)
-	pulse.tween_property(_card, "scale", Vector2(1.05, 1.05), 0.5) \
-		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-	pulse.tween_property(_card, "scale", Vector2.ONE, 0.5) \
-		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	# Battement cardiaque × 3 : montée rapide, chute, rebond (0.66 s/cycle ≈ 2 s)
+	var pulse := create_tween()
+	for _i: int in 3:
+		pulse.tween_property(_card, "scale", Vector2(1.20, 1.20), 0.12) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		pulse.tween_property(_card, "scale", Vector2(0.94, 0.94), 0.18) \
+			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		pulse.tween_property(_card, "scale", Vector2.ONE, 0.36) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
 
-	# Transition de couleur via tween_method — force le redraw à chaque frame
+	# Transition de couleur de la carte (from_tier → to_tier)
 	var from_color := UIColors.tier_color(_params.get("from_tier", 0) as int)
 	var to_color   := UIColors.tier_color(_params.get("to_tier",   1) as int)
 	create_tween().set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE) \
@@ -313,22 +314,143 @@ func _update_card_color(progress: float, from_c: Color, to_c: Color) -> void:
 	if is_instance_valid(_card):
 		_card.queue_redraw()
 
-# ─── Phase 4 : flash blanc + texte + cristal ────────────────
+# ─── Phase 4 : flash + texte descend dans la carte ──────────
 func _phase4_revelation() -> void:
-	# Flash blanc instantané → disparaît en 0.2 s
 	_flash.modulate.a = 1.0
 	create_tween().tween_property(_flash, "modulate:a", 0.0, 0.2)
+	_crystal.play()
 
-	# Texte : scale 0.5 → 1.2 (0.2 s EASE_OUT), puis 1.2 → 1.0 (0.3 s TRANS_BACK)
+	# Grand texte palier : apparaît (0.25 s), puis descend dans la carte (0.4 s)
 	_tier_label.modulate.a = 1.0
 	_tier_label.scale      = Vector2(0.5, 0.5)
-	var ltw := create_tween()
-	ltw.tween_property(_tier_label, "scale", Vector2(1.2, 1.2), 0.2) \
-		.set_ease(Tween.EASE_OUT)
-	ltw.tween_property(_tier_label, "scale", Vector2.ONE, 0.3) \
+	var appear_tw := create_tween()
+	appear_tw.tween_property(_tier_label, "scale", Vector2.ONE, 0.25) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	appear_tw.tween_callback(_start_tier_descent)
 
-	_crystal.play()
+func _start_tier_descent() -> void:
+	if not is_instance_valid(_from_tier_lbl): return
+	if not is_instance_valid(_tier_label):    return
+
+	# Capturer les positions écran AVANT tout changement d'ancre
+	var tier_rect := _tier_label.get_global_rect()
+	var from_rect := _from_tier_lbl.get_global_rect()
+
+	# Créer un clone du grand texte en positionnement absolu (anchor 0,0)
+	var clone := Label.new()
+	clone.text                 = _tier_label.text
+	clone.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	clone.add_theme_font_size_override("font_size", 56)
+	clone.add_theme_color_override("font_color", Color.WHITE)
+	clone.add_theme_constant_override("outline_size", 5)
+	clone.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
+	clone.anchor_left   = 0.0; clone.anchor_right  = 0.0
+	clone.anchor_top    = 0.0; clone.anchor_bottom = 0.0
+	clone.position      = tier_rect.position
+	clone.size          = tier_rect.size
+	clone.pivot_offset  = tier_rect.size * 0.5
+	clone.z_index       = 100
+	add_child(clone)
+
+	# Masquer l'original (le clone s'en charge)
+	_tier_label.modulate.a = 0.0
+
+	# Calculer la position cible : centré sur from_lbl
+	var scale_target := 13.0 / 56.0
+	var from_center  := from_rect.get_center()
+	var scaled_size  := tier_rect.size * scale_target
+	var target_pos   := from_center - scaled_size * 0.5
+
+	var tw := create_tween().set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.set_parallel(true)
+	tw.tween_property(clone, "position", target_pos, 0.4)
+	tw.tween_property(clone, "scale",    Vector2(scale_target, scale_target), 0.4)
+	tw.tween_property(_from_tier_lbl, "modulate:a", 0.0, 0.3)
+	tw.chain().tween_callback(func() -> void:
+		clone.queue_free()
+		_finish_tier_replacement()
+	)
+
+func _finish_tier_replacement() -> void:
+	if not is_instance_valid(_from_tier_lbl): return
+	var to_tier  := _params.get("to_tier", 1) as int
+	var to_color := UIColors.tier_color(to_tier)
+	_from_tier_lbl.text = GameData.get_tier_name(to_tier).to_upper()
+	_from_tier_lbl.add_theme_color_override("font_color", to_color)
+	create_tween().tween_property(_from_tier_lbl, "modulate:a", 1.0, 0.15)
+
+# ─── Phase 5 : carte monte + texte bonus ────────────────────
+func _phase5_celebration() -> void:
+	# Carte glisse vers le tiers supérieur de l'écran
+	var slide := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	slide.set_parallel(true)
+	slide.tween_property(_card, "offset_top",    -210.0, 0.5)
+	slide.tween_property(_card, "offset_bottom",  -70.0, 0.5)
+
+	# Texte bonus en dessous (après 0.35 s)
+	var bonus_text := _get_evolution_text()
+	if not bonus_text.is_empty():
+		var to_tier  := _params.get("to_tier", 1) as int
+		var to_color := UIColors.tier_color(to_tier)
+
+		var bonus := Label.new()
+		bonus.text                 = bonus_text
+		bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
+		bonus.add_theme_font_size_override("font_size", 15)
+		bonus.add_theme_color_override("font_color", to_color.lerp(Color.WHITE, 0.4))
+		bonus.add_theme_constant_override("outline_size", 3)
+		bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+		bonus.anchor_left   = 0.5; bonus.anchor_right  = 0.5
+		bonus.anchor_top    = 0.5; bonus.anchor_bottom = 0.5
+		bonus.offset_left   = -230.0; bonus.offset_right  = 230.0
+		bonus.offset_top    = -20.0;  bonus.offset_bottom = 80.0
+		bonus.modulate.a    = 0.0
+		bonus.z_index       = 50
+		add_child(bonus)
+
+		var bonus_tw := create_tween()
+		bonus_tw.tween_interval(0.35)
+		bonus_tw.tween_property(bonus, "modulate:a", 1.0, 0.4)
+
+# Retourne le texte explicatif du passage au nouveau palier,
+# selon l'entité et le tier cible.
+func _get_evolution_text() -> String:
+	var entity_type := _params.get("entity_type", "") as String
+	var entity_id   := _params.get("entity_id", "")   as String
+	var to_tier     := _params.get("to_tier", 1)       as int
+
+	# Village / Héro — textes figés par tier
+	if entity_id == "hero" or entity_type == "hero":
+		match to_tier:
+			1: return "Vous pouvez maintenant\npartir en expédition !"
+			2: return "La Forge est déverrouillée !"
+			3: return "Le Sanctuaire est accessible !"
+			4: return "La Relique est accessible !"
+			5: return "Le mystère ultime s'ouvre…"
+			_: return ""
+
+	# Entités génériques — lire tier_effects + passive_slots
+	var entity := GameData.get_entity(entity_id)
+	if entity.is_empty(): return ""
+
+	var lines: Array[String] = []
+
+	var te_list: Array = entity.get("tier_effects", [])
+	if to_tier < te_list.size():
+		for eff: Dictionary in te_list[to_tier].get("effects", []):
+			var desc := eff.get("description", "") as String
+			if not desc.is_empty():
+				lines.append("• " + desc)
+
+	for slot: Dictionary in entity.get("passive_slots", []):
+		if slot.get("unlock_tier", -1) == to_tier:
+			var pid   := slot.get("passive_id", "") as String
+			var pdata := GameData.get_entity(pid)
+			var pname := pdata.get("name", pid) as String
+			lines.append("Passif débloqué : " + pname)
+
+	return "\n".join(lines)
 
 # ─── Phase 6 : fondu noir + changement de scène ─────────────
 func _phase6_return() -> void:
