@@ -37,6 +37,7 @@ const PANEL_TITLES: Dictionary = {
 # ─── État ─────────────────────────────────────────────────────
 var _ring            : CircleRing         # anneau animé central (XP fill + tier visuel)
 var _xp_label        : Label              # label "X / Y XP" sous l'orbe (tier 0 uniquement)
+var _evolve_btn      : Button            = null  # bouton ÉVOLUER (tier 0, visible quand XP plein)
 var _hub_root        : Control            # conteneur du hub hexagonal (tier 1+)
 var _rp_root         : Control            # panneau droit JRPG — null si fermé
 var _rp_content      : VBoxContainer      # zone de contenu scrollable du panneau droit
@@ -114,6 +115,19 @@ func _build_tier0(creature: Dictionary) -> void:
 	_xp_label.add_theme_color_override("font_color", TIER_0_COLOR.lightened(0.3))
 	_center(_xp_label, Vector2(0.0, 56.0), Vector2(160.0, 20.0))
 	add_child(_xp_label)
+
+	var from_t := creature.get("current_tier", 0) as int
+	_evolve_btn = Button.new()
+	_evolve_btn.text    = "ÉVOLUER ▲"
+	_evolve_btn.visible = MasterySystem.can_evolve("hero")
+	_evolve_btn.add_theme_color_override("font_color", UIColors.FILTER_ON)
+	_evolve_btn.pressed.connect(func() -> void:
+		MasterySystem.evolve_entity("hero")
+		SaveManager.save()
+		_launch_evolution_ritual("village", "hero", "Village", from_t, from_t + 1)
+	)
+	_center(_evolve_btn, Vector2(0.0, 88.0), Vector2(160.0, 34.0))
+	add_child(_evolve_btn)
 
 # ─── Tier 1+ : hub hexagonal ──────────────────────────────────
 # Construit le hub circulaire avec les hexagones débloqués par le tier.
@@ -366,8 +380,12 @@ func _panel_hero() -> void:
 			eb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			eb.add_theme_color_override("font_color", UIColors.FILTER_ON)
 			eb.pressed.connect(func() -> void:
+				var from_t := c.get("current_tier", 0) as int
 				if MasterySystem.evolve_entity(cid):
-					get_tree().reload_current_scene()
+					SaveManager.save()
+					_launch_evolution_ritual(
+						c.get("entity_type", "creature"), cid,
+						c.get("name", cid), from_t, from_t + 1)
 			)
 			_rp_content.add_child(eb)
 	else:
@@ -1167,7 +1185,7 @@ func _debug_tier_up() -> void:
 		hero["current_tier"] = tier + 1
 		hero["current_xp"]   = 0.0
 		SaveManager.save()
-		get_tree().reload_current_scene()
+		_launch_evolution_ritual("village", "hero", "Village", tier, tier + 1)
 
 # Décrémente le tier du héro, réinitialise son XP et recharge la scène.
 func _debug_tier_down() -> void:
@@ -1177,7 +1195,7 @@ func _debug_tier_down() -> void:
 		hero["current_tier"] = tier - 1
 		hero["current_xp"]   = 0.0
 		SaveManager.save()
-		get_tree().reload_current_scene()
+		_launch_evolution_ritual("village", "hero", "Village", tier, tier - 1)
 
 # ─── Clicker (tier 0) ─────────────────────────────────────────
 # Ajoute XP_PER_CLICK XP au héro et évolue automatiquement si le seuil est atteint.
@@ -1190,9 +1208,31 @@ func _on_hero_click() -> void:
 	_xp_label.text      = "%d / %d XP" % [int(xp), int(xpmax)]
 	EventBus.xp_gained.emit("hero", XP_PER_CLICK)
 	if MasterySystem.can_evolve("hero"):
-		MasterySystem.evolve_entity("hero")
-		SaveManager.save()
-		get_tree().reload_current_scene()
+		if is_instance_valid(_evolve_btn):
+			_evolve_btn.visible = true
+
+# ─── Rituel d'ascension ──────────────────────────────────────
+# Stocke les paramètres dans GameData puis fond vers noir avant de changer de scène.
+func _launch_evolution_ritual(entity_type: String, entity_id: String,
+		entity_name: String, from_tier: int, to_tier: int) -> void:
+	GameData.pending_evolution = {
+		"entity_type": entity_type,
+		"entity_id":   entity_id,
+		"entity_name": entity_name,
+		"from_tier":   from_tier,
+		"to_tier":     to_tier,
+	}
+	var overlay := ColorRect.new()
+	overlay.color = Color.BLACK
+	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	overlay.modulate.a = 0.0
+	overlay.z_index = 500
+	add_child(overlay)
+	var tw := create_tween()
+	tw.tween_property(overlay, "modulate:a", 1.0, 0.25).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		get_tree().change_scene_to_file("res://scenes/village/EvolutionRitual.tscn")
+	)
 
 # ─── Factory hexagone ─────────────────────────────────────────
 # Crée un HexItem, le positionne sur le hub et l'enregistre dans _hex_items.

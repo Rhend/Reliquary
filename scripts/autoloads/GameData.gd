@@ -37,6 +37,8 @@ var entities: Dictionary = {}
 
 # ─── État courant du joueur ─────────────────────────────────
 
+var pending_evolution: Dictionary = {}
+
 var player: Dictionary = {
 	"luck":               0,
 	"resources":          {},          # item_id → quantité possédée
