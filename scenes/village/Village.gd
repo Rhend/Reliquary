@@ -1197,8 +1197,8 @@ func _on_hero_click() -> void:
 		var from_t := hero.get("current_tier", 0) as int
 		MasterySystem.evolve_entity("hero")
 		SaveManager.save()
-		_launch_evolution_ritual("hero", "hero",
-			hero.get("name", "Héro"), from_t, from_t + 1)
+		_launch_evolution_ritual("village", "hero",
+			"Village", from_t, from_t + 1)
 
 # ─── Rituel d'ascension ──────────────────────────────────────
 # Stocke les paramètres dans GameData puis fond vers noir avant de changer de scène.

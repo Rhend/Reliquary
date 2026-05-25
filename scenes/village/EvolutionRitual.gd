@@ -363,11 +363,10 @@ func _start_tier_descent() -> void:
 	# Masquer l'original (le clone s'en charge)
 	_tier_label.modulate.a = 0.0
 
-	# Calculer la position cible : centré sur from_lbl
+	# Calculer la position cible : le pivot_offset (centre du clone) doit atterrir sur from_center
 	var scale_target := 13.0 / 56.0
 	var from_center  := from_rect.get_center()
-	var scaled_size  := tier_rect.size * scale_target
-	var target_pos   := from_center - scaled_size * 0.5
+	var target_pos   := from_center - tier_rect.size * 0.5  # pivot_offset = size/2
 
 	var tw := create_tween().set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.set_parallel(true)
@@ -395,9 +394,32 @@ func _phase5_celebration() -> void:
 	slide.tween_property(_card, "offset_top",    -210.0, 0.4)
 	slide.tween_property(_card, "offset_bottom",  -70.0, 0.4)
 
-	# Texte bonus : 24px blanc, 120px sous la carte (offset_top=50 → 40 pour effet surgit)
+	# Panneau cadre + label bonus, 120px sous le bas de la carte
 	var bonus_text := _get_evolution_text()
 	if not bonus_text.is_empty():
+		var to_tier  := _params.get("to_tier", 1) as int
+		var to_color := UIColors.tier_color(to_tier)
+
+		var panel_style := StyleBoxFlat.new()
+		panel_style.bg_color     = Color(to_color.r, to_color.g, to_color.b, 0.08)
+		panel_style.border_color = Color(to_color.r, to_color.g, to_color.b, 0.55)
+		panel_style.border_width_left   = 2; panel_style.border_width_right  = 2
+		panel_style.border_width_top    = 2; panel_style.border_width_bottom = 2
+		panel_style.corner_radius_top_left     = 8; panel_style.corner_radius_top_right    = 8
+		panel_style.corner_radius_bottom_left  = 8; panel_style.corner_radius_bottom_right = 8
+
+		var bonus_panel := PanelContainer.new()
+		bonus_panel.add_theme_stylebox_override("panel", panel_style)
+		bonus_panel.anchor_left   = 0.5; bonus_panel.anchor_right  = 0.5
+		bonus_panel.anchor_top    = 0.5; bonus_panel.anchor_bottom = 0.5
+		bonus_panel.offset_left   = -250.0; bonus_panel.offset_right  = 250.0
+		bonus_panel.offset_top    =   70.0; bonus_panel.offset_bottom = 170.0  # surgit : 70→60
+		bonus_panel.modulate.a    = 0.0
+		bonus_panel.z_index       = 50
+
+		var inner_margin := UIHelpers.margin_of(12)
+		bonus_panel.add_child(inner_margin)
+
 		var bonus := Label.new()
 		bonus.text                 = bonus_text
 		bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -406,20 +428,15 @@ func _phase5_celebration() -> void:
 		bonus.add_theme_color_override("font_color", Color.WHITE)
 		bonus.add_theme_constant_override("outline_size", 3)
 		bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-		bonus.anchor_left   = 0.5; bonus.anchor_right  = 0.5
-		bonus.anchor_top    = 0.5; bonus.anchor_bottom = 0.5
-		bonus.offset_left   = -300.0; bonus.offset_right  = 300.0
-		bonus.offset_top    =   60.0; bonus.offset_bottom = 160.0  # surgit : part de 60 → 50
-		bonus.modulate.a    = 0.0
-		bonus.z_index       = 50
-		add_child(bonus)
+		inner_margin.add_child(bonus)
+		add_child(bonus_panel)
 
 		# Fade in + légère remontée simultanés, après délai de 0.35 s
 		var bonus_tw := create_tween().set_parallel(true)
-		bonus_tw.tween_property(bonus, "modulate:a",    1.0,  0.3).set_delay(0.35)
-		bonus_tw.tween_property(bonus, "offset_top",   50.0,  0.3) \
+		bonus_tw.tween_property(bonus_panel, "modulate:a",     1.0, 0.3).set_delay(0.35)
+		bonus_tw.tween_property(bonus_panel, "offset_top",    60.0, 0.3) \
 			.set_delay(0.35).set_ease(Tween.EASE_OUT)
-		bonus_tw.tween_property(bonus, "offset_bottom", 150.0, 0.3) \
+		bonus_tw.tween_property(bonus_panel, "offset_bottom", 160.0, 0.3) \
 			.set_delay(0.35).set_ease(Tween.EASE_OUT)
 
 # Retourne le texte explicatif du passage au nouveau palier,
@@ -429,8 +446,8 @@ func _get_evolution_text() -> String:
 	var entity_id   := _params.get("entity_id", "")   as String
 	var to_tier     := _params.get("to_tier", 1)       as int
 
-	# Village / Héro — textes figés par tier
-	if entity_id == "hero" or entity_type == "hero":
+	# Village — textes figés par tier (entity_type "village" depuis Village.gd)
+	if entity_type == "village":
 		match to_tier:
 			1: return "Vous pouvez maintenant\npartir en expédition !"
 			2: return "La Forge est déverrouillée !"
