@@ -38,6 +38,18 @@ const COMBO_HP_THRESHOLD:   float = 0.25
 const COMBO_ATK_BONUS_PCT:  float = 0.05   # +5 % ATK par niveau de combo au-dessus de 1
 const STRIKE_BREAK_THRESHOLD: float = 0.20  # coup ennemi ≥ 20 % PV max brise le strike
 
+# ─── Distribution pondérée des créatures ────────────────────
+# Poids par tier selon le nombre de tiers débloqués dans le biome.
+# Clé = nombre de tiers débloqués (1–6), valeur = poids par index de tier.
+const DISTRIBUTION_WEIGHTS: Dictionary = {
+	1: [100],
+	2: [90, 10],
+	3: [80, 15, 5],
+	4: [70, 19, 8, 3],
+	5: [60, 24, 10, 5, 1],
+	6: [50, 27, 12, 7, 3, 1],
+}
+
 # ─── Modificateurs de cycle disponibles ─────────────────────
 const CYCLE_MODIFIERS: Array = [
 	{
@@ -73,6 +85,11 @@ var _first_encounter_pending: bool  = false      # vrai uniquement pour la toute
 var _is_first_combat:         bool  = true       # vrai jusqu'au premier combat du cycle (embuscade)
 var _combo_count:             int   = 0          # combo courant (remis à 0 si trop de dégâts reçus)
 var _combat_start_hp:         float = 0.0        # PV du héro au début du combat (pour calcul combo)
+
+# Créatures disponibles ce cycle avec leurs poids pondérés.
+# Rempli une fois par cycle via _build_available_creatures().
+# Format : [ { "data": {enemy_dict}, "weight": float }, … ]
+var available_creatures: Array = []
 
 # ─── Statistiques du cycle en cours ─────────────────────────
 
@@ -142,6 +159,7 @@ func start_adventure(biome_id: String) -> void:
 	_is_first_combat         = true
 
 	BiomeMechanics.initialize_for_biome(biome_id)
+	_build_available_creatures(biome_id)
 
 	# Réinitialise les statistiques du cycle
 	_cycle_luck               = 0
@@ -220,14 +238,11 @@ func _process_encounter() -> void:
 
 # Tire un ennemi aléatoire dans le pool du biome et lance le combat.
 func _handle_creature_encounter(hero_id: String, enc_data: Dictionary) -> void:
-	var biome   = GameData.get_entity(current_biome_id)
-	var enemies = biome.get("base_stats", {}).get("enemies", [])
-
-	if enemies.is_empty():
+	var enemy := _weighted_random_creature()
+	if enemy.is_empty():
 		_schedule_next_encounter()
 		return
-
-	var enemy          = enemies[randi() % enemies.size()].duplicate()
+	enemy              = enemy.duplicate()
 	enc_data["enemy"]  = enemy
 	_combat_start_hp   = current_hp
 
@@ -532,6 +547,88 @@ func _get_strike_xp_mult() -> float:
 	if _bonus_strike < 20: return 1.20
 	if _bonus_strike < 30: return 1.35
 	return 1.50
+
+# ═══════════════════════════════════════════════════════════
+#  Distribution pondérée des créatures
+# ═══════════════════════════════════════════════════════════
+
+# Retourne le nombre de tiers de créatures débloqués dans ce biome.
+# Un tier est débloqué si la créature correspondante a déjà été tuée (xp > 0 dans le bestiaire).
+# Tier 0 est TOUJOURS débloqué (exception de démarrage).
+func _count_unlocked_tiers(biome_id: String) -> int:
+	var biome    := GameData.get_entity(biome_id)
+	var enemies  := biome.get("base_stats", {}).get("enemies", []) as Array
+	var bestiary := GameData.player.get("bestiary", {}) as Dictionary
+
+	var count := 0
+	for enemy in enemies:
+		var enemy_id:   String = enemy.get("id", "")
+		var enemy_tier: int    = int(enemy.get("tier", 0))
+		var entry: Dictionary  = bestiary.get(enemy_id, {})
+		# T0 toujours disponible ; tiers supérieurs uniquement si kill confirmé (xp > 0)
+		var is_unlocked: bool = (enemy_tier == 0) or (float(entry.get("xp", 0.0)) > 0.0)
+		if is_unlocked:
+			count = maxi(count, enemy_tier + 1)
+
+	return maxi(count, 1)  # minimum 1 : T0 toujours présent
+
+# Reconstruit available_creatures pour le biome donné au début d'un cycle.
+# Chaque entrée : { "data": enemy_dict, "weight": float }
+func _build_available_creatures(biome_id: String) -> void:
+	available_creatures = []
+
+	var biome    := GameData.get_entity(biome_id)
+	var enemies  := biome.get("base_stats", {}).get("enemies", []) as Array
+	var bestiary := GameData.player.get("bestiary", {}) as Dictionary
+
+	if enemies.is_empty():
+		return
+
+	var unlocked_tiers := _count_unlocked_tiers(biome_id)
+	var clamped        := clampi(unlocked_tiers, 1, 6)
+	var weights: Array  = (DISTRIBUTION_WEIGHTS[clamped] as Array).duplicate()
+
+	for enemy in enemies:
+		var enemy_id:   String = enemy.get("id", "")
+		var enemy_tier: int    = int(enemy.get("tier", 0))
+		var entry: Dictionary  = bestiary.get(enemy_id, {})
+		var is_unlocked: bool  = (enemy_tier == 0) or (float(entry.get("xp", 0.0)) > 0.0)
+
+		if not is_unlocked:
+			continue
+		if enemy_tier >= weights.size():
+			continue  # tier hors table (biome avec moins de créatures que de tiers)
+
+		available_creatures.append({
+			"data":   enemy,
+			"weight": float(weights[enemy_tier])
+		})
+
+	# Filet de sécurité : si vide (ne devrait pas arriver), forcer T0
+	if available_creatures.is_empty():
+		for enemy in enemies:
+			if int(enemy.get("tier", 0)) == 0:
+				available_creatures.append({"data": enemy, "weight": 100.0})
+				return
+		available_creatures.append({"data": enemies[0], "weight": 100.0})
+
+# Tirage pondéré parmi les créatures disponibles ce cycle.
+func _weighted_random_creature() -> Dictionary:
+	if available_creatures.is_empty():
+		return {}
+
+	var total_weight := 0.0
+	for c in available_creatures:
+		total_weight += float(c.get("weight", 1.0))
+
+	var roll       := randf() * total_weight
+	var cumulative := 0.0
+	for c in available_creatures:
+		cumulative += float(c.get("weight", 1.0))
+		if roll < cumulative:
+			return c.get("data", {})
+
+	return available_creatures[0].get("data", {})
 
 # Clôt le cycle et émet adventure_cycle_ended avec toutes les statistiques.
 func _end_adventure(victory: bool) -> void:
