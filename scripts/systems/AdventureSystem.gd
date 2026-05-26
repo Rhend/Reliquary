@@ -70,6 +70,7 @@ var current_modifier:         Dictionary = {}     # modificateur de cycle actif
 
 var _encounter_timer:         Timer              # timer qui cadence les rencontres
 var _first_encounter_pending: bool  = false      # vrai uniquement pour la toute première rencontre du cycle
+var _is_first_combat:         bool  = true       # vrai jusqu'au premier combat du cycle (embuscade)
 var _combo_count:             int   = 0          # combo courant (remis à 0 si trop de dégâts reçus)
 var _combat_start_hp:         float = 0.0        # PV du héro au début du combat (pour calcul combo)
 
@@ -138,6 +139,9 @@ func start_adventure(biome_id: String) -> void:
 	_bonus_strike            = 0
 	_bonus_strike_max        = 0
 	_first_encounter_pending = true
+	_is_first_combat         = true
+
+	BiomeMechanics.initialize_for_biome(biome_id)
 
 	# Réinitialise les statistiques du cycle
 	_cycle_luck               = 0
@@ -231,7 +235,13 @@ func _handle_creature_encounter(hero_id: String, enc_data: Dictionary) -> void:
 		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, 0.0
 	)
 	EventBus.adventure_event_resolved.emit(enc_data)
-	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses())
+
+	var combat_options := {
+		"ambush": _is_first_combat and BiomeMechanics.is_ambush_active(),
+		"poison": BiomeMechanics.is_mechanic_active("poison"),
+	}
+	_is_first_combat = false
+	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses(), combat_options)
 
 # ─── Rencontre Bénédiction ────────────────────────────────────
 
@@ -398,12 +408,16 @@ func _schedule_next_encounter(delay: float = INSTANT_EVENT_DELAY) -> void:
 	_encounter_timer.wait_time = actual_delay
 	_encounter_timer.start()
 
-# Tire le type de rencontre selon les probabilités du biome, ajustées par la luck.
+# Tire le type de rencontre selon les probabilités du biome.
+# Applique d'abord la Chance Corsaire (si active), puis le bonus de luck de cycle.
 func _roll_encounter_type() -> String:
-	var biome       = GameData.get_entity(current_biome_id)
-	var event_table = biome.get("base_stats", {}).get("event_table", {
+	var biome      = GameData.get_entity(current_biome_id)
+	var base_table = biome.get("base_stats", {}).get("event_table", {
 		"creature": 0.70, "benediction": 0.15, "trap": 0.15
 	})
+
+	# Chance Corsaire : déplace -5 % de créatures vers les événements positifs
+	var event_table = BiomeMechanics.modify_event_probabilities(base_table)
 
 	var luck        = float(_get_effective_luck())
 	var trap_base   = float(event_table.get("trap", 0.15))

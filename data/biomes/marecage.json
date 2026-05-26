@@ -1,6 +1,8 @@
 {
 	"id": "biome_marecage",
 	"name": "Marécage Putride",
+	"strong_mechanic": "poison",
+	"unlock_tier": 2,
 	"base_stats": {
 		"event_table": {
 			"creature":    0.60,

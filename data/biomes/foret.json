@@ -1,6 +1,8 @@
 {
 	"id": "biome_foret",
 	"name": "Forêt Sombre",
+	"strong_mechanic": "ambush",
+	"unlock_tier": 2,
 	"base_stats": {
 		"event_table": {
 			"creature":    0.70,

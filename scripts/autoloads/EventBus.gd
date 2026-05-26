@@ -78,6 +78,13 @@ signal passive_unlocked(entity_id: String, passive_id: String)
 @warning_ignore("unused_signal")
 signal passives_refreshed()
 
+# ── Mécaniques de biome ─────────────────────────────────────
+
+# Émis par BiomeMechanics.initialize_for_biome() quand une mécanique forte se déclenche.
+# mechanic = "ambush" | "poison" | "pirate_luck"
+@warning_ignore("unused_signal")
+signal biome_mechanic_activated(mechanic: String)
+
 # ── Aventure ────────────────────────────────────────────────
 
 @warning_ignore("unused_signal")

@@ -37,6 +37,11 @@ var _combat_label: Label = null  # label "En combat..." affiché pendant un duel
 # ─── Bonus Strike ─────────────────────────────────────────────
 var _strike_widget: BonusStrikeWidget = null  # compteur de strikes en overlay top-right
 
+# ─── Mécaniques de biome ──────────────────────────────────────
+var _ambush_pending: bool  = false  # vrai au lancement si embuscade active, reset après 1er combat
+var _ambush_icon:    Label = null   # icône ⚡ sur le cercle ennemi pendant le 1er combat
+var _luck_icon:      Label = null   # trèfle 🍀 pulsant (Chance Corsaire), visible tout le cycle
+
 # ═══════════════════════════════════════════════════════════
 # Construit l'UI et connecte tous les signaux au démarrage.
 func _ready() -> void:
@@ -182,9 +187,11 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_stop_idle_state()
 	_flee_btn.disabled = false
 	_cycle_xp = 0.0
+	_ambush_pending = false
 	_update_xp_label()
 	_rebuild_buffs()
 	_rebuild_equip()
+	_cleanup_luck_icon()
 
 	var creature_id := GameData.player.get("active_creature_id", "") as String
 	var creature    := GameData.get_entity(creature_id)
@@ -194,6 +201,15 @@ func _on_adventure_started(_biome_id: String) -> void:
 		AdventureSystem.current_hp, AdventureSystem.current_hp,
 		hero_tier, CombatCircle.EntityType.CREATURE, true
 	)
+
+	# ── Indicateurs mécaniques de biome ──────────────────────
+	var mechanic := BiomeMechanics.active_mechanic
+	match mechanic:
+		"ambush":
+			_ambush_pending = true
+			_show_ambush_warning()
+		"pirate_luck":
+			_build_luck_icon()
 
 # Met à jour le cercle ennemi selon le type d'événement résolu (piège, positif, combat).
 func _on_event_resolved(event_data: Dictionary) -> void:
@@ -242,8 +258,20 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_flee_btn.disabled = false
 	_prev_tick = 0
 
+	# Icône ⚡ sur le premier ennemi du cycle si embuscade active
+	_cleanup_ambush_icon()
+	if _ambush_pending:
+		_ambush_pending = false
+		_build_ambush_icon()
+
 # Met à jour les HP de la cible et anime la barre d'action de l'attaquant sur la durée du step.
 func _on_step_started(step: CombatStep) -> void:
+	# Tick de poison : met à jour le cercle ennemi avec des nombres verts (pas de barre d'action)
+	if step.is_poison:
+		_enemy_circle.update_hp(float(step.target_hp_after))
+		_enemy_circle.take_poison_damage(step.damage)
+		return
+
 	if step.attacker == "hero":
 		_enemy_circle.update_hp(float(step.target_hp_after))
 		_enemy_circle.take_damage(step.damage, step.is_crit)
@@ -297,11 +325,15 @@ func _on_cycle_ended(result: Dictionary) -> void:
 	_flee_btn.disabled = true
 	_cycle_xp = float(result.get("xp_total", 0.0))
 	_update_xp_label()
+	_cleanup_ambush_icon()
+	_cleanup_luck_icon()
 	_navigate_to_summary()
 
 # Navigue vers le résumé quand le joueur arrête l'expédition manuellement.
 func _on_adventure_stopped() -> void:
 	_stop_idle_state()
+	_cleanup_ambush_icon()
+	_cleanup_luck_icon()
 	_navigate_to_summary()
 
 # Demande à AdventureSystem de stopper l'aventure en cours.
@@ -434,6 +466,77 @@ func _rebuild_equip() -> void:
 
 	if not found:
 		_equip_vbox.add_child(UIHelpers.none_label(13))
+
+# ═══════════════════════════════════════════════════════════
+#  Mécaniques de biome — indicateurs visuels
+# ═══════════════════════════════════════════════════════════
+
+# Affiche le bandeau d'avertissement embuscade en haut de l'écran (3 s puis fade).
+func _show_ambush_warning() -> void:
+	var lbl := Label.new()
+	lbl.text = "⚠ Embuscade activée — Premier ennemi frappe en premier"
+	lbl.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.42, 0.10))
+	lbl.custom_minimum_size  = Vector2(0, 36)
+	lbl.mouse_filter         = Control.MOUSE_FILTER_IGNORE
+	add_child(lbl)
+	var tw := create_tween()
+	tw.tween_interval(3.0)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(lbl.queue_free)
+
+# Crée l'icône ⚡ rouge en overlay top-right du cercle ennemi (1er combat).
+func _build_ambush_icon() -> void:
+	var icon := Label.new()
+	icon.text = "⚡"
+	icon.add_theme_font_size_override("font_size", 26)
+	icon.add_theme_color_override("font_color", Color(1.0, 0.15, 0.10))
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var right_x: float = CombatCircle.CIRCLE_RADIUS * 2.0 + CombatCircle.CTRL_PADDING - 28.0
+	icon.position = Vector2(right_x, 4.0)
+	_enemy_circle.add_child(icon)
+	_ambush_icon = icon
+
+func _cleanup_ambush_icon() -> void:
+	if _ambush_icon and is_instance_valid(_ambush_icon):
+		_ambush_icon.queue_free()
+	_ambush_icon = null
+
+# Crée l'icône 🍀 pulsante (Chance Corsaire) en overlay top-right de la scène.
+func _build_luck_icon() -> void:
+	_cleanup_luck_icon()
+	var lbl := Label.new()
+	lbl.text = "🍀"
+	lbl.anchor_left   = 1.0
+	lbl.anchor_right  = 1.0
+	lbl.anchor_top    = 0.0
+	lbl.anchor_bottom = 0.0
+	lbl.offset_left   = -(BonusStrikeWidget.SIZE + 12.0)
+	lbl.offset_right  = -12.0
+	lbl.offset_top    = BonusStrikeWidget.SIZE + 20.0
+	lbl.offset_bottom = BonusStrikeWidget.SIZE + 52.0
+	lbl.add_theme_font_size_override("font_size", 26)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(lbl)
+	_luck_icon = lbl
+	_animate_luck_icon()
+
+# Pulsation alpha 0.6 → 1.0 → 0.6 en boucle (1.6 s par cycle).
+func _animate_luck_icon() -> void:
+	if not _luck_icon or not is_instance_valid(_luck_icon):
+		return
+	var tw := create_tween().set_loops()
+	tw.tween_property(_luck_icon, "modulate:a", 1.0, 0.8).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(_luck_icon, "modulate:a", 0.6, 0.8).set_ease(Tween.EASE_IN_OUT)
+
+func _cleanup_luck_icon() -> void:
+	if _luck_icon and is_instance_valid(_luck_icon):
+		_luck_icon.queue_free()
+	_luck_icon = null
 
 # ═══════════════════════════════════════════════════════════
 #  Résumé de fin de cycle

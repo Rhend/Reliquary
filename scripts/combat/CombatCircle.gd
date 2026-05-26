@@ -162,6 +162,10 @@ func take_damage(amount: int, is_crit: bool) -> void:
 		var c := Color.WHITE if hero_deals else UIColors.LOG_DEFEAT
 		_spawn_number(str(amount), 24, c)
 
+# Affiche les dégâts de poison (Marécage Putride) : nombre vert plus petit, légèrement décalé.
+func take_poison_damage(amount: int) -> void:
+	_spawn_number_offset(str(amount), 18, Color.GREEN, Vector2(22.0, -18.0))
+
 # Déclenche le flash de soin (vert) et fait apparaître le chiffre flottant "+N".
 func receive_heal(amount: int) -> void:
 	_flash_col   = UIColors.HEAL_COLOR
@@ -431,14 +435,18 @@ func _refresh_labels() -> void:
 
 # Crée un chiffre flottant animé (monte et disparaît en 0.9 s) dans _dmg_layer.
 func _spawn_number(text: String, font_size: int, color: Color) -> void:
+	_spawn_number_offset(text, font_size, color, Vector2.ZERO)
+
+# Variante avec décalage local supplémentaire (utilisée pour poison, etc.).
+func _spawn_number_offset(text: String, font_size: int, color: Color, offset: Vector2) -> void:
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.add_theme_font_size_override("font_size", font_size)
 	lbl.add_theme_color_override("font_color", color)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var sx := _circle_center.x + randf_range(-20.0, 20.0) - 22.0
-	var sy := _circle_center.y - 14.0
+	var sx := _circle_center.x + randf_range(-20.0, 20.0) - 22.0 + offset.x
+	var sy := _circle_center.y - 14.0 + offset.y
 	lbl.position = Vector2(sx, sy)
 	_dmg_layer.add_child(lbl)
 

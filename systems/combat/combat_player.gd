@@ -46,9 +46,10 @@ func _ready() -> void:
 # ═══════════════════════════════════════════════════════════
 
 # Lance un nouveau combat contre l'ennemi donné depuis les HP courants du héro.
-# modifier_bonuses est un dictionnaire de multiplicateurs fourni par AdventureSystem (ex: atk_mult, def_mult).
+# modifier_bonuses : multiplicateurs fournis par AdventureSystem (atk_mult, def_mult).
+# combat_options   : options de mécaniques de biome { "ambush": bool, "poison": bool }.
 func start_combat(enemy: Dictionary, current_hp: float,
-		modifier_bonuses: Dictionary) -> void:
+		modifier_bonuses: Dictionary, combat_options: Dictionary = {}) -> void:
 	var passives := PassiveSystem.get_combat_bonuses()
 	var equip    := GameData.get_equipment_bonuses()
 	var cid      := GameData.player.get("active_creature_id", "") as String
@@ -87,7 +88,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	_enemy_dict       = enemy
 	_current_hero_hp  = current_hp
 	_current_enemy_hp = e_hp
-	_steps            = CombatResolver.resolve(hero_stats, enemy_stats)
+	_steps            = CombatResolver.resolve(hero_stats, enemy_stats, combat_options)
 	_index            = 0
 	_prev_tick        = 0
 
@@ -112,7 +113,10 @@ func _play_next() -> void:
 
 	var step: CombatStep = _steps[_index]
 
-	if step.attacker == "hero":
+	# Les ticks de poison réduisent les HP ennemis (indépendamment du champ "attacker")
+	if step.is_poison:
+		_current_enemy_hp = float(step.target_hp_after)
+	elif step.attacker == "hero":
 		_current_enemy_hp = float(step.target_hp_after)
 	else:
 		_current_hero_hp = float(step.target_hp_after)
