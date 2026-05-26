@@ -375,19 +375,9 @@ func _panel_hero() -> void:
 		_rp_content.add_child(xl)
 
 		if can_ev:
-			var eb := Button.new()
-			eb.text = "ÉVOLUER ▲"
-			eb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			eb.add_theme_color_override("font_color", UIColors.FILTER_ON)
-			eb.pressed.connect(func() -> void:
-				var from_t := c.get("current_tier", 0) as int
-				if MasterySystem.evolve_entity(cid):
-					SaveManager.save()
-					_launch_evolution_ritual(
-						c.get("entity_type", "creature"), cid,
-						c.get("name", cid), from_t, from_t + 1)
-			)
-			_rp_content.add_child(eb)
+			_rp_content.add_child(_make_evolve_btn(
+				cid, c.get("name", cid) as String,
+				c.get("entity_type", "creature") as String, tier))
 	else:
 		var ml := Label.new()
 		ml.text = "▲ NIVEAU MAXIMUM"
@@ -519,6 +509,12 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		xp_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		vb.add_child(xp_lbl)
+
+	var pid_ev := pdata.get("id", "") as String
+	if MasterySystem.can_evolve(pid_ev):
+		wrapper.add_child(_make_evolve_btn(pid_ev,
+				pdata.get("name", pid_ev) as String,
+				pdata.get("entity_type", "passive") as String, rarity))
 
 	# ── Arbre d'évolutions (caché par défaut) ─────────────────
 	var evo_tree := VBoxContainer.new()
@@ -808,6 +804,9 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	var section := VBoxContainer.new()
 	section.add_theme_constant_override("separation", 2)
 	section.visible = false
+	if MasterySystem.can_evolve(biome_id):
+		wrapper.add_child(_make_evolve_btn(biome_id,
+				biome.get("name", biome_id) as String, "biome", btier))
 	wrapper.add_child(section)
 
 	var indent := MarginContainer.new()
@@ -967,6 +966,12 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 				xp_lbl.add_theme_color_override("font_color", ec if at_max else UIColors.TEXT_MUTED)
 				xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 				hb.add_child(xp_lbl)
+
+			if MasterySystem.can_evolve(entry_id):
+				parent.add_child(_make_evolve_btn(
+						entry_id, entry.get("name", "?") as String,
+						entity.get("entity_type", "creature") as String,
+						entity_tier))
 		else:
 			# Entité non découverte — style "À DÉBLOQUER"
 			var panel := PanelContainer.new()
@@ -1210,6 +1215,35 @@ func _on_hero_click() -> void:
 	if MasterySystem.can_evolve("hero"):
 		if is_instance_valid(_evolve_btn):
 			_evolve_btn.visible = true
+
+# ─── Bouton ÉVOLUER pulsant ──────────────────────────────────
+# Fabrique un bouton ÉVOLUER avec pulsation scale 1.0→1.05→1.0 en boucle.
+# La couleur du texte correspond au tier cible (from_tier + 1).
+func _make_evolve_btn(entity_id: String, entity_name: String,
+		entity_type: String, from_tier: int) -> Button:
+	var nc  := UIColors.tier_color(from_tier + 1)
+	var btn := Button.new()
+	btn.text = "ÉVOLUER ▲"
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_color_override("font_color", nc)
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.resized.connect(func() -> void:
+		btn.pivot_offset = btn.size * 0.5
+	)
+	btn.ready.connect(func() -> void:
+		var tw := btn.create_tween().set_loops()
+		tw.tween_property(btn, "scale", Vector2(1.05, 1.05), 0.6) \
+				.set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(btn, "scale", Vector2.ONE, 0.6) \
+				.set_ease(Tween.EASE_IN_OUT)
+	)
+	btn.pressed.connect(func() -> void:
+		if MasterySystem.evolve_entity(entity_id):
+			SaveManager.save()
+			_launch_evolution_ritual(entity_type, entity_id, entity_name,
+					from_tier, from_tier + 1)
+	)
+	return btn
 
 # ─── Rituel d'ascension ──────────────────────────────────────
 # Stocke les paramètres dans GameData puis fond vers noir avant de changer de scène.

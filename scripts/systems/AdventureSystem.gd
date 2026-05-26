@@ -33,10 +33,9 @@ extends Node
 const FIRST_ENCOUNTER_DELAY: float = 1.0   # délai avant la toute première rencontre du cycle
 const COMBAT_POST_DELAY:     float = 2.5   # pause après la fin d'un combat
 const INSTANT_EVENT_DELAY:   float = 1.0   # pause après piège ou bénédiction
-const DEFAULT_REGEN_PCT:    float = 0.15
+const DEFAULT_REGEN_PCT:    float = 0.0
 const COMBO_HP_THRESHOLD:   float = 0.25
 const COMBO_ATK_BONUS_PCT:  float = 0.05   # +5 % ATK par niveau de combo au-dessus de 1
-const STRIKE_BREAK_THRESHOLD: float = 0.20  # coup ennemi ≥ 20 % PV max brise le strike
 
 # ─── Distribution pondérée des créatures ────────────────────
 # Poids par tier selon le nombre de tiers débloqués dans le biome.
@@ -106,9 +105,6 @@ var _cycle_xp_hero:            float      = 0.0
 var _cycle_xp_biome:           float      = 0.0
 var _cycle_xp_passives_total:  float      = 0.0
 var _cycle_xp_passives_detail: Dictionary = {}
-
-var _bonus_strike:     int = 0   # compteur de hits héro consécutifs sans break
-var _bonus_strike_max: int = 0   # meilleur strike atteint dans le cycle
 
 func _ready() -> void:
 	_encounter_timer          = Timer.new()
@@ -401,10 +397,14 @@ func _resolve_victory(enemy: Dictionary) -> void:
 # ═══════════════════════════════════════════════════════════
 
 # Régénère regen_pct% des PV max après chaque rencontre.
+# Sources : modificateur de cycle (regen_pct) + passifs actifs (hp_regen_pct).
 func _apply_regen(_hero_id: String) -> void:
-	var regen_pct = float(current_modifier.get("regen_pct", DEFAULT_REGEN_PCT))
-	var max_hp    = _get_max_hp()
-	current_hp    = minf(current_hp + max_hp * regen_pct, max_hp)
+	var regen_pct := float(current_modifier.get("regen_pct", DEFAULT_REGEN_PCT)) \
+			+ PassiveSystem.get_effect("hp_regen_pct")
+	if regen_pct <= 0.0:
+		return
+	var max_hp := _get_max_hp()
+	current_hp  = minf(current_hp + max_hp * regen_pct, max_hp)
 
 # Calcule les PV max effectifs du héro (stats de base + équipement + passifs).
 func _get_max_hp() -> float:
