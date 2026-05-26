@@ -113,7 +113,6 @@ func _ready() -> void:
 	add_child(_encounter_timer)
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.xp_gained.connect(_on_xp_gained_tracking)
-	CombatPlayer.step_started.connect(_on_step_started_strike)
 
 # Accumule l'XP biome et passifs pour le résumé de cycle.
 # Appelé par EventBus.xp_gained à chaque attribution MasterySystem.
@@ -149,8 +148,6 @@ func start_adventure(biome_id: String) -> void:
 	current_hp       = _get_max_hp()
 
 	_combo_count             = 0
-	_bonus_strike            = 0
-	_bonus_strike_max        = 0
 	_first_encounter_pending = true
 	_is_first_combat         = true
 
@@ -188,7 +185,6 @@ func stop_adventure() -> void:
 	if CombatPlayer.is_playing:
 		CombatPlayer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
-	_bonus_strike_max = maxi(_bonus_strike_max, _bonus_strike)
 	CycleData.last_cycle_summary = _build_summary(false)
 	EventBus.adventure_stopped.emit()
 
@@ -349,8 +345,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	var xp_base     = float(enemy.get("xp_reward", 10))
 	var gen_tier    = int(enemy.get("tier", 0))
 	var xp_mult     = float(current_modifier.get("xp_mult", 1.0))
-	var strike_mult = _get_strike_xp_mult()
-	var xp_earned   = xp_base * xp_mult * strike_mult
+	var xp_earned   = xp_base * xp_mult
 
 	# XP aux passifs actifs
 	MasterySystem.add_xp_to_all_active(xp_earned, gen_tier)
@@ -523,31 +518,6 @@ func _drop_ingredients() -> void:
 		_cycle_loot += drops.size()
 		EventBus.loot_dropped.emit(drops, "Biome")
 
-# Vérifie chaque step de combat : incrémente le strike si le héro attaque,
-# le brise si l'ennemi inflige un coup lourd (≥ STRIKE_BREAK_THRESHOLD % PV max).
-func _on_step_started_strike(step: CombatStep) -> void:
-	if not is_running:
-		return
-	if step.attacker == "hero":
-		_bonus_strike    += 1
-		_bonus_strike_max = maxi(_bonus_strike_max, _bonus_strike)
-		EventBus.bonus_strike_changed.emit(_bonus_strike)
-	else:
-		var max_hp := _get_max_hp()
-		if max_hp > 0.0 and float(step.damage) / max_hp >= STRIKE_BREAK_THRESHOLD:
-			_bonus_strike = 0
-			EventBus.bonus_strike_changed.emit(0)
-			EventBus.bonus_strike_broken.emit()
-
-# Multiplicateur XP selon le palier de strike courant (appliqué par victoire).
-func _get_strike_xp_mult() -> float:
-	if _bonus_strike < 1:  return 1.00
-	if _bonus_strike < 5:  return 1.05
-	if _bonus_strike < 10: return 1.10
-	if _bonus_strike < 20: return 1.20
-	if _bonus_strike < 30: return 1.35
-	return 1.50
-
 # ═══════════════════════════════════════════════════════════
 #  Distribution pondérée des créatures
 # ═══════════════════════════════════════════════════════════
@@ -635,7 +605,6 @@ func _end_adventure(victory: bool) -> void:
 	is_running = false
 	_encounter_timer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
-	_bonus_strike_max = maxi(_bonus_strike_max, _bonus_strike)
 	var summary := _build_summary(victory)
 	CycleData.last_cycle_summary = summary
 	EventBus.adventure_cycle_ended.emit(summary)
@@ -659,5 +628,4 @@ func _build_summary(victory: bool) -> Dictionary:
 		"positive_events":      _cycle_positive_events,
 		"traps_triggered":      _cycle_traps_triggered,
 		"cycle_luck":           _cycle_luck,
-		"strike_max":           _bonus_strike_max,
 	}
