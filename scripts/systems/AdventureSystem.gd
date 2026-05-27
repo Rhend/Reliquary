@@ -173,7 +173,6 @@ func start_adventure(biome_id: String) -> void:
 
 	GameData.player["active_biome_id"] = biome_id
 	EventBus.adventure_started.emit(biome_id)
-	EventBus.bonus_strike_changed.emit(0)
 	_schedule_next_encounter()
 
 # Interrompt l'aventure en cours (bouton "Mettre fin à l'expédition").

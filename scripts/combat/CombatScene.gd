@@ -34,9 +34,6 @@ var _idle_tw:      Tween = null  # tween du fade-in du label idle
 # ─── Combat ───────────────────────────────────────────────────
 var _combat_label: Label = null  # label "En combat..." affiché pendant un duel
 
-# ─── Bonus Strike ─────────────────────────────────────────────
-var _strike_widget: BonusStrikeWidget = null  # compteur de strikes en overlay top-right
-
 # ─── Mécaniques de biome ──────────────────────────────────────
 var _ambush_pending: bool  = false  # vrai au lancement si embuscade active, reset après 1er combat
 var _ambush_icon:    Label = null   # icône ⚡ sur le cercle ennemi pendant le 1er combat
@@ -62,7 +59,6 @@ func _build_ui() -> void:
 	root.add_child(_build_info_bar())
 	root.add_child(_build_circles_area())
 	root.add_child(_build_footer())
-	_build_strike_widget()
 
 # ── Circles ────────────────────────────────────────────────
 
@@ -179,7 +175,6 @@ func _connect_signals() -> void:
 	EventBus.adventure_stopped.connect(_on_adventure_stopped)
 	CombatPlayer.step_started.connect(_on_step_started)
 	CombatPlayer.step_ended.connect(_on_step_ended)
-	EventBus.bonus_strike_broken.connect(_on_bonus_strike_broken)
 
 # ═══════════════════════════════════════════════════════════
 #  Handlers signaux
@@ -370,41 +365,6 @@ func _on_flee_pressed() -> void:
 	AdventureSystem.stop_adventure()
 
 # ═══════════════════════════════════════════════════════════
-#  Bonus Strike
-# ═══════════════════════════════════════════════════════════
-
-# Positionne le widget circulaire en overlay top-right de la scène.
-func _build_strike_widget() -> void:
-	_strike_widget              = BonusStrikeWidget.new()
-	_strike_widget.anchor_left  = 1.0
-	_strike_widget.anchor_right = 1.0
-	_strike_widget.anchor_top   = 0.0
-	_strike_widget.anchor_bottom = 0.0
-	_strike_widget.offset_left   = -(BonusStrikeWidget.SIZE + 12.0)
-	_strike_widget.offset_right  = -12.0
-	_strike_widget.offset_top    = 12.0
-	_strike_widget.offset_bottom = 12.0 + BonusStrikeWidget.SIZE
-	add_child(_strike_widget)
-
-# Affiche un flash "STRIKE BRISÉ !" centré, puis disparaît.
-func _on_bonus_strike_broken() -> void:
-	var lbl := Label.new()
-	lbl.text = "STRIKE BRISÉ !"
-	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 36)
-	lbl.add_theme_color_override("font_color", UIColors.LOG_DEFEAT)
-	lbl.modulate.a = 0.0
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(lbl)
-	var tw := create_tween()
-	tw.tween_property(lbl, "modulate:a", 0.88, 0.14)
-	tw.tween_interval(0.42)
-	tw.tween_property(lbl, "modulate:a", 0.0, 0.32)
-	tw.tween_callback(lbl.queue_free)
-
-# ═══════════════════════════════════════════════════════════
 #  Idle entre événements
 # ═══════════════════════════════════════════════════════════
 
@@ -542,10 +502,10 @@ func _build_luck_icon() -> void:
 	lbl.anchor_right  = 1.0
 	lbl.anchor_top    = 0.0
 	lbl.anchor_bottom = 0.0
-	lbl.offset_left   = -(BonusStrikeWidget.SIZE + 12.0)
+	lbl.offset_left   = -92.0
 	lbl.offset_right  = -12.0
-	lbl.offset_top    = BonusStrikeWidget.SIZE + 20.0
-	lbl.offset_bottom = BonusStrikeWidget.SIZE + 52.0
+	lbl.offset_top    = 12.0
+	lbl.offset_bottom = 44.0
 	lbl.add_theme_font_size_override("font_size", 26)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
