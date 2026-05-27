@@ -19,7 +19,7 @@ func _ready() -> void:
 	ico.text = icon_text
 	ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ico.add_theme_font_size_override("font_size", 40)
+	ico.add_theme_font_size_override("font_size", 56)
 	ico.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ico.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(ico)
@@ -67,7 +67,7 @@ func _draw() -> void:
 
 func _callout(c: Vector2) -> void:
 	var font := ThemeDB.fallback_font
-	var fsz  := 13
+	var fsz  := 17
 	var r    := hex_radius * (0.78 if tier <= 2 else 0.92)
 
 	var text_w  := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsz).x
@@ -84,25 +84,20 @@ func _callout(c: Vector2) -> void:
 	var base  := Color(tier_color.r, tier_color.g, tier_color.b,
 			0.90 + 0.10 * sin(_t * 1.8))
 
-	# Halo large autour de la ligne — bien visible
+	# Halo de lueur autour de la ligne
 	var glow := Color(tier_color.r, tier_color.g, tier_color.b,
 			0.28 + 0.12 * sin(_t * 1.5))
-	draw_line(p0, p1, glow, 14.0, true)
-	draw_line(p1, p2, glow, 14.0, true)
-	# Halo intermédiaire
-	var glow2 := Color(tier_color.r, tier_color.g, tier_color.b,
-			0.50 + 0.10 * sin(_t * 1.5))
-	draw_line(p0, p1, glow2, 5.0, true)
-	draw_line(p1, p2, glow2, 5.0, true)
+	draw_line(p0, p1, glow, 6.0, true)
+	draw_line(p1, p2, glow, 6.0, true)
 
-	draw_line(p0, p1, black, 3.0, true)
-	draw_line(p1, p2, black, 3.0, true)
-	draw_line(p0, p1, base, 2.0, true)
-	draw_line(p1, p2, base, 2.0, true)
+	draw_line(p0, p1, black, 2.0, true)
+	draw_line(p1, p2, black, 2.0, true)
+	draw_line(p0, p1, base, 1.2, true)
+	draw_line(p1, p2, base, 1.2, true)
 
-	var dot_r := 2.5 + 0.8 * sin(_t * 3.2)
-	draw_circle(p0, dot_r + 2.5, Color(tier_color.r, tier_color.g, tier_color.b, 0.40))
-	draw_circle(p0, dot_r + 1.5, black)
+	var dot_r := 1.8 + 0.5 * sin(_t * 3.2)
+	draw_circle(p0, dot_r + 2.0, Color(tier_color.r, tier_color.g, tier_color.b, 0.35))
+	draw_circle(p0, dot_r + 1.0, black)
 	draw_circle(p0, dot_r, base)
 
 	# Particule animée le long du callout
@@ -115,10 +110,10 @@ func _callout(c: Vector2) -> void:
 		pp = p1.lerp(p2, (dist - stem_len) / bar_len)
 	var pa   := sin(prog * PI)
 	var pc   := tier_color.lightened(0.55); pc.a = pa * 0.95
-	var pcg  := Color(pc.r, pc.g, pc.b, pa * 0.45)
-	draw_circle(pp, 9.0, pcg)
-	draw_circle(pp, 4.0, pc)
-	draw_circle(pp, 1.8, Color(1.0, 1.0, 1.0, pa))
+	var pcg  := Color(pc.r, pc.g, pc.b, pa * 0.40)
+	draw_circle(pp, 5.0, pcg)
+	draw_circle(pp, 2.5, pc)
+	draw_circle(pp, 1.0, Color(1.0, 1.0, 1.0, pa))
 
 	var tx  := minf(p1.x, p2.x)
 	var tp  := Vector2(tx, p1.y - 6.0)
