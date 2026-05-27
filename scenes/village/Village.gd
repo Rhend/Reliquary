@@ -1233,6 +1233,7 @@ func _debug_passive_cycle(passive_id: String) -> void:
 
 	GameData.player["active_passives"] = actives
 	PassiveSystem.refresh_active_passives()
+	EventBus.player_state_changed.emit()
 
 # Ajoute le bouton ⛶ en haut à droite pour basculer le plein écran.
 func _build_fullscreen_btn() -> void:
