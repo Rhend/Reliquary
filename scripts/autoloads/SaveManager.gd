@@ -1,23 +1,30 @@
 # ============================================================
 # SaveManager.gd — Sauvegarde automatique sur progression.
 #
-# Stratégie de déclenchement :
-#   Les signaux de progression marquent un flag "dirty" et
-#   démarrent un timer de SAVE_DEBOUNCE secondes.  La sauvegarde
-#   n'est écrite sur disque qu'à l'expiration du timer, pas à
-#   chaque signal.  Cela évite les dizaines de writes par combat
-#   (xp_gained × creature + biome + N passifs + bestiary_updated).
+# Format JSON à trois sections :
+#   "player"   — dict complet GameData.player
+#   "entities" — tier / xp / unlocked_passives par entité à progression
+#   "systems"  — état runtime des autoloads (cooldowns, etc.)
 #
-# Format : JSON indenté, un seul fichier.
-# Chemin  : user://IdleEvolutionSave.json
-#   Windows : %APPDATA%\Godot\app_userdata\IdleEvolution\
-#   Linux   : ~/.local/share/godot/app_userdata/IdleEvolution/
+# Étendre la sauvegarde :
+#   • Nouvelle donnée joueur  → l'ajouter dans GameData.player (sauvegardé automatiquement).
+#   • Nouvelle entité         → rien à faire (détectée via current_tier).
+#   • Nouvel état de système  → ajouter une clé dans _save_systems() et _load_systems().
+#
+# Déclenchement :
+#   Les signaux de progression marquent un flag "dirty" et démarrent un timer
+#   de SAVE_DEBOUNCE secondes. La sauvegarde n'est écrite qu'à l'expiration,
+#   évitant des dizaines de writes par combat.
+#
+# Versioning :
+#   Incrémenter SAVE_VER dès qu'un champ est renommé ou supprimé.
+#   Un simple ajout de clé NE nécessite PAS de bump (merge tolère les clés inconnues).
 # ============================================================
 extends Node
 
-const SAVE_PATH     = "user://IdleEvolutionSave.json"
-const SAVE_VER      = 6      # Incrémenter lors d'un changement de format incompatible
-const SAVE_DEBOUNCE = 2.0    # Secondes d'inactivité avant l'écriture sur disque
+const SAVE_PATH     := "user://IdleEvolutionSave.json"
+const SAVE_VER      := 7
+const SAVE_DEBOUNCE := 2.0
 
 var _save_dirty:  bool  = false
 var _save_loaded: bool  = false
@@ -38,13 +45,10 @@ func _ready() -> void:
 	EventBus.player_state_changed.connect(_on_progress)
 	EventBus.equipment_changed.connect(_on_progress)
 
-# Marque la sauvegarde comme nécessaire et remet le timer à zéro.
-# start() sur un Timer en cours le relance depuis le début.
 func _on_progress(_a = null, _b = null) -> void:
 	_save_dirty = true
 	_save_timer.start()
 
-# Appelé quand le timer expire : écrit sur disque une seule fois.
 func _flush_save() -> void:
 	if _save_dirty:
 		_save_dirty = false
@@ -55,29 +59,41 @@ func _flush_save() -> void:
 # ═══════════════════════════════════════════════════════════
 
 func save() -> void:
-	var save_data: Dictionary = {
-		"version": SAVE_VER,
-		"player":  GameData.player.duplicate(true),
-		"entities": {}
+	var data := {
+		"version":  SAVE_VER,
+		"player":   _save_player(),
+		"entities": _save_entities(),
+		"systems":  _save_systems(),
 	}
-
-	for entity_id in GameData.entities:
-		var e = GameData.entities[entity_id]
-		if not e.has("current_tier"):
-			continue   # resource / recipe — pas de progression à sauvegarder
-		save_data["entities"][entity_id] = {
-			"current_tier":      e.get("current_tier",      0),
-			"current_xp":        e.get("current_xp",        0.0),
-			"unlocked_passives": e.get("unlocked_passives", [])
-		}
-
-	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
 		push_error("SaveManager: impossible d'ouvrir le fichier de sauvegarde")
 		return
-	file.store_string(JSON.stringify(save_data, "\t"))
+	file.store_string(JSON.stringify(data, "\t"))
 	file.close()
 	EventBus.save_completed.emit()
+
+func _save_player() -> Dictionary:
+	return GameData.player.duplicate(true)
+
+func _save_entities() -> Dictionary:
+	var result: Dictionary = {}
+	for entity_id in GameData.entities:
+		var e: Dictionary = GameData.entities[entity_id]
+		if not e.has("current_tier"):
+			continue
+		result[entity_id] = {
+			"current_tier":      e.get("current_tier",      0),
+			"current_xp":        e.get("current_xp",        0.0),
+			"unlocked_passives": e.get("unlocked_passives", []),
+		}
+	return result
+
+func _save_systems() -> Dictionary:
+	# ── Ajouter ici les états runtime à persister ──────────────
+	return {
+		"passive_cooldowns": PassiveSystem.passive_cooldowns.duplicate(),
+	}
 
 # ═══════════════════════════════════════════════════════════
 #  Chargement
@@ -87,41 +103,53 @@ func load_save() -> void:
 	if _save_loaded:
 		return
 	_save_loaded = true
-	if not FileAccess.file_exists(SAVE_PATH):
-		return   # Première session — pas de fichier à charger
 
-	var file = FileAccess.open(SAVE_PATH, FileAccess.READ)
-	if file == null:
+	if not FileAccess.file_exists(SAVE_PATH):
 		return
 
-	var json = JSON.new()
-	var err  = json.parse(file.get_as_text())
+	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var json := JSON.new()
+	var err  := json.parse(file.get_as_text())
 	file.close()
 	if err != OK:
 		push_error("SaveManager: fichier de sauvegarde corrompu — ignoré")
 		return
 
-	var save_data: Dictionary = json.get_data()
-
-	# Abandonne si la version ne correspond pas (format incompatible)
-	var saved_ver = int(save_data.get("version", 0))
+	var data: Dictionary = json.get_data()
+	var saved_ver: int   = int(data.get("version", 0))
 	if saved_ver != SAVE_VER:
-		push_warning("SaveManager: version %d en mémoire, %d attendu — sauvegarde ignorée" \
+		push_warning("SaveManager: version %d trouvée, %d attendue — sauvegarde ignorée (supprimer le fichier pour repartir proprement)" \
 			% [saved_ver, SAVE_VER])
 		return
 
-	# Fusionne l'état joueur sauvegardé (true = les clés du save écrasent les défauts)
-	if save_data.has("player"):
-		GameData.player.merge(save_data["player"], true)
-
-	# Restaure le tier / XP de chaque entité connue
-	if save_data.has("entities"):
-		for entity_id in save_data["entities"]:
-			if not GameData.entities.has(entity_id):
-				continue   # Entité supprimée depuis la dernière session — ignorée
-			var saved = save_data["entities"][entity_id]
-			GameData.entities[entity_id]["current_tier"]      = saved.get("current_tier",      0)
-			GameData.entities[entity_id]["current_xp"]        = saved.get("current_xp",        0.0)
-			GameData.entities[entity_id]["unlocked_passives"] = saved.get("unlocked_passives", [])
-
+	_load_player(data)
+	_load_entities(data)
+	_load_systems(data)
 	EventBus.load_completed.emit()
+
+func _load_player(data: Dictionary) -> void:
+	if not data.has("player"):
+		return
+	GameData.player.merge(data["player"], true)
+
+func _load_entities(data: Dictionary) -> void:
+	if not data.has("entities"):
+		return
+	for entity_id in data["entities"]:
+		if not GameData.entities.has(entity_id):
+			continue
+		var saved: Dictionary = data["entities"][entity_id]
+		var e: Dictionary     = GameData.entities[entity_id]
+		e["current_tier"]      = saved.get("current_tier",      0)
+		e["current_xp"]        = saved.get("current_xp",        0.0)
+		e["unlocked_passives"] = saved.get("unlocked_passives", [])
+
+func _load_systems(data: Dictionary) -> void:
+	if not data.has("systems"):
+		return
+	var sys: Dictionary = data["systems"]
+	# ── Ajouter ici la restauration des états runtime ──────────
+	if sys.has("passive_cooldowns"):
+		PassiveSystem.passive_cooldowns = (sys["passive_cooldowns"] as Dictionary).duplicate()
