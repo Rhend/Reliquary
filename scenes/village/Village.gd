@@ -1195,7 +1195,7 @@ func _build_debug_buttons() -> void:
 # Retourne le label affiché sur un bouton de passif debug.
 func _debug_passive_label(passive_id: String, short_name: String) -> String:
 	var passive := GameData.get_entity(passive_id)
-	var active  := passive_id in GameData.player.get("active_passives", [])
+	var active: bool = passive_id in (GameData.player.get("active_passives", []) as Array)
 	if passive.is_empty() or not active:
 		return short_name + ": OFF"
 	return short_name + ": T" + str(passive.get("current_tier", 0))
