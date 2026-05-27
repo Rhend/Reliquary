@@ -108,7 +108,10 @@ func _build_circles_area() -> Control:
 func _build_footer() -> Control:
 	var tcolor := _hero_tier_color()
 
-	var m := UIHelpers.margin_of(8)
+	var m    := UIHelpers.margin_of(8)
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 6)
+	m.add_child(hbox)
 
 	_flee_btn = Button.new()
 	_flee_btn.text                   = "⚔  Mettre fin à l'expédition"
@@ -119,8 +122,24 @@ func _build_footer() -> Control:
 	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	_flee_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	_flee_btn.pressed.connect(_on_flee_pressed)
-	m.add_child(_flee_btn)
+	hbox.add_child(_flee_btn)
+
+	var dbg := Button.new()
+	dbg.text                = "🛡 14%"
+	dbg.custom_minimum_size = Vector2(70, 48)
+	dbg.add_theme_font_size_override("font_size", 13)
+	dbg.add_theme_color_override("font_color", Color(0.25, 0.60, 1.0))
+	dbg.add_theme_stylebox_override("normal", UIHelpers.card_style(Color(0.25, 0.60, 1.0), 0.10, 0.60, 1, 6))
+	dbg.add_theme_stylebox_override("hover",  UIHelpers.card_style(Color(0.25, 0.60, 1.0), 0.25, 1.00, 1, 6))
+	dbg.pressed.connect(_debug_set_hp_14pct)
+	hbox.add_child(dbg)
+
 	return m
+
+func _debug_set_hp_14pct() -> void:
+	var max_hp := AdventureSystem.get_max_hp()
+	AdventureSystem.current_hp = max_hp * 0.14
+	_hero_circle.update_hp(AdventureSystem.current_hp)
 
 # ── Info bar : XP | Effets actifs | Équipement ─────────────
 
