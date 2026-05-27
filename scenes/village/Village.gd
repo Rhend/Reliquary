@@ -1275,9 +1275,11 @@ func _debug_tier_down() -> void:
 # Ajoute XP_PER_CLICK XP au héro et évolue automatiquement si le seuil est atteint.
 func _on_hero_click() -> void:
 	var hero  := GameData.get_entity("hero")
-	var xp    := hero.get("current_xp", 0.0) as float + XP_PER_CLICK
-	hero["current_xp"] = xp
 	var xpmax := float(GameData.xp_thresholds[1])
+	if hero.get("current_xp", 0.0) as float >= xpmax:
+		return
+	var xp := minf(hero.get("current_xp", 0.0) as float + XP_PER_CLICK, xpmax)
+	hero["current_xp"] = xp
 	_ring.fill_fraction = minf(xp / xpmax, 1.0)
 	_xp_label.text      = "%d / %d XP" % [int(xp), int(xpmax)]
 	EventBus.xp_gained.emit("hero", XP_PER_CLICK)
