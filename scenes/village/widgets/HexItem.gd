@@ -19,7 +19,7 @@ func _ready() -> void:
 	ico.text = icon_text
 	ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ico.add_theme_font_size_override("font_size", 56)
+	ico.add_theme_font_size_override("font_size", 50)
 	ico.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ico.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(ico)
@@ -156,10 +156,15 @@ func _round(c: Vector2, with_fx: bool) -> void:
 		draw_arc(c, r, sa, sa + 1.0, 20, sh, 4.5, true)
 
 	if is_selected:
-		var gr: float = 14.0 if with_fx else 10.0
-		var glow := tier_color; glow.a = 0.50
-		draw_arc(c, r + gr, 0.0, TAU, 48, glow, 7.0, true)
-		draw_arc(c, r, 0.0, TAU, 64, tier_color.lightened(0.3), 3.0, true)
+		# Halo externe diffus
+		var gr: float = 16.0 if with_fx else 12.0
+		var outer := tier_color; outer.a = 0.55
+		draw_arc(c, r + gr, 0.0, TAU, 48, outer, 9.0, true)
+		# Contour brillant bien visible
+		var bright := tier_color.lightened(0.70); bright.a = 1.0
+		draw_arc(c, r, 0.0, TAU, 64, bright, 4.0, true)
+		# Liseré blanc intérieur
+		draw_arc(c, r - 3.0, 0.0, TAU, 64, Color(1.0, 1.0, 1.0, 0.55), 1.5, true)
 	elif is_hovered:
 		var ex: float = 16.0 if with_fx else 14.0
 		var corona := tier_color; corona.a = 0.30
@@ -217,9 +222,14 @@ func _hexa(c: Vector2, with_fx: bool, with_pulse: bool) -> void:
 		draw_line(ps, pe, sh, 4.5, true)
 
 	if is_selected:
-		_draw_border(pts, tier_color.lightened(0.3), 3.0)
-		var glow := tier_color; glow.a = 0.45
-		_draw_border(_hex(c, eff_r + 10.0), glow, 7.0)
+		# Halo externe diffus
+		var outer := tier_color; outer.a = 0.55
+		_draw_border(_hex(c, eff_r + 12.0), outer, 9.0)
+		# Contour brillant bien visible
+		var bright := tier_color.lightened(0.70); bright.a = 1.0
+		_draw_border(pts, bright, 4.0)
+		# Liseré blanc intérieur
+		_draw_border(_hex(c, eff_r - 3.0), Color(1.0, 1.0, 1.0, 0.55), 1.5)
 	elif is_hovered:
 		var expand: float = 18.0
 		if with_fx: expand = 22.0

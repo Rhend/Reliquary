@@ -96,9 +96,9 @@ func _build_tier0(creature: Dictionary) -> void:
 	var lname := Label.new()
 	lname.text = "Village"
 	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lname.add_theme_font_size_override("font_size", 15)
+	lname.add_theme_font_size_override("font_size", 22)
 	lname.add_theme_color_override("font_color", TIER_0_COLOR.lightened(0.2))
-	_center(lname, Vector2(0.0, -60.0), Vector2(150.0, 22.0))
+	_center(lname, Vector2(0.0, -60.0), Vector2(180.0, 30.0))
 	add_child(lname)
 
 	var orb := ClickOrb.new()
@@ -151,17 +151,17 @@ func _build_hub(creature: Dictionary, tier: int) -> void:
 	var lname := Label.new()
 	lname.text = "Village"
 	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lname.add_theme_font_size_override("font_size", 17)
+	lname.add_theme_font_size_override("font_size", 24)
 	lname.add_theme_color_override("font_color", tcolor)
-	_center(lname, Vector2(0.0, -14.0), Vector2(150.0, 26.0))
+	_center(lname, Vector2(0.0, -17.0), Vector2(180.0, 32.0))
 	_hub_root.add_child(lname)
 
 	var ltier := Label.new()
 	ltier.text = GameData.get_tier_name(tier)
 	ltier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ltier.add_theme_font_size_override("font_size", 11)
+	ltier.add_theme_font_size_override("font_size", 15)
 	ltier.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.40))
-	_center(ltier, Vector2(0.0, 12.0), Vector2(130.0, 20.0))
+	_center(ltier, Vector2(0.0, 16.0), Vector2(150.0, 24.0))
 	_hub_root.add_child(ltier)
 
 	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool: return d[2] <= tier)
