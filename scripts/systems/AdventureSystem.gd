@@ -366,7 +366,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_drop_loot(enemy)
 
 	# Ingrédients biome (uniquement si Village Tier ≥ 2)
-	if GameData.player.get("village_tier", 0) >= 2:
+	if GameData.get_entity("hero").get("current_tier", 0) >= 2:
 		_drop_ingredients()
 
 	# Combo

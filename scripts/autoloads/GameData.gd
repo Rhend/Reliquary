@@ -45,7 +45,6 @@ var player: Dictionary = {
 	"active_creature_id": "hero",
 	"active_biome_id":    "",
 	"active_passives":    [],
-	"village_tier":       0,           # tier du village — débloque l'ingredient_pool à 2+
 	"equipped": {
 		"weapon":    "equip_epee_bois",
 		"armor":     "",

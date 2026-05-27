@@ -19,8 +19,9 @@ const SAVE_PATH     = "user://IdleEvolutionSave.json"
 const SAVE_VER      = 6      # Incrémenter lors d'un changement de format incompatible
 const SAVE_DEBOUNCE = 2.0    # Secondes d'inactivité avant l'écriture sur disque
 
-var _save_dirty: bool  = false
-var _save_timer: Timer
+var _save_dirty:  bool  = false
+var _save_loaded: bool  = false
+var _save_timer:  Timer
 
 func _ready() -> void:
 	_save_timer           = Timer.new()
@@ -83,6 +84,9 @@ func save() -> void:
 # ═══════════════════════════════════════════════════════════
 
 func load_save() -> void:
+	if _save_loaded:
+		return
+	_save_loaded = true
 	if not FileAccess.file_exists(SAVE_PATH):
 		return   # Première session — pas de fichier à charger
 

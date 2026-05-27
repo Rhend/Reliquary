@@ -47,8 +47,8 @@ var _adv_selected_biome_id := ""          # biome sélectionné dans le panneau 
 var _hex_items            : Dictionary = {}   # panel_id → HexItem, pour gérer l'état sélectionné
 
 # ─── Init ─────────────────────────────────────────────────────
-# Construit l'UI au démarrage (la sauvegarde est déjà chargée par Main.gd).
 func _ready() -> void:
+	SaveManager.load_save()
 	_build_ui()
 
 # Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
@@ -1007,7 +1007,7 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
 func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	if pool.is_empty():
 		return
-	var locked: bool = GameData.player.get("village_tier", 0) < 2
+	var locked: bool = GameData.get_entity("hero").get("current_tier", 0) < 2
 	var nc := UIColors.CARD_NEUTRAL
 
 	var cat_wrap := VBoxContainer.new()
