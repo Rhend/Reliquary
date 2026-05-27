@@ -42,6 +42,9 @@ var _ambush_pending: bool  = false  # vrai au lancement si embuscade active, res
 var _ambush_icon:    Label = null   # icône ⚡ sur le cercle ennemi pendant le 1er combat
 var _luck_icon:      Label = null   # trèfle 🍀 pulsant (Chance Corsaire), visible tout le cycle
 
+# ─── Bouclier d'urgence (Résilience Rare+) ────────────────────
+var _hero_shield: float = 0.0   # PV de bouclier trackés pendant le playback
+
 # ═══════════════════════════════════════════════════════════
 # Construit l'UI et connecte tous les signaux au démarrage.
 func _ready() -> void:
@@ -255,6 +258,8 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	)
 	_hero_circle.action_progress  = 0.0
 	_enemy_circle.action_progress = 0.0
+	_hero_shield = 0.0
+	_hero_circle.set_shield(0)
 	_flee_btn.disabled = false
 	_prev_tick = 0
 
@@ -266,8 +271,14 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 
 # Met à jour les HP de la cible et anime la barre d'action de l'attaquant sur la durée du step.
 func _on_step_started(step: CombatStep) -> void:
-	# Tick de poison : met à jour le cercle ennemi avec des nombres verts (pas de barre d'action)
+	# Tick de poison biome : nombres verts, pas de barre d'action
 	if step.is_poison:
+		_enemy_circle.update_hp(float(step.target_hp_after))
+		_enemy_circle.take_poison_damage(step.damage)
+		return
+
+	# Tick de poison passif (Contact Venimeux) : idem, légèrement décalé
+	if step.is_passive_poison:
 		_enemy_circle.update_hp(float(step.target_hp_after))
 		_enemy_circle.take_poison_damage(step.damage)
 		return
@@ -275,9 +286,27 @@ func _on_step_started(step: CombatStep) -> void:
 	if step.attacker == "hero":
 		_enemy_circle.update_hp(float(step.target_hp_after))
 		_enemy_circle.take_damage(step.damage, step.is_crit)
+		# Contact Venimeux proc : icône poison sur l'ennemi
+		if step.passive_poison_proc:
+			_enemy_circle.show_poison_proc()
 	else:
-		_hero_circle.update_hp(float(step.target_hp_after))
-		_hero_circle.take_damage(step.damage, step.is_crit)
+		# Coup ennemi : gérer l'absorption bouclier
+		if step.shield_absorbed > 0:
+			_hero_circle.take_shield_damage(step.shield_absorbed)
+			_hero_shield = maxf(_hero_shield - float(step.shield_absorbed), 0.0)
+			_hero_circle.set_shield(int(_hero_shield))
+		if step.damage > 0:
+			_hero_circle.update_hp(float(step.target_hp_after))
+			_hero_circle.take_damage(step.damage, step.is_crit)
+		elif step.shield_absorbed > 0:
+			# Tout absorbé par bouclier : mettre à jour le label HP sans animation dégâts
+			_hero_circle.update_hp(float(step.target_hp_after))
+
+		# Bouclier vient de s'activer après ce coup
+		if step.is_shield_proc:
+			_hero_shield = float(step.shield_value)
+			_hero_circle.set_shield(int(_hero_shield))
+			_show_shield_banner()
 
 	# Anime la barre d'action du cercle attaquant, calée sur les ticks VIT réels
 	var ticks := maxi(step.tick_time - _prev_tick, 1)
@@ -537,6 +566,42 @@ func _cleanup_luck_icon() -> void:
 	if _luck_icon and is_instance_valid(_luck_icon):
 		_luck_icon.queue_free()
 	_luck_icon = null
+
+# Affiche le bandeau BOUCLIER ! centré sur le cercle héro pendant 1.5s puis fade.
+func _show_shield_banner() -> void:
+	var lbl := Label.new()
+	lbl.text = "BOUCLIER !"
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 24)
+	lbl.add_theme_color_override("font_color", Color.CYAN)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# Overlay bleu sur le cercle héro
+	var overlay := ColorRect.new()
+	overlay.color        = Color(0.2, 0.5, 1.0, 0.0)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hero_circle.add_child(overlay)
+
+	# Label centré sur le cercle héro
+	var w := _hero_circle.custom_minimum_size.x
+	var h := _hero_circle.custom_minimum_size.y
+	lbl.position         = Vector2(0.0, h * 0.5 - 16.0)
+	lbl.custom_minimum_size = Vector2(w, 32.0)
+	lbl.modulate.a       = 0.0
+	_hero_circle.add_child(lbl)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(overlay, "color:a", 0.5, 0.15)
+	tw.tween_property(lbl,     "modulate:a", 1.0, 0.15)
+	tw.chain()
+	tw.tween_interval(1.5)
+	tw.tween_property(overlay, "color:a", 0.0, 0.5)
+	tw.parallel().tween_property(lbl, "modulate:a", 0.0, 0.5)
+	tw.chain().tween_callback(overlay.queue_free)
+	tw.parallel().tween_callback(lbl.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Résumé de fin de cycle

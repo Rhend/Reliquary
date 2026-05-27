@@ -1,22 +1,19 @@
 {
 	"id": "passive_combat_mastery",
 	"name": "Maîtrise du Combat",
+	"type": "flat",
 	"base_stats": {
 		"effects": [
-			{
-				"id":          "atk_bonus",
-				"value":       10,
-				"description": "+10 ATK permanente"
-			}
+			{ "id": "atk_bonus", "value": 5, "description": "+5 ATK permanente" }
 		]
 	},
 	"tier_effects": [
-		{ "effects": [{ "id": "atk_bonus", "value": 10, "description": "+10 ATK permanente"  }] },
-		{ "effects": [{ "id": "atk_bonus", "value": 16, "description": "+16 ATK permanente"  }] },
-		{ "effects": [{ "id": "atk_bonus", "value": 24, "description": "+24 ATK permanente"  }] },
-		{ "effects": [{ "id": "atk_bonus", "value": 35, "description": "+35 ATK permanente"  }] },
-		{ "effects": [{ "id": "atk_bonus", "value": 50, "description": "+50 ATK permanente"  }] },
-		{ "effects": [{ "id": "atk_bonus", "value": 70, "description": "+70 ATK permanente"  }] }
+		{ "effects": [{ "id": "atk_bonus", "value": 5,  "description": "+5 ATK permanente"  }], "conditional_effects": [] },
+		{ "effects": [{ "id": "atk_bonus", "value": 12, "description": "+12 ATK permanente" }], "conditional_effects": [] },
+		{ "effects": [{ "id": "atk_bonus", "value": 20, "description": "+20 ATK permanente" }], "conditional_effects": [] },
+		{ "effects": [{ "id": "atk_bonus", "value": 30, "description": "+30 ATK permanente" }], "conditional_effects": [] },
+		{ "effects": [{ "id": "atk_bonus", "value": 45, "description": "+45 ATK permanente" }], "conditional_effects": [] },
+		{ "effects": [{ "id": "atk_bonus", "value": 65, "description": "+65 ATK permanente" }], "conditional_effects": [] }
 	],
 	"passive_slots": []
 }

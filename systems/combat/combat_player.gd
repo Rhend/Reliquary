@@ -9,41 +9,29 @@
 # ============================================================
 extends Node
 
-const TICK_DURATION:    float = 0.16   # secondes par tick (VIT=20 → attaque toutes les 5 ticks = 0.8 s)
-const MIN_STEP_DURATION: float = 0.20  # durée minimale entre deux steps pour que l'animation soit lisible
+const TICK_DURATION:    float = 0.16
+const MIN_STEP_DURATION: float = 0.20
 
-# Émis au début de chaque step, avant l'attente — l'UI doit déclencher les animations ici.
 signal step_started(step: CombatStep)
-# Émis à la fin du délai d'un step — l'UI peut clore les animations ici.
 signal step_ended(step: CombatStep)
-# Émis une fois la séquence entière jouée. winner vaut "hero" ou "enemy".
 signal combat_finished(winner: String)
 
-# ─── État runtime ────────────────────────────────────────────
+var _steps:            Array      = []
+var _index:            int        = 0
+var _prev_tick:        int        = 0
+var _timer:            Timer
+var _current_hero_hp:  float      = 0.0
+var _current_enemy_hp: float      = 0.0
+var _enemy_dict:       Dictionary = {}
 
-var _steps:            Array      = []   # séquence de CombatStep produite par CombatResolver
-var _index:            int        = 0    # index du step en cours de lecture
-var _prev_tick:        int        = 0    # tick du dernier step joué — sert à calculer le délai entre steps
-var _timer:            Timer             # timer one-shot qui cadence le playback
-var _current_hero_hp:  float      = 0.0 # HP héro mis à jour au fil des steps (pour EventBus et fin de combat)
-var _current_enemy_hp: float      = 0.0 # HP ennemi mis à jour au fil des steps
-var _enemy_dict:       Dictionary = {}  # données brutes de l'ennemi combattu (transmises à combat_ended)
-
-# Vrai si le timer est actif, c'est-à-dire qu'un combat est en cours de lecture.
 var is_playing: bool:
 	get: return _timer != null and not _timer.is_stopped()
 
-# ═══════════════════════════════════════════════════════════
-# Initialise le timer interne de playback.
 func _ready() -> void:
 	_timer          = Timer.new()
 	_timer.one_shot = true
 	_timer.timeout.connect(_on_timer)
 	add_child(_timer)
-
-# ═══════════════════════════════════════════════════════════
-#  Interface publique
-# ═══════════════════════════════════════════════════════════
 
 # Lance un nouveau combat contre l'ennemi donné depuis les HP courants du héro.
 # modifier_bonuses : multiplicateurs fournis par AdventureSystem (atk_mult, def_mult).
@@ -60,8 +48,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 		+ float(passives.get("atk_bonus", 0.0))
 		+ float(equip.get("atk", 0.0))
 	) * float(modifier_bonuses.get("atk_mult", 1.0))
-	var h_atk_mastery: float = GameData.get_mastery_combat_bonus(enemy.get("id", ""))
-	h_atk += h_atk_mastery
+	h_atk += GameData.get_mastery_combat_bonus(enemy.get("id", ""))
 
 	var h_def: float = (
 		float(stats.get("def", 0))
@@ -70,13 +57,29 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	) * float(modifier_bonuses.get("def_mult", 1.0))
 	var h_vit: float = float(stats.get("vit", 20))
 
+	# HP maximum du héro (pour le calcul du seuil de bouclier)
+	var h_hp_max: float = (
+		float(stats.get("hp", 100))
+		+ float(passives.get("hp_bonus", 0.0))
+		+ float(equip.get("hp", 0.0))
+	)
+
 	var e_hp := float(enemy.get("hp", 50))
 
+	# Effets conditionnels des passifs (bouclier + poison passif)
+	var passive_effects := PassiveSystem.get_passive_combat_effects(h_atk)
+	var extended_options := combat_options.duplicate()
+	if not (passive_effects["shield"] as Dictionary).is_empty():
+		extended_options["passive_shield"] = passive_effects["shield"]
+	if not (passive_effects["passive_poison"] as Dictionary).is_empty():
+		extended_options["passive_poison"] = passive_effects["passive_poison"]
+
 	var hero_stats := {
-		"hp":  current_hp,
-		"atk": h_atk,
-		"def": h_def,
-		"vit": h_vit,
+		"hp":     current_hp,
+		"hp_max": h_hp_max,
+		"atk":    h_atk,
+		"def":    h_def,
+		"vit":    h_vit,
 	}
 	var enemy_stats := {
 		"hp":  e_hp,
@@ -88,24 +91,26 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	_enemy_dict       = enemy
 	_current_hero_hp  = current_hp
 	_current_enemy_hp = e_hp
-	_steps            = CombatResolver.resolve(hero_stats, enemy_stats, combat_options)
+	_steps            = CombatResolver.resolve(hero_stats, enemy_stats, extended_options)
 	_index            = 0
 	_prev_tick        = 0
+
+	# Enregistrer le cooldown du bouclier si il a procé pendant la résolution
+	var shield_cfg := extended_options.get("passive_shield", {}) as Dictionary
+	var shield_pid: String = shield_cfg.get("passive_id", "")
+	if not shield_pid.is_empty():
+		for s in _steps:
+			if (s as CombatStep).is_shield_proc:
+				PassiveSystem.set_shield_cooldown(shield_pid, int(shield_cfg.get("cooldown_cycles", 1)))
+				break
 
 	EventBus.combat_started.emit(cid, enemy, current_hp, e_hp)
 	_play_next()
 
-# Interrompt le playback immédiatement (ex: changement de scène en cours de combat).
 func stop() -> void:
 	if _timer:
 		_timer.stop()
 
-# ═══════════════════════════════════════════════════════════
-#  Boucle de playback
-# ═══════════════════════════════════════════════════════════
-
-# Joue le step courant, calcule son délai et démarre le timer.
-# Appelé récursivement via _on_timer jusqu'à épuisement des steps.
 func _play_next() -> void:
 	if _index >= _steps.size():
 		_finish(_determine_winner())
@@ -113,8 +118,7 @@ func _play_next() -> void:
 
 	var step: CombatStep = _steps[_index]
 
-	# Les ticks de poison réduisent les HP ennemis (indépendamment du champ "attacker")
-	if step.is_poison:
+	if step.is_poison or step.is_passive_poison:
 		_current_enemy_hp = float(step.target_hp_after)
 	elif step.attacker == "hero":
 		_current_enemy_hp = float(step.target_hp_after)
@@ -132,13 +136,11 @@ func _play_next() -> void:
 	_timer.wait_time = maxf(duration, MIN_STEP_DURATION)
 	_timer.start()
 
-# Appelé à l'expiration du timer — clôt le step en cours et passe au suivant.
 func _on_timer() -> void:
 	step_ended.emit(_steps[_index])
 	_index += 1
 	_play_next()
 
-# Clôt le combat : émet les signaux de fin avec le vainqueur et les HP résiduels.
 func _finish(winner: String) -> void:
 	combat_finished.emit(winner)
 	EventBus.combat_ended.emit({
@@ -147,11 +149,10 @@ func _finish(winner: String) -> void:
 		"enemy":                 _enemy_dict
 	})
 
-# Détermine le vainqueur à partir du dernier step ou des HP résiduels.
 func _determine_winner() -> String:
 	if _steps.is_empty():
 		return "hero"
 	var last: CombatStep = _steps.back()
 	if last.is_killing_blow:
-		return "hero" if last.attacker == "hero" else "enemy"
+		return "hero" if (last.attacker == "hero" or last.is_poison or last.is_passive_poison) else "enemy"
 	return "hero" if _current_enemy_hp <= _current_hero_hp else "enemy"
