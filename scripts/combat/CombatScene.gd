@@ -241,10 +241,11 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_stop_idle_state()
 	if _combat_label:
 		_combat_label.modulate.a = 1.0
-	var creature  := GameData.get_entity(creature_id)
-	var hero_tier := int(creature.get("current_tier", 0))
+	var creature   := GameData.get_entity(creature_id)
+	var hero_tier  := int(creature.get("current_tier", 0))
+	var hero_hp_max := AdventureSystem.get_max_hp()
 	_hero_circle.setup(
-		creature.get("name", "Héro"), hero_hp, hero_hp,
+		creature.get("name", "Héro"), hero_hp, hero_hp_max,
 		hero_tier, CombatCircle.EntityType.CREATURE, true
 	)
 	_enemy_circle.setup(

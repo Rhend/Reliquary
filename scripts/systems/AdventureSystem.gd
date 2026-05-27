@@ -145,7 +145,7 @@ func start_adventure(biome_id: String) -> void:
 
 	current_biome_id = biome_id
 	is_running       = true
-	current_hp       = _get_max_hp()
+	current_hp       = get_max_hp()
 
 	_combo_count             = 0
 	_first_encounter_pending = true
@@ -278,7 +278,7 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 
 	match effect_type:
 		"heal":
-			var max_hp = _get_max_hp()
+			var max_hp = get_max_hp()
 			var healed = minf(effect_value, max_hp - current_hp)
 			current_hp = minf(current_hp + effect_value, max_hp)
 			EventBus.heal_applied.emit(healed, current_hp)
@@ -370,7 +370,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 		_drop_ingredients()
 
 	# Combo
-	var max_hp      = _get_max_hp()
+	var max_hp      = get_max_hp()
 	var hp_lost_pct = (_combat_start_hp - current_hp) / max_hp if max_hp > 0.0 else 1.0
 	if hp_lost_pct <= COMBO_HP_THRESHOLD:
 		_combo_count += 1
@@ -398,11 +398,11 @@ func _apply_regen(_hero_id: String) -> void:
 			+ PassiveSystem.get_effect("hp_regen_pct")
 	if regen_pct <= 0.0:
 		return
-	var max_hp := _get_max_hp()
+	var max_hp := get_max_hp()
 	current_hp  = minf(current_hp + max_hp * regen_pct, max_hp)
 
 # Calcule les PV max effectifs du héro (stats de base + équipement + passifs).
-func _get_max_hp() -> float:
+func get_max_hp() -> float:
 	var hero_id  = GameData.player.get("active_creature_id", "")
 	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)
 	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)

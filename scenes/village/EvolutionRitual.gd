@@ -280,9 +280,6 @@ func _run_sequence() -> void:
 	# Célébration stable — bouton visible, skip autorisé
 	_can_skip = true
 	_show_return_button()
-	await get_tree().create_timer(1.6).timeout
-
-	_phase6_return()
 
 # ─── Phase 2 : fade in + scale in ───────────────────────────
 func _phase2_card_appear() -> void:
@@ -539,18 +536,10 @@ func _phase6_return() -> void:
 func _input(event: InputEvent) -> void:
 	if not _can_skip or _returning:
 		return
-
-	var do_skip := false
-	if event is InputEventMouseButton \
-			and (event as InputEventMouseButton).pressed:
-		do_skip = true
-	elif event is InputEventKey \
+	if event is InputEventKey \
 			and (event as InputEventKey).pressed \
 			and not (event as InputEventKey).echo:
 		var kc := (event as InputEventKey).keycode
 		if kc == KEY_SPACE or kc == KEY_ESCAPE or kc == KEY_ENTER:
-			do_skip = true
-
-	if do_skip:
-		_skip_triggered = true
-		_phase6_return()
+			_skip_triggered = true
+			_phase6_return()
