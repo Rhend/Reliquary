@@ -389,9 +389,17 @@ func _panel_hero() -> void:
 	# ── Sous-section PASSIFS ──────────────────────────────────
 	_rp_content.add_child(UIHelpers.section_header("◆  PASSIFS", tcolor))
 
-	var unlocked: Array = c.get("unlocked_passives", [])
+	var unlocked: Array        = c.get("unlocked_passives", [])
+	var standalone: Array      = GameData.player.get("active_passives", [])
+	var all_passives: Array    = []
+	for pid in unlocked:
+		if pid not in all_passives:
+			all_passives.append(pid)
+	for pid in standalone:
+		if pid not in all_passives:
+			all_passives.append(pid)
 
-	if unlocked.is_empty():
+	if all_passives.is_empty():
 		var none_lbl := Label.new()
 		none_lbl.text = "Aucun passif débloqué"
 		none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -399,7 +407,7 @@ func _panel_hero() -> void:
 		none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		_rp_content.add_child(none_lbl)
 	else:
-		for pid in unlocked:
+		for pid in all_passives:
 			var pdata := GameData.get_entity(pid)
 			if not pdata.is_empty():
 				_rp_content.add_child(_passive_card(pdata, tcolor))
