@@ -23,14 +23,6 @@ func load_from_data(data: Dictionary) -> void:
 func get_tier_name() -> String:
 	return GameData.get_tier_name(current_tier)
 
-func can_evolve() -> bool:
-	if current_tier >= GameData.MAX_TIER:
-		return false
-	var next_idx = current_tier + 1
-	if next_idx >= GameData.xp_thresholds.size():
-		return false
-	return current_xp >= float(GameData.xp_thresholds[next_idx])
-
 func get_stat(stat_name: String, default_value: float = 0.0) -> float:
 	return float(base_stats.get(stat_name, default_value))
 

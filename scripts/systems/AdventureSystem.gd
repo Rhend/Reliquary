@@ -459,64 +459,45 @@ func _pick_modifier() -> void:
 			break
 	EventBus.modifier_activated.emit(current_modifier)
 
-# Drop le loot spécifique à l'ennemi vaincu (loot_table de l'ennemi).
-func _drop_loot(enemy: Dictionary) -> void:
-	var loot_table = enemy.get("loot_table", [])
-	if loot_table.is_empty():
+# Roule un drop depuis un pool d'entrées avec bonus de luck.
+# Chaque entrée : { item_id, chance, name, qty_min?, qty_max? }
+# source_name : affiché dans loot_dropped (nom ennemi ou "Biome").
+func _drop_pool(pool: Array, source_name: String) -> void:
+	if pool.is_empty():
 		return
-
 	var drops:      Array = []
 	var luck_bonus: float = float(_get_effective_luck()) * 0.01
-
-	for entry in loot_table:
-		var roll_threshold = minf(float(entry.get("chance", 0.0)) + luck_bonus, 1.0)
-		if randf() < roll_threshold:
-			var item_id = entry.get("item_id", "")
-			if item_id == "":
-				continue
-			GameData.add_resource(item_id, 1)
-			var res = GameData.get_entity(item_id)
-			drops.append({
-				"item_id": item_id,
-				"name":    res.get("name", item_id),
-				"qty":     1
-			})
-
+	for entry in pool:
+		var roll_threshold := minf(float(entry.get("chance", 0.0)) + luck_bonus, 1.0)
+		if randf() >= roll_threshold:
+			continue
+		var item_id: String = entry.get("item_id", "")
+		if item_id == "":
+			continue
+		var qty_min: int = int(entry.get("qty_min", 1))
+		var qty_max: int = int(entry.get("qty_max", qty_min))
+		var qty:     int = randi_range(qty_min, qty_max)
+		GameData.add_resource(item_id, qty)
+		var res := GameData.get_entity(item_id)
+		drops.append({
+			"item_id": item_id,
+			"name":    res.get("name", entry.get("name", item_id)),
+			"qty":     qty
+		})
 	if not drops.is_empty():
 		_cycle_loot += drops.size()
-		EventBus.loot_dropped.emit(drops, enemy.get("name", "?"))
+		EventBus.loot_dropped.emit(drops, source_name)
+
+# Drop le loot spécifique à l'ennemi vaincu (loot_table de l'ennemi).
+func _drop_loot(enemy: Dictionary) -> void:
+	_drop_pool(enemy.get("loot_table", []), enemy.get("name", "?"))
 
 # Drop des ingrédients depuis l'ingredient_pool du biome.
 # Chaque ingrédient tombe en quantité aléatoire entre qty_min et qty_max.
 # Disponible uniquement si Village Tier ≥ 2 (appelé depuis _resolve_victory).
 func _drop_ingredients() -> void:
-	var biome = GameData.get_entity(current_biome_id)
-	var pool: Array = biome.get("base_stats", {}).get("ingredient_pool", [])
-	if pool.is_empty():
-		return
-
-	var drops:      Array = []
-	var luck_bonus: float = float(_get_effective_luck()) * 0.01
-
-	for entry in pool:
-		var roll_threshold = minf(float(entry.get("chance", 0.0)) + luck_bonus, 1.0)
-		if randf() < roll_threshold:
-			var item_id: String = entry.get("item_id", "")
-			if item_id == "":
-				continue
-			var qty_min: int = int(entry.get("qty_min", 1))
-			var qty_max: int = int(entry.get("qty_max", 1))
-			var qty:     int = randi_range(qty_min, qty_max)
-			GameData.add_resource(item_id, qty)
-			drops.append({
-				"item_id": item_id,
-				"name":    entry.get("name", item_id),
-				"qty":     qty
-			})
-
-	if not drops.is_empty():
-		_cycle_loot += drops.size()
-		EventBus.loot_dropped.emit(drops, "Biome")
+	var biome := GameData.get_entity(current_biome_id)
+	_drop_pool(biome.get("base_stats", {}).get("ingredient_pool", []), "Biome")
 
 # ═══════════════════════════════════════════════════════════
 #  Distribution pondérée des créatures

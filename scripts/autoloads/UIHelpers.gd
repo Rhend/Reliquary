@@ -127,6 +127,46 @@ static func none_label(font_size: int = 13) -> Label:
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	return lbl
 
+# Attache le feedback hover/press juice standard à n'importe quel Control cliquable.
+# Hover  : scale ×1.03 (TRANS_BACK) + modulate ×1.30.
+# Press  : squash ×0.95 + flash ×1.55, spring-back vers état hover.
+# À appeler juste après avoir mis CURSOR_POINTING_HAND sur le nœud.
+static func add_hover_feedback(node: Control) -> void:
+	# Array mutable partagé entre lambdas pour éviter CONFUSABLE_CAPTURE_REASSIGNMENT.
+	var h: Array = [null]
+	node.mouse_entered.connect(func() -> void:
+		node.pivot_offset = node.size * 0.5
+		if is_instance_valid(h[0]): (h[0] as Tween).kill()
+		h[0] = node.create_tween()
+		var tw := h[0] as Tween
+		tw.set_parallel(true)
+		tw.tween_property(node, "modulate", Color(1.30, 1.30, 1.30), 0.13).set_ease(Tween.EASE_OUT)
+		tw.tween_property(node, "scale", Vector2(1.03, 1.03), 0.16) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	)
+	node.mouse_exited.connect(func() -> void:
+		if is_instance_valid(h[0]): (h[0] as Tween).kill()
+		h[0] = node.create_tween()
+		var tw := h[0] as Tween
+		tw.set_parallel(true)
+		tw.tween_property(node, "modulate", Color.WHITE, 0.20).set_ease(Tween.EASE_OUT)
+		tw.tween_property(node, "scale", Vector2.ONE, 0.20).set_ease(Tween.EASE_OUT)
+	)
+	node.gui_input.connect(func(ev: InputEvent) -> void:
+		if not (ev is InputEventMouseButton \
+				and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
+			return
+		if is_instance_valid(h[0]): (h[0] as Tween).kill()
+		h[0] = node.create_tween()
+		var tw := h[0] as Tween
+		tw.tween_property(node, "scale", Vector2(0.95, 0.95), 0.06) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.parallel().tween_property(node, "modulate", Color(1.55, 1.55, 1.55), 0.06)
+		tw.tween_property(node, "scale", Vector2(1.03, 1.03), 0.18) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tw.parallel().tween_property(node, "modulate", Color(1.30, 1.30, 1.30), 0.14)
+	)
+
 # Retourne la barre de navigation commune aux scènes secondaires :
 #   [← Village]  TITRE CENTRÉ
 # on_back est connecté au pressed du bouton retour.

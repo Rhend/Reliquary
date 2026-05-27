@@ -440,7 +440,7 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(rcolor))
 	if has_evos:
 		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		_add_hover_feedback(panel)
+		UIHelpers.add_hover_feedback(panel)
 	wrapper.add_child(panel)
 
 	var m := UIHelpers.margin_of(6)
@@ -678,7 +678,7 @@ func _panel_adventure() -> void:
 	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	btn.pressed.connect(_on_start_selected_expedition)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_add_hover_feedback(btn)
+	UIHelpers.add_hover_feedback(btn)
 	_rp_content.add_child(btn)
 
 	# ── Séparateur ────────────────────────────────────────────
@@ -762,7 +762,7 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	panel.fill_color = bcolor
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_add_hover_feedback(panel)
+	UIHelpers.add_hover_feedback(panel)
 	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(bcolor))
 	wrapper.add_child(panel)
 
@@ -850,7 +850,7 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	var cat_panel := PanelContainer.new()
 	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_add_hover_feedback(cat_panel)
+	UIHelpers.add_hover_feedback(cat_panel)
 	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
 	cat_wrap.add_child(cat_panel)
 
@@ -1019,7 +1019,7 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if not locked:
 		cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		_add_hover_feedback(cat_panel)
+		UIHelpers.add_hover_feedback(cat_panel)
 	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
 	cat_wrap.add_child(cat_panel)
 
@@ -1096,51 +1096,6 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
 			ent_section.visible = not ent_section.visible
 			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
-	)
-
-# Feedback hover + press sur n'importe quelle carte cliquable.
-# Hover  : scale x1.03 avec overshoot (TRANS_BACK) + brightnes x1.30.
-# Press  : scale down x0.95 + flash x1.55, puis spring-back vers état hover.
-# Appeler juste après avoir mis CURSOR_POINTING_HAND.
-func _add_hover_feedback(panel: Control) -> void:
-	# Array utilisé comme conteneur mutable partagé entre les lambdas.
-	# Évite le warning CONFUSABLE_CAPTURE_REASSIGNMENT sur une variable Tween locale.
-	var h: Array = [null]
-
-	panel.mouse_entered.connect(func() -> void:
-		panel.pivot_offset = panel.size * 0.5
-		if is_instance_valid(h[0]): (h[0] as Tween).kill()
-		h[0] = panel.create_tween()
-		var tw := h[0] as Tween
-		tw.set_parallel(true)
-		tw.tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.13) \
-				.set_ease(Tween.EASE_OUT)
-		tw.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.16) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	)
-	panel.mouse_exited.connect(func() -> void:
-		if is_instance_valid(h[0]): (h[0] as Tween).kill()
-		h[0] = panel.create_tween()
-		var tw := h[0] as Tween
-		tw.set_parallel(true)
-		tw.tween_property(panel, "modulate", Color.WHITE, 0.20).set_ease(Tween.EASE_OUT)
-		tw.tween_property(panel, "scale", Vector2.ONE, 0.20).set_ease(Tween.EASE_OUT)
-	)
-	panel.gui_input.connect(func(ev: InputEvent) -> void:
-		if not (ev is InputEventMouseButton \
-				and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
-			return
-		if is_instance_valid(h[0]): (h[0] as Tween).kill()
-		h[0] = panel.create_tween()
-		var tw := h[0] as Tween
-		# Enfoncement rapide
-		tw.tween_property(panel, "scale", Vector2(0.95, 0.95), 0.06) \
-				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		tw.parallel().tween_property(panel, "modulate", Color(1.55, 1.55, 1.55), 0.06)
-		# Spring-back vers état hover
-		tw.tween_property(panel, "scale", Vector2(1.03, 1.03), 0.18) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		tw.parallel().tween_property(panel, "modulate", Color(1.30, 1.30, 1.30), 0.14)
 	)
 
 # Panneau générique "Bientôt disponible" pour les fonctionnalités non implémentées.

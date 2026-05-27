@@ -158,7 +158,7 @@ func _build_ui() -> void:
 
 	btn.pressed.connect(_go_to_village)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_add_hover_feedback(btn)
+	UIHelpers.add_hover_feedback(btn)
 	btn_m.add_child(btn)
 	_fade_register(btn_m)
 
@@ -170,7 +170,7 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 		biome_name: String, tcolor: Color) -> void:
 
 	# ── ◆ STATISTIQUES ───────────────────────────────────────
-	var sh1 := _section_header("◆  STATISTIQUES", tcolor)
+	var sh1 := UIHelpers.section_header("◆  STATISTIQUES", tcolor)
 	vb.add_child(sh1)
 	_fade_register(sh1)
 
@@ -227,7 +227,7 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 		_stat_anims.append({"label": lbl_luck, "target": luck, "prefix": "+", "suffix": ""})
 
 	# ── ◆ RÉPARTITION XP ─────────────────────────────────────
-	var sh2 := _section_header("◆  RÉPARTITION XP", tcolor)
+	var sh2 := UIHelpers.section_header("◆  RÉPARTITION XP", tcolor)
 	vb.add_child(sh2)
 	_fade_register(sh2)
 
@@ -278,7 +278,7 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 			ready_names.append(e.get("name", eid))
 
 	if not ready_names.is_empty():
-		var sh3 := _section_header("◆  ÉVOLUTION DISPONIBLE", UIColors.FILTER_ON)
+		var sh3 := UIHelpers.section_header("◆  ÉVOLUTION DISPONIBLE", UIColors.FILTER_ON)
 		vb.add_child(sh3)
 		_fade_register(sh3)
 
@@ -371,48 +371,7 @@ func _go_to_village() -> void:
 	get_tree().change_scene_to_file("res://scenes/village/village.tscn")
 
 # ═══════════════════════════════════════════════════════════
-#  Juice — hover/press feedback (copie Village._add_hover_feedback)
-# ═══════════════════════════════════════════════════════════
-
-func _add_hover_feedback(node: Control) -> void:
-	var h: Array = [null]
-
-	node.mouse_entered.connect(func() -> void:
-		node.pivot_offset = node.size * 0.5
-		if is_instance_valid(h[0]): (h[0] as Tween).kill()
-		h[0] = node.create_tween()
-		var tw := h[0] as Tween
-		tw.set_parallel(true)
-		tw.tween_property(node, "modulate", Color(1.30, 1.30, 1.30), 0.13) \
-				.set_ease(Tween.EASE_OUT)
-		tw.tween_property(node, "scale", Vector2(1.03, 1.03), 0.16) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	)
-	node.mouse_exited.connect(func() -> void:
-		if is_instance_valid(h[0]): (h[0] as Tween).kill()
-		h[0] = node.create_tween()
-		var tw := h[0] as Tween
-		tw.set_parallel(true)
-		tw.tween_property(node, "modulate", Color.WHITE, 0.20).set_ease(Tween.EASE_OUT)
-		tw.tween_property(node, "scale", Vector2.ONE, 0.20).set_ease(Tween.EASE_OUT)
-	)
-	node.gui_input.connect(func(ev: InputEvent) -> void:
-		if not (ev is InputEventMouseButton \
-				and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
-			return
-		if is_instance_valid(h[0]): (h[0] as Tween).kill()
-		h[0] = node.create_tween()
-		var tw := h[0] as Tween
-		tw.tween_property(node, "scale", Vector2(0.95, 0.95), 0.06) \
-				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		tw.parallel().tween_property(node, "modulate", Color(1.55, 1.55, 1.55), 0.06)
-		tw.tween_property(node, "scale", Vector2(1.03, 1.03), 0.18) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		tw.parallel().tween_property(node, "modulate", Color(1.30, 1.30, 1.30), 0.14)
-	)
-
-# ═══════════════════════════════════════════════════════════
-#  Helpers UI — style Village.gd
+#  Helpers UI
 # ═══════════════════════════════════════════════════════════
 
 # Retourne le seuil XP du prochain tier de l'entité.
@@ -423,25 +382,6 @@ func _next_tier_threshold(entity: Dictionary) -> float:
 	if entity_tier >= GameData.MAX_TIER or next_idx >= GameData.xp_thresholds.size():
 		return float(GameData.xp_thresholds.back())
 	return float(GameData.xp_thresholds[next_idx])
-
-func _section_header(title: String, color: Color) -> Control:
-	var vb := VBoxContainer.new()
-	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_theme_constant_override("separation", 4)
-
-	var lbl := Label.new()
-	lbl.text = title
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", color)
-	vb.add_child(lbl)
-
-	var line := ColorRect.new()
-	line.color                 = Color(color.r, color.g, color.b, 0.38)
-	line.custom_minimum_size   = Vector2(0.0, 1.0)
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(line)
-
-	return vb
 
 # Crée une ligne clé:valeur dans un VBoxContainer. Retourne le Label valeur.
 # La valeur s'affiche "0" au départ ; le compteur l'animera ensuite.
@@ -535,21 +475,3 @@ func _xp_card(icon: String, label: String, xp_max: float,
 
 	return {"container": wrapper, "bar": bar, "xp_label": xp_lbl}
 
-func _detail_row(key_text: String, val_text: String) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-
-	var key := Label.new()
-	key.text                  = key_text
-	key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	key.add_theme_color_override("font_color",    UIColors.TEXT_MUTED)
-	key.add_theme_font_size_override("font_size", 12)
-	row.add_child(key)
-
-	var val := Label.new()
-	val.text = val_text
-	val.add_theme_color_override("font_color",    UIColors.COMBO_COLOR)
-	val.add_theme_font_size_override("font_size", 12)
-	row.add_child(val)
-
-	return row
