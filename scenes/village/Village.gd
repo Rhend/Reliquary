@@ -1146,24 +1146,85 @@ func _panel_soon(label: String) -> void:
 
 # ─── Debug : boutons tier ─────────────────────────────────────
 # Ajoute les boutons "Tier +/-" pour tester visuellement les tiers sans sauvegarder.
+# Ligne 2 : 3 boutons cycliques pour tester les passifs (OFF → T0 → … → T5 → OFF).
 func _build_debug_buttons() -> void:
-	var hb := HBoxContainer.new()
-	hb.anchor_left = 0.0; hb.anchor_top    = 0.0
-	hb.anchor_right = 0.0; hb.anchor_bottom = 0.0
-	hb.offset_left = 10; hb.offset_top    = 10
-	hb.offset_right = 10; hb.offset_bottom = 10
-	hb.add_theme_constant_override("separation", 6)
-	add_child(hb)
+	var vb := VBoxContainer.new()
+	vb.anchor_left   = 0.0; vb.anchor_top    = 0.0
+	vb.anchor_right  = 0.0; vb.anchor_bottom = 0.0
+	vb.offset_left   = 10;  vb.offset_top    = 10
+	vb.offset_right  = 10;  vb.offset_bottom = 10
+	vb.add_theme_constant_override("separation", 4)
+	add_child(vb)
+
+	# Ligne 1 : tier héro
+	var row1 := HBoxContainer.new()
+	row1.add_theme_constant_override("separation", 6)
+	vb.add_child(row1)
 
 	var up := Button.new()
 	up.text = "Tier +"
 	up.pressed.connect(_debug_tier_up)
-	hb.add_child(up)
+	row1.add_child(up)
 
 	var dn := Button.new()
 	dn.text = "Tier −"
 	dn.pressed.connect(_debug_tier_down)
-	hb.add_child(dn)
+	row1.add_child(dn)
+
+	# Ligne 2 : passifs de test
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 6)
+	vb.add_child(row2)
+
+	var debug_passives := [
+		["passive_combat_mastery", "Combat"],
+		["passive_resilience",     "Résilience"],
+		["passive_poison_touch",   "Contact"],
+	]
+	for entry: Array in debug_passives:
+		var pid: String   = entry[0]
+		var label: String = entry[1]
+		var btn           := Button.new()
+		btn.text          = _debug_passive_label(pid, label)
+		btn.pressed.connect(func() -> void:
+			_debug_passive_cycle(pid)
+			btn.text = _debug_passive_label(pid, label)
+		)
+		row2.add_child(btn)
+
+# Retourne le label affiché sur un bouton de passif debug.
+func _debug_passive_label(passive_id: String, short_name: String) -> String:
+	var passive := GameData.get_entity(passive_id)
+	var active  := passive_id in GameData.player.get("active_passives", [])
+	if passive.is_empty() or not active:
+		return short_name + ": OFF"
+	return short_name + ": T" + str(passive.get("current_tier", 0))
+
+# Cycle le tier d'un passif : OFF→T0→T1→…→T5→OFF.
+# Ajoute / retire le passif de active_passives et rafraîchit PassiveSystem.
+func _debug_passive_cycle(passive_id: String) -> void:
+	var passive := GameData.get_entity(passive_id)
+	if passive.is_empty():
+		return
+
+	var actives: Array = GameData.player.get("active_passives", [])
+	var idx := actives.find(passive_id)
+
+	if idx == -1:
+		# OFF → T0
+		actives.append(passive_id)
+		passive["current_tier"] = 0
+	else:
+		var tier := passive.get("current_tier", 0) as int
+		if tier < GameData.MAX_TIER:
+			passive["current_tier"] = tier + 1
+		else:
+			# T5 → OFF
+			actives.remove_at(idx)
+			passive["current_tier"] = 0
+
+	GameData.player["active_passives"] = actives
+	PassiveSystem.refresh_active_passives()
 
 # Ajoute le bouton ⛶ en haut à droite pour basculer le plein écran.
 func _build_fullscreen_btn() -> void:
