@@ -280,9 +280,6 @@ func _run_sequence() -> void:
 	# Célébration stable — bouton visible, skip autorisé
 	_can_skip = true
 	_show_return_button()
-	await get_tree().create_timer(1.6).timeout
-
-	_phase6_return()
 
 # ─── Phase 2 : fade in + scale in ───────────────────────────
 func _phase2_card_appear() -> void:
@@ -486,29 +483,36 @@ func _show_return_button() -> void:
 	var to_tier  := _params.get("to_tier", 1) as int
 	var to_color := UIColors.tier_color(to_tier)
 
-	var btn_style := StyleBoxFlat.new()
-	btn_style.bg_color     = Color(to_color.r, to_color.g, to_color.b, 0.15)
-	btn_style.border_color = Color(to_color.r, to_color.g, to_color.b, 0.70)
-	btn_style.border_width_left   = 2; btn_style.border_width_right  = 2
-	btn_style.border_width_top    = 2; btn_style.border_width_bottom = 2
-	btn_style.corner_radius_top_left     = 6; btn_style.corner_radius_top_right    = 6
-	btn_style.corner_radius_bottom_left  = 6; btn_style.corner_radius_bottom_right = 6
-
 	var btn := Button.new()
 	btn.text = "REVENIR AU VILLAGE"
-	btn.add_theme_stylebox_override("normal",  btn_style)
-	btn.add_theme_stylebox_override("hover",   btn_style)
-	btn.add_theme_stylebox_override("pressed", btn_style)
+	btn.add_theme_stylebox_override("normal",   UIHelpers.card_style(to_color, 0.15, 0.70, 2, 6))
+	btn.add_theme_stylebox_override("hover",    UIHelpers.card_style(to_color, 0.32, 1.00, 2, 6))
+	btn.add_theme_stylebox_override("pressed",  UIHelpers.card_style(to_color, 0.45, 1.00, 2, 6))
+	btn.add_theme_stylebox_override("focus",    UIHelpers.card_style(to_color, 0.15, 0.70, 2, 6))
 	btn.add_theme_color_override("font_color", Color.WHITE)
 	btn.add_theme_font_size_override("font_size", 14)
 	btn.anchor_left   = 0.5; btn.anchor_right  = 0.5
 	btn.anchor_top    = 1.0; btn.anchor_bottom = 1.0
 	btn.offset_left   = -120.0; btn.offset_right  = 120.0
 	btn.offset_top    = -60.0;  btn.offset_bottom = -24.0
+	btn.pivot_offset  = Vector2(120.0, 18.0)
 	btn.modulate.a    = 0.0
 	btn.z_index       = 60
-	btn.pressed.connect(_phase6_return)
 	add_child(btn)
+
+	btn.mouse_entered.connect(func() -> void:
+		var tw := btn.create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tw.tween_property(btn, "scale", Vector2(1.08, 1.08), 0.12)
+	)
+	btn.mouse_exited.connect(func() -> void:
+		var tw := btn.create_tween().set_ease(Tween.EASE_OUT)
+		tw.tween_property(btn, "scale", Vector2.ONE, 0.10)
+	)
+	btn.pressed.connect(func() -> void:
+		var tw := btn.create_tween().set_trans(Tween.TRANS_SINE)
+		tw.tween_property(btn, "scale", Vector2(0.90, 0.90), 0.07)
+		tw.tween_callback(_phase6_return)
+	)
 
 	create_tween().tween_property(btn, "modulate:a", 1.0, 0.4)
 
@@ -539,18 +543,10 @@ func _phase6_return() -> void:
 func _input(event: InputEvent) -> void:
 	if not _can_skip or _returning:
 		return
-
-	var do_skip := false
-	if event is InputEventMouseButton \
-			and (event as InputEventMouseButton).pressed:
-		do_skip = true
-	elif event is InputEventKey \
+	if event is InputEventKey \
 			and (event as InputEventKey).pressed \
 			and not (event as InputEventKey).echo:
 		var kc := (event as InputEventKey).keycode
 		if kc == KEY_SPACE or kc == KEY_ESCAPE or kc == KEY_ENTER:
-			do_skip = true
-
-	if do_skip:
-		_skip_triggered = true
-		_phase6_return()
+			_skip_triggered = true
+			_phase6_return()

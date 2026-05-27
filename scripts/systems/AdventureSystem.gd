@@ -145,7 +145,7 @@ func start_adventure(biome_id: String) -> void:
 
 	current_biome_id = biome_id
 	is_running       = true
-	current_hp       = _get_max_hp()
+	current_hp       = get_max_hp()
 
 	_combo_count             = 0
 	_first_encounter_pending = true
@@ -173,7 +173,6 @@ func start_adventure(biome_id: String) -> void:
 
 	GameData.player["active_biome_id"] = biome_id
 	EventBus.adventure_started.emit(biome_id)
-	EventBus.bonus_strike_changed.emit(0)
 	_schedule_next_encounter()
 
 # Interrompt l'aventure en cours (bouton "Mettre fin à l'expédition").
@@ -185,6 +184,7 @@ func stop_adventure() -> void:
 	if CombatPlayer.is_playing:
 		CombatPlayer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
+	PassiveSystem.decrement_cooldowns()
 	CycleData.last_cycle_summary = _build_summary(false)
 	EventBus.adventure_stopped.emit()
 
@@ -278,7 +278,7 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 
 	match effect_type:
 		"heal":
-			var max_hp = _get_max_hp()
+			var max_hp = get_max_hp()
 			var healed = minf(effect_value, max_hp - current_hp)
 			current_hp = minf(current_hp + effect_value, max_hp)
 			EventBus.heal_applied.emit(healed, current_hp)
@@ -366,11 +366,11 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_drop_loot(enemy)
 
 	# Ingrédients biome (uniquement si Village Tier ≥ 2)
-	if GameData.player.get("village_tier", 0) >= 2:
+	if GameData.get_entity("hero").get("current_tier", 0) >= 2:
 		_drop_ingredients()
 
 	# Combo
-	var max_hp      = _get_max_hp()
+	var max_hp      = get_max_hp()
 	var hp_lost_pct = (_combat_start_hp - current_hp) / max_hp if max_hp > 0.0 else 1.0
 	if hp_lost_pct <= COMBO_HP_THRESHOLD:
 		_combo_count += 1
@@ -398,11 +398,11 @@ func _apply_regen(_hero_id: String) -> void:
 			+ PassiveSystem.get_effect("hp_regen_pct")
 	if regen_pct <= 0.0:
 		return
-	var max_hp := _get_max_hp()
+	var max_hp := get_max_hp()
 	current_hp  = minf(current_hp + max_hp * regen_pct, max_hp)
 
 # Calcule les PV max effectifs du héro (stats de base + équipement + passifs).
-func _get_max_hp() -> float:
+func get_max_hp() -> float:
 	var hero_id  = GameData.player.get("active_creature_id", "")
 	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)
 	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
@@ -605,6 +605,7 @@ func _end_adventure(victory: bool) -> void:
 	is_running = false
 	_encounter_timer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
+	PassiveSystem.decrement_cooldowns()
 	var summary := _build_summary(victory)
 	CycleData.last_cycle_summary = summary
 	EventBus.adventure_cycle_ended.emit(summary)

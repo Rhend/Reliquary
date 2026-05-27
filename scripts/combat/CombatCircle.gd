@@ -55,6 +55,9 @@ var _idle_t: float = 0.0    # horloge dédiée à la pulsation et aux motes ambi
 # ─── Action bar (remplie par CombatScene) ────────────────────
 var action_progress: float = 0.0   # 0..1 — progression de l'arc intérieur d'anticipation d'attaque
 
+# ─── Bouclier d'urgence (Résilience Rare+) ───────────────────
+var shield_hp: float = 0.0   # PV de bouclier actuels (0 = pas de bouclier)
+
 # ═══════════════════════════════════════════════════════════
 # Construit les nœuds enfants (labels, couche de dégâts) et
 # calcule le centre géométrique en fonction des constantes de taille.
@@ -116,6 +119,7 @@ func setup(p_name: String, p_hp: float, p_max_hp: float,
 	_idle_t          = 0.0
 	scale            = Vector2.ONE
 	action_progress  = 0.0
+	shield_hp        = 0.0
 	_refresh_labels()
 	queue_redraw()
 
@@ -171,6 +175,35 @@ func receive_heal(amount: int) -> void:
 	_flash_col   = UIColors.HEAL_COLOR
 	_flash_alpha = 0.5
 	_spawn_number("+" + str(amount), 24, UIColors.HEAL_COLOR)
+
+# Met à jour les PV du bouclier et rafraîchit le label HP.
+func set_shield(hp: int) -> void:
+	shield_hp = maxf(float(hp), 0.0)
+	_refresh_labels()
+	queue_redraw()
+
+# Affiche les dégâts absorbés par le bouclier : nombre bleu légèrement décalé.
+func take_shield_damage(amount: int) -> void:
+	if amount <= 0:
+		return
+	_flash_col   = Color(0.2, 0.5, 1.0)
+	_flash_alpha = 0.3
+	_spawn_number_offset(str(amount), 20, Color(0.3, 0.7, 1.0), Vector2(-22.0, -18.0))
+
+# Affiche l'icône de proc de poison passif (Contact Venimeux) : 🐍 pop sur l'ennemi.
+func show_poison_proc() -> void:
+	var lbl := Label.new()
+	lbl.text = "☠"
+	lbl.add_theme_font_size_override("font_size", 26)
+	lbl.add_theme_color_override("font_color", Color(0.2, 0.85, 0.3))
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.position = _circle_center + Vector2(-13.0, -CIRCLE_RADIUS - 14.0)
+	_dmg_layer.add_child(lbl)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lbl, "scale", Vector2(1.5, 1.5), 0.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.5).set_delay(0.3)
+	tw.chain().tween_callback(lbl.queue_free)
 
 # Animation de victoire : double pulse de scale (spring-back).
 func celebrate() -> void:
@@ -249,6 +282,14 @@ func _draw() -> void:
 			EntityType.CREATURE: _ring_creature(a_start, a_end, tier_color)
 			EntityType.TRAP:     _ring_trap(a_start, a_end, tier_color)
 			EntityType.BENEDICTION:    _ring_benediction(a_start, a_end, tier_color)
+
+	# Arc bouclier — bleu dans la zone vide (au-delà du dernier HP)
+	if shield_hp > 0.0 and max_hp > 0.0:
+		var shield_pct := minf(shield_hp / max_hp, 1.0)
+		var shield_col := Color(0.25, 0.60, 1.0, 0.85)
+		# S'étend à partir de a_start (fin de l'arc HP) dans la zone vide
+		draw_arc(Vector2.ZERO, CIRCLE_RADIUS + RING_WIDTH * 0.5 + 5.0,
+				a_start - TAU * shield_pct, a_start, 64, shield_col, 5.0, true)
 
 	# Action bar — arc intérieur, sens horaire depuis le haut
 	if action_progress > 0.001:
@@ -426,12 +467,17 @@ func _arc_borders(a0: float, a1: float, c: Color) -> void:
 	var outer := c.lightened(0.3); outer.a = 0.55
 	draw_arc(Vector2.ZERO, CIRCLE_RADIUS + RING_WIDTH * 0.5, a0, a1, 64, outer, 1.5, true)
 
-# Met à jour les textes du label nom et du label PV.
+# Met à jour les textes du label nom et du label PV (avec bouclier si actif).
 func _refresh_labels() -> void:
 	if _name_label:
 		_name_label.text = entity_name
 	if _hp_label:
-		_hp_label.text = "%d / %d" % [int(current_hp), int(max_hp)]
+		if shield_hp > 0.0:
+			_hp_label.text = "%d (+%d🛡) / %d" % [int(current_hp), int(shield_hp), int(max_hp)]
+			_hp_label.add_theme_color_override("font_color", Color(0.55, 0.82, 1.0))
+		else:
+			_hp_label.text = "%d / %d" % [int(current_hp), int(max_hp)]
+			_hp_label.add_theme_color_override("font_color", Color.WHITE)
 
 # Crée un chiffre flottant animé (monte et disparaît en 0.9 s) dans _dmg_layer.
 func _spawn_number(text: String, font_size: int, color: Color) -> void:

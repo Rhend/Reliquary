@@ -34,13 +34,13 @@ var _idle_tw:      Tween = null  # tween du fade-in du label idle
 # ─── Combat ───────────────────────────────────────────────────
 var _combat_label: Label = null  # label "En combat..." affiché pendant un duel
 
-# ─── Bonus Strike ─────────────────────────────────────────────
-var _strike_widget: BonusStrikeWidget = null  # compteur de strikes en overlay top-right
-
 # ─── Mécaniques de biome ──────────────────────────────────────
 var _ambush_pending: bool  = false  # vrai au lancement si embuscade active, reset après 1er combat
 var _ambush_icon:    Label = null   # icône ⚡ sur le cercle ennemi pendant le 1er combat
 var _luck_icon:      Label = null   # trèfle 🍀 pulsant (Chance Corsaire), visible tout le cycle
+
+# ─── Bouclier d'urgence (Résilience Rare+) ────────────────────
+var _hero_shield: float = 0.0   # PV de bouclier trackés pendant le playback
 
 # ═══════════════════════════════════════════════════════════
 # Construit l'UI et connecte tous les signaux au démarrage.
@@ -59,7 +59,6 @@ func _build_ui() -> void:
 	root.add_child(_build_info_bar())
 	root.add_child(_build_circles_area())
 	root.add_child(_build_footer())
-	_build_strike_widget()
 
 # ── Circles ────────────────────────────────────────────────
 
@@ -109,7 +108,10 @@ func _build_circles_area() -> Control:
 func _build_footer() -> Control:
 	var tcolor := _hero_tier_color()
 
-	var m := UIHelpers.margin_of(8)
+	var m    := UIHelpers.margin_of(8)
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 6)
+	m.add_child(hbox)
 
 	_flee_btn = Button.new()
 	_flee_btn.text                   = "⚔  Mettre fin à l'expédition"
@@ -120,8 +122,24 @@ func _build_footer() -> Control:
 	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	_flee_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	_flee_btn.pressed.connect(_on_flee_pressed)
-	m.add_child(_flee_btn)
+	hbox.add_child(_flee_btn)
+
+	var dbg := Button.new()
+	dbg.text                = "🛡 14%"
+	dbg.custom_minimum_size = Vector2(70, 48)
+	dbg.add_theme_font_size_override("font_size", 13)
+	dbg.add_theme_color_override("font_color", Color(0.25, 0.60, 1.0))
+	dbg.add_theme_stylebox_override("normal", UIHelpers.card_style(Color(0.25, 0.60, 1.0), 0.10, 0.60, 1, 6))
+	dbg.add_theme_stylebox_override("hover",  UIHelpers.card_style(Color(0.25, 0.60, 1.0), 0.25, 1.00, 1, 6))
+	dbg.pressed.connect(_debug_set_hp_14pct)
+	hbox.add_child(dbg)
+
 	return m
+
+func _debug_set_hp_14pct() -> void:
+	var max_hp := AdventureSystem.get_max_hp()
+	AdventureSystem.current_hp = max_hp * 0.14
+	_hero_circle.update_hp(AdventureSystem.current_hp)
 
 # ── Info bar : XP | Effets actifs | Équipement ─────────────
 
@@ -176,7 +194,6 @@ func _connect_signals() -> void:
 	EventBus.adventure_stopped.connect(_on_adventure_stopped)
 	CombatPlayer.step_started.connect(_on_step_started)
 	CombatPlayer.step_ended.connect(_on_step_ended)
-	EventBus.bonus_strike_broken.connect(_on_bonus_strike_broken)
 
 # ═══════════════════════════════════════════════════════════
 #  Handlers signaux
@@ -243,10 +260,11 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_stop_idle_state()
 	if _combat_label:
 		_combat_label.modulate.a = 1.0
-	var creature  := GameData.get_entity(creature_id)
-	var hero_tier := int(creature.get("current_tier", 0))
+	var creature   := GameData.get_entity(creature_id)
+	var hero_tier  := int(creature.get("current_tier", 0))
+	var hero_hp_max := AdventureSystem.get_max_hp()
 	_hero_circle.setup(
-		creature.get("name", "Héro"), hero_hp, hero_hp,
+		creature.get("name", "Héro"), hero_hp, hero_hp_max,
 		hero_tier, CombatCircle.EntityType.CREATURE, true
 	)
 	_enemy_circle.setup(
@@ -255,6 +273,8 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	)
 	_hero_circle.action_progress  = 0.0
 	_enemy_circle.action_progress = 0.0
+	_hero_shield = 0.0
+	_hero_circle.set_shield(0)
 	_flee_btn.disabled = false
 	_prev_tick = 0
 
@@ -266,8 +286,14 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 
 # Met à jour les HP de la cible et anime la barre d'action de l'attaquant sur la durée du step.
 func _on_step_started(step: CombatStep) -> void:
-	# Tick de poison : met à jour le cercle ennemi avec des nombres verts (pas de barre d'action)
+	# Tick de poison biome : nombres verts, pas de barre d'action
 	if step.is_poison:
+		_enemy_circle.update_hp(float(step.target_hp_after))
+		_enemy_circle.take_poison_damage(step.damage)
+		return
+
+	# Tick de poison passif (Contact Venimeux) : idem, légèrement décalé
+	if step.is_passive_poison:
 		_enemy_circle.update_hp(float(step.target_hp_after))
 		_enemy_circle.take_poison_damage(step.damage)
 		return
@@ -275,9 +301,27 @@ func _on_step_started(step: CombatStep) -> void:
 	if step.attacker == "hero":
 		_enemy_circle.update_hp(float(step.target_hp_after))
 		_enemy_circle.take_damage(step.damage, step.is_crit)
+		# Contact Venimeux proc : icône poison sur l'ennemi
+		if step.passive_poison_proc:
+			_enemy_circle.show_poison_proc()
 	else:
-		_hero_circle.update_hp(float(step.target_hp_after))
-		_hero_circle.take_damage(step.damage, step.is_crit)
+		# Coup ennemi : gérer l'absorption bouclier
+		if step.shield_absorbed > 0:
+			_hero_circle.take_shield_damage(step.shield_absorbed)
+			_hero_shield = maxf(_hero_shield - float(step.shield_absorbed), 0.0)
+			_hero_circle.set_shield(int(_hero_shield))
+		if step.damage > 0:
+			_hero_circle.update_hp(float(step.target_hp_after))
+			_hero_circle.take_damage(step.damage, step.is_crit)
+		elif step.shield_absorbed > 0:
+			# Tout absorbé par bouclier : mettre à jour le label HP sans animation dégâts
+			_hero_circle.update_hp(float(step.target_hp_after))
+
+		# Bouclier vient de s'activer après ce coup
+		if step.is_shield_proc:
+			_hero_shield = float(step.shield_value)
+			_hero_circle.set_shield(int(_hero_shield))
+			_show_shield_banner()
 
 	# Anime la barre d'action du cercle attaquant, calée sur les ticks VIT réels
 	var ticks := maxi(step.tick_time - _prev_tick, 1)
@@ -339,41 +383,6 @@ func _on_adventure_stopped() -> void:
 # Demande à AdventureSystem de stopper l'aventure en cours.
 func _on_flee_pressed() -> void:
 	AdventureSystem.stop_adventure()
-
-# ═══════════════════════════════════════════════════════════
-#  Bonus Strike
-# ═══════════════════════════════════════════════════════════
-
-# Positionne le widget circulaire en overlay top-right de la scène.
-func _build_strike_widget() -> void:
-	_strike_widget              = BonusStrikeWidget.new()
-	_strike_widget.anchor_left  = 1.0
-	_strike_widget.anchor_right = 1.0
-	_strike_widget.anchor_top   = 0.0
-	_strike_widget.anchor_bottom = 0.0
-	_strike_widget.offset_left   = -(BonusStrikeWidget.SIZE + 12.0)
-	_strike_widget.offset_right  = -12.0
-	_strike_widget.offset_top    = 12.0
-	_strike_widget.offset_bottom = 12.0 + BonusStrikeWidget.SIZE
-	add_child(_strike_widget)
-
-# Affiche un flash "STRIKE BRISÉ !" centré, puis disparaît.
-func _on_bonus_strike_broken() -> void:
-	var lbl := Label.new()
-	lbl.text = "STRIKE BRISÉ !"
-	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 36)
-	lbl.add_theme_color_override("font_color", UIColors.LOG_DEFEAT)
-	lbl.modulate.a = 0.0
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(lbl)
-	var tw := create_tween()
-	tw.tween_property(lbl, "modulate:a", 0.88, 0.14)
-	tw.tween_interval(0.42)
-	tw.tween_property(lbl, "modulate:a", 0.0, 0.32)
-	tw.tween_callback(lbl.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Idle entre événements
@@ -513,10 +522,10 @@ func _build_luck_icon() -> void:
 	lbl.anchor_right  = 1.0
 	lbl.anchor_top    = 0.0
 	lbl.anchor_bottom = 0.0
-	lbl.offset_left   = -(BonusStrikeWidget.SIZE + 12.0)
+	lbl.offset_left   = -92.0
 	lbl.offset_right  = -12.0
-	lbl.offset_top    = BonusStrikeWidget.SIZE + 20.0
-	lbl.offset_bottom = BonusStrikeWidget.SIZE + 52.0
+	lbl.offset_top    = 12.0
+	lbl.offset_bottom = 44.0
 	lbl.add_theme_font_size_override("font_size", 26)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
@@ -537,6 +546,42 @@ func _cleanup_luck_icon() -> void:
 	if _luck_icon and is_instance_valid(_luck_icon):
 		_luck_icon.queue_free()
 	_luck_icon = null
+
+# Affiche le bandeau BOUCLIER ! centré sur le cercle héro pendant 1.5s puis fade.
+func _show_shield_banner() -> void:
+	var lbl := Label.new()
+	lbl.text = "BOUCLIER !"
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 24)
+	lbl.add_theme_color_override("font_color", Color.CYAN)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# Overlay bleu sur le cercle héro
+	var overlay := ColorRect.new()
+	overlay.color        = Color(0.2, 0.5, 1.0, 0.0)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hero_circle.add_child(overlay)
+
+	# Label centré sur le cercle héro
+	var w := _hero_circle.custom_minimum_size.x
+	var h := _hero_circle.custom_minimum_size.y
+	lbl.position         = Vector2(0.0, h * 0.5 - 16.0)
+	lbl.custom_minimum_size = Vector2(w, 32.0)
+	lbl.modulate.a       = 0.0
+	_hero_circle.add_child(lbl)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(overlay, "color:a", 0.5, 0.15)
+	tw.tween_property(lbl,     "modulate:a", 1.0, 0.15)
+	tw.chain()
+	tw.tween_interval(1.5)
+	tw.tween_property(overlay, "color:a", 0.0, 0.5)
+	tw.parallel().tween_property(lbl, "modulate:a", 0.0, 0.5)
+	tw.chain().tween_callback(overlay.queue_free)
+	tw.parallel().tween_callback(lbl.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Résumé de fin de cycle

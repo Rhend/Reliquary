@@ -195,7 +195,6 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 	var positive_evts := data.get("positive_events", 0) as int
 	var traps         := data.get("traps_triggered", 0) as int
 	var combo_max     := data.get("combo_max",       0) as int
-	var strike_max    := data.get("strike_max",      0) as int
 	var loot          := data.get("loot_total",      0) as int
 	var luck          := data.get("cycle_luck",       0) as int
 
@@ -211,22 +210,16 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 		UIColors.LOG_TRAP    if traps > 0      else UIColors.TEXT_MUTED)
 	var lbl_combo  := _stat_row_into(right, "Meilleur combo",
 		UIColors.COMBO_COLOR if combo_max > 1  else UIColors.TEXT_MUTED)
-	var lbl_strike := _stat_row_into(right, "Meilleur strike",
-		UIColors.FILTER_ON   if strike_max > 0 else UIColors.TEXT_MUTED)
 	var lbl_loot   := _stat_row_into(right, "Objets", UIColors.LOG_LOOT)
 
-	# Texte initial avec préfixe/suffixe (visible avant que le compteur démarre)
-	lbl_combo.text  = "x0"
-	lbl_strike.text = "x0"
+	lbl_combo.text = "x0"
 
-	# Enregistrement des compteurs (colonne gauche d'abord, puis droite)
-	_stat_anims.append({"label": lbl_ev,     "target": events_total,  "prefix": "",  "suffix": ""})
-	_stat_anims.append({"label": lbl_cbt,    "target": combats_won,   "prefix": "",  "suffix": ""})
-	_stat_anims.append({"label": lbl_pos,    "target": positive_evts, "prefix": "",  "suffix": ""})
-	_stat_anims.append({"label": lbl_trap,   "target": traps,         "prefix": "",  "suffix": ""})
-	_stat_anims.append({"label": lbl_combo,  "target": combo_max,     "prefix": "x", "suffix": ""})
-	_stat_anims.append({"label": lbl_strike, "target": strike_max,    "prefix": "x", "suffix": ""})
-	_stat_anims.append({"label": lbl_loot,   "target": loot,          "prefix": "",  "suffix": ""})
+	_stat_anims.append({"label": lbl_ev,    "target": events_total,  "prefix": "",  "suffix": ""})
+	_stat_anims.append({"label": lbl_cbt,   "target": combats_won,   "prefix": "",  "suffix": ""})
+	_stat_anims.append({"label": lbl_pos,   "target": positive_evts, "prefix": "",  "suffix": ""})
+	_stat_anims.append({"label": lbl_trap,  "target": traps,         "prefix": "",  "suffix": ""})
+	_stat_anims.append({"label": lbl_combo, "target": combo_max,     "prefix": "x", "suffix": ""})
+	_stat_anims.append({"label": lbl_loot,  "target": loot,          "prefix": "",  "suffix": ""})
 
 	if luck > 0:
 		var lbl_luck := _stat_row_into(right, "Luck", UIColors.FILTER_ON)
