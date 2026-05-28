@@ -89,13 +89,16 @@ func _load_mastery_config() -> void:
 # Charge toutes les entités depuis leurs dossiers respectifs.
 func _load_all_entities() -> void:
 	# Entités avec progression (tier / XP / passifs débloqués)
-	_load_entities_from_folder("res://data/hero/",      "hero")
-	_load_entities_from_folder("res://data/biomes/",    "biome")
-	_load_entities_from_folder("res://data/passives/",  "passive")
-	_load_entities_from_folder("res://data/equipment/", "equipment")
+	_load_entities_from_folder("res://data/hero/",           "hero")
+	_load_entities_from_folder("res://data/biomes/",         "biome")
+	_load_entities_from_folder("res://data/passives/",       "passive")
+	_load_entities_from_folder("res://data/equipment/",      "equipment")
+	_load_entities_from_folder("res://data/passifs_uniques/", "passif_unique")
 	# Données statiques (sans progression)
-	_load_data_from_folder("res://data/resources/", "resource")
-	_load_data_from_folder("res://data/forge/",      "recipe")
+	_load_data_from_folder("res://data/resources/",   "resource")
+	_load_data_from_folder("res://data/forge/",        "recipe")
+	_load_data_from_folder("res://data/ingredients/",  "ingredient")
+	_load_data_from_folder("res://data/fragments/",    "fragment")
 
 # Charge un dossier JSON et initialise les champs de maîtrise.
 func _load_entities_from_folder(path: String, entity_type: String) -> void:
