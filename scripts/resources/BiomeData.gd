@@ -20,3 +20,6 @@ extends Resource
 @export var benedictions_ids:           Array[String]      = []
 @export var ingredients_drop_ids:       Array[String]      = []
 @export var ingredient_unique_id:       String             = ""
+@export var unlock_tier:                int                = 2
+@export var base_stats:                 Dictionary         = {}
+@export var passive_slots:              Array              = []

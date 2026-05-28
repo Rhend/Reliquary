@@ -1,0 +1,28 @@
+[gd_resource type="BiomeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "biome_montagne"
+nom_affichage_fr = "Montagne"
+nom_affichage_en = "Mountain"
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0
+xp_maitrise_palier_suivant = 100
+slot_equipement_associe = 0
+biome_secondaire_id = ""
+est_decouvert = true
+mecanique_forte_id = ""
+mecanique_forte_activee = false
+creature_surface_id = "enemy_crabe"
+creature_profondeur_id = "enemy_sirene"
+creature_unique_id = "enemy_requin"
+creature_unique_vaincue = false
+pieges_ids = ["quicksand", "jellyfish", "rip_tide"]
+benedictions_ids = ["sea_shell", "tide_pool", "drift_chest"]
+ingredients_drop_ids = ["res_ecaille", "res_perle_marine", "res_os_corail"]
+ingredient_unique_id = ""
+unlock_tier = 2
+base_stats = {"event_table": {"creature": 0.7, "benediction": 0.15, "trap": 0.15}, "enemies": [{"id": "enemy_crabe", "name": "Crabe Géant", "atk": 14, "def": 6, "hp": 55, "vit": 16, "tier": 0, "xp_reward": 14, "loot_table": [{"item_id": "res_ecaille", "chance": 0.4}, {"item_id": "res_perle_marine", "chance": 0.2}]}, {"id": "enemy_sirene", "name": "Sirène Hostile", "atk": 18, "def": 4, "hp": 70, "vit": 24, "tier": 1, "xp_reward": 22, "loot_table": [{"item_id": "res_ecaille", "chance": 0.3}, {"item_id": "res_herbe_magique", "chance": 0.25}, {"item_id": "res_perle_marine", "chance": 0.3}]}, {"id": "enemy_requin", "name": "Requin Marteau", "atk": 24, "def": 8, "hp": 120, "vit": 20, "tier": 2, "xp_reward": 40, "loot_table": [{"item_id": "res_os_corail", "chance": 0.55}, {"item_id": "res_ecaille", "chance": 0.35}, {"item_id": "res_perle_marine", "chance": 0.2}]}], "benedictions": [{"id": "sea_shell", "name": "Coquillage Magique", "effect": "luck", "value": 8}, {"id": "tide_pool", "name": "Mare Régénératrice", "effect": "heal", "value": 30}, {"id": "drift_chest", "name": "Coffre à la Dérive", "effect": "luck", "value": 5}], "traps": [{"id": "quicksand", "name": "Sables Mouvants", "damage": 20}, {"id": "jellyfish", "name": "Méduse Venimeuse", "damage": 18}, {"id": "rip_tide", "name": "Courant Violent", "damage": 25}], "ingredient_pool": [{"item_id": "res_ecaille", "name": "Écaille", "tier": 0, "qty_min": 1, "qty_max": 3, "chance": 0.25}, {"item_id": "res_perle_marine", "name": "Perle Marine", "tier": 1, "qty_min": 1, "qty_max": 2, "chance": 0.15}, {"item_id": "res_os_corail", "name": "Os de Corail", "tier": 2, "qty_min": 1, "qty_max": 1, "chance": 0.1}]}
+passive_slots = [{"unlock_tier": 1, "passive_id": "passive_regeneration"}, {"unlock_tier": 2, "passive_id": "passive_resistance"}, {"unlock_tier": 4, "passive_id": "passive_resilience"}]

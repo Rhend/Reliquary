@@ -8,7 +8,7 @@
 # Mécaniques :
 #   "ambush"      (Forêt Sombre)   — premier ennemi frappe avant le cycle VIT
 #   "poison"      (Marécage Putride) — chaque frappe héro empoisonne l'ennemi
-#   "pirate_luck" (Plage Sauvage)  — probabilités événements déplacées vers le positif
+#   "pirate_luck"                  — probabilités événements déplacées vers le positif (non assignée)
 # ============================================================
 extends Node
 

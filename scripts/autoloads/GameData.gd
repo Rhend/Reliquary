@@ -88,17 +88,53 @@ func _load_mastery_config() -> void:
 
 # Charge toutes les entités depuis leurs dossiers respectifs.
 func _load_all_entities() -> void:
+	# Biomes : chargés depuis .tres (source de vérité)
+	_load_tres_entities_from_folder("res://data/biomes/", "biome")
 	# Entités avec progression (tier / XP / passifs débloqués)
-	_load_entities_from_folder("res://data/hero/",           "hero")
-	_load_entities_from_folder("res://data/biomes/",         "biome")
-	_load_entities_from_folder("res://data/passives/",       "passive")
-	_load_entities_from_folder("res://data/equipment/",      "equipment")
+	_load_entities_from_folder("res://data/hero/",            "hero")
+	_load_entities_from_folder("res://data/passives/",        "passive")
+	_load_entities_from_folder("res://data/equipment/",       "equipment")
 	_load_entities_from_folder("res://data/passifs_uniques/", "passif_unique")
 	# Données statiques (sans progression)
-	_load_data_from_folder("res://data/resources/",   "resource")
-	_load_data_from_folder("res://data/forge/",        "recipe")
-	_load_data_from_folder("res://data/ingredients/",  "ingredient")
-	_load_data_from_folder("res://data/fragments/",    "fragment")
+	_load_data_from_folder("res://data/resources/",  "resource")
+	_load_data_from_folder("res://data/forge/",       "recipe")
+	_load_data_from_folder("res://data/ingredients/", "ingredient")
+	_load_data_from_folder("res://data/fragments/",   "fragment")
+
+# Charge les .tres d'un dossier et initialise les champs de maîtrise.
+# Les alias "name" et "strong_mechanic" sont ajoutés pour compatibilité avec les systèmes existants.
+func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".tres"):
+			var res := load(path + file_name)
+			var id_val = res.get("id") if res != null else null
+			if id_val != null and id_val != "":
+				var data := _resource_to_dict(res)
+				data["entity_type"]       = entity_type
+				data["current_tier"]      = 0
+				data["current_xp"]        = 0.0
+				data["unlocked_passives"] = []
+				if not data.has("name"):
+					data["name"] = data.get("nom_affichage_fr", "")
+				if not data.has("strong_mechanic"):
+					data["strong_mechanic"] = data.get("mecanique_forte_id", "")
+				entities[data["id"]] = data
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+# Convertit un Resource en Dictionary en extrayant toutes ses propriétés de script.
+func _resource_to_dict(res: Resource) -> Dictionary:
+	var data: Dictionary = {}
+	var skip := ["script", "resource_path", "resource_name", "resource_local_to_scene"]
+	for prop in res.get_property_list():
+		if prop.usage & PROPERTY_USAGE_STORAGE and not skip.has(prop.name):
+			data[prop.name] = res.get(prop.name)
+	return data
 
 # Charge un dossier JSON et initialise les champs de maîtrise.
 func _load_entities_from_folder(path: String, entity_type: String) -> void:

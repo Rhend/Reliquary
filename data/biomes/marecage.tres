@@ -1,0 +1,28 @@
+[gd_resource type="BiomeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "biome_marecage"
+nom_affichage_fr = "Marécage Putride"
+nom_affichage_en = "Putrid Swamp"
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0
+xp_maitrise_palier_suivant = 100
+slot_equipement_associe = 5
+biome_secondaire_id = ""
+est_decouvert = true
+mecanique_forte_id = "poison"
+mecanique_forte_activee = false
+creature_surface_id = "enemy_grenouille"
+creature_profondeur_id = "enemy_serpent"
+creature_unique_id = "enemy_hydre"
+creature_unique_vaincue = false
+pieges_ids = ["boue_mouvante", "miasmes", "lianes"]
+benedictions_ids = ["boue_curative", "champignon_magique"]
+ingredients_drop_ids = ["res_slime", "res_venin", "res_ecaille"]
+ingredient_unique_id = ""
+unlock_tier = 2
+base_stats = {"event_table": {"creature": 0.6, "benediction": 0.1, "trap": 0.3}, "enemies": [{"id": "enemy_grenouille", "name": "Grenouille Géante", "atk": 12, "def": 4, "hp": 55, "vit": 22, "tier": 0, "xp_reward": 14, "loot_table": [{"item_id": "res_slime", "chance": 0.45}]}, {"id": "enemy_serpent", "name": "Serpent des Marais", "atk": 20, "def": 3, "hp": 75, "vit": 28, "tier": 1, "xp_reward": 22, "loot_table": [{"item_id": "res_venin", "chance": 0.4}, {"item_id": "res_ecaille", "chance": 0.25}]}, {"id": "enemy_hydre", "name": "Hydre", "atk": 26, "def": 10, "hp": 160, "vit": 14, "tier": 2, "xp_reward": 55, "loot_table": [{"item_id": "res_venin", "chance": 0.7}, {"item_id": "res_ecaille", "chance": 0.5}, {"item_id": "res_mineral_fer", "chance": 0.3}]}], "benedictions": [{"id": "boue_curative", "name": "Boue Curative", "effect": "heal", "value": 20}, {"id": "champignon_magique", "name": "Champignon Magique", "effect": "luck", "value": 10}], "traps": [{"id": "boue_mouvante", "name": "Boue Mouvante", "damage": 20}, {"id": "miasmes", "name": "Miasmes Toxiques", "damage": 30}, {"id": "lianes", "name": "Lianes Tranchantes", "damage": 25}], "ingredient_pool": [{"item_id": "res_slime", "name": "Slime Visqueux", "tier": 0, "qty_min": 1, "qty_max": 4, "chance": 0.3}, {"item_id": "res_venin", "name": "Venin", "tier": 1, "qty_min": 1, "qty_max": 2, "chance": 0.2}, {"item_id": "res_ecaille", "name": "Écaille", "tier": 1, "qty_min": 1, "qty_max": 2, "chance": 0.15}]}
+passive_slots = [{"unlock_tier": 1, "passive_id": "passive_poison_touch"}, {"unlock_tier": 2, "passive_id": "passive_regeneration"}]
