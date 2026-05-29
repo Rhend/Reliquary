@@ -38,18 +38,6 @@ const COMBO_HP_THRESHOLD:       float = 0.25
 const COMBO_ATK_BONUS_PCT:      float = 0.05  # +5 % ATK par niveau de combo au-dessus de 1
 const ZONE_TRANSITION_THRESHOLD: int  = 5     # événements résolus avant transition de zone
 
-# ─── Distribution pondérée des créatures ────────────────────
-# Poids par tier selon le nombre de tiers débloqués dans le biome.
-# Clé = nombre de tiers débloqués (1–6), valeur = poids par index de tier.
-const DISTRIBUTION_WEIGHTS: Dictionary = {
-	1: [100],
-	2: [90, 10],
-	3: [80, 15, 5],
-	4: [70, 19, 8, 3],
-	5: [60, 24, 10, 5, 1],
-	6: [50, 27, 12, 7, 3, 1],
-}
-
 # ─── Modificateurs de cycle disponibles ─────────────────────
 const CYCLE_MODIFIERS: Array = [
 	{
@@ -766,4 +754,5 @@ func _check_zone_transition() -> void:
 		return
 	zone_courante       = next_zone as Enums.Zone
 	_nb_evenements_zone = 0
+	_build_available_creatures(current_biome_id)
 	EventBus.zone_changee.emit(int(zone_courante))
