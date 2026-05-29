@@ -89,7 +89,7 @@ func _save_entities() -> Dictionary:
 
 		# Champs d'état propres aux nouvelles entités
 		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-				"est_collecte", "est_debloque", "quantite_en_stock"]:
+				"est_collecte", "est_debloque", "quantite_en_stock", "maitrise_actuelle"]:
 			if e.has(field):
 				entry[field] = e[field]
 
@@ -157,7 +157,7 @@ func _load_entities(data: Dictionary) -> void:
 			e["unlocked_passives"] = saved.get("unlocked_passives", [])
 
 		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-				"est_collecte", "est_debloque", "quantite_en_stock"]:
+				"est_collecte", "est_debloque", "quantite_en_stock", "maitrise_actuelle"]:
 			if e.has(field) and saved.has(field):
 				e[field] = saved[field]
 

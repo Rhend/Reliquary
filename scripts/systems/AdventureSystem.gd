@@ -389,6 +389,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 
 	# Loot ennemi
 	_drop_loot(enemy)
+	_drop_ingredient_from_creature(enemy)
 
 	# Ingrédients biome (uniquement si Village Tier ≥ 2)
 	if GameData.get_entity("hero").get("current_tier", 0) >= 2:
@@ -521,6 +522,24 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 # Drop le loot spécifique à l'ennemi vaincu (loot_table de l'ennemi).
 func _drop_loot(enemy: Dictionary) -> void:
 	_drop_pool(enemy.get("loot_table", []), enemy.get("name", "?"))
+
+# Drop un ingrédient standard depuis une créature évolutive (50% de chance).
+func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
+	var creature := GameData.get_entity(enemy.get("id", ""))
+	if creature.is_empty() or creature.get("est_unique", false):
+		return
+	var pool := creature.get("ingredients_drop_ids", []) as Array
+	if pool.is_empty() or randf() >= 0.5:
+		return
+	var ingredient_id: String = pool[randi() % pool.size()]
+	var ingr := GameData.get_entity(ingredient_id)
+	if ingr.is_empty():
+		return
+	ingr["quantite_en_stock"] = int(ingr.get("quantite_en_stock", 0)) + 1
+	EventBus.loot_dropped.emit(
+		[{"item_id": ingredient_id, "name": ingr.get("nom_affichage_fr", ingredient_id), "qty": 1}],
+		enemy.get("name", "?")
+	)
 
 # Drop des ingrédients depuis ingredients_drop du biome.
 # Disponible uniquement si Village Tier ≥ 2 (appelé depuis _resolve_victory).
