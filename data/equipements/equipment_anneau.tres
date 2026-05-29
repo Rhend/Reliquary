@@ -12,4 +12,4 @@ biome_source_id = ""
 maitrise_actuelle = 0
 est_debloque = false
 stats_par_palier = {}
-recettes_evolution = {}
+recettes_evolution = {1: [{"ingredient_id": "res_fourrure", "quantite": 2}], 2: [{"ingredient_id": "res_fourrure", "quantite": 2}, {"ingredient_id": "res_venin", "quantite": 1}]}

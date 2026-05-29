@@ -457,7 +457,7 @@ func _roll_encounter_type() -> String:
 		"creature": 0.70, "benediction": 0.15, "trap": 0.15
 	})
 
-	# Chance Corsaire : déplace -5 % de créatures vers les événements positifs
+	# Bonne Étoile : déplace -5 % de créatures vers les événements positifs
 	var event_table = BiomeMechanics.modify_event_probabilities(base_table)
 
 	var luck        = float(_get_effective_luck())

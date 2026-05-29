@@ -44,7 +44,7 @@ var _combat_label: Label = null  # label "En combat..." affiché pendant un duel
 # ─── Mécaniques de biome ──────────────────────────────────────
 var _ambush_pending: bool  = false  # vrai au lancement si embuscade active, reset après 1er combat
 var _ambush_icon:    Label = null   # icône ⚡ sur le cercle ennemi pendant le 1er combat
-var _luck_icon:      Label = null   # trèfle 🍀 pulsant (Chance Corsaire), visible tout le cycle
+var _luck_icon:      Label = null   # trèfle 🍀 pulsant (Bonne Étoile), visible tout le cycle
 
 # ─── Bouclier d'urgence (Résilience Rare+) ────────────────────
 var _hero_shield: float = 0.0   # PV de bouclier trackés pendant le playback
@@ -242,7 +242,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 		"ambush":
 			_ambush_pending = true
 			_show_ambush_warning()
-		"pirate_luck":
+		"bonne_etoile":
 			_build_luck_icon()
 
 # Met à jour le cercle ennemi selon le type d'événement résolu (piège, positif, combat).
@@ -530,7 +530,7 @@ func _cleanup_ambush_icon() -> void:
 		_ambush_icon.queue_free()
 	_ambush_icon = null
 
-# Crée l'icône 🍀 pulsante (Chance Corsaire) en overlay top-right de la scène.
+# Crée l'icône 🍀 pulsante (Bonne Étoile) en overlay top-right de la scène.
 func _build_luck_icon() -> void:
 	_cleanup_luck_icon()
 	var lbl := Label.new()

@@ -9,7 +9,7 @@
 [ext_resource type="BenedictionData" path="res://data/benedictions/benediction_sea_shell.tres" id="7"]
 [ext_resource type="BenedictionData" path="res://data/benedictions/benediction_tide_pool.tres" id="8"]
 [ext_resource type="IngredientData" path="res://data/ingredients/ingredient_ecaille.tres" id="9"]
-[ext_resource type="IngredientData" path="res://data/ingredients/ingredient_perle_marine.tres" id="10"]
+[ext_resource type="IngredientData" path="res://data/ingredients/ingredient_pierre_montagne.tres" id="10"]
 [ext_resource type="IngredientData" path="res://data/ingredients/ingredient_gorlab.tres" id="11"]
 
 [resource]

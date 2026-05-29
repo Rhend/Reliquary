@@ -8,13 +8,13 @@
 # Mécaniques :
 #   "ambush"      (Forêt Sombre)   — premier ennemi frappe avant le cycle VIT
 #   "poison"      (Marécage Putride) — chaque frappe héro empoisonne l'ennemi
-#   "pirate_luck"                  — probabilités événements déplacées vers le positif (non assignée)
+#   "bonne_etoile"                 — probabilités événements déplacées vers le positif (non assignée)
 # ============================================================
 extends Node
 
 const UNLOCK_TIER:            int   = 2      # palier Rare requis pour débloquer
-const PIRATE_LUCK_CREATURE:   float = -0.05  # -5 % de combats
-const PIRATE_LUCK_BENEDICTION: float = 0.05  # +5 % d'événements positifs
+const BONNE_ETOILE_CREATURE:   float = -0.05  # -5 % de combats
+const BONNE_ETOILE_BENEDICTION: float = 0.05  # +5 % d'événements positifs
 
 # Mécanique active pour le cycle courant ("" si aucune).
 var active_mechanic: String = ""
@@ -51,12 +51,12 @@ func is_ambush_active() -> bool:
 func is_mechanic_active(mechanic: String) -> bool:
 	return active_mechanic == mechanic
 
-# Retourne les probabilités d'événements modifiées pour la Chance Corsaire.
+# Retourne les probabilités d'événements modifiées pour la Bonne Étoile.
 # Pour les autres mécaniques, retourne base_probs inchangé.
 func modify_event_probabilities(base_probs: Dictionary) -> Dictionary:
-	if active_mechanic != "pirate_luck":
+	if active_mechanic != "bonne_etoile":
 		return base_probs
 	var modified := base_probs.duplicate()
-	modified["creature"]    = maxf(float(base_probs.get("creature",    0.70)) + PIRATE_LUCK_CREATURE,    0.0)
-	modified["benediction"] = minf(float(base_probs.get("benediction", 0.15)) + PIRATE_LUCK_BENEDICTION, 1.0)
+	modified["creature"]    = maxf(float(base_probs.get("creature",    0.70)) + BONNE_ETOILE_CREATURE,    0.0)
+	modified["benediction"] = minf(float(base_probs.get("benediction", 0.15)) + BONNE_ETOILE_BENEDICTION, 1.0)
 	return modified

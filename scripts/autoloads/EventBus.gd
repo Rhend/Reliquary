@@ -73,7 +73,7 @@ signal passives_refreshed()
 # ── Mécaniques de biome ─────────────────────────────────────
 
 # Émis par BiomeMechanics.initialize_for_biome() quand une mécanique forte se déclenche.
-# mechanic = "ambush" | "poison" | "pirate_luck"
+# mechanic = "ambush" | "poison" | "bonne_etoile"
 @warning_ignore("unused_signal")
 signal biome_mechanic_activated(mechanic: String)
 

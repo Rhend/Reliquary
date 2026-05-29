@@ -12,4 +12,4 @@ biome_source_id = ""
 maitrise_actuelle = 0
 est_debloque = true
 stats_par_palier = {0: {"def": 3, "hp": 20}}
-recettes_evolution = {}
+recettes_evolution = {1: [{"ingredient_id": "res_slime", "quantite": 2}], 2: [{"ingredient_id": "res_slime", "quantite": 2}, {"ingredient_id": "res_pierre_montagne", "quantite": 1}]}
