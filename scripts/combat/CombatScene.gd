@@ -231,7 +231,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 	var creature    := GameData.get_entity(creature_id)
 	var hero_tier   := int(creature.get("current_tier", 0))
 	_hero_circle.setup(
-		creature.get("name", "Héro"),
+		creature.get("nom_affichage_fr", creature.get("name", "Héro")),
 		AdventureSystem.current_hp, AdventureSystem.current_hp,
 		hero_tier, CombatCircle.EntityType.CREATURE, true
 	)
@@ -281,7 +281,7 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	var hero_tier  := int(creature.get("current_tier", 0))
 	var hero_hp_max := AdventureSystem.get_max_hp()
 	_hero_circle.setup(
-		creature.get("name", "Héro"), hero_hp, hero_hp_max,
+		creature.get("nom_affichage_fr", creature.get("name", "Héro")), hero_hp, hero_hp_max,
 		hero_tier, CombatCircle.EntityType.CREATURE, true
 	)
 	_enemy_circle.setup(
