@@ -16,4 +16,4 @@ xp_maitrise_palier_suivant = 100
 stats_par_palier = {}
 ingredients_drop_ids = []
 loot_table = []
-passif_debloque_id = ""
+passif_debloque_id = "passif_unique_foret"

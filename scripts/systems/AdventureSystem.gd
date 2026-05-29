@@ -81,6 +81,7 @@ var current_hp:               float      = 0.0    # PV courants du héro
 var current_modifier:         Dictionary = {}     # modificateur de cycle actif
 var zone_courante:            Enums.Zone = Enums.Zone.SURFACE
 var _nb_evenements_zone:      int        = 0      # événements résolus dans la zone courante
+var combat_unique_en_cours:   bool       = false  # vrai pendant le combat contre la créature Unique
 
 var _encounter_timer:         Timer              # timer qui cadence les rencontres
 var _first_encounter_pending: bool  = false      # vrai uniquement pour la toute première rencontre du cycle
@@ -155,6 +156,7 @@ func start_adventure(biome_id: String) -> void:
 	_is_first_combat         = true
 	zone_courante            = Enums.Zone.SURFACE
 	_nb_evenements_zone      = 0
+	combat_unique_en_cours   = false
 
 	BiomeMechanics.initialize_for_biome(biome_id)
 	_build_available_creatures(biome_id)
@@ -349,6 +351,14 @@ func _on_combat_ended(result: Dictionary) -> void:
 		return
 
 	current_hp = result.get("remaining_creature_hp", 0.0)
+
+	if combat_unique_en_cours:
+		combat_unique_en_cours = false
+		if result.get("victory", false):
+			_resolve_unique_victory(result.get("enemy", {}))
+		else:
+			_end_adventure(false)
+		return
 
 	if result.get("victory", false):
 		_resolve_victory(result.get("enemy", {}))
@@ -631,6 +641,83 @@ func _build_summary(victory: bool) -> Dictionary:
 		"traps_triggered":      _cycle_traps_triggered,
 		"cycle_luck":           _cycle_luck,
 	}
+
+# ═══════════════════════════════════════════════════════════
+#  Créature Unique d'Abysse
+# ═══════════════════════════════════════════════════════════
+
+# Déclenche le combat contre la créature Unique. Appelé par l'UI (bouton joueur).
+func start_unique_combat() -> void:
+	if not is_running or combat_unique_en_cours:
+		return
+	var biome := GameData.get_entity(current_biome_id)
+	if biome.get("creature_unique_vaincue", false):
+		return
+	var unique := biome.get("creature_unique", {}) as Dictionary
+	if unique.is_empty():
+		return
+	combat_unique_en_cours = true
+	_encounter_timer.stop()
+	var s := (unique.get("stats_par_palier", {}) as Dictionary).get(0, {}) as Dictionary
+	var unique_dict := {
+		"id":         unique.get("id", ""),
+		"name":       unique.get("nom_affichage_fr", ""),
+		"tier":       2,
+		"atk":        s.get("atk",       50),
+		"def":        s.get("def",        0),
+		"hp":         s.get("hp",        150),
+		"vit":        s.get("vit",        15),
+		"xp_reward":  s.get("xp_reward", 200),
+		"loot_table": unique.get("loot_table", []),
+	}
+	GameData.record_encounter(
+		unique_dict["id"], unique_dict["name"], "Créature", current_biome_id, 0.0
+	)
+	_combat_start_hp = current_hp
+	_is_first_combat = false
+	CombatPlayer.start_combat(unique_dict, current_hp, get_modifier_bonuses(), {
+		"ambush": false,
+		"poison": BiomeMechanics.is_mechanic_active("poison"),
+	})
+
+# Résout la victoire contre la créature Unique : flags, ingrédient, passif, signal.
+func _resolve_unique_victory(enemy: Dictionary) -> void:
+	var biome := GameData.get_entity(current_biome_id)
+	biome["creature_unique_vaincue"] = true
+
+	# Ingrédient unique → quantite_en_stock = 1
+	var ingr_id: String = (biome.get("ingredient_unique", {}) as Dictionary).get("id", "")
+	if ingr_id != "":
+		var ingr := GameData.get_entity(ingr_id)
+		if not ingr.is_empty():
+			ingr["quantite_en_stock"] = 1
+
+	# Passif unique → est_debloque = true
+	var passif_id: String = (biome.get("creature_unique", {}) as Dictionary).get("passif_debloque_id", "")
+	if passif_id != "":
+		var passif := GameData.get_entity(passif_id)
+		if not passif.is_empty():
+			passif["est_debloque"] = true
+
+	# XP et loot (traité comme une victoire de combat standard)
+	var xp_base  := float(enemy.get("xp_reward", 0))
+	var xp_mult  := float(current_modifier.get("xp_mult", 1.0))
+	var xp_earned := xp_base * xp_mult
+	MasterySystem.add_xp_to_all_active(xp_earned, 2)
+	MasterySystem.add_xp_to_entity(current_biome_id, xp_earned * 0.40, 2)
+	var hero_id := GameData.player.get("active_creature_id", "")
+	MasterySystem.add_xp_to_entity(hero_id, xp_earned * 0.20, 2)
+	GameData.record_encounter(enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, xp_base)
+	_drop_loot(enemy)
+
+	_cycle_xp          += xp_earned
+	_cycle_xp_hero     += xp_earned * 0.20
+	_cycle_combats_won += 1
+
+	EventBus.creature_unique_vaincue.emit(current_biome_id, ingr_id, passif_id)
+
+	_apply_regen(hero_id)
+	_schedule_next_encounter(COMBAT_POST_DELAY)
 
 # ═══════════════════════════════════════════════════════════
 #  Zones
