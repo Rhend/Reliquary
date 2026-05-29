@@ -52,13 +52,17 @@ func get_entities_by_type(entity_type: String) -> Array:
 # Retourne les entités associées à un biome spécifique.
 # Inclut ennemis, pièges, événements positifs issus de la définition JSON du biome.
 func get_biome_entity_pools(biome_id: String) -> Dictionary:
-	var biome  = GameData.get_entity(biome_id)
-	var bstats = biome.get("base_stats", {})
+	var biome = GameData.get_entity(biome_id)
+	var creatures: Array = []
+	for slot in ["creature_surface", "creature_profondeur", "creature_unique"]:
+		var c := biome.get(slot, {}) as Dictionary
+		if not c.is_empty():
+			creatures.append(c)
 	return {
-		"creatures":    bstats.get("enemies",          []),
-		"traps":        bstats.get("traps",            []),
-		"benedictions": bstats.get("benedictions",     []),
-		"ingredients":  bstats.get("ingredient_pool",  []),
+		"creatures":    creatures,
+		"traps":        biome.get("pieges",           []),
+		"benedictions": biome.get("benedictions",     []),
+		"ingredients":  biome.get("ingredients_drop", []),
 	}
 
 # Nombre d'entités découvertes parmi une liste de Dictionaries (issues du pool biome).
@@ -80,7 +84,7 @@ func get_mastery_display(entity_id: String) -> Dictionary:
 	var next_idx: int  = mini(tier + 1, GameData.xp_thresholds.size() - 1)
 	var xp_max: float  = float(GameData.xp_thresholds[next_idx])
 	return {
-		"name":       e.get("name", entity_id),
+		"name":       e.get("nom_affichage_fr", e.get("name", entity_id)),
 		"tier":       tier,
 		"tier_name":  GameData.get_tier_name(tier),
 		"xp":         xp,

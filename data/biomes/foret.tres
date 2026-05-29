@@ -1,6 +1,16 @@
-[gd_resource type="BiomeData" load_steps=2 format=3]
+[gd_resource type="BiomeData" load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_rat.tres" id="2"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_ours.tres" id="3"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_dragon.tres" id="4"]
+[ext_resource type="PiegeData" path="res://data/pieges/piege_spike_trap.tres" id="5"]
+[ext_resource type="PiegeData" path="res://data/pieges/piege_poison_trap.tres" id="6"]
+[ext_resource type="BenedictionData" path="res://data/benedictions/benediction_herb_find.tres" id="7"]
+[ext_resource type="BenedictionData" path="res://data/benedictions/benediction_lucky_charm.tres" id="8"]
+[ext_resource type="IngredientData" path="res://data/ingredients/ingredient_fourrure.tres" id="9"]
+[ext_resource type="IngredientData" path="res://data/ingredients/ingredient_mineral_fer.tres" id="10"]
+[ext_resource type="IngredientData" path="res://data/ingredients/ingredient_oscar.tres" id="11"]
 
 [resource]
 script = ExtResource("1")
@@ -15,14 +25,12 @@ biome_secondaire_id = ""
 est_decouvert = true
 mecanique_forte_id = "ambush"
 mecanique_forte_activee = false
-creature_surface_id = "enemy_rat"
-creature_profondeur_id = "enemy_loup"
-creature_unique_id = "enemy_dragon"
+creature_surface = ExtResource("2")
+creature_profondeur = ExtResource("3")
+creature_unique = ExtResource("4")
 creature_unique_vaincue = false
-pieges_ids = ["spike_trap", "poison_trap"]
-benedictions_ids = ["herb_find", "lucky_charm"]
-ingredients_drop_ids = ["res_fourrure", "res_dent_gobelin", "res_mineral_fer", "res_defense_sanglier"]
-ingredient_unique_id = ""
-unlock_tier = 2
-base_stats = {"event_table": {"creature": 0.7, "benediction": 0.15, "trap": 0.15}, "enemies": [{"id": "enemy_rat", "name": "Rat des Égouts", "atk": 6, "def": 1, "hp": 25, "vit": 30, "tier": 0, "xp_reward": 8, "loot_table": [{"item_id": "res_fourrure", "chance": 0.3}]}, {"id": "enemy_gobelin", "name": "Gobelin", "atk": 10, "def": 3, "hp": 45, "vit": 20, "tier": 1, "xp_reward": 18, "loot_table": [{"item_id": "res_dent_gobelin", "chance": 0.4}, {"item_id": "res_mineral_fer", "chance": 0.15}]}, {"id": "enemy_loup", "name": "Loup Sombre", "atk": 18, "def": 6, "hp": 80, "vit": 25, "tier": 2, "xp_reward": 35, "loot_table": [{"item_id": "res_fourrure", "chance": 0.5}, {"item_id": "res_dent_gobelin", "chance": 0.2}]}, {"id": "enemy_sanglier", "name": "Sanglier Épique", "atk": 28, "def": 12, "hp": 140, "vit": 15, "tier": 3, "xp_reward": 70, "loot_table": [{"item_id": "res_defense_sanglier", "chance": 0.45}, {"item_id": "res_fourrure", "chance": 0.35}]}, {"id": "enemy_ours", "name": "Ours Légendaire", "atk": 45, "def": 20, "hp": 260, "vit": 12, "tier": 4, "xp_reward": 140, "loot_table": [{"item_id": "res_mineral_fer", "chance": 0.5}, {"item_id": "res_defense_sanglier", "chance": 0.3}]}, {"id": "enemy_dragon", "name": "Dragon Ancien", "atk": 75, "def": 35, "hp": 500, "vit": 18, "tier": 5, "xp_reward": 280, "loot_table": [{"item_id": "res_defense_sanglier", "chance": 0.6}, {"item_id": "res_mineral_fer", "chance": 0.5}]}], "benedictions": [{"id": "herb_find", "name": "Herbes médicinales", "effect": "heal", "value": 20}, {"id": "lucky_charm", "name": "Breloque porte-bonheur", "effect": "luck", "value": 5}], "traps": [{"id": "spike_trap", "name": "Pièges à pointes", "damage": 15}, {"id": "poison_trap", "name": "Baies empoisonnées", "damage": 25}], "ingredient_pool": [{"item_id": "res_fourrure", "name": "Fourrure", "tier": 0, "qty_min": 1, "qty_max": 3, "chance": 0.25}, {"item_id": "res_mineral_fer", "name": "Minerai de Fer", "tier": 1, "qty_min": 1, "qty_max": 2, "chance": 0.15}, {"item_id": "res_defense_sanglier", "name": "Défense de Sanglier", "tier": 2, "qty_min": 1, "qty_max": 1, "chance": 0.1}]}
-passive_slots = [{"unlock_tier": 1, "passive_id": "passive_regeneration"}, {"unlock_tier": 3, "passive_id": "passive_resistance"}]
+pieges = Array[PiegeData]([ExtResource("5"), ExtResource("6")])
+benedictions = Array[BenedictionData]([ExtResource("7"), ExtResource("8")])
+ingredients_drop = Array[IngredientData]([ExtResource("9"), ExtResource("10")])
+ingredient_unique = ExtResource("11")
+event_table = {"creature": 0.7, "benediction": 0.15, "trap": 0.15}

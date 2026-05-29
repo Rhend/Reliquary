@@ -12,4 +12,5 @@ extends Resource
 @export var xp_maitrise_palier_suivant: int                = 100
 @export var stats_par_palier:           Dictionary         = {}
 @export var ingredients_drop_ids:       Array[String]      = []
+@export var loot_table:                 Array              = []
 @export var passif_debloque_id:         String             = ""

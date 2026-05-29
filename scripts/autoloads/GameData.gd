@@ -67,12 +67,12 @@ func _ready() -> void:
 func _seed_test_bestiary() -> void:
 	var hall: Dictionary = player.get("bestiary", {})
 	var test_entries: Array = [
-		{"id":"enemy_rat",      "name":"Rat des Égouts",    "tier":0, "xp":50.0,    "count":6,   "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_gobelin",  "name":"Gobelin",           "tier":1, "xp":180.0,   "count":22,  "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_loup",     "name":"Loup Sombre",       "tier":2, "xp":750.0,   "count":55,  "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_sanglier", "name":"Sanglier Épique",   "tier":3, "xp":4200.0,  "count":120, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_ours",     "name":"Ours Légendaire",   "tier":4, "xp":22000.0, "count":210, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_dragon",   "name":"Dragon Ancien",     "tier":5, "xp":0.0,     "count":350, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
+		{"id":"creature_rat",                "name":"Rat des Égouts",     "tier":0, "xp":50.0,    "count":6,   "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
+		{"id":"creature_ours",               "name":"Ours Légendaire",    "tier":1, "xp":180.0,   "count":22,  "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
+		{"id":"creature_dragon",             "name":"Dragon Ancien",      "tier":2, "xp":750.0,   "count":55,  "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
+		{"id":"creature_grenouille",         "name":"Grenouille Géante",  "tier":0, "xp":50.0,    "count":10,  "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
+		{"id":"creature_serpent",            "name":"Serpent des Marais", "tier":1, "xp":200.0,   "count":30,  "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
+		{"id":"creature_cavalier_sans_tete", "name":"Cavalier Sans Tête", "tier":2, "xp":0.0,     "count":5,   "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
 	]
 	for e in test_entries:
 		if not hall.has(e["id"]):
@@ -90,19 +90,21 @@ func _load_mastery_config() -> void:
 func _load_all_entities() -> void:
 	# Biomes : chargés depuis .tres (source de vérité)
 	_load_tres_entities_from_folder("res://data/biomes/", "biome")
-	# Entités avec progression (tier / XP / passifs débloqués)
-	_load_entities_from_folder("res://data/hero/",            "hero")
-	_load_entities_from_folder("res://data/passives/",        "passive")
-	_load_entities_from_folder("res://data/equipment/",       "equipment")
-	_load_entities_from_folder("res://data/passifs_uniques/", "passif_unique")
-	# Données statiques (sans progression)
-	_load_data_from_folder("res://data/resources/",  "resource")
-	_load_data_from_folder("res://data/forge/",       "recipe")
-	_load_data_from_folder("res://data/ingredients/", "ingredient")
-	_load_data_from_folder("res://data/fragments/",   "fragment")
+	# Contenu VS : créatures, passifs uniques
+	_load_tres_entities_from_folder("res://data/creatures/",       "creature")
+	_load_tres_entities_from_folder("res://data/passifs_uniques/", "passif_unique")
+	# Données statiques VS
+	_load_tres_data_from_folder("res://data/ingredients/", "ingredient")
+	_load_tres_data_from_folder("res://data/fragments/",   "fragment")
+	# Entités avec progression (tier / XP / passifs débloqués) — JSON
+	_load_entities_from_folder("res://data/hero/",      "hero")
+	_load_entities_from_folder("res://data/passives/",  "passive")
+	_load_entities_from_folder("res://data/equipment/", "equipment")
+	# Données statiques JSON
+	_load_data_from_folder("res://data/resources/", "resource")
+	_load_data_from_folder("res://data/forge/",     "recipe")
 
 # Charge les .tres d'un dossier et initialise les champs de maîtrise.
-# Les alias "name" et "strong_mechanic" sont ajoutés pour compatibilité avec les systèmes existants.
 func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:
 	var dir := DirAccess.open(path)
 	if dir == null:
@@ -119,21 +121,48 @@ func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:
 				data["current_tier"]      = 0
 				data["current_xp"]        = 0.0
 				data["unlocked_passives"] = []
-				if not data.has("name"):
-					data["name"] = data.get("nom_affichage_fr", "")
-				if not data.has("strong_mechanic"):
-					data["strong_mechanic"] = data.get("mecanique_forte_id", "")
+				entities[data["id"]] = data
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+# Charge les .tres d'un dossier comme données statiques (sans progression).
+func _load_tres_data_from_folder(path: String, entity_type: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".tres"):
+			var res := load(path + file_name)
+			var id_val = res.get("id") if res != null else null
+			if id_val != null and id_val != "":
+				var data := _resource_to_dict(res)
+				data["entity_type"] = entity_type
 				entities[data["id"]] = data
 		file_name = dir.get_next()
 	dir.list_dir_end()
 
 # Convertit un Resource en Dictionary en extrayant toutes ses propriétés de script.
+# Les sous-Resources et tableaux de Resources sont convertis récursivement.
 func _resource_to_dict(res: Resource) -> Dictionary:
 	var data: Dictionary = {}
 	var skip := ["script", "resource_path", "resource_name", "resource_local_to_scene"]
 	for prop in res.get_property_list():
 		if prop.usage & PROPERTY_USAGE_STORAGE and not skip.has(prop.name):
-			data[prop.name] = res.get(prop.name)
+			var val = res.get(prop.name)
+			if val is Resource:
+				data[prop.name] = _resource_to_dict(val)
+			elif val is Array:
+				var arr: Array = []
+				for item in val:
+					if item is Resource:
+						arr.append(_resource_to_dict(item))
+					else:
+						arr.append(item)
+				data[prop.name] = arr
+			else:
+				data[prop.name] = val
 	return data
 
 # Charge un dossier JSON et initialise les champs de maîtrise.
@@ -253,7 +282,7 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 			"name":       enc_name,
 			"type":       enc_type,
 			"biome_id":   biome_id,
-			"biome_name": biome.get("name", biome_id),
+			"biome_name": biome.get("nom_affichage_fr", biome_id),
 			"count":      0,
 			"xp":         0.0,
 			"tier":       0

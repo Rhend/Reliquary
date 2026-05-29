@@ -1,0 +1,19 @@
+[gd_resource type="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CreatureData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "creature_crabe"
+nom_affichage_fr = "Crabe Géant"
+nom_affichage_en = "Giant Crab"
+est_unique = false
+zone_associee = 0
+biome_id = "biome_montagne"
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0
+xp_maitrise_palier_suivant = 100
+stats_par_palier = {0: {"atk": 14, "def": 6, "hp": 55, "vit": 16, "xp_reward": 14}}
+ingredients_drop_ids = ["res_ecaille", "res_perle_marine"]
+loot_table = [{"item_id": "res_ecaille", "chance": 0.4}, {"item_id": "res_perle_marine", "chance": 0.2}]
+passif_debloque_id = ""

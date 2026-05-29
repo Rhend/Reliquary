@@ -1,0 +1,11 @@
+[gd_resource type="PiegeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/PiegeData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "spike_trap"
+nom_affichage_fr = "Pièges à pointes"
+nom_affichage_en = "Spike Trap"
+biome_source_id = "biome_foret"
+degats = 15

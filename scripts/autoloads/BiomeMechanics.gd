@@ -32,11 +32,11 @@ func initialize_for_biome(biome_id: String) -> void:
 	if biome.is_empty():
 		return
 
-	var mechanic := biome.get("strong_mechanic", "") as String
+	var mechanic := biome.get("mecanique_forte_id", "") as String
 	if mechanic == "":
 		return
 
-	var required_tier: int = int(biome.get("unlock_tier", UNLOCK_TIER))
+	var required_tier: int = UNLOCK_TIER
 	var current_tier:  int = int(biome.get("current_tier", 0))
 
 	if current_tier >= required_tier:
