@@ -57,8 +57,8 @@ func _apply_passive_effects(passive_id: String) -> void:
 	var effects: Array = []
 	if tier < te_list.size():
 		effects = te_list[tier].get("effects", [])
-	if effects.is_empty():
-		effects = passive.get("base_stats", {}).get("effects", [])
+	if effects.is_empty() and not te_list.is_empty():
+		effects = te_list[0].get("effects", [])
 	for effect in effects:
 		var eid   = effect.get("id",    "")
 		var value = float(effect.get("value", 0.0))

@@ -46,9 +46,12 @@ var player: Dictionary = {
 	"active_biome_id":    "",
 	"active_passives":    [],
 	"equipped": {
-		"weapon":    "equip_epee_bois",
-		"armor":     "",
-		"accessory": "equip_bouclier"
+		"arme":     "equipment_arme",
+		"anneau":   "",
+		"armure":   "",
+		"ceinture": "",
+		"bouclier": "equipment_bouclier",
+		"talisman": ""
 	},
 	"equipment_inventory": [],
 	"bestiary": {}   # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
@@ -67,12 +70,12 @@ func _ready() -> void:
 func _seed_test_bestiary() -> void:
 	var hall: Dictionary = player.get("bestiary", {})
 	var test_entries: Array = [
-		{"id":"enemy_rat",      "name":"Rat des Égouts",    "tier":0, "xp":50.0,    "count":6,   "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_gobelin",  "name":"Gobelin",           "tier":1, "xp":180.0,   "count":22,  "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_loup",     "name":"Loup Sombre",       "tier":2, "xp":750.0,   "count":55,  "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_sanglier", "name":"Sanglier Épique",   "tier":3, "xp":4200.0,  "count":120, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_ours",     "name":"Ours Légendaire",   "tier":4, "xp":22000.0, "count":210, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
-		{"id":"enemy_dragon",   "name":"Dragon Ancien",     "tier":5, "xp":0.0,     "count":350, "type":"Créature", "biome_id":"biome_foret", "biome_name":"Forêt Sombre"},
+		{"id":"creature_foret_surface",    "name":"Rat des Égouts",     "tier":0, "xp":50.0,   "count":6,  "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
+		{"id":"creature_foret_profondeur", "name":"Ours Légendaire",    "tier":1, "xp":180.0,  "count":22, "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
+		{"id":"creature_oscar",            "name":"Oscar",              "tier":2, "xp":750.0,  "count":55, "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
+		{"id":"creature_marecage_surface",    "name":"Grenouille Géante",  "tier":0, "xp":50.0,  "count":10, "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
+		{"id":"creature_marecage_profondeur", "name":"Serpent des Marais", "tier":1, "xp":200.0, "count":30, "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
+		{"id":"creature_cavalier_sans_tete",  "name":"Cavalier Sans Tête", "tier":2, "xp":0.0,   "count":5,  "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
 	]
 	for e in test_entries:
 		if not hall.has(e["id"]):
@@ -88,14 +91,82 @@ func _load_mastery_config() -> void:
 
 # Charge toutes les entités depuis leurs dossiers respectifs.
 func _load_all_entities() -> void:
-	# Entités avec progression (tier / XP / passifs débloqués)
-	_load_entities_from_folder("res://data/hero/",      "hero")
-	_load_entities_from_folder("res://data/biomes/",    "biome")
+	# Biomes : chargés depuis .tres (source de vérité)
+	_load_tres_entities_from_folder("res://data/biomes/", "biome")
+	# Contenu VS : créatures, passifs uniques
+	_load_tres_entities_from_folder("res://data/creatures/",       "creature")
+	_load_tres_entities_from_folder("res://data/passifs_uniques/", "passif_unique")
+	# Données statiques VS
+	_load_tres_data_from_folder("res://data/ingredients/", "ingredient")
+	_load_tres_data_from_folder("res://data/fragments/",   "fragment")
+	# Héro : chargé depuis .tres (source de vérité)
+	_load_tres_entities_from_folder("res://data/hero/", "hero")
 	_load_entities_from_folder("res://data/passives/",  "passive")
-	_load_entities_from_folder("res://data/equipment/", "equipment")
-	# Données statiques (sans progression)
+	_load_tres_entities_from_folder("res://data/equipements/", "equipment")
+	# Données statiques JSON
 	_load_data_from_folder("res://data/resources/", "resource")
-	_load_data_from_folder("res://data/forge/",      "recipe")
+	_load_data_from_folder("res://data/forge/",     "recipe")
+
+# Charge les .tres d'un dossier et initialise les champs de maîtrise.
+func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".tres"):
+			var res := load(path + file_name)
+			var id_val = res.get("id") if res != null else null
+			if id_val != null and id_val != "":
+				var data := _resource_to_dict(res)
+				data["entity_type"]       = entity_type
+				data["current_tier"]      = 0
+				data["current_xp"]        = 0.0
+				data["unlocked_passives"] = []
+				entities[data["id"]] = data
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+# Charge les .tres d'un dossier comme données statiques (sans progression).
+func _load_tres_data_from_folder(path: String, entity_type: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.ends_with(".tres"):
+			var res := load(path + file_name)
+			var id_val = res.get("id") if res != null else null
+			if id_val != null and id_val != "":
+				var data := _resource_to_dict(res)
+				data["entity_type"] = entity_type
+				entities[data["id"]] = data
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+# Convertit un Resource en Dictionary en extrayant toutes ses propriétés de script.
+# Les sous-Resources et tableaux de Resources sont convertis récursivement.
+func _resource_to_dict(res: Resource) -> Dictionary:
+	var data: Dictionary = {}
+	var skip := ["script", "resource_path", "resource_name", "resource_local_to_scene"]
+	for prop in res.get_property_list():
+		if prop.usage & PROPERTY_USAGE_STORAGE and not skip.has(prop.name):
+			var val = res.get(prop.name)
+			if val is Resource:
+				data[prop.name] = _resource_to_dict(val)
+			elif val is Array:
+				var arr: Array = []
+				for item in val:
+					if item is Resource:
+						arr.append(_resource_to_dict(item))
+					else:
+						arr.append(item)
+				data[prop.name] = arr
+			else:
+				data[prop.name] = val
+	return data
 
 # Charge un dossier JSON et initialise les champs de maîtrise.
 func _load_entities_from_folder(path: String, entity_type: String) -> void:
@@ -167,12 +238,13 @@ func get_effective_stats(entity_id: String) -> Dictionary:
 	var entity = get_entity(entity_id)
 	if entity.is_empty():
 		return {}
-	var stats   = entity.get("base_stats", {}).duplicate()
-	var tier    = entity.get("current_tier", 0)
-	var scaling = entity.get("tier_scaling", {})
-	for key in scaling:
-		stats[key] = stats.get(key, 0) + tier * int(scaling[key])
-	return stats
+	var tier := int(entity.get("current_tier", 0))
+	return {
+		"atk": int(entity.get("atk", 0)) + tier * int(entity.get("atk_par_tier", 0)),
+		"def": int(entity.get("def", 0)) + tier * int(entity.get("def_par_tier", 0)),
+		"hp":  int(entity.get("hp",  0)) + tier * int(entity.get("hp_par_tier",  0)),
+		"vit": int(entity.get("vit", 0)) + tier * int(entity.get("vit_par_tier", 0)),
+	}
 
 # Bonus cumulés de tous les équipements portés.
 # Retourne au minimum { atk:0, hp:0, attack_speed_pct:0 }.
@@ -184,9 +256,9 @@ func get_equipment_bonuses() -> Dictionary:
 		var item = get_entity(item_id)
 		if item.is_empty():
 			continue
-		var item_bonuses: Dictionary = item.get("base_stats", {}).get("bonuses", {})
-		for key in item_bonuses:
-			bonuses[key] = bonuses.get(key, 0.0) + float(item_bonuses[key])
+		var item_stats: Dictionary = (item.get("stats_par_palier", {}) as Dictionary).get(0, {})
+		for key in item_stats:
+			bonuses[key] = bonuses.get(key, 0.0) + float(item_stats[key])
 	return bonuses
 
 # ═══════════════════════════════════════════════════════════
@@ -214,7 +286,7 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 			"name":       enc_name,
 			"type":       enc_type,
 			"biome_id":   biome_id,
-			"biome_name": biome.get("name", biome_id),
+			"biome_name": biome.get("nom_affichage_fr", biome_id),
 			"count":      0,
 			"xp":         0.0,
 			"tier":       0
@@ -280,8 +352,11 @@ func craft(recipe: Dictionary) -> bool:
 
 func equip_item(item_id: String) -> void:
 	var item = get_entity(item_id)
-	var slot = item.get("base_stats", {}).get("slot", "")
-	if slot == "" or not player["equipped"].has(slot):
+	var slot_idx: int = int(item.get("slot", -1))
+	if slot_idx < 0 or slot_idx >= Enums.SlotEquipement.size():
+		return
+	var slot: String = Enums.SlotEquipement.keys()[slot_idx].to_lower()
+	if not player["equipped"].has(slot):
 		return
 	var old_id = player["equipped"].get(slot, "")
 	if old_id != "":

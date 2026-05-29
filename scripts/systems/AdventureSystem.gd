@@ -255,13 +255,13 @@ func _handle_creature_encounter(hero_id: String, enc_data: Dictionary) -> void:
 # Tire une bénédiction aléatoire et applique son effet immédiatement.
 func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	var biome       = GameData.get_entity(current_biome_id)
-	var benedictions = biome.get("base_stats", {}).get("benedictions", [])
+	var benedictions = biome.get("benedictions", [])
 
 	if not benedictions.is_empty():
 		var bene             = benedictions[randi() % benedictions.size()]
 		enc_data["effect"]   = bene
 		GameData.record_encounter(
-			bene.get("id", ""), bene.get("name", "?"), "Bénédiction", current_biome_id, 5.0
+			bene.get("id", ""), bene.get("nom_affichage_fr", "?"), "Bénédiction", current_biome_id, 5.0
 		)
 		_apply_benediction_effect(bene)
 		_cycle_events          += 1
@@ -273,8 +273,8 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 
 # Applique l'effet d'une bénédiction (soin ou bonus de luck).
 func _apply_benediction_effect(bene: Dictionary) -> void:
-	var effect_type  = bene.get("effect", "")
-	var effect_value = float(bene.get("value", 0.0))
+	var effect_type  = bene.get("effet", "")
+	var effect_value = float(bene.get("valeur", 0.0))
 
 	match effect_type:
 		"heal":
@@ -292,7 +292,7 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 # Tire un piège aléatoire et applique ses dégâts (sauf si modificateur "Fantôme").
 func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	var biome = GameData.get_entity(current_biome_id)
-	var traps = biome.get("base_stats", {}).get("traps", [])
+	var traps = biome.get("pieges", [])
 
 	if traps.is_empty():
 		EventBus.adventure_event_resolved.emit(enc_data)
@@ -305,7 +305,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	if current_modifier.get("ignore_traps", false):
 		enc_data["ignored"] = true
 		GameData.record_encounter(
-			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
+			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, 5.0
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
 		_apply_regen(hero_id)
@@ -313,9 +313,9 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	else:
 		_cycle_events          += 1
 		_cycle_traps_triggered += 1
-		current_hp = maxf(current_hp - float(trap.get("damage", 10)), 0.0)
+		current_hp = maxf(current_hp - float(trap.get("degats", 10)), 0.0)
 		GameData.record_encounter(
-			trap.get("id", ""), trap.get("name", "?"), "Piège", current_biome_id, 5.0
+			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, 5.0
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
 		if current_hp <= 0.0:
@@ -422,7 +422,7 @@ func _schedule_next_encounter(delay: float = INSTANT_EVENT_DELAY) -> void:
 # Applique d'abord la Chance Corsaire (si active), puis le bonus de luck de cycle.
 func _roll_encounter_type() -> String:
 	var biome      = GameData.get_entity(current_biome_id)
-	var base_table = biome.get("base_stats", {}).get("event_table", {
+	var base_table = biome.get("event_table", {
 		"creature": 0.70, "benediction": 0.15, "trap": 0.15
 	})
 
@@ -481,7 +481,7 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 		var res := GameData.get_entity(item_id)
 		drops.append({
 			"item_id": item_id,
-			"name":    res.get("name", entry.get("name", item_id)),
+			"name":    res.get("nom_affichage_fr", res.get("name", item_id)),
 			"qty":     qty
 		})
 	if not drops.is_empty():
@@ -492,76 +492,96 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 func _drop_loot(enemy: Dictionary) -> void:
 	_drop_pool(enemy.get("loot_table", []), enemy.get("name", "?"))
 
-# Drop des ingrédients depuis l'ingredient_pool du biome.
-# Chaque ingrédient tombe en quantité aléatoire entre qty_min et qty_max.
+# Drop des ingrédients depuis ingredients_drop du biome.
 # Disponible uniquement si Village Tier ≥ 2 (appelé depuis _resolve_victory).
 func _drop_ingredients() -> void:
-	var biome := GameData.get_entity(current_biome_id)
-	_drop_pool(biome.get("base_stats", {}).get("ingredient_pool", []), "Biome")
+	var biome       := GameData.get_entity(current_biome_id)
+	var ingredients := biome.get("ingredients_drop", []) as Array
+	if ingredients.is_empty():
+		return
+	var drops:      Array = []
+	var luck_bonus: float = float(_get_effective_luck()) * 0.01
+	for ingr in ingredients:
+		var ingr_dict := ingr as Dictionary
+		var roll_threshold := minf(float(ingr_dict.get("chance", 0.0)) + luck_bonus, 1.0)
+		if randf() >= roll_threshold:
+			continue
+		var item_id: String = ingr_dict.get("id", "")
+		if item_id == "":
+			continue
+		var qty_min: int = int(ingr_dict.get("qty_min", 1))
+		var qty_max: int = int(ingr_dict.get("qty_max", qty_min))
+		var qty:     int = randi_range(qty_min, qty_max)
+		GameData.add_resource(item_id, qty)
+		drops.append({"item_id": item_id, "name": ingr_dict.get("nom_affichage_fr", item_id), "qty": qty})
+	if not drops.is_empty():
+		_cycle_loot += drops.size()
+		EventBus.loot_dropped.emit(drops, "Biome")
 
 # ═══════════════════════════════════════════════════════════
 #  Distribution pondérée des créatures
 # ═══════════════════════════════════════════════════════════
 
-# Retourne le nombre de tiers de créatures débloqués dans ce biome.
-# Un tier est débloqué si la créature correspondante a déjà été tuée (xp > 0 dans le bestiaire).
-# Tier 0 est TOUJOURS débloqué (exception de démarrage).
-func _count_unlocked_tiers(biome_id: String) -> int:
-	var biome    := GameData.get_entity(biome_id)
-	var enemies  := biome.get("base_stats", {}).get("enemies", []) as Array
-	var bestiary := GameData.player.get("bestiary", {}) as Dictionary
-
-	var count := 0
-	for enemy in enemies:
-		var enemy_id:   String = enemy.get("id", "")
-		var enemy_tier: int    = int(enemy.get("tier", 0))
-		var entry: Dictionary  = bestiary.get(enemy_id, {})
-		# T0 toujours disponible ; tiers supérieurs uniquement si kill confirmé (xp > 0)
-		var is_unlocked: bool = (enemy_tier == 0) or (float(entry.get("xp", 0.0)) > 0.0)
-		if is_unlocked:
-			count = maxi(count, enemy_tier + 1)
-
-	return maxi(count, 1)  # minimum 1 : T0 toujours présent
-
 # Reconstruit available_creatures pour le biome donné au début d'un cycle.
-# Chaque entrée : { "data": enemy_dict, "weight": float }
+# Chaque entrée : { "data": combat_dict, "weight": float }
+# Les 3 créatures du biome correspondent aux tiers 0 (surface), 1 (profondeur), 2 (unique).
 func _build_available_creatures(biome_id: String) -> void:
 	available_creatures = []
 
 	var biome    := GameData.get_entity(biome_id)
-	var enemies  := biome.get("base_stats", {}).get("enemies", []) as Array
 	var bestiary := GameData.player.get("bestiary", {}) as Dictionary
 
-	if enemies.is_empty():
-		return
+	var creature_slots: Array = [
+		biome.get("creature_surface",   {}),
+		biome.get("creature_profondeur", {}),
+		biome.get("creature_unique",     {}),
+	]
 
-	var unlocked_tiers := _count_unlocked_tiers(biome_id)
-	var clamped        := clampi(unlocked_tiers, 1, 6)
-	var weights: Array  = (DISTRIBUTION_WEIGHTS[clamped] as Array).duplicate()
+	# Compte les tiers débloqués (tier 0 toujours actif)
+	var unlocked_tiers := 1
+	for i in range(1, creature_slots.size()):
+		var c := creature_slots[i] as Dictionary
+		if c.is_empty(): continue
+		var c_id: String = c.get("id", "")
+		if c_id == "": continue
+		var entry := bestiary.get(c_id, {}) as Dictionary
+		if float(entry.get("xp", 0.0)) > 0.0:
+			unlocked_tiers = i + 1
 
-	for enemy in enemies:
-		var enemy_id:   String = enemy.get("id", "")
-		var enemy_tier: int    = int(enemy.get("tier", 0))
-		var entry: Dictionary  = bestiary.get(enemy_id, {})
-		var is_unlocked: bool  = (enemy_tier == 0) or (float(entry.get("xp", 0.0)) > 0.0)
+	var clamped: int   = clampi(unlocked_tiers, 1, creature_slots.size())
+	var weights: Array = (DISTRIBUTION_WEIGHTS[clamped] as Array).duplicate()
 
-		if not is_unlocked:
-			continue
-		if enemy_tier >= weights.size():
-			continue  # tier hors table (biome avec moins de créatures que de tiers)
-
+	for i in range(clamped):
+		var c := creature_slots[i] as Dictionary
+		if c.is_empty(): continue
+		var stats_map := c.get("stats_par_palier", {}) as Dictionary
+		var s         := stats_map.get(0, {}) as Dictionary
 		available_creatures.append({
-			"data":   enemy,
-			"weight": float(weights[enemy_tier])
+			"data": {
+				"id":         c.get("id", ""),
+				"name":       c.get("nom_affichage_fr", ""),
+				"tier":       i,
+				"atk":        s.get("atk",        10),
+				"def":        s.get("def",         0),
+				"hp":         s.get("hp",          50),
+				"vit":        s.get("vit",         20),
+				"xp_reward":  s.get("xp_reward",   10),
+				"loot_table": c.get("loot_table",  []),
+			},
+			"weight": float(weights[i])
 		})
 
-	# Filet de sécurité : si vide (ne devrait pas arriver), forcer T0
+	# Filet de sécurité : si vide, forcer la créature de surface
 	if available_creatures.is_empty():
-		for enemy in enemies:
-			if int(enemy.get("tier", 0)) == 0:
-				available_creatures.append({"data": enemy, "weight": 100.0})
-				return
-		available_creatures.append({"data": enemies[0], "weight": 100.0})
+		var c := creature_slots[0] as Dictionary
+		if not c.is_empty():
+			var s := (c.get("stats_par_palier", {}) as Dictionary).get(0, {}) as Dictionary
+			available_creatures.append({"data": {
+				"id": c.get("id", ""), "name": c.get("nom_affichage_fr", ""),
+				"tier": 0, "atk": s.get("atk", 10), "def": s.get("def", 0),
+				"hp": s.get("hp", 50), "vit": s.get("vit", 20),
+				"xp_reward": s.get("xp_reward", 10), "loot_table": c.get("loot_table", []),
+			}, "weight": 100.0})
 
 # Tirage pondéré parmi les créatures disponibles ce cycle.
 func _weighted_random_creature() -> Dictionary:

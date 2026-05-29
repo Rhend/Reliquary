@@ -1,0 +1,14 @@
+[gd_resource type="PassifUniqueData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/PassifUniqueData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "passif_unique_foret"
+nom_affichage_fr = "Essence de Forêt"
+nom_affichage_en = "Forest Essence"
+biome_source_id = "biome_foret"
+est_debloque = false
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0
+effet_par_palier = {}

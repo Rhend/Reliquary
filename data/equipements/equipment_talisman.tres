@@ -1,0 +1,15 @@
+[gd_resource type="EquipmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/EquipmentData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "equipment_talisman"
+nom_affichage_fr = "Bottes Légères"
+nom_affichage_en = "Light Boots"
+slot = 5
+biome_source_id = ""
+maitrise_actuelle = 0
+est_debloque = true
+stats_par_palier = {0: {"attack_speed_pct": 2}}
+recettes_evolution = {}

@@ -23,7 +23,7 @@
 extends Node
 
 const SAVE_PATH     := "user://IdleEvolutionSave.json"
-const SAVE_VER      := 7
+const SAVE_VER      := 8
 const SAVE_DEBOUNCE := 2.0
 
 var _save_dirty:  bool  = false
@@ -80,13 +80,21 @@ func _save_entities() -> Dictionary:
 	var result: Dictionary = {}
 	for entity_id in GameData.entities:
 		var e: Dictionary = GameData.entities[entity_id]
-		if not e.has("current_tier"):
-			continue
-		result[entity_id] = {
-			"current_tier":      e.get("current_tier",      0),
-			"current_xp":        e.get("current_xp",        0.0),
-			"unlocked_passives": e.get("unlocked_passives", []),
-		}
+		var entry: Dictionary = {}
+
+		if e.has("current_tier"):
+			entry["current_tier"]      = e.get("current_tier",      0)
+			entry["current_xp"]        = e.get("current_xp",        0.0)
+			entry["unlocked_passives"] = e.get("unlocked_passives", [])
+
+		# Champs d'état propres aux nouvelles entités
+		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
+				"est_collecte", "est_debloque"]:
+			if e.has(field):
+				entry[field] = e[field]
+
+		if not entry.is_empty():
+			result[entity_id] = entry
 	return result
 
 func _save_systems() -> Dictionary:
@@ -142,9 +150,16 @@ func _load_entities(data: Dictionary) -> void:
 			continue
 		var saved: Dictionary = data["entities"][entity_id]
 		var e: Dictionary     = GameData.entities[entity_id]
-		e["current_tier"]      = saved.get("current_tier",      0)
-		e["current_xp"]        = saved.get("current_xp",        0.0)
-		e["unlocked_passives"] = saved.get("unlocked_passives", [])
+
+		if e.has("current_tier"):
+			e["current_tier"]      = saved.get("current_tier",      0)
+			e["current_xp"]        = saved.get("current_xp",        0.0)
+			e["unlocked_passives"] = saved.get("unlocked_passives", [])
+
+		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
+				"est_collecte", "est_debloque"]:
+			if e.has(field) and saved.has(field):
+				e[field] = saved[field]
 
 func _load_systems(data: Dictionary) -> void:
 	if not data.has("systems"):

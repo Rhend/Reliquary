@@ -1,8 +1,0 @@
-{
-	"id": "equip_bouclier_fer",
-	"name": "Bouclier de Fer",
-	"base_stats": {
-		"slot": "accessory",
-		"bonuses": { "def": 4, "hp": 15 }
-	}
-}

@@ -235,7 +235,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 		"trap":
 			var trap := event_data.get("trap", {}) as Dictionary
 			_enemy_circle.setup(
-				trap.get("name", "Piège"), 1.0, 1.0, 0,
+				trap.get("nom_affichage_fr", "Piège"), 1.0, 1.0, 0,
 				CombatCircle.EntityType.TRAP, false
 			)
 			if not event_data.get("ignored", false):
@@ -246,7 +246,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 		"benediction":
 			var bene := event_data.get("effect", {}) as Dictionary
 			_enemy_circle.setup(
-				bene.get("name", "Bénédiction"), 1.0, 1.0, 0,
+				bene.get("nom_affichage_fr", "Bénédiction"), 1.0, 1.0, 0,
 				CombatCircle.EntityType.BENEDICTION, false
 			)
 			_start_idle_state()
@@ -468,7 +468,7 @@ func _rebuild_equip() -> void:
 			continue
 		found = true
 		var lbl := Label.new()
-		lbl.text = item.get("name", item_id)
+		lbl.text = item.get("nom_affichage_fr", item_id)
 		lbl.add_theme_font_size_override("font_size", 13)
 		lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 		_equip_vbox.add_child(lbl)

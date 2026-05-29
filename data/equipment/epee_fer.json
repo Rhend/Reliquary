@@ -1,8 +1,0 @@
-{
-	"id": "equip_epee_fer",
-	"name": "Épée de Fer",
-	"base_stats": {
-		"slot": "weapon",
-		"bonuses": { "atk": 5 }
-	}
-}

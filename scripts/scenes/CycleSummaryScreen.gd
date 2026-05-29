@@ -37,7 +37,7 @@ func _build_ui() -> void:
 	var tcolor := UIColors.tier_color(tier)
 
 	var biome      := GameData.get_entity(data.get("biome_id", "") as String)
-	var biome_name := biome.get("name", "Biome Inconnu") as String
+	var biome_name := biome.get("nom_affichage_fr", "Biome Inconnu") as String
 
 	# ── Fond BG_DARK ────────────────────────────────────────
 	var bg := ColorRect.new()
@@ -256,7 +256,7 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 	# Passifs — une carte par passif vs son propre seuil de tier-up
 	for passive_id: String in detail:
 		var p_entity := GameData.get_entity(passive_id)
-		var p_name   := p_entity.get("name", passive_id) as String
+		var p_name   := p_entity.get("nom_affichage_fr", p_entity.get("name", passive_id)) as String
 		var p_xp     := detail[passive_id] as float
 		var p_thresh := _next_tier_threshold(p_entity)
 		var p_card   := _xp_card("⚡", p_name, p_thresh, UIColors.COMBO_COLOR, tcolor)
@@ -275,7 +275,7 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 		if e_tier >= GameData.MAX_TIER:
 			continue
 		if e.get("current_xp", 0.0) >= float(GameData.xp_thresholds[e_tier + 1]):
-			ready_names.append(e.get("name", eid))
+			ready_names.append(e.get("nom_affichage_fr", e.get("name", eid)))
 
 	if not ready_names.is_empty():
 		var sh3 := UIHelpers.section_header("◆  ÉVOLUTION DISPONIBLE", UIColors.FILTER_ON)

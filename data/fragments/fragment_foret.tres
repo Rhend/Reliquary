@@ -1,0 +1,11 @@
+[gd_resource type="FragmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/FragmentData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fragment_foret"
+nom_affichage_fr = "Fragment de Forêt"
+nom_affichage_en = "Forest Fragment"
+biome_source_id = "biome_foret"
+est_collecte = false

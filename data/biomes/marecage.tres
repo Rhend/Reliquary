@@ -1,0 +1,36 @@
+[gd_resource type="BiomeData" load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_marecage_surface.tres" id="2"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_marecage_profondeur.tres" id="3"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_cavalier_sans_tete.tres" id="4"]
+[ext_resource type="PiegeData" path="res://data/pieges/piege_boue_mouvante.tres" id="5"]
+[ext_resource type="PiegeData" path="res://data/pieges/piege_miasmes.tres" id="6"]
+[ext_resource type="BenedictionData" path="res://data/benedictions/benediction_boue_curative.tres" id="7"]
+[ext_resource type="BenedictionData" path="res://data/benedictions/benediction_champignon_magique.tres" id="8"]
+[ext_resource type="IngredientData" path="res://data/ingredients/ingredient_slime.tres" id="9"]
+[ext_resource type="IngredientData" path="res://data/ingredients/ingredient_venin.tres" id="10"]
+[ext_resource type="IngredientData" path="res://data/ingredients/ingredient_cavalier_sans_tete.tres" id="11"]
+
+[resource]
+script = ExtResource("1")
+id = "biome_marecage"
+nom_affichage_fr = "Marécage Putride"
+nom_affichage_en = "Putrid Swamp"
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0
+xp_maitrise_palier_suivant = 100
+slot_equipement_associe = 5
+biome_secondaire_id = ""
+est_decouvert = true
+mecanique_forte_id = "poison"
+mecanique_forte_activee = false
+creature_surface = ExtResource("2")
+creature_profondeur = ExtResource("3")
+creature_unique = ExtResource("4")
+creature_unique_vaincue = false
+pieges = Array[PiegeData]([ExtResource("5"), ExtResource("6")])
+benedictions = Array[BenedictionData]([ExtResource("7"), ExtResource("8")])
+ingredients_drop = Array[IngredientData]([ExtResource("9"), ExtResource("10")])
+ingredient_unique = ExtResource("11")
+event_table = {"creature": 0.6, "benediction": 0.1, "trap": 0.3}

@@ -1,0 +1,15 @@
+[gd_resource type="IngredientData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/IngredientData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "res_mineral_fer"
+nom_affichage_fr = "Minerai de Fer"
+nom_affichage_en = "Iron Ore"
+biome_source_id = "biome_foret"
+est_unique = false
+quantite_en_stock = 0
+chance = 0.15
+qty_min = 1
+qty_max = 2

@@ -620,7 +620,9 @@ func _tier_effects(pdata: Dictionary, t: int) -> Array:
 	if t < te_list.size():
 		var effs: Array = te_list[t].get("effects", [])
 		if not effs.is_empty(): return effs
-	return pdata.get("base_stats", {}).get("effects", [])
+	if not te_list.is_empty():
+		return te_list[0].get("effects", [])
+	return []
 
 # Formate un entier XP avec séparateur de milliers (ex: 1 234).
 func _xp_fmt(xp: int) -> String:
@@ -670,7 +672,7 @@ func _panel_adventure() -> void:
 	btn.add_theme_color_override("font_color", tcolor)
 	btn.visible = not no_biome_selected
 	if not no_biome_selected:
-		var bname: String = str(GameData.get_entity(_adv_selected_biome_id).get("name", _adv_selected_biome_id)).to_upper()
+		var bname: String = str(GameData.get_entity(_adv_selected_biome_id).get("nom_affichage_fr", _adv_selected_biome_id)).to_upper()
 		btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
 	else:
 		btn.text = "⚔   PARTIR EN EXPÉDITION"
@@ -697,7 +699,7 @@ func _panel_adventure() -> void:
 		if e.get("entity_type", "") != "biome":
 			continue
 		var bid := eid
-		biome_names[bid] = e.get("name", bid).to_upper()
+		biome_names[bid] = e.get("nom_affichage_fr", bid).to_upper()
 
 		var result  := _adv_biome_card(bid, e)
 		var wrapper := result["wrapper"] as Control
@@ -778,7 +780,7 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	pvb.add_child(hdr)
 
 	var name_lbl := Label.new()
-	name_lbl.text = biome.get("name", biome_id).to_upper()
+	name_lbl.text = biome.get("nom_affichage_fr", biome_id).to_upper()
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.add_theme_font_size_override("font_size", 13)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
@@ -814,7 +816,7 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	section.visible = false
 	if MasterySystem.can_evolve(biome_id):
 		wrapper.add_child(_make_evolve_btn(biome_id,
-				biome.get("name", biome_id) as String, "biome", btier))
+				biome.get("nom_affichage_fr", biome_id) as String, "biome", btier))
 	wrapper.add_child(section)
 
 	var indent := MarginContainer.new()

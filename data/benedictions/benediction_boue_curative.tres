@@ -1,0 +1,12 @@
+[gd_resource type="BenedictionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BenedictionData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "boue_curative"
+nom_affichage_fr = "Boue Curative"
+nom_affichage_en = "Healing Mud"
+biome_source_id = "biome_marecage"
+effet = "heal"
+valeur = 20

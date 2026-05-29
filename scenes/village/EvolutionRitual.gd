@@ -454,7 +454,7 @@ func _get_evolution_text() -> String:
 			5: return "Le mystère ultime s'ouvre…"
 			_: return ""
 
-	# Entités génériques — lire tier_effects + passive_slots
+	# Entités génériques — lire tier_effects + passifs_par_palier
 	var entity := GameData.get_entity(entity_id)
 	if entity.is_empty(): return ""
 
@@ -467,12 +467,12 @@ func _get_evolution_text() -> String:
 			if not desc.is_empty():
 				lines.append("• " + desc)
 
-	for slot: Dictionary in entity.get("passive_slots", []):
-		if slot.get("unlock_tier", -1) == to_tier:
-			var pid   := slot.get("passive_id", "") as String
-			var pdata := GameData.get_entity(pid)
-			var pname := pdata.get("name", pid) as String
-			lines.append("Passif débloqué : " + pname)
+	var passifs := entity.get("passifs_par_palier", {}) as Dictionary
+	if passifs.has(to_tier):
+		var pid   := str(passifs[to_tier])
+		var pdata := GameData.get_entity(pid)
+		var pname := pdata.get("nom_affichage_fr", pdata.get("name", pid)) as String
+		lines.append("Passif débloqué : " + pname)
 
 	if lines.is_empty():
 		return "Nouveau palier atteint — Capacités améliorées"

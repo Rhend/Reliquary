@@ -132,10 +132,10 @@ func _unlock_passives_for_tier(entity_id: String, tier: int) -> void:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return
-	for slot in entity.get("passive_slots", []):
-		if slot.get("unlock_tier", 99) != tier:
-			continue
-		var passive_id = slot.get("passive_id", "")
-		if passive_id != "" and passive_id not in entity.get("unlocked_passives", []):
-			entity["unlocked_passives"].append(passive_id)
-			EventBus.passive_unlocked.emit(entity_id, passive_id)
+	var passifs := entity.get("passifs_par_palier", {}) as Dictionary
+	if not passifs.has(tier):
+		return
+	var passive_id := str(passifs[tier])
+	if passive_id != "" and passive_id not in entity.get("unlocked_passives", []):
+		entity["unlocked_passives"].append(passive_id)
+		EventBus.passive_unlocked.emit(entity_id, passive_id)
