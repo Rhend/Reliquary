@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1")
-id = "creature_sirene"
+id = "creature_montagne_profondeur"
 nom_affichage_fr = "Sirène Hostile"
 nom_affichage_en = "Hostile Siren"
 est_unique = false

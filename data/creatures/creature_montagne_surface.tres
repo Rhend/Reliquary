@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1")
-id = "creature_crabe"
+id = "creature_montagne_surface"
 nom_affichage_fr = "Crabe Géant"
 nom_affichage_en = "Giant Crab"
 est_unique = false

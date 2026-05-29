@@ -1,8 +1,8 @@
 [gd_resource type="BiomeData" load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
-[ext_resource type="CreatureData" path="res://data/creatures/creature_crabe.tres" id="2"]
-[ext_resource type="CreatureData" path="res://data/creatures/creature_sirene.tres" id="3"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_montagne_surface.tres" id="2"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_montagne_profondeur.tres" id="3"]
 [ext_resource type="CreatureData" path="res://data/creatures/creature_gorlab.tres" id="4"]
 [ext_resource type="PiegeData" path="res://data/pieges/piege_quicksand.tres" id="5"]
 [ext_resource type="PiegeData" path="res://data/pieges/piege_jellyfish.tres" id="6"]

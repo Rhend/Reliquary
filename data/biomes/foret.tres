@@ -1,9 +1,9 @@
 [gd_resource type="BiomeData" load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
-[ext_resource type="CreatureData" path="res://data/creatures/creature_rat.tres" id="2"]
-[ext_resource type="CreatureData" path="res://data/creatures/creature_ours.tres" id="3"]
-[ext_resource type="CreatureData" path="res://data/creatures/creature_dragon.tres" id="4"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_foret_surface.tres" id="2"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_foret_profondeur.tres" id="3"]
+[ext_resource type="CreatureData" path="res://data/creatures/creature_oscar.tres" id="4"]
 [ext_resource type="PiegeData" path="res://data/pieges/piege_spike_trap.tres" id="5"]
 [ext_resource type="PiegeData" path="res://data/pieges/piege_poison_trap.tres" id="6"]
 [ext_resource type="BenedictionData" path="res://data/benedictions/benediction_herb_find.tres" id="7"]

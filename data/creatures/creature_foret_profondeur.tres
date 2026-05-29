@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1")
-id = "creature_ours"
+id = "creature_foret_profondeur"
 nom_affichage_fr = "Ours Légendaire"
 nom_affichage_en = "Legendary Bear"
 est_unique = false
