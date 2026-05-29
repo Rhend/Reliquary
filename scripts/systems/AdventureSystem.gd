@@ -277,10 +277,17 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 	_apply_regen(hero_id)
 	_schedule_next_encounter()
 
-# Applique l'effet d'une bénédiction (soin ou bonus de luck).
+# Multiplicateur d'intensité des pièges et bénédictions selon la zone.
+func _get_zone_intensity() -> float:
+	match zone_courante:
+		Enums.Zone.PROFONDEUR: return 2.0
+		Enums.Zone.ABYSSE:     return 3.5
+		_:                     return 1.0
+
+# Applique l'effet d'une bénédiction (soin ou bonus de luck), modulé par la zone.
 func _apply_benediction_effect(bene: Dictionary) -> void:
 	var effect_type  = bene.get("effet", "")
-	var effect_value = float(bene.get("valeur", 0.0))
+	var effect_value = float(bene.get("valeur", 0.0)) * _get_zone_intensity()
 
 	match effect_type:
 		"heal":
@@ -320,7 +327,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	else:
 		_cycle_events          += 1
 		_cycle_traps_triggered += 1
-		current_hp = maxf(current_hp - float(trap.get("degats", 10)), 0.0)
+		current_hp = maxf(current_hp - float(trap.get("degats", 10)) * _get_zone_intensity(), 0.0)
 		GameData.record_encounter(
 			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, 5.0
 		)
@@ -427,9 +434,13 @@ func _schedule_next_encounter(delay: float = INSTANT_EVENT_DELAY) -> void:
 	_encounter_timer.wait_time = actual_delay
 	_encounter_timer.start()
 
-# Tire le type de rencontre selon les probabilités du biome.
-# Applique d'abord la Chance Corsaire (si active), puis le bonus de luck de cycle.
+# Tire le type de rencontre selon la zone courante et les probabilités du biome.
 func _roll_encounter_type() -> String:
+	# Abysse : pas de combat — 50 % bénédictions / 50 % pièges
+	if zone_courante == Enums.Zone.ABYSSE:
+		return "benediction" if randf() < 0.5 else "trap"
+
+	# Surface et Profondeur : distribution standard du biome
 	var biome      = GameData.get_entity(current_biome_id)
 	var base_table = biome.get("event_table", {
 		"creature": 0.70, "benediction": 0.15, "trap": 0.15
@@ -528,69 +539,49 @@ func _drop_ingredients() -> void:
 		EventBus.loot_dropped.emit(drops, "Biome")
 
 # ═══════════════════════════════════════════════════════════
-#  Distribution pondérée des créatures
+#  Distribution pondérée des créatures (par zone)
 # ═══════════════════════════════════════════════════════════
 
-# Reconstruit available_creatures pour le biome donné au début d'un cycle.
-# Chaque entrée : { "data": combat_dict, "weight": float }
-# Les 3 créatures du biome correspondent aux tiers 0 (surface), 1 (profondeur), 2 (unique).
+# Reconstruit available_creatures selon la zone courante.
+# Surface    : 70 % créature Surface  + 30 % créature Profondeur
+# Profondeur : 30 % créature Surface  + 70 % créature Profondeur
+# Abysse     : aucune créature évolutive (Phase 4 gère l'Unique)
 func _build_available_creatures(biome_id: String) -> void:
 	available_creatures = []
+	if zone_courante == Enums.Zone.ABYSSE:
+		return
 
-	var biome    := GameData.get_entity(biome_id)
-	var bestiary := GameData.player.get("bestiary", {}) as Dictionary
+	var biome      := GameData.get_entity(biome_id)
+	var surface    := biome.get("creature_surface",    {}) as Dictionary
+	var profondeur := biome.get("creature_profondeur", {}) as Dictionary
 
-	var creature_slots: Array = [
-		biome.get("creature_surface",   {}),
-		biome.get("creature_profondeur", {}),
-		biome.get("creature_unique",     {}),
-	]
+	match zone_courante:
+		Enums.Zone.SURFACE:
+			_pool_add(surface,    70.0)
+			_pool_add(profondeur, 30.0)
+		Enums.Zone.PROFONDEUR:
+			_pool_add(surface,    30.0)
+			_pool_add(profondeur, 70.0)
 
-	# Compte les tiers débloqués (tier 0 toujours actif)
-	var unlocked_tiers := 1
-	for i in range(1, creature_slots.size()):
-		var c := creature_slots[i] as Dictionary
-		if c.is_empty(): continue
-		var c_id: String = c.get("id", "")
-		if c_id == "": continue
-		var entry := bestiary.get(c_id, {}) as Dictionary
-		if float(entry.get("xp", 0.0)) > 0.0:
-			unlocked_tiers = i + 1
-
-	var clamped: int   = clampi(unlocked_tiers, 1, creature_slots.size())
-	var weights: Array = (DISTRIBUTION_WEIGHTS[clamped] as Array).duplicate()
-
-	for i in range(clamped):
-		var c := creature_slots[i] as Dictionary
-		if c.is_empty(): continue
-		var stats_map := c.get("stats_par_palier", {}) as Dictionary
-		var s         := stats_map.get(0, {}) as Dictionary
-		available_creatures.append({
-			"data": {
-				"id":         c.get("id", ""),
-				"name":       c.get("nom_affichage_fr", ""),
-				"tier":       i,
-				"atk":        s.get("atk",        10),
-				"def":        s.get("def",         0),
-				"hp":         s.get("hp",          50),
-				"vit":        s.get("vit",         20),
-				"xp_reward":  s.get("xp_reward",   10),
-				"loot_table": c.get("loot_table",  []),
-			},
-			"weight": float(weights[i])
-		})
-
-	# Filet de sécurité : si vide, forcer la créature de surface
-	if available_creatures.is_empty():
-		var c := creature_slots[0] as Dictionary
-		if not c.is_empty():
-			var s := (c.get("stats_par_palier", {}) as Dictionary).get(0, {}) as Dictionary
-			available_creatures.append({"data": {
-				"id": c.get("id", ""), "name": c.get("nom_affichage_fr", ""),
-				"tier": 0, "atk": s.get("atk", 10), "def": s.get("def", 0),
-				"hp": s.get("hp", 50), "vit": s.get("vit", 20),
-				"xp_reward": s.get("xp_reward", 10), "loot_table": c.get("loot_table", []),
-			}, "weight": 100.0})
+# Convertit un dict créature en entrée de combat et l'ajoute au pool avec son poids.
+func _pool_add(creature: Dictionary, weight: float) -> void:
+	if creature.is_empty():
+		return
+	var s := (creature.get("stats_par_palier", {}) as Dictionary).get(0, {}) as Dictionary
+	available_creatures.append({
+		"data": {
+			"id":         creature.get("id", ""),
+			"name":       creature.get("nom_affichage_fr", ""),
+			"tier":       0,
+			"atk":        s.get("atk",       10),
+			"def":        s.get("def",        0),
+			"hp":         s.get("hp",         50),
+			"vit":        s.get("vit",        20),
+			"xp_reward":  s.get("xp_reward",  10),
+			"loot_table": creature.get("loot_table", []),
+		},
+		"weight": weight,
+	})
 
 # Tirage pondéré parmi les créatures disponibles ce cycle.
 func _weighted_random_creature() -> Dictionary:
