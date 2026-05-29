@@ -52,6 +52,7 @@ func _ready() -> void:
 	_build_ui()
 	EventBus.fragment_libere.connect(_on_fragment_libere)
 	EventBus.village_tier_change.connect(_on_village_tier_change)
+	EventBus.biome_revele.connect(_on_biome_revele)
 
 # Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
 func _active_creature() -> Dictionary:
@@ -743,6 +744,8 @@ func _panel_adventure() -> void:
 		var e := GameData.entities[eid] as Dictionary
 		if e.get("entity_type", "") != "biome":
 			continue
+		if not e.get("est_decouvert", false):
+			continue
 		var bid := eid
 		biome_names[bid] = e.get("nom_affichage_fr", bid).to_upper()
 
@@ -1349,6 +1352,42 @@ func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
 # Village tier change : rebuild hub (nouvelle couleur, nouveau bouton forge).
 func _on_village_tier_change(nouveau_tier: int) -> void:
 	_rebuild_hub()
+
+# Nouveau biome révélé : bannière + refresh du panneau Expéditions si ouvert.
+func _on_biome_revele(biome_id: String) -> void:
+	var biome := GameData.get_entity(biome_id)
+	var nom   := biome.get("nom_affichage_fr", biome_id) as String
+	_show_biome_revele_banner(nom)
+	if _active_panel_id == "adventure":
+		_open_panel("adventure")
+
+func _show_biome_revele_banner(biome_nom: String) -> void:
+	var banner := PanelContainer.new()
+	banner.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	banner.offset_top    = 20
+	banner.offset_bottom = 80
+	banner.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color     = Color(0.05, 0.10, 0.25, 0.92)
+	style.border_color = Color(0.4, 0.7, 1.0)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	banner.add_theme_stylebox_override("panel", style)
+	add_child(banner)
+
+	var lbl := Label.new()
+	lbl.text = "✦  Nouveau biome révélé : %s  ✦" % biome_nom
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.add_theme_color_override("font_color", Color(0.4, 0.7, 1.0))
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.add_child(lbl)
+
+	var tw := create_tween()
+	tw.tween_interval(3.0)
+	tw.tween_property(banner, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(banner.queue_free)
 
 # Bannière temporaire lors de la libération d'un Fragment.
 func _show_fragment_banner(fragment_nom: String) -> void:

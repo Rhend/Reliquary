@@ -238,25 +238,37 @@ func _read_json(path: String) -> Dictionary:
 #  Village
 # ═══════════════════════════════════════════════════════════
 
-# Hook entity_evolved : libère le Fragment quand un biome atteint Rare (tier 2).
+# Hook entity_evolved : libère le Fragment (Rare) et révèle le biome secondaire (Légendaire).
 func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
-	if new_tier != 2:
-		return
 	var entity := get_entity(entity_id)
 	if entity.get("entity_type", "") != "biome":
 		return
-	for fid in entities:
-		var frag := entities[fid]
-		if frag.get("entity_type", "") != "fragment":
-			continue
-		if frag.get("biome_source_id", "") != entity_id:
-			continue
-		if frag.get("est_collecte", false):
+
+	# Rare (tier 2) → libération du Fragment
+	if new_tier == 2:
+		for fid in entities:
+			var frag := entities[fid]
+			if frag.get("entity_type", "") != "fragment":
+				continue
+			if frag.get("biome_source_id", "") != entity_id:
+				continue
+			if frag.get("est_collecte", false):
+				break
+			frag["est_collecte"] = true
+			village["fragments_collectes"].append(fid)
+			EventBus.fragment_libere.emit(fid, entity_id)
 			break
-		frag["est_collecte"] = true
-		village["fragments_collectes"].append(fid)
-		EventBus.fragment_libere.emit(fid, entity_id)
-		break
+
+	# Légendaire (tier 4) → révélation du biome secondaire
+	if new_tier == 4:
+		var secondary_id := entity.get("biome_secondaire_id", "") as String
+		if secondary_id == "":
+			return
+		var secondary := get_entity(secondary_id)
+		if secondary.is_empty() or secondary.get("est_decouvert", false):
+			return
+		secondary["est_decouvert"] = true
+		EventBus.biome_revele.emit(secondary_id)
 
 # Retourne true si le Village peut passer au Tier suivant.
 func can_upgrade_village() -> bool:
