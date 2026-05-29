@@ -30,12 +30,13 @@ extends Node
 
 # ─── Constantes ─────────────────────────────────────────────
 
-const FIRST_ENCOUNTER_DELAY: float = 1.0   # délai avant la toute première rencontre du cycle
-const COMBAT_POST_DELAY:     float = 2.5   # pause après la fin d'un combat
-const INSTANT_EVENT_DELAY:   float = 1.0   # pause après piège ou bénédiction
-const DEFAULT_REGEN_PCT:    float = 0.0
-const COMBO_HP_THRESHOLD:   float = 0.25
-const COMBO_ATK_BONUS_PCT:  float = 0.05   # +5 % ATK par niveau de combo au-dessus de 1
+const FIRST_ENCOUNTER_DELAY:    float = 1.0   # délai avant la toute première rencontre du cycle
+const COMBAT_POST_DELAY:        float = 2.5   # pause après la fin d'un combat
+const INSTANT_EVENT_DELAY:      float = 1.0   # pause après piège ou bénédiction
+const DEFAULT_REGEN_PCT:        float = 0.0
+const COMBO_HP_THRESHOLD:       float = 0.25
+const COMBO_ATK_BONUS_PCT:      float = 0.05  # +5 % ATK par niveau de combo au-dessus de 1
+const ZONE_TRANSITION_THRESHOLD: int  = 5     # événements résolus avant transition de zone
 
 # ─── Distribution pondérée des créatures ────────────────────
 # Poids par tier selon le nombre de tiers débloqués dans le biome.
@@ -78,6 +79,8 @@ var is_running:               bool       = false  # vrai pendant qu'une aventure
 var current_biome_id:         String     = ""     # id du biome actuellement exploré
 var current_hp:               float      = 0.0    # PV courants du héro
 var current_modifier:         Dictionary = {}     # modificateur de cycle actif
+var zone_courante:            Enums.Zone = Enums.Zone.SURFACE
+var _nb_evenements_zone:      int        = 0      # événements résolus dans la zone courante
 
 var _encounter_timer:         Timer              # timer qui cadence les rencontres
 var _first_encounter_pending: bool  = false      # vrai uniquement pour la toute première rencontre du cycle
@@ -150,6 +153,8 @@ func start_adventure(biome_id: String) -> void:
 	_combo_count             = 0
 	_first_encounter_pending = true
 	_is_first_combat         = true
+	zone_courante            = Enums.Zone.SURFACE
+	_nb_evenements_zone      = 0
 
 	BiomeMechanics.initialize_for_biome(biome_id)
 	_build_available_creatures(biome_id)
@@ -268,6 +273,7 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 		_cycle_positive_events += 1
 
 	EventBus.adventure_event_resolved.emit(enc_data)
+	_check_zone_transition()
 	_apply_regen(hero_id)
 	_schedule_next_encounter()
 
@@ -308,6 +314,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, 5.0
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
+		_check_zone_transition()
 		_apply_regen(hero_id)
 		_schedule_next_encounter()
 	else:
@@ -321,6 +328,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 		if current_hp <= 0.0:
 			_end_adventure(false)
 		else:
+			_check_zone_transition()
 			_apply_regen(hero_id)
 			_schedule_next_encounter()
 
@@ -384,6 +392,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_cycle_combats_won += 1
 	_cycle_combo_max    = maxi(_cycle_combo_max, _combo_count)
 
+	_check_zone_transition()
 	_apply_regen(hero_id)
 	_schedule_next_encounter(COMBAT_POST_DELAY)
 
@@ -631,3 +640,33 @@ func _build_summary(victory: bool) -> Dictionary:
 		"traps_triggered":      _cycle_traps_triggered,
 		"cycle_luck":           _cycle_luck,
 	}
+
+# ═══════════════════════════════════════════════════════════
+#  Zones
+# ═══════════════════════════════════════════════════════════
+
+# Zone maximale débloquée selon la Maîtrise (current_tier) du biome.
+# Commun/Peu Commun → Surface ; Rare/Épique → Profondeur ; Légendaire/Unique → Abysse.
+func _get_max_zone(biome_id: String) -> Enums.Zone:
+	var tier: int = GameData.get_entity(biome_id).get("current_tier", 0)
+	if tier >= 4:
+		return Enums.Zone.ABYSSE
+	elif tier >= 2:
+		return Enums.Zone.PROFONDEUR
+	else:
+		return Enums.Zone.SURFACE
+
+# Appelée après chaque événement résolu. Si le seuil est atteint et la zone suivante
+# est débloquée, transition et émission du signal zone_changee.
+func _check_zone_transition() -> void:
+	_nb_evenements_zone += 1
+	if _nb_evenements_zone < ZONE_TRANSITION_THRESHOLD:
+		return
+	var next_zone: int = int(zone_courante) + 1
+	if next_zone > int(Enums.Zone.ABYSSE):
+		return
+	if next_zone > int(_get_max_zone(current_biome_id)):
+		return
+	zone_courante       = next_zone as Enums.Zone
+	_nb_evenements_zone = 0
+	EventBus.zone_changee.emit(int(zone_courante))
