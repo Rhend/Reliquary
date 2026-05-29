@@ -256,10 +256,52 @@ func get_equipment_bonuses() -> Dictionary:
 		var item = get_entity(item_id)
 		if item.is_empty():
 			continue
-		var item_stats: Dictionary = (item.get("stats_par_palier", {}) as Dictionary).get(0, {})
+		var tier     := int(item.get("maitrise_actuelle", 0))
+		var spm      := item.get("stats_par_palier", {}) as Dictionary
+		var item_stats: Dictionary = spm.get(tier, spm.get(0, {}))
 		for key in item_stats:
 			bonuses[key] = bonuses.get(key, 0.0) + float(item_stats[key])
 	return bonuses
+
+# Retourne la recette (Array de {ingredient_id, quantite}) pour le palier cible,
+# ou [] si aucune recette n'est définie.
+func get_forge_recipe(equipment_id: String, target_tier: int) -> Array:
+	var equip := get_entity(equipment_id)
+	if equip.is_empty():
+		return []
+	return (equip.get("recettes_evolution", {}) as Dictionary).get(target_tier, []) as Array
+
+# Retourne true si l'équipement peut être forgé au palier suivant.
+func can_forge(equipment_id: String) -> bool:
+	var equip := get_entity(equipment_id)
+	if equip.is_empty():
+		return false
+	var current := int(equip.get("maitrise_actuelle", 0))
+	if current >= MAX_TIER:
+		return false
+	var recipe := get_forge_recipe(equipment_id, current + 1)
+	if recipe.is_empty():
+		return false
+	for req in recipe:
+		var ingr := get_entity(req.get("ingredient_id", ""))
+		if ingr.is_empty() or int(ingr.get("quantite_en_stock", 0)) < int(req.get("quantite", 1)):
+			return false
+	return true
+
+# Forge l'équipement au palier suivant : consomme les ingrédients, monte le palier.
+# Retourne false si impossible.
+func forge(equipment_id: String) -> bool:
+	if not can_forge(equipment_id):
+		return false
+	var equip   := get_entity(equipment_id)
+	var current := int(equip.get("maitrise_actuelle", 0))
+	var recipe  := get_forge_recipe(equipment_id, current + 1)
+	for req in recipe:
+		var ingr := get_entity(req.get("ingredient_id", ""))
+		ingr["quantite_en_stock"] = int(ingr.get("quantite_en_stock", 0)) - int(req.get("quantite", 1))
+	equip["maitrise_actuelle"] = current + 1
+	EventBus.equipement_evolue.emit(equipment_id, current + 1)
+	return true
 
 # ═══════════════════════════════════════════════════════════
 #  Hall des Évolutions (Bestiaire)

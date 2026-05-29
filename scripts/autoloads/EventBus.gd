@@ -117,6 +117,9 @@ signal combat_ended(result: Dictionary)
 # Émis quand un item est équipé ou déséquipé.
 @warning_ignore("unused_signal")
 signal equipment_changed()
+# Émis après la forge d'un équipement (passage au palier suivant).
+@warning_ignore("unused_signal")
+signal equipement_evolue(equipment_id: String, nouveau_palier: int)
 
 # ── État joueur ─────────────────────────────────────────────
 
