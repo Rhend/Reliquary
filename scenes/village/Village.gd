@@ -620,7 +620,9 @@ func _tier_effects(pdata: Dictionary, t: int) -> Array:
 	if t < te_list.size():
 		var effs: Array = te_list[t].get("effects", [])
 		if not effs.is_empty(): return effs
-	return pdata.get("base_stats", {}).get("effects", [])
+	if not te_list.is_empty():
+		return te_list[0].get("effects", [])
+	return []
 
 # Formate un entier XP avec séparateur de milliers (ex: 1 234).
 func _xp_fmt(xp: int) -> String:

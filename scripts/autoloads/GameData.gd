@@ -96,8 +96,8 @@ func _load_all_entities() -> void:
 	# Données statiques VS
 	_load_tres_data_from_folder("res://data/ingredients/", "ingredient")
 	_load_tres_data_from_folder("res://data/fragments/",   "fragment")
-	# Entités avec progression (tier / XP / passifs débloqués) — JSON
-	_load_entities_from_folder("res://data/hero/",      "hero")
+	# Héro : chargé depuis .tres (source de vérité)
+	_load_tres_entities_from_folder("res://data/hero/", "hero")
 	_load_entities_from_folder("res://data/passives/",  "passive")
 	_load_entities_from_folder("res://data/equipment/", "equipment")
 	# Données statiques JSON
@@ -235,12 +235,13 @@ func get_effective_stats(entity_id: String) -> Dictionary:
 	var entity = get_entity(entity_id)
 	if entity.is_empty():
 		return {}
-	var stats   = entity.get("base_stats", {}).duplicate()
-	var tier    = entity.get("current_tier", 0)
-	var scaling = entity.get("tier_scaling", {})
-	for key in scaling:
-		stats[key] = stats.get(key, 0) + tier * int(scaling[key])
-	return stats
+	var tier := int(entity.get("current_tier", 0))
+	return {
+		"atk": int(entity.get("atk", 0)) + tier * int(entity.get("atk_par_tier", 0)),
+		"def": int(entity.get("def", 0)) + tier * int(entity.get("def_par_tier", 0)),
+		"hp":  int(entity.get("hp",  0)) + tier * int(entity.get("hp_par_tier",  0)),
+		"vit": int(entity.get("vit", 0)) + tier * int(entity.get("vit_par_tier", 0)),
+	}
 
 # Bonus cumulés de tous les équipements portés.
 # Retourne au minimum { atk:0, hp:0, attack_speed_pct:0 }.
@@ -252,7 +253,7 @@ func get_equipment_bonuses() -> Dictionary:
 		var item = get_entity(item_id)
 		if item.is_empty():
 			continue
-		var item_bonuses: Dictionary = item.get("base_stats", {}).get("bonuses", {})
+		var item_bonuses: Dictionary = item.get("bonuses", {})
 		for key in item_bonuses:
 			bonuses[key] = bonuses.get(key, 0.0) + float(item_bonuses[key])
 	return bonuses
@@ -348,7 +349,7 @@ func craft(recipe: Dictionary) -> bool:
 
 func equip_item(item_id: String) -> void:
 	var item = get_entity(item_id)
-	var slot = item.get("base_stats", {}).get("slot", "")
+	var slot = item.get("slot", "")
 	if slot == "" or not player["equipped"].has(slot):
 		return
 	var old_id = player["equipped"].get(slot, "")
