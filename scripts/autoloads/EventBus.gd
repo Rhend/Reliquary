@@ -84,6 +84,12 @@ signal adventure_started(biome_id: String)
 # Émis par AdventureSystem à chaque changement de zone pendant une expédition.
 @warning_ignore("unused_signal")
 signal zone_changee(nouvelle_zone: int)
+# Émis quand un Fragment est libéré au passage d'un biome à Rare.
+@warning_ignore("unused_signal")
+signal fragment_libere(fragment_id: String, biome_id: String)
+# Émis quand le Village passe au Tier suivant.
+@warning_ignore("unused_signal")
+signal village_tier_change(nouveau_tier: int)
 # Émis après la victoire contre une créature Unique d'Abysse.
 @warning_ignore("unused_signal")
 signal creature_unique_vaincue(biome_id: String, ingredient_id: String, passif_id: String)

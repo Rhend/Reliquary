@@ -22,6 +22,12 @@ const MASTERY_TIERS: Array[String] = [
 ]
 const MAX_TIER: int = 5
 
+# Fragments requis pour passer du Tier n au Tier n+1 (index = tier source).
+const VILLAGE_TIER_REQUIREMENTS: Array[int] = [
+	0,  # T0→T1 : automatique
+	1,  # T1→T2 : 1 Fragment requis
+]
+
 # ─── Données chargées depuis mastery_config.json ────────────
 
 # XP cumulatif requis pour atteindre chaque tier [0, 100, 500, …]
@@ -38,6 +44,11 @@ var entities: Dictionary = {}
 # ─── État courant du joueur ─────────────────────────────────
 
 var pending_evolution: Dictionary = {}
+
+var village: Dictionary = {
+	"tier_actuel":         1,
+	"fragments_collectes": [],
+}
 
 var player: Dictionary = {
 	"luck":               0,
@@ -65,6 +76,7 @@ func _ready() -> void:
 	_load_mastery_config()
 	_load_all_entities()
 	_seed_test_bestiary()
+	EventBus.entity_evolved.connect(_on_entity_evolved)
 
 # Données de test — couvre les 6 tiers de rareté pour le Hall des Évolutions.
 func _seed_test_bestiary() -> void:
@@ -217,6 +229,50 @@ func _read_json(path: String) -> Dictionary:
 		push_error("GameData: erreur parsing JSON — " + path)
 		return {}
 	return json.get_data()
+
+# ═══════════════════════════════════════════════════════════
+#  Accesseurs — Entités
+# ═══════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════
+#  Village
+# ═══════════════════════════════════════════════════════════
+
+# Hook entity_evolved : libère le Fragment quand un biome atteint Rare (tier 2).
+func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
+	if new_tier != 2:
+		return
+	var entity := get_entity(entity_id)
+	if entity.get("entity_type", "") != "biome":
+		return
+	for fid in entities:
+		var frag := entities[fid]
+		if frag.get("entity_type", "") != "fragment":
+			continue
+		if frag.get("biome_source_id", "") != entity_id:
+			continue
+		if frag.get("est_collecte", false):
+			break
+		frag["est_collecte"] = true
+		village["fragments_collectes"].append(fid)
+		EventBus.fragment_libere.emit(fid, entity_id)
+		break
+
+# Retourne true si le Village peut passer au Tier suivant.
+func can_upgrade_village() -> bool:
+	var current := int(village.get("tier_actuel", 1))
+	if current >= VILLAGE_TIER_REQUIREMENTS.size():
+		return false
+	var req := VILLAGE_TIER_REQUIREMENTS[current]
+	return village.get("fragments_collectes", []).size() >= req
+
+# Passe le Village au Tier suivant. Retourne false si impossible.
+func upgrade_village() -> bool:
+	if not can_upgrade_village():
+		return false
+	village["tier_actuel"] = int(village.get("tier_actuel", 1)) + 1
+	EventBus.village_tier_change.emit(village["tier_actuel"])
+	return true
 
 # ═══════════════════════════════════════════════════════════
 #  Accesseurs — Entités

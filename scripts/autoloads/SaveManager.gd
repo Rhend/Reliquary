@@ -23,7 +23,7 @@
 extends Node
 
 const SAVE_PATH     := "user://IdleEvolutionSave.json"
-const SAVE_VER      := 8
+const SAVE_VER      := 9
 const SAVE_DEBOUNCE := 2.0
 
 var _save_dirty:  bool  = false
@@ -64,6 +64,7 @@ func save() -> void:
 		"player":   _save_player(),
 		"entities": _save_entities(),
 		"systems":  _save_systems(),
+		"village":  GameData.village.duplicate(),
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -135,6 +136,8 @@ func load_save() -> void:
 	_load_player(data)
 	_load_entities(data)
 	_load_systems(data)
+	if data.has("village"):
+		GameData.village.merge(data["village"], true)
 	EventBus.load_completed.emit()
 
 func _load_player(data: Dictionary) -> void:

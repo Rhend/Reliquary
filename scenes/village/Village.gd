@@ -19,7 +19,7 @@ const XP_PER_CLICK := 20.0
 const MENU_ITEMS: Array = [
 	["HÉRO",        "👤", 1, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  1, "_go_adventure", "adventure" ],
-	["FORGE",       "🔨", 2, "_go_forge",     "forge"     ],
+	["FORGE",       "🔨", 1, "_go_forge",     "forge"     ],
 	["SANCTUAIRE",  "✦",  3, "_go_sanctuary", "sanctuary" ],
 	["RELIQUE",     "◈",  4, "_go_relic",     "relic"     ],
 	["?",           "?",  5, "_go_tbd",       "tbd"       ],
@@ -50,6 +50,8 @@ var _hex_items            : Dictionary = {}   # panel_id → HexItem, pour gére
 func _ready() -> void:
 	SaveManager.load_save()
 	_build_ui()
+	EventBus.fragment_libere.connect(_on_fragment_libere)
+	EventBus.village_tier_change.connect(_on_village_tier_change)
 
 # Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
 func _active_creature() -> Dictionary:
@@ -164,7 +166,50 @@ func _build_hub(creature: Dictionary, tier: int) -> void:
 	_center(ltier, Vector2(0.0, 16.0), Vector2(150.0, 24.0))
 	_hub_root.add_child(ltier)
 
-	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool: return d[2] <= tier)
+	# ── Info Village (tier + fragments) ──────────────────────
+	var vtier := GameData.village.get("tier_actuel", 1) as int
+	var vcolor := Color(0.55, 0.85, 0.55) if vtier >= 2 else Color(0.6, 0.6, 0.7)
+
+	var vlabel := Label.new()
+	vlabel.text = "Village T%d" % vtier
+	vlabel.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vlabel.add_theme_font_size_override("font_size", 12)
+	vlabel.add_theme_color_override("font_color", vcolor)
+	_center(vlabel, Vector2(0.0, 40.0), Vector2(150.0, 18.0))
+	_hub_root.add_child(vlabel)
+
+	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
+		var frags_needed := GameData.VILLAGE_TIER_REQUIREMENTS[vtier]
+		var frags_have   := GameData.village.get("fragments_collectes", []).size()
+		var fprog := Label.new()
+		fprog.text = "🔮 %d / %d fragment%s" % [frags_have, frags_needed, "s" if frags_needed > 1 else ""]
+		fprog.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fprog.add_theme_font_size_override("font_size", 11)
+		fprog.add_theme_color_override("font_color", UIColors.FILTER_ON if frags_have >= frags_needed else UIColors.TEXT_MUTED)
+		_center(fprog, Vector2(0.0, 57.0), Vector2(180.0, 16.0))
+		_hub_root.add_child(fprog)
+
+		if GameData.can_upgrade_village():
+			var ubtn := Button.new()
+			ubtn.text = "▲  Faire évoluer le Village"
+			ubtn.add_theme_font_size_override("font_size", 11)
+			ubtn.add_theme_color_override("font_color", vcolor)
+			ubtn.add_theme_stylebox_override("normal", UIHelpers.card_style(vcolor, 0.12, 1.0, 1, 4))
+			ubtn.add_theme_stylebox_override("hover",  UIHelpers.card_style(vcolor, 0.28, 1.0, 1, 4))
+			ubtn.pressed.connect(func() -> void:
+				if GameData.upgrade_village():
+					_rebuild_hub()
+			)
+			_center(ubtn, Vector2(0.0, 78.0), Vector2(200.0, 26.0))
+			_hub_root.add_child(ubtn)
+
+	# ── Hex items (forge débloquée par village tier, reste par hero tier) ──
+	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
+		var pid := d[4] as String
+		if pid == "forge":
+			return vtier >= (d[2] as int)
+		return (d[2] as int) <= tier
+	)
 	var n := unlocked.size()
 	for i in n:
 		var ang := -PI * 0.5 + i * TAU / n
@@ -1103,6 +1148,14 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 # ─── Panneau Forge ────────────────────────────────────────────
 
 func _panel_forge() -> void:
+	if GameData.village.get("tier_actuel", 1) < 2:
+		var lbl := Label.new()
+		lbl.text = "🔨  Le Forgeron\n\n« Je ne peux pas encore\nvous aider. »\n\nLibérez un Fragment pour\nfaire évoluer le Village."
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		_rp_content.add_child(lbl)
+		return
 	var tcolor := UIColors.tier_color(int(_active_creature().get("current_tier", 0)))
 
 	# ── Inventaire ingrédients ──────────────────────────────
@@ -1269,6 +1322,62 @@ func _panel_soon(label: String) -> void:
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	_rp_content.add_child(lbl)
+
+# ─── Village ──────────────────────────────────────────────────
+
+# Recrée le hub (après upgrade village ou changement de tier).
+func _rebuild_hub() -> void:
+	if _hub_root and is_instance_valid(_hub_root):
+		_hub_root.queue_free()
+		_hub_root = null
+	_rp_root = null
+	_rp_content = null
+	_hex_items.clear()
+	_active_panel_id = ""
+	var creature := _active_creature()
+	var tier     := creature.get("current_tier", 0) as int
+	if tier > 0:
+		_build_hub(creature, tier)
+
+# Fragment libéré : feedback + rebuild hub (le bouton upgrade peut apparaître).
+func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
+	var frag := GameData.get_entity(fragment_id)
+	var nom  := frag.get("nom_affichage_fr", fragment_id) as String
+	_show_fragment_banner(nom)
+	_rebuild_hub()
+
+# Village tier change : rebuild hub (nouvelle couleur, nouveau bouton forge).
+func _on_village_tier_change(nouveau_tier: int) -> void:
+	_rebuild_hub()
+
+# Bannière temporaire lors de la libération d'un Fragment.
+func _show_fragment_banner(fragment_nom: String) -> void:
+	var banner := PanelContainer.new()
+	banner.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	banner.offset_top    = 20
+	banner.offset_bottom = 80
+	banner.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color     = Color(0.05, 0.05, 0.20, 0.92)
+	style.border_color = Color(0.55, 0.85, 0.55)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	banner.add_theme_stylebox_override("panel", style)
+	add_child(banner)
+
+	var lbl := Label.new()
+	lbl.text = "🔮  Fragment libéré : %s" % fragment_nom
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.add_theme_color_override("font_color", Color(0.55, 0.85, 0.55))
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.add_child(lbl)
+
+	var tw := create_tween()
+	tw.tween_interval(2.5)
+	tw.tween_property(banner, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(banner.queue_free)
 
 # ─── Debug : boutons tier ─────────────────────────────────────
 # Ajoute les boutons "Tier +/-" pour tester visuellement les tiers sans sauvegarder.
