@@ -31,6 +31,9 @@ var _idle_label:   Label = null  # label "En exploration..." visible si attente 
 var _idle_active:  bool  = false # vrai pendant l'état d'attente entre deux événements
 var _idle_tw:      Tween = null  # tween du fade-in du label idle
 
+# ─── Zone courante ────────────────────────────────────────────
+var _zone_label: Label = null   # label "Surface / Profondeur / Abysse"
+
 # ─── Combat ───────────────────────────────────────────────────
 var _combat_label: Label = null  # label "En combat..." affiché pendant un duel
 
@@ -99,6 +102,12 @@ func _build_circles_area() -> Control:
 	_idle_label.modulate.a = 0.0
 	_idle_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_idle_label)
+
+	_zone_label = Label.new()
+	_zone_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_zone_label.add_theme_font_size_override("font_size", 13)
+	_zone_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(_zone_label)
 
 	return center
 
@@ -187,6 +196,7 @@ func _build_equip_section(parent: VBoxContainer) -> void:
 func _connect_signals() -> void:
 	EventBus.adventure_started.connect(_on_adventure_started)
 	EventBus.adventure_event_resolved.connect(_on_event_resolved)
+	EventBus.zone_changee.connect(_on_zone_changee)
 	EventBus.combat_started.connect(_on_combat_started)
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.heal_applied.connect(_on_heal_applied)
@@ -209,6 +219,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_rebuild_buffs()
 	_rebuild_equip()
 	_cleanup_luck_icon()
+	_update_zone_label(AdventureSystem.zone_courante)
 
 	var creature_id := GameData.player.get("active_creature_id", "") as String
 	var creature    := GameData.get_entity(creature_id)
@@ -546,6 +557,20 @@ func _cleanup_luck_icon() -> void:
 	if _luck_icon and is_instance_valid(_luck_icon):
 		_luck_icon.queue_free()
 	_luck_icon = null
+
+# ── Zone ────────────────────────────────────────────────────
+
+func _on_zone_changee(nouvelle_zone: int) -> void:
+	_update_zone_label(nouvelle_zone as Enums.Zone)
+
+func _update_zone_label(zone: Enums.Zone) -> void:
+	if not _zone_label:
+		return
+	const NOMS := ["Surface", "Profondeur", "Abysse"]
+	const COULEURS := [Color(0.4, 0.7, 1.0), Color(0.6, 0.3, 1.0), Color(1.0, 0.3, 0.2)]
+	var idx := clampi(int(zone), 0, 2)
+	_zone_label.text = "◆ " + NOMS[idx]
+	_zone_label.add_theme_color_override("font_color", COULEURS[idx])
 
 # Affiche le bandeau BOUCLIER ! centré sur le cercle héro pendant 1.5s puis fade.
 func _show_shield_banner() -> void:

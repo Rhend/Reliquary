@@ -81,6 +81,9 @@ signal biome_mechanic_activated(mechanic: String)
 
 @warning_ignore("unused_signal")
 signal adventure_started(biome_id: String)
+# Émis par AdventureSystem à chaque changement de zone pendant une expédition.
+@warning_ignore("unused_signal")
+signal zone_changee(nouvelle_zone: int)
 # event_data : { type, biome_id, creature_id, [enemy / effect / trap], [ignored] }
 @warning_ignore("unused_signal")
 signal adventure_event_resolved(event_data: Dictionary)

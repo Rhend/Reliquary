@@ -23,3 +23,9 @@ enum ZoneCreature {
 	PROFONDEUR,
 	ABYSSE,
 }
+
+enum Zone {
+	SURFACE    = 0,
+	PROFONDEUR = 1,
+	ABYSSE     = 2,
+}
