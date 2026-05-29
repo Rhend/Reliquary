@@ -34,6 +34,10 @@ var _idle_tw:      Tween = null  # tween du fade-in du label idle
 # ─── Zone courante ────────────────────────────────────────────
 var _zone_label: Label = null   # label "Surface / Profondeur / Abysse"
 
+# ─── Créature Unique ──────────────────────────────────────────
+var _unique_panel:   Control = null  # indicateur + bouton en Abysse
+var _circles_vbox:   VBoxContainer = null  # référence au vbox des cercles
+
 # ─── Combat ───────────────────────────────────────────────────
 var _combat_label: Label = null  # label "En combat..." affiché pendant un duel
 
@@ -70,10 +74,11 @@ func _build_circles_area() -> Control:
 	var center := CenterContainer.new()
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
-	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 12)
-	center.add_child(vbox)
+	_circles_vbox = VBoxContainer.new()
+	_circles_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	_circles_vbox.add_theme_constant_override("separation", 12)
+	center.add_child(_circles_vbox)
+	var vbox := _circles_vbox
 
 	_combat_label = Label.new()
 	_combat_label.text = "En combat..."
@@ -197,6 +202,7 @@ func _connect_signals() -> void:
 	EventBus.adventure_started.connect(_on_adventure_started)
 	EventBus.adventure_event_resolved.connect(_on_event_resolved)
 	EventBus.zone_changee.connect(_on_zone_changee)
+	EventBus.creature_unique_vaincue.connect(_on_creature_unique_vaincue)
 	EventBus.combat_started.connect(_on_combat_started)
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.heal_applied.connect(_on_heal_applied)
@@ -562,6 +568,10 @@ func _cleanup_luck_icon() -> void:
 
 func _on_zone_changee(nouvelle_zone: int) -> void:
 	_update_zone_label(nouvelle_zone as Enums.Zone)
+	if nouvelle_zone == Enums.Zone.ABYSSE:
+		_show_unique_indicator()
+	else:
+		_hide_unique_indicator()
 
 func _update_zone_label(zone: Enums.Zone) -> void:
 	if not _zone_label:
@@ -571,6 +581,101 @@ func _update_zone_label(zone: Enums.Zone) -> void:
 	var idx := clampi(int(zone), 0, 2)
 	_zone_label.text = "◆ " + NOMS[idx]
 	_zone_label.add_theme_color_override("font_color", COULEURS[idx])
+
+# ── Créature Unique ─────────────────────────────────────────
+
+func _show_unique_indicator() -> void:
+	if not _circles_vbox or _unique_panel != null:
+		return
+	var biome := GameData.get_entity(AdventureSystem.current_biome_id)
+	if biome.get("creature_unique_vaincue", false):
+		return
+	var unique := biome.get("creature_unique", {}) as Dictionary
+	if unique.is_empty():
+		return
+
+	var nom    := unique.get("nom_affichage_fr", "???") as String
+	var color  := Color(1.0, 0.3, 0.2)
+
+	_unique_panel = PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color     = Color(0.18, 0.0, 0.0, 0.90)
+	style.border_color = color
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	_unique_panel.add_theme_stylebox_override("panel", style)
+
+	var m := MarginContainer.new()
+	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		m.add_theme_constant_override(side, 10)
+	_unique_panel.add_child(m)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	m.add_child(vb)
+
+	var lbl := Label.new()
+	lbl.text = "☠  %s vous observe..." % nom
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 14)
+	lbl.add_theme_color_override("font_color", color)
+	vb.add_child(lbl)
+
+	var btn := Button.new()
+	btn.text = "⚔  Affronter %s" % nom
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_color_override("font_color", color)
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(color, 0.15, 1.0, 1, 4))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(color, 0.30, 1.0, 1, 4))
+	btn.pressed.connect(AdventureSystem.start_unique_combat)
+	vb.add_child(btn)
+
+	_circles_vbox.add_child(_unique_panel)
+
+func _hide_unique_indicator() -> void:
+	if _unique_panel and is_instance_valid(_unique_panel):
+		_unique_panel.queue_free()
+	_unique_panel = null
+
+func _on_creature_unique_vaincue(biome_id: String, ingredient_id: String, passif_id: String) -> void:
+	_hide_unique_indicator()
+	_show_unique_victory_banner(biome_id, ingredient_id, passif_id)
+
+func _show_unique_victory_banner(biome_id: String, ingredient_id: String, passif_id: String) -> void:
+	var ingr_name  := GameData.get_entity(ingredient_id).get("nom_affichage_fr", ingredient_id) as String
+	var passif_name := GameData.get_entity(passif_id).get("nom_affichage_fr", passif_id) as String
+
+	var banner := PanelContainer.new()
+	banner.set_anchors_preset(Control.PRESET_FULL_RECT)
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.75)
+	banner.add_theme_stylebox_override("panel", style)
+	add_child(banner)
+
+	var vb := VBoxContainer.new()
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_theme_constant_override("separation", 12)
+	banner.add_child(vb)
+
+	for line: Array in [
+		["✨  CRÉATURE UNIQUE VAINCUE  ✨",   24, Color(1.0, 0.8, 0.2)],
+		["Ingrédient obtenu : " + ingr_name,  16, Color(0.6, 1.0, 0.6)],
+		["Passif débloqué : " + passif_name,  16, Color(0.5, 0.8, 1.0)],
+	]:
+		var lbl := Label.new()
+		lbl.text = line[0] as String
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", line[1] as int)
+		lbl.add_theme_color_override("font_color", line[2] as Color)
+		vb.add_child(lbl)
+
+	var tw := create_tween()
+	tw.tween_interval(3.5)
+	tw.tween_property(banner, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(banner.queue_free)
 
 # Affiche le bandeau BOUCLIER ! centré sur le cercle héro pendant 1.5s puis fade.
 func _show_shield_banner() -> void:

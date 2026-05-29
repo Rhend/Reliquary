@@ -84,6 +84,9 @@ signal adventure_started(biome_id: String)
 # Émis par AdventureSystem à chaque changement de zone pendant une expédition.
 @warning_ignore("unused_signal")
 signal zone_changee(nouvelle_zone: int)
+# Émis après la victoire contre une créature Unique d'Abysse.
+@warning_ignore("unused_signal")
+signal creature_unique_vaincue(biome_id: String, ingredient_id: String, passif_id: String)
 # event_data : { type, biome_id, creature_id, [enemy / effect / trap], [ignored] }
 @warning_ignore("unused_signal")
 signal adventure_event_resolved(event_data: Dictionary)
