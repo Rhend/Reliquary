@@ -1,12 +1,12 @@
 class_name EquipmentData
 extends Resource
 
-@export var id:                   String               = ""
-@export var nom_affichage_fr:     String               = ""
-@export var nom_affichage_en:     String               = ""
-@export var slot:                 Enums.SlotEquipement = Enums.SlotEquipement.ARME
-@export var biome_source_id:      String               = ""
-@export var maitrise_actuelle:    Enums.Maitrise       = Enums.Maitrise.COMMUN
-@export var est_debloque:         bool                 = false
-@export var stats_par_palier:     Dictionary           = {}
-@export var recettes_evolution:   Dictionary           = {}
+@export var id:                  String               = ""
+@export var nom_affichage_fr:    String               = ""
+@export var nom_affichage_en:    String               = ""
+@export var slot:                Enums.SlotEquipement = Enums.SlotEquipement.ARME
+@export var biome_source_id:     String               = ""
+@export var maitrise_actuelle:   Enums.Maitrise       = Enums.Maitrise.COMMUN
+@export var est_debloque:        bool                 = false
+@export var stats_par_palier:    Dictionary           = {}
+@export var recettes_evolution:  Dictionary           = {}

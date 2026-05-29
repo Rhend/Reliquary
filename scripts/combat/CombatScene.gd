@@ -468,7 +468,7 @@ func _rebuild_equip() -> void:
 			continue
 		found = true
 		var lbl := Label.new()
-		lbl.text = item.get("name", item_id)
+		lbl.text = item.get("nom_affichage_fr", item_id)
 		lbl.add_theme_font_size_override("font_size", 13)
 		lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 		_equip_vbox.add_child(lbl)

@@ -1,0 +1,15 @@
+[gd_resource type="EquipmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/EquipmentData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "equipment_anneau"
+nom_affichage_fr = ""
+nom_affichage_en = ""
+slot = 1
+biome_source_id = ""
+maitrise_actuelle = 0
+est_debloque = false
+stats_par_palier = {}
+recettes_evolution = {}

@@ -46,9 +46,12 @@ var player: Dictionary = {
 	"active_biome_id":    "",
 	"active_passives":    [],
 	"equipped": {
-		"weapon":    "equip_epee_bois",
-		"armor":     "",
-		"accessory": "equip_bouclier"
+		"arme":     "equipment_arme",
+		"anneau":   "",
+		"armure":   "",
+		"ceinture": "",
+		"bouclier": "equipment_bouclier",
+		"talisman": ""
 	},
 	"equipment_inventory": [],
 	"bestiary": {}   # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
@@ -99,7 +102,7 @@ func _load_all_entities() -> void:
 	# Héro : chargé depuis .tres (source de vérité)
 	_load_tres_entities_from_folder("res://data/hero/", "hero")
 	_load_entities_from_folder("res://data/passives/",  "passive")
-	_load_entities_from_folder("res://data/equipment/", "equipment")
+	_load_tres_entities_from_folder("res://data/equipements/", "equipment")
 	# Données statiques JSON
 	_load_data_from_folder("res://data/resources/", "resource")
 	_load_data_from_folder("res://data/forge/",     "recipe")
@@ -253,9 +256,9 @@ func get_equipment_bonuses() -> Dictionary:
 		var item = get_entity(item_id)
 		if item.is_empty():
 			continue
-		var item_bonuses: Dictionary = item.get("bonuses", {})
-		for key in item_bonuses:
-			bonuses[key] = bonuses.get(key, 0.0) + float(item_bonuses[key])
+		var item_stats: Dictionary = (item.get("stats_par_palier", {}) as Dictionary).get(0, {})
+		for key in item_stats:
+			bonuses[key] = bonuses.get(key, 0.0) + float(item_stats[key])
 	return bonuses
 
 # ═══════════════════════════════════════════════════════════
@@ -349,8 +352,11 @@ func craft(recipe: Dictionary) -> bool:
 
 func equip_item(item_id: String) -> void:
 	var item = get_entity(item_id)
-	var slot = item.get("slot", "")
-	if slot == "" or not player["equipped"].has(slot):
+	var slot_idx: int = int(item.get("slot", -1))
+	if slot_idx < 0 or slot_idx >= Enums.SlotEquipement.size():
+		return
+	var slot: String = Enums.SlotEquipement.keys()[slot_idx].to_lower()
+	if not player["equipped"].has(slot):
 		return
 	var old_id = player["equipped"].get(slot, "")
 	if old_id != "":
