@@ -878,39 +878,6 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		pvb.add_child(xp_lbl)
 
-	# ── Indicateurs : zone max + Fragment + créature Unique ──
-	var info_row := HBoxContainer.new()
-	info_row.add_theme_constant_override("separation", 8)
-	pvb.add_child(info_row)
-
-	var zone_lbl := Label.new()
-	zone_lbl.text = "📍 " + _zone_max_name(btier)
-	zone_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	zone_lbl.add_theme_font_size_override("font_size", 10)
-	zone_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	info_row.add_child(zone_lbl)
-
-	# Fragment collecté ?
-	var frag_done := false
-	for fid in GameData.entities:
-		var f := GameData.entities[fid] as Dictionary
-		if f.get("entity_type","") == "fragment" and f.get("biome_source_id","") == biome_id:
-			frag_done = f.get("est_collecte", false)
-			break
-	var frag_lbl := Label.new()
-	frag_lbl.text = "🔮 %s" % ("✔" if frag_done else "☐")
-	frag_lbl.add_theme_font_size_override("font_size", 10)
-	frag_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY if frag_done else UIColors.TEXT_MUTED)
-	info_row.add_child(frag_lbl)
-
-	# Créature Unique vaincue ?
-	var unique_done := biome.get("creature_unique_vaincue", false) as bool
-	var uniq_lbl := Label.new()
-	uniq_lbl.text = "☠ %s" % ("✔" if unique_done else "☐")
-	uniq_lbl.add_theme_font_size_override("font_size", 10)
-	uniq_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY if unique_done else UIColors.TEXT_MUTED)
-	info_row.add_child(uniq_lbl)
-
 	# ── Section catégories (repliée par défaut) ───────────────
 	var section := VBoxContainer.new()
 	section.add_theme_constant_override("separation", 2)
@@ -929,9 +896,10 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	cat_vb.add_theme_constant_override("separation", 3)
 	indent.add_child(cat_vb)
 
-	_adv_category_card(cat_vb, "CRÉATURES",    pools["creatures"],    UIColors.TYPE_CREATURE)
-	_adv_category_card(cat_vb, "PIÈGES",       pools["traps"],        UIColors.TYPE_TRAP)
-	_adv_category_card(cat_vb, "BÉNÉDICTIONS", pools["benedictions"], UIColors.TYPE_BENEDICTION)
+	# Filtrage par zone débloquée : seuls les éléments des zones actives comptent et s'affichent.
+	_adv_category_card(cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE)
+	_adv_category_card(cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP)
+	_adv_category_card(cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION)
 	_adv_ingredient_section(cat_vb, pools["ingredients"])
 
 	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
@@ -1006,22 +974,26 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
 	)
 
-# Remplit parent avec une XPCard par entité du pool. Entités non découvertes → ligne "????".
+# Remplit parent avec une carte par entité du pool, même format pour tous les types.
+# Entité non découverte → nom "?", palier Commun, XP 0 / seuil (placeholder homogène).
 func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void:
-	var total := pool.size()
-	for i: int in range(total):
-		var entry    := pool[i] as Dictionary
+	for entry: Dictionary in pool:
 		var entry_id := entry.get("id", "") as String
 		var is_known := MasteryRegistry.is_discovered(entry_id)
 
-		if is_known:
-			var entity      := GameData.get_entity(entry_id)
-			var bentry      := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
-			var is_equip    : bool = entity.get("entity_type", "") == "equipment"
-			var entity_tier := 0
-			var entity_xp   := 0.0
-			var at_max      := false
+		# Valeurs d'affichage — placeholder Commun si non découvert.
+		var disp_name   := "?"
+		var entity_tier := 0
+		var entity_xp   := 0.0
+		var at_max      := false
+		var is_equip    := false
+		var entity: Dictionary = {}
 
+		if is_known:
+			entity = GameData.get_entity(entry_id)
+			var bentry := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
+			is_equip   = entity.get("entity_type", "") == "equipment"
+			disp_name  = entry.get("name", "?")
 			if not entity.is_empty() and not is_equip:
 				entity_tier = entity.get("current_tier", 0)
 				entity_xp   = entity.get("current_xp",   0.0)
@@ -1033,76 +1005,56 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 			else:
 				entity_tier = entry.get("tier", 0)
 
-			var ec       := UIColors.tier_color(entity_tier)
-			var xp_need  := 0
-			var xp_fill  := 0.0
-			if not at_max and not is_equip and entity_tier + 1 < GameData.xp_thresholds.size():
-				xp_need = int(GameData.xp_thresholds[entity_tier + 1])
-				if xp_need > 0:
-					xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
+		var ec      := UIColors.tier_color(entity_tier)
+		var xp_need := 0
+		var xp_fill := 0.0
+		if not at_max and not is_equip and entity_tier + 1 < GameData.xp_thresholds.size():
+			xp_need = int(GameData.xp_thresholds[entity_tier + 1])
+			if xp_need > 0:
+				xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
 
-			var panel := XPCard.new()
-			panel.xp_fill    = xp_fill
-			panel.fill_color = ec
-			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			panel.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.38, 1, 3))
-			parent.add_child(panel)
+		var panel := XPCard.new()
+		panel.xp_fill    = xp_fill
+		panel.fill_color = ec
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.38, 1, 3))
+		parent.add_child(panel)
 
-			var pm := UIHelpers.margin_of(4)
-			panel.add_child(pm)
+		var pm := UIHelpers.margin_of(4)
+		panel.add_child(pm)
 
-			var hb := HBoxContainer.new()
-			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			pm.add_child(hb)
+		var hb := HBoxContainer.new()
+		hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pm.add_child(hb)
 
-			var name_lbl := Label.new()
-			name_lbl.text = entry.get("name", "?")
-			name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			name_lbl.add_theme_font_size_override("font_size", 11)
-			name_lbl.add_theme_color_override("font_color", Color.WHITE)
-			hb.add_child(name_lbl)
+		var name_lbl := Label.new()
+		name_lbl.text = disp_name
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.add_theme_font_size_override("font_size", 11)
+		name_lbl.add_theme_color_override("font_color", Color.WHITE if is_known else UIColors.TEXT_MUTED)
+		hb.add_child(name_lbl)
 
-			var tbadge := Label.new()
-			tbadge.text = GameData.get_tier_name(entity_tier)
-			tbadge.add_theme_font_size_override("font_size", 10)
-			tbadge.add_theme_color_override("font_color", ec)
-			hb.add_child(tbadge)
+		var tbadge := Label.new()
+		tbadge.text = GameData.get_tier_name(entity_tier)
+		tbadge.add_theme_font_size_override("font_size", 10)
+		tbadge.add_theme_color_override("font_color", ec)
+		hb.add_child(tbadge)
 
-			if not is_equip:
-				var xp_text := "RANG MAX" if at_max \
-						else "%s / %s XP" % [_xp_fmt(int(entity_xp)), _xp_fmt(xp_need)]
-				var xp_lbl := Label.new()
-				xp_lbl.text = xp_text
-				xp_lbl.add_theme_font_size_override("font_size", 9)
-				xp_lbl.add_theme_color_override("font_color", ec if at_max else UIColors.TEXT_MUTED)
-				xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-				hb.add_child(xp_lbl)
+		if not is_equip:
+			var xp_text := "RANG MAX" if at_max \
+					else "%s / %s XP" % [_xp_fmt(int(entity_xp)), _xp_fmt(xp_need)]
+			var xp_lbl := Label.new()
+			xp_lbl.text = xp_text
+			xp_lbl.add_theme_font_size_override("font_size", 9)
+			xp_lbl.add_theme_color_override("font_color", ec if at_max else UIColors.TEXT_MUTED)
+			xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			hb.add_child(xp_lbl)
 
-			if MasterySystem.can_evolve(entry_id):
-				parent.add_child(_make_evolve_btn(
-						entry_id, entry.get("name", "?") as String,
-						entity.get("entity_type", "creature") as String,
-						entity_tier))
-		else:
-			# Entité non découverte — style "À DÉBLOQUER"
-			var panel := PanelContainer.new()
-			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			panel.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.04, 0.20, 1, 3))
-			parent.add_child(panel)
-
-			var pm := UIHelpers.margin_of(4)
-			panel.add_child(pm)
-
-			var hb := HBoxContainer.new()
-			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			pm.add_child(hb)
-
-			var unk := Label.new()
-			unk.text = "????   %d / %d" % [i + 1, total]
-			unk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			unk.add_theme_font_size_override("font_size", 11)
-			unk.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-			hb.add_child(unk)
+		if is_known and MasterySystem.can_evolve(entry_id):
+			parent.add_child(_make_evolve_btn(
+					entry_id, disp_name,
+					entity.get("entity_type", "creature") as String,
+					entity_tier))
 
 # Carte catégorie dédiée aux ingrédients de biome.
 # Verrouillée tant que village_tier < 2 : affiche uniquement un message de prérequis.
@@ -1110,7 +1062,9 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	if pool.is_empty():
 		return
-	var locked: bool = GameData.get_entity("hero").get("current_tier", 0) < 2
+	# Section absente (pas grisée) tant que le Village n'a pas atteint le Tier 2 (Forgeron).
+	if (GameData.village.get("tier_actuel", 1) as int) < 2:
+		return
 	var nc := UIColors.CARD_NEUTRAL
 
 	var cat_wrap := VBoxContainer.new()
@@ -1120,9 +1074,8 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 
 	var cat_panel := PanelContainer.new()
 	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if not locked:
-		cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		UIHelpers.add_hover_feedback(cat_panel)
+	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UIHelpers.add_hover_feedback(cat_panel)
 	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
 	cat_wrap.add_child(cat_panel)
 
@@ -1139,14 +1092,6 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	clbl.add_theme_font_size_override("font_size", 11)
 	clbl.add_theme_color_override("font_color", nc)
 	chdr.add_child(clbl)
-
-	if locked:
-		var lock_lbl := Label.new()
-		lock_lbl.text = "Village Tier 2"
-		lock_lbl.add_theme_font_size_override("font_size", 10)
-		lock_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		chdr.add_child(lock_lbl)
-		return
 
 	var cat_arrow := Label.new()
 	cat_arrow.text = "  ▶"
@@ -1405,6 +1350,24 @@ func _zone_max_name(tier: int) -> String:
 	if tier >= 4: return "Abysse"
 	elif tier >= 2: return "Profondeur"
 	else: return "Surface"
+
+# Zone d'enfoncement la plus profonde débloquée selon le tier de maîtrise du biome.
+# 0 = Surface (toujours), 1 = Profondeur (Rare+), 2 = Abysse (Légendaire+).
+func _biome_max_zone(tier: int) -> int:
+	if tier >= 4: return 2
+	elif tier >= 2: return 1
+	else: return 0
+
+# Garde uniquement les entrées dont la zone est débloquée pour ce tier de biome.
+# Les entrées sans champ de zone (pièges, bénédictions — transversaux) sont conservées.
+func _filter_pool_by_zone(pool: Array, tier: int) -> Array:
+	var max_zone := _biome_max_zone(tier)
+	var out: Array = []
+	for entry: Dictionary in pool:
+		if entry.has("zone_associee") and int(entry["zone_associee"]) > max_zone:
+			continue
+		out.append(entry)
+	return out
 
 # ─── Village ──────────────────────────────────────────────────
 

@@ -70,6 +70,11 @@ const TIER_EPIQUE     := Color(0.72, 0.28, 1.00)   # 3 — Épique
 const TIER_LEGENDAIRE := Color(1.00, 0.78, 0.08)   # 4 — Légendaire
 const TIER_UNIQUE     := Color(1.00, 0.10, 0.18)   # 5 — Unique
 
+# ── Zones d'enfoncement (Surface / Profondeur / Abysse) ──────
+const ZONE_SURFACE    := Color(0.30, 0.70, 1.00)   # bleu
+const ZONE_PROFONDEUR := Color(0.72, 0.28, 1.00)   # violet
+const ZONE_ABYSSE     := Color(0.88, 0.18, 0.12)   # rouge
+
 # ── Carte neutre (sans rareté native) ───────────────────────
 const CARD_NEUTRAL := Color(0.42, 0.52, 0.68)   # acier-bleu sobre, ni tier ni catégorie
 
@@ -116,6 +121,14 @@ func tier_color(tier: int) -> Color:
 		4: return TIER_LEGENDAIRE
 		5: return TIER_UNIQUE
 		_: return Color.WHITE
+
+# Couleur d'une zone d'enfoncement (0 = Surface, 1 = Profondeur, 2 = Abysse).
+func zone_color(zone: int) -> Color:
+	match zone:
+		0: return ZONE_SURFACE
+		1: return ZONE_PROFONDEUR
+		2: return ZONE_ABYSSE
+		_: return ZONE_SURFACE
 
 # Couleur d'une entrée du Hall des Évolutions selon son type.
 func encounter(enc_type: String) -> Color:
