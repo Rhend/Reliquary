@@ -560,8 +560,9 @@ func _drop_ingredients() -> void:
 # ═══════════════════════════════════════════════════════════
 
 # Reconstruit available_creatures selon la zone courante.
-# Surface    : 70 % créature Surface  + 30 % créature Profondeur
-# Profondeur : 30 % créature Surface  + 70 % créature Profondeur
+# Surface    : créature Surface uniquement (la Profondeur n'apparaît pas tant
+#              qu'elle n'est pas débloquée — on n'y descend que si la zone l'est)
+# Profondeur : créature Profondeur (70 %) + créature Surface (30 %, taux moindre)
 # Abysse     : aucune créature évolutive (Phase 4 gère l'Unique)
 func _build_available_creatures(biome_id: String) -> void:
 	available_creatures = []
@@ -574,8 +575,7 @@ func _build_available_creatures(biome_id: String) -> void:
 
 	match zone_courante:
 		Enums.Zone.SURFACE:
-			_pool_add(surface,    70.0)
-			_pool_add(profondeur, 30.0)
+			_pool_add(surface,    100.0)
 		Enums.Zone.PROFONDEUR:
 			_pool_add(surface,    30.0)
 			_pool_add(profondeur, 70.0)

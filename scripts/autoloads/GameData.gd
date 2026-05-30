@@ -75,23 +75,7 @@ var player: Dictionary = {
 func _ready() -> void:
 	_load_mastery_config()
 	_load_all_entities()
-	_seed_test_bestiary()
 	EventBus.entity_evolved.connect(_on_entity_evolved)
-
-# Données de test — couvre les 6 tiers de rareté pour le Hall des Évolutions.
-func _seed_test_bestiary() -> void:
-	var hall: Dictionary = player.get("bestiary", {})
-	var test_entries: Array = [
-		{"id":"creature_foret_surface",    "name":"Rat des Égouts",     "tier":0, "xp":50.0,   "count":6,  "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
-		{"id":"creature_foret_profondeur", "name":"Ours Légendaire",    "tier":1, "xp":180.0,  "count":22, "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
-		{"id":"creature_oscar",            "name":"Oscar",              "tier":2, "xp":750.0,  "count":55, "type":"Créature", "biome_id":"biome_foret",    "biome_name":"Forêt Sombre"},
-		{"id":"creature_marecage_surface",    "name":"Grenouille Géante",  "tier":0, "xp":50.0,  "count":10, "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
-		{"id":"creature_marecage_profondeur", "name":"Serpent des Marais", "tier":1, "xp":200.0, "count":30, "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
-		{"id":"creature_cavalier_sans_tete",  "name":"Cavalier Sans Tête", "tier":2, "xp":0.0,   "count":5,  "type":"Créature", "biome_id":"biome_marecage", "biome_name":"Marécage Putride"},
-	]
-	for e in test_entries:
-		if not hall.has(e["id"]):
-			hall[e["id"]] = e.duplicate()
 
 func _load_mastery_config() -> void:
 	var config = _read_json("res://data/mastery_config.json")

@@ -786,8 +786,16 @@ func _panel_adventure() -> void:
 			if bid == _adv_selected_biome_id:
 				section.visible = not section.visible
 				arrow.text = "  ▼" if section.visible else "  ▶"
-				btn.text = ("⚔   PARTIR EN EXPÉDITION — " + bname) if section.visible \
-						else "⚔   PARTIR EN EXPÉDITION"
+				if section.visible:
+					# Ré-sélection : bouton actif.
+					btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+					btn.visible = true
+					placeholder.visible = false
+				else:
+					# Désélection : plus de biome choisi → bouton masqué, placeholder affiché.
+					_adv_selected_biome_id = ""
+					btn.visible = false
+					placeholder.visible = true
 			else:
 				if _adv_selected_biome_id in contents \
 						and is_instance_valid(contents[_adv_selected_biome_id]):
@@ -993,7 +1001,7 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 			entity = GameData.get_entity(entry_id)
 			var bentry := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
 			is_equip   = entity.get("entity_type", "") == "equipment"
-			disp_name  = entry.get("name", "?")
+			disp_name  = entry.get("nom_affichage_fr", entry.get("name", "?"))
 			if not entity.is_empty() and not is_equip:
 				entity_tier = entity.get("current_tier", 0)
 				entity_xp   = entity.get("current_xp",   0.0)
