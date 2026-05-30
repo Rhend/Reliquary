@@ -247,7 +247,7 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 	# Rare (tier 2) → libération du Fragment
 	if new_tier == 2:
 		for fid in entities:
-			var frag := entities[fid]
+			var frag: Dictionary = entities[fid]
 			if frag.get("entity_type", "") != "fragment":
 				continue
 			if frag.get("biome_source_id", "") != entity_id:

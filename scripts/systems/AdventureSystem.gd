@@ -224,7 +224,7 @@ func _process_encounter() -> void:
 # ─── Rencontre Créature ───────────────────────────────────────
 
 # Tire un ennemi aléatoire dans le pool du biome et lance le combat.
-func _handle_creature_encounter(hero_id: String, enc_data: Dictionary) -> void:
+func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 	var enemy := _weighted_random_creature()
 	if enemy.is_empty():
 		_schedule_next_encounter()
@@ -712,7 +712,7 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 	var xp_earned := xp_base * xp_mult
 	MasterySystem.add_xp_to_all_active(xp_earned, 2)
 	MasterySystem.add_xp_to_entity(current_biome_id, xp_earned * 0.40, 2)
-	var hero_id := GameData.player.get("active_creature_id", "")
+	var hero_id: String = GameData.player.get("active_creature_id", "")
 	MasterySystem.add_xp_to_entity(hero_id, xp_earned * 0.20, 2)
 	GameData.record_encounter(enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, xp_base)
 	_drop_loot(enemy)

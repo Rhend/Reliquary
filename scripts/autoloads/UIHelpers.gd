@@ -6,7 +6,10 @@
 #
 # Toutes les fonctions sont statiques → UIHelpers.fonction().
 # Aucun état interne : ce script ne fait que fabriquer des nœuds.
+# Classe utilitaire (class_name), pas un autoload : les appels statiques
+# se résolvent directement sur le type.
 # ============================================================
+class_name UIHelpers
 extends Node
 
 # ═══════════════════════════════════════════════════════════

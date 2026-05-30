@@ -6,7 +6,7 @@
 #   • l'équipement porté (weapon / armor / accessory)
 #   • les passifs permanents débloqués par les entités du jeu
 # ============================================================
-class_name HeroData extends Resource
+extends Resource
 
 @export var base_hp:  int = 110
 @export var base_atk: int = 15

@@ -82,7 +82,6 @@ func _build_ui() -> void:
 	else:
 		_build_hub(creature, tier)
 
-	_build_debug_buttons()
 	_build_fullscreen_btn()
 
 # ─── Tier 0 : clicker ─────────────────────────────────────────
@@ -136,7 +135,7 @@ func _build_tier0(creature: Dictionary) -> void:
 
 # ─── Tier 1+ : hub hexagonal ──────────────────────────────────
 # Construit le hub circulaire avec les hexagones débloqués par le tier.
-func _build_hub(creature: Dictionary, tier: int) -> void:
+func _build_hub(_creature: Dictionary, tier: int) -> void:
 	var vp     := get_viewport_rect().size
 	var tcolor := UIColors.tier_color(tier)
 	var _diam_margins := [70.0, 70.0, 82.0, 104.0, 136.0, 164.0]
@@ -183,7 +182,7 @@ func _build_hub(creature: Dictionary, tier: int) -> void:
 
 	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
 		var frags_needed := GameData.VILLAGE_TIER_REQUIREMENTS[vtier]
-		var frags_have   := GameData.village.get("fragments_collectes", []).size()
+		var frags_have: int = (GameData.village.get("fragments_collectes", []) as Array).size()
 		var fprog := Label.new()
 		fprog.text = "🔮 %d / %d fragment%s" % [frags_have, frags_needed, "s" if frags_needed > 1 else ""]
 		fprog.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1002,7 +1001,7 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 	)
 
 # Remplit parent avec une XPCard par entité du pool. Entités non découvertes → ligne "????".
-func _adv_entity_rows(parent: VBoxContainer, pool: Array, color: Color) -> void:
+func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void:
 	var total := pool.size()
 	for i: int in range(total):
 		var entry    := pool[i] as Dictionary
@@ -1244,9 +1243,9 @@ func _panel_village() -> void:
 	# ── Progression Tier suivant ────────────────────────────
 	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
 		var req        := GameData.VILLAGE_TIER_REQUIREMENTS[vtier]
-		var have       := GameData.village.get("fragments_collectes", []).size()
-		var ready      := have >= req
-		var prog_color := UIColors.FILTER_ON if ready else UIColors.TEXT_MUTED
+		var have: int  = (GameData.village.get("fragments_collectes", []) as Array).size()
+		var is_ready: bool = have >= req
+		var prog_color := UIColors.FILTER_ON if is_ready else UIColors.TEXT_MUTED
 
 		_rp_content.add_child(UIHelpers.section_header("◆  TIER SUIVANT", vcolor))
 
@@ -1280,7 +1279,7 @@ func _panel_village() -> void:
 			_rp_content.add_child(ubtn)
 
 # Carte d'un passif unique : colorée si débloqué, grisée avec 🔒 sinon.
-func _passif_unique_card(passif_id: String, passif: Dictionary, tcolor: Color) -> Control:
+func _passif_unique_card(passif_id: String, passif: Dictionary, _tcolor: Color) -> Control:
 	var unlocked  := passif.get("est_debloque", false) as bool
 	var nom       := passif.get("nom_affichage_fr", passif_id) as String
 	var biome_id  := passif.get("biome_source_id", "") as String
@@ -1420,11 +1419,11 @@ func _forge_equip_card(equip_id: String, equip: Dictionary, tcolor: Color) -> Co
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.add_theme_font_size_override("font_size", 12)
 		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		var m := MarginContainer.new()
+		var lm := MarginContainer.new()
 		for s in ["margin_left","margin_right","margin_top","margin_bottom"]:
-			m.add_theme_constant_override(s, 8)
-		locked.add_child(m)
-		m.add_child(lbl)
+			lm.add_theme_constant_override(s, 8)
+		locked.add_child(lm)
+		lm.add_child(lbl)
 		return locked
 
 	var current_tier := int(equip.get("maitrise_actuelle", 0))
@@ -1567,13 +1566,13 @@ func _rebuild_hub() -> void:
 
 # Fragment libéré : feedback + rebuild hub (le bouton upgrade peut apparaître).
 func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
-	var frag := GameData.get_entity(fragment_id)
+	var frag: Dictionary = GameData.get_entity(fragment_id)
 	var nom  := frag.get("nom_affichage_fr", fragment_id) as String
 	_show_fragment_banner(nom)
 	_rebuild_hub()
 
 # Village tier change : rebuild hub (nouvelle couleur, nouveau bouton forge).
-func _on_village_tier_change(nouveau_tier: int) -> void:
+func _on_village_tier_change(_nouveau_tier: int) -> void:
 	_rebuild_hub()
 
 # Nouveau biome révélé : bannière + refresh du panneau Expéditions si ouvert.
@@ -1641,89 +1640,6 @@ func _show_fragment_banner(fragment_nom: String) -> void:
 	tw.tween_property(banner, "modulate:a", 0.0, 0.5)
 	tw.tween_callback(banner.queue_free)
 
-# ─── Debug : boutons tier ─────────────────────────────────────
-# Ajoute les boutons "Tier +/-" pour tester visuellement les tiers sans sauvegarder.
-# Ligne 2 : 3 boutons cycliques pour tester les passifs (OFF → T0 → … → T5 → OFF).
-func _build_debug_buttons() -> void:
-	var vb := VBoxContainer.new()
-	vb.anchor_left   = 0.0; vb.anchor_top    = 0.0
-	vb.anchor_right  = 0.0; vb.anchor_bottom = 0.0
-	vb.offset_left   = 10;  vb.offset_top    = 10
-	vb.offset_right  = 10;  vb.offset_bottom = 10
-	vb.add_theme_constant_override("separation", 4)
-	add_child(vb)
-
-	# Ligne 1 : tier héro
-	var row1 := HBoxContainer.new()
-	row1.add_theme_constant_override("separation", 6)
-	vb.add_child(row1)
-
-	var up := Button.new()
-	up.text = "Tier +"
-	up.pressed.connect(_debug_tier_up)
-	row1.add_child(up)
-
-	var dn := Button.new()
-	dn.text = "Tier −"
-	dn.pressed.connect(_debug_tier_down)
-	row1.add_child(dn)
-
-	# Ligne 2 : passifs de test
-	var row2 := HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 6)
-	vb.add_child(row2)
-
-	var debug_passives := [
-		["passive_combat_mastery", "Combat"],
-		["passive_resilience",     "Résilience"],
-		["passive_poison_touch",   "Contact"],
-	]
-	for entry: Array in debug_passives:
-		var pid: String   = entry[0]
-		var label: String = entry[1]
-		var btn           := Button.new()
-		btn.text          = _debug_passive_label(pid, label)
-		btn.pressed.connect(func() -> void:
-			_debug_passive_cycle(pid)
-			btn.text = _debug_passive_label(pid, label)
-		)
-		row2.add_child(btn)
-
-# Retourne le label affiché sur un bouton de passif debug.
-func _debug_passive_label(passive_id: String, short_name: String) -> String:
-	var passive := GameData.get_entity(passive_id)
-	var active: bool = passive_id in (GameData.player.get("active_passives", []) as Array)
-	if passive.is_empty() or not active:
-		return short_name + ": OFF"
-	return short_name + ": T" + str(passive.get("current_tier", 0))
-
-# Cycle le tier d'un passif : OFF→T0→T1→…→T5→OFF.
-# Ajoute / retire le passif de active_passives et rafraîchit PassiveSystem.
-func _debug_passive_cycle(passive_id: String) -> void:
-	var passive := GameData.get_entity(passive_id)
-	if passive.is_empty():
-		return
-
-	var actives: Array = GameData.player.get("active_passives", [])
-	var idx := actives.find(passive_id)
-
-	if idx == -1:
-		# OFF → T0
-		actives.append(passive_id)
-		passive["current_tier"] = 0
-	else:
-		var tier := passive.get("current_tier", 0) as int
-		if tier < GameData.MAX_TIER:
-			passive["current_tier"] = tier + 1
-		else:
-			# T5 → OFF
-			actives.remove_at(idx)
-			passive["current_tier"] = 0
-
-	GameData.player["active_passives"] = actives
-	PassiveSystem.refresh_active_passives()
-	EventBus.player_state_changed.emit()
-
 # Ajoute le bouton ⛶ en haut à droite pour basculer le plein écran.
 func _build_fullscreen_btn() -> void:
 	var btn := Button.new()
@@ -1740,26 +1656,6 @@ func _build_fullscreen_btn() -> void:
 	btn.tooltip_text = "Plein écran  (F11)"
 	btn.pressed.connect(func() -> void: GameSettings.set_fullscreen(not GameSettings.fullscreen))
 	add_child(btn)
-
-# Incrémente le tier du héro, réinitialise son XP et recharge la scène.
-func _debug_tier_up() -> void:
-	var hero := GameData.get_entity("hero")
-	var tier := hero.get("current_tier", 0) as int
-	if tier < GameData.MAX_TIER:
-		hero["current_tier"] = tier + 1
-		hero["current_xp"]   = 0.0
-		SaveManager.save()
-		_launch_evolution_ritual("village", "hero", "Village", tier, tier + 1)
-
-# Décrémente le tier du héro, réinitialise son XP et recharge la scène.
-func _debug_tier_down() -> void:
-	var hero := GameData.get_entity("hero")
-	var tier := hero.get("current_tier", 0) as int
-	if tier > 0:
-		hero["current_tier"] = tier - 1
-		hero["current_xp"]   = 0.0
-		SaveManager.save()
-		_launch_evolution_ritual("village", "hero", "Village", tier, tier - 1)
 
 # ─── Clicker (tier 0) ─────────────────────────────────────────
 # Ajoute XP_PER_CLICK XP au héro et évolue automatiquement si le seuil est atteint.
