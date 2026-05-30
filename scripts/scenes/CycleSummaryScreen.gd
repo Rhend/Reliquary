@@ -342,20 +342,20 @@ func _count_stat(stat: Dictionary) -> void:
 
 # Remplit une barre XP et son label de 0 → target (EASE_OUT CUBIC).
 func _fill_xp_bar(xp: Dictionary) -> void:
-	var bar     : ProgressBar = xp["bar"]
-	var xp_lbl  : Label       = xp["xp_label"]
-	var target  : float       = xp["target"]
-	var max_val : float       = xp["max_val"]
+	var bar     : XPCard = xp["bar"]
+	var xp_lbl  : Label  = xp["xp_label"]
+	var target  : float  = xp["target"]
+	var max_val : float  = xp["max_val"]
 
-	bar.max_value = max_val
-	bar.value     = 0.0
-	xp_lbl.text   = "+0 XP"
+	bar.xp_fill = 0.0
+	xp_lbl.text = "+0 XP"
 
 	if target <= 0.0:
 		return
 
+	var frac_target := clampf(target / max_val, 0.0, 1.0) if max_val > 0.0 else 0.0
 	var tw := create_tween().set_parallel(true)
-	tw.tween_property(bar, "value", target, 0.75) \
+	tw.tween_property(bar, "xp_fill", frac_target, 0.75) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_method(func(v: float) -> void:
 		xp_lbl.text = "+%.0f XP" % v
@@ -454,23 +454,8 @@ func _xp_card(icon: String, label: String, xp_max: float,
 	xp_lbl.add_theme_color_override("font_color", icon_color)
 	hb.add_child(xp_lbl)
 
-	var bar := ProgressBar.new()
-	bar.min_value           = 0.0
-	bar.max_value           = xp_max
-	bar.value               = 0.0
-	bar.show_percentage     = false
-	bar.custom_minimum_size = Vector2(0, 5)
-
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = icon_color
-	fill.set_corner_radius_all(2)
-	bar.add_theme_stylebox_override("fill", fill)
-
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = UIColors.BG_BAR
-	bg_style.set_corner_radius_all(2)
-	bar.add_theme_stylebox_override("background", bg_style)
-
+	# Barre XP universelle (XPCard + bulles). Animée via xp_fill dans _fill_xp_bar.
+	var bar := UIHelpers.xp_bar(0.0, xp_max, icon_color, 12, false)
 	vb.add_child(bar)
 
 	return {"container": wrapper, "bar": bar, "xp_label": xp_lbl}
