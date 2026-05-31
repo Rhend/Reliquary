@@ -14,12 +14,58 @@
 # Usage : Balance.CRIT_CHANCE, Balance.XP_THRESHOLDS, etc.
 #
 # Ce qui N'EST PAS ici (volontairement) :
-#   • Stats de base par entité           → fichiers .tres (contenu)
 #   • Tables d'événements par biome       → .tres des biomes
 #   • Configs de passifs (bouclier/poison)→ .tres des passifs
 #   • Cadence/timings & animations        → AdventureSystem / CombatPlayer
 # ============================================================
 class_name Balance
+
+# ═══════════════════════════════════════════════════════════
+#  Stats du héro par palier de Maîtrise [T0..T5]
+#  Source de vérité (spec "Fondations du jeu").
+#  T3-T5 extrapolés à ~×1.7/tier HP/ATK, ×2.0 DEF.
+# ═══════════════════════════════════════════════════════════
+
+const HERO_HP_PER_TIER:  Array[int] = [100, 160, 280, 470, 785, 1300]
+const HERO_ATK_PER_TIER: Array[int] = [20,  32,  55,  90,  150, 245]
+const HERO_DEF_PER_TIER: Array[int] = [2,   4,   8,   16,  32,  60]
+const HERO_VIT: int = 20  # constant à tous les paliers
+
+# ═══════════════════════════════════════════════════════════
+#  Stats génériques des créatures par palier [T0..T5]
+#  Surface et Profondeur — valeurs de référence spec.
+#  DEF = 0 (première passe). VIT stocké par créature dans .tres.
+#  T3-T5 extrapolés à ~×1.63/tier HP, ~×1.6/tier ATK.
+# ═══════════════════════════════════════════════════════════
+
+const CREATURE_SURFACE_HP:  Array[int] = [40,  64,  105, 175, 285, 470]
+const CREATURE_SURFACE_ATK: Array[int] = [10,  15,  24,  38,  60,  96]
+
+const CREATURE_PROFONDEUR_HP:  Array[int] = [60,  95,  155, 255, 415, 675]
+const CREATURE_PROFONDEUR_ATK: Array[int] = [14,  21,  33,  53,  85,  135]
+
+# ═══════════════════════════════════════════════════════════
+#  Pièges — dégâts en % des PV max du héro (palier Commun)
+#  Modulés par zone. Première passe ; la modulation par
+#  Maîtrise du piège sera calibrée dans une passe dédiée.
+# ═══════════════════════════════════════════════════════════
+
+const TRAP_DMG_PCT_SURFACE:    float = 0.08
+const TRAP_DMG_PCT_PROFONDEUR: float = 0.15
+const TRAP_DMG_PCT_ABYSSE:     float = 0.30
+
+# ─── Saignement (infligé par certains pièges) ─────────────
+const BLEED_DMG_PCT:  float = 0.02  # % PV max par événement
+const BLEED_DURATION: int   = 3     # nombre d'événements
+
+# ═══════════════════════════════════════════════════════════
+#  Bénédictions — effets de base (palier Commun)
+#  La modulation par Maîtrise de la bénédiction sera calibrée
+#  dans une passe dédiée.
+# ═══════════════════════════════════════════════════════════
+
+const BLESS_HEAL_PCT:     float = 0.15  # % PV max restaurés (indépendant de la zone)
+const BLESS_XP_BONUS_PCT: float = 0.50  # bonus d'XP de base sur le prochain événement
 
 # ═══════════════════════════════════════════════════════════
 #  Combat — résolution (CombatResolver)

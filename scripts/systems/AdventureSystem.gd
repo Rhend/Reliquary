@@ -74,6 +74,10 @@ var _cycle_xp_passives_total:  float      = 0.0
 var _cycle_xp_passives_detail: Dictionary = {}
 # XP par entité rencontrée ce cycle (créatures, pièges, bénédictions).
 var _cycle_xp_entities_detail: Dictionary = {}
+# Saignement : ticks restants et dégâts par tick (calculés à l'application).
+var _bleed_remaining: int   = 0
+# Bénédiction XP : multiplicateur d'XP de base appliqué UNE fois sur le prochain événement.
+var _bless_xp_mult:   float = 1.0
 
 func _ready() -> void:
 	_encounter_timer          = Timer.new()
@@ -145,6 +149,8 @@ func start_adventure(biome_id: String) -> void:
 	_cycle_xp_passives_total  = 0.0
 	_cycle_xp_passives_detail = {}
 	_cycle_xp_entities_detail = {}
+	_bleed_remaining          = 0
+	_bless_xp_mult            = 1.0
 
 	_pick_modifier()
 
@@ -248,7 +254,9 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 	EventBus.adventure_event_resolved.emit(enc_data)
 	_check_zone_transition()
 	_apply_regen(hero_id)
-	_schedule_next_encounter()
+	_tick_bleed()
+	if is_running:
+		_schedule_next_encounter()
 
 # Multiplicateur d'intensité des pièges et bénédictions selon la zone.
 func _get_zone_intensity() -> float:
@@ -257,20 +265,26 @@ func _get_zone_intensity() -> float:
 		Enums.Zone.ABYSSE:     return Balance.ZONE_INTENSITY_ABYSSE
 		_:                     return Balance.ZONE_INTENSITY_SURFACE
 
-# Applique l'effet d'une bénédiction (soin ou bonus de luck), modulé par la zone.
+# Applique l'effet d'une bénédiction.
+# heal     → % PV max depuis Balance (indépendant de la zone).
+# xp_bonus → multiplie l'XP de base du prochain événement.
+# luck     → valeur × intensité de zone (comportement inchangé).
 func _apply_benediction_effect(bene: Dictionary) -> void:
-	var effect_type  = bene.get("effet", "")
-	var effect_value = float(bene.get("valeur", 0.0)) * _get_zone_intensity()
+	var effect_type := bene.get("effet", "") as String
 
 	match effect_type:
 		"heal":
-			var max_hp = get_max_hp()
-			var healed = minf(effect_value, max_hp - current_hp)
-			current_hp = minf(current_hp + effect_value, max_hp)
+			var max_hp := get_max_hp()
+			var healed := maxf(0.0, max_hp * Balance.BLESS_HEAL_PCT)
+			current_hp  = minf(current_hp + healed, max_hp)
 			EventBus.heal_applied.emit(healed, current_hp)
 
+		"xp_bonus":
+			_bless_xp_mult = 1.0 + Balance.BLESS_XP_BONUS_PCT
+
 		"luck":
-			_cycle_luck += int(effect_value)
+			var luck_val := float(bene.get("valeur", 0.0)) * _get_zone_intensity()
+			_cycle_luck  += int(luck_val)
 			EventBus.luck_boosted.emit(_cycle_luck)
 
 # Distribue l'XP de Maîtrise d'un événement résolu à TOUTES les entités actives :
@@ -281,7 +295,8 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 func _distribute_mastery_xp(event_id: String, event_base: float) -> void:
 	if event_id == "":
 		return
-	var base       := event_base * float(current_modifier.get("xp_mult", 1.0))
+	var base       := event_base * float(current_modifier.get("xp_mult", 1.0)) * _bless_xp_mult
+	_bless_xp_mult  = 1.0  # consommé une seule fois
 	var event_tier := int(GameData.get_entity(event_id).get("maitrise_actuelle", 0))
 
 	MasterySystem.add_xp_to_entity(event_id, base, event_tier)                                       # entité rencontrée
@@ -320,7 +335,11 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	else:
 		_cycle_events          += 1
 		_cycle_traps_triggered += 1
-		current_hp = maxf(current_hp - float(trap.get("degats", 10)) * _get_zone_intensity(), 0.0)
+		var max_hp := get_max_hp()
+		current_hp  = maxf(current_hp - max_hp * _trap_dmg_pct(), 0.0)
+		if trap.get("inflict_saignement", false):
+			_bleed_remaining = Balance.BLEED_DURATION
+			enc_data["saignement"] = true
 		GameData.record_encounter(
 			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, 5.0
 		)
@@ -330,7 +349,9 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 		else:
 			_check_zone_transition()
 			_apply_regen(hero_id)
-			_schedule_next_encounter()
+			_tick_bleed()
+			if is_running:
+				_schedule_next_encounter()
 
 # ═══════════════════════════════════════════════════════════
 #  Résultat de combat
@@ -391,7 +412,9 @@ func _resolve_victory(enemy: Dictionary) -> void:
 
 	_check_zone_transition()
 	_apply_regen(hero_id)
-	_schedule_next_encounter(COMBAT_POST_DELAY)
+	_tick_bleed()
+	if is_running:
+		_schedule_next_encounter(COMBAT_POST_DELAY)
 
 # ═══════════════════════════════════════════════════════════
 #  Utilitaires internes
@@ -406,6 +429,26 @@ func _apply_regen(_hero_id: String) -> void:
 		return
 	var max_hp := get_max_hp()
 	current_hp  = minf(current_hp + max_hp * regen_pct, max_hp)
+
+# Applique un tick de saignement (Balance.BLEED_DMG_PCT × PV max).
+# Non-cumulatif : un nouveau piège saignant réinitialise la durée.
+func _tick_bleed() -> void:
+	if _bleed_remaining <= 0:
+		return
+	var max_hp := get_max_hp()
+	var dmg    := max_hp * Balance.BLEED_DMG_PCT
+	current_hp  = maxf(current_hp - dmg, 0.0)
+	_bleed_remaining -= 1
+	EventBus.bleed_ticked.emit(dmg, current_hp, _bleed_remaining)
+	if current_hp <= 0.0:
+		_end_adventure(false)
+
+# Retourne le % de dégâts de piège pour la zone courante.
+func _trap_dmg_pct() -> float:
+	match zone_courante:
+		Enums.Zone.PROFONDEUR: return Balance.TRAP_DMG_PCT_PROFONDEUR
+		Enums.Zone.ABYSSE:     return Balance.TRAP_DMG_PCT_ABYSSE
+		_:                     return Balance.TRAP_DMG_PCT_SURFACE
 
 # Calcule les PV max effectifs du héro (stats de base + équipement + passifs).
 func get_max_hp() -> float:
@@ -571,16 +614,26 @@ func _build_available_creatures(biome_id: String) -> void:
 			_pool_add(surface,    Balance.POOL_WEIGHT_DEEP_SURFACE)
 			_pool_add(profondeur, Balance.POOL_WEIGHT_DEEP_DEEP)
 
-# Convertit un dict créature en entrée de combat et l'ajoute au pool avec son poids.
+# Convertit un dict créature en entrée de combat et l'ajoute au pool.
+# Utilise le tier de Maîtrise réel de la créature et descend dans stats_par_palier
+# jusqu'à trouver le tier le plus proche ≤ tier courant.
 func _pool_add(creature: Dictionary, weight: float) -> void:
 	if creature.is_empty():
 		return
-	var s := (creature.get("stats_par_palier", {}) as Dictionary).get(0, {}) as Dictionary
+	var tier := int(creature.get("maitrise_actuelle", 0))
+	var spp  := creature.get("stats_par_palier", {}) as Dictionary
+	var s    := {} as Dictionary
+	var t    := tier
+	while t >= 0:
+		if spp.has(t):
+			s = spp[t] as Dictionary
+			break
+		t -= 1
 	available_creatures.append({
 		"data": {
 			"id":         creature.get("id", ""),
 			"name":       creature.get("nom_affichage_fr", ""),
-			"tier":       0,
+			"tier":       tier,
 			"atk":        s.get("atk",       10),
 			"def":        s.get("def",        0),
 			"hp":         s.get("hp",         50),
@@ -710,7 +763,9 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 
 	var hero_id: String = GameData.player.get("active_creature_id", "")
 	_apply_regen(hero_id)
-	_schedule_next_encounter(COMBAT_POST_DELAY)
+	_tick_bleed()
+	if is_running:
+		_schedule_next_encounter(COMBAT_POST_DELAY)
 
 # ═══════════════════════════════════════════════════════════
 #  Zones

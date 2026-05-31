@@ -8,8 +8,8 @@ id = "lucky_charm"
 nom_affichage_fr = "Breloque porte-bonheur"
 nom_affichage_en = "Lucky Charm"
 biome_source_id = "biome_foret"
-effet = "luck"
-valeur = 5
+effet = "xp_bonus"
+valeur = 50
 
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

@@ -303,13 +303,40 @@ func palier_suivant_cost(entity_type: String, tier: int) -> float:
 		return 0.0
 	return float(xp_thresholds[next_idx])
 
-# Stats de base d'une entité après application de sa progression de tier.
-# Exemple : héro tier 2 avec tier_scaling.atk=3 → atk_base + 2×3 = +6 ATK.
+# Stats effectives d'une entité au palier courant.
+# Héro          → tables Balance.HERO_*_PER_TIER (non-linéaires, source unique).
+# Créatures     → stats_par_palier[tier] du .tres (descend jusqu'au tier 0 si nécessaire).
+# Équipements   → inchangé (géré par get_equipment_bonuses).
+# Autres entités→ formule linéaire (atk_base + tier × atk_par_tier).
 func get_effective_stats(entity_id: String) -> Dictionary:
 	var entity = get_entity(entity_id)
 	if entity.is_empty():
 		return {}
 	var tier := int(entity.get("maitrise_actuelle", 0))
+
+	if entity.get("entity_type", "") == "hero":
+		var t := clampi(tier, 0, Balance.HERO_HP_PER_TIER.size() - 1)
+		return {
+			"atk": Balance.HERO_ATK_PER_TIER[t],
+			"def": Balance.HERO_DEF_PER_TIER[t],
+			"hp":  Balance.HERO_HP_PER_TIER[t],
+			"vit": Balance.HERO_VIT,
+		}
+
+	var spp := entity.get("stats_par_palier", {}) as Dictionary
+	if not spp.is_empty():
+		var t := tier
+		while t >= 0:
+			if spp.has(t):
+				var s := spp[t] as Dictionary
+				return {
+					"atk": int(s.get("atk", 0)),
+					"def": int(s.get("def", 0)),
+					"hp":  int(s.get("hp",  0)),
+					"vit": int(s.get("vit", 20)),
+				}
+			t -= 1
+
 	return {
 		"atk": int(entity.get("atk", 0)) + tier * int(entity.get("atk_par_tier", 0)),
 		"def": int(entity.get("def", 0)) + tier * int(entity.get("def_par_tier", 0)),
