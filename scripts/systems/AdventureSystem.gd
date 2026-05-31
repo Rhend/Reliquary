@@ -37,6 +37,7 @@ const DEFAULT_REGEN_PCT:        float = 0.0
 const COMBO_HP_THRESHOLD:       float = 0.25
 const COMBO_ATK_BONUS_PCT:      float = 0.05  # +5 % ATK par niveau de combo au-dessus de 1
 const ZONE_TRANSITION_THRESHOLD: int  = 5     # événements résolus avant transition de zone
+const EVENT_MASTERY_XP:         float = 10.0  # XP de maîtrise gagnée par un piège/bénédiction à la rencontre
 
 # ─── Modificateurs de cycle disponibles ─────────────────────
 const CYCLE_MODIFIERS: Array = [
@@ -97,6 +98,8 @@ var _cycle_xp_hero:            float      = 0.0
 var _cycle_xp_biome:           float      = 0.0
 var _cycle_xp_passives_total:  float      = 0.0
 var _cycle_xp_passives_detail: Dictionary = {}
+# XP par entité rencontrée ce cycle (créatures, pièges, bénédictions).
+var _cycle_xp_entities_detail: Dictionary = {}
 
 func _ready() -> void:
 	_encounter_timer          = Timer.new()
@@ -120,6 +123,9 @@ func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
 			_cycle_xp_passives_total               += amount
 			_cycle_xp_passives_detail[entity_id]    = \
 				_cycle_xp_passives_detail.get(entity_id, 0.0) + amount
+		"creature", "trap", "benediction":
+			_cycle_xp_entities_detail[entity_id]    = \
+				_cycle_xp_entities_detail.get(entity_id, 0.0) + amount
 
 # ═══════════════════════════════════════════════════════════
 #  Interface publique
@@ -163,6 +169,7 @@ func start_adventure(biome_id: String) -> void:
 	_cycle_xp_biome           = 0.0
 	_cycle_xp_passives_total  = 0.0
 	_cycle_xp_passives_detail = {}
+	_cycle_xp_entities_detail = {}
 
 	_pick_modifier()
 
@@ -180,7 +187,7 @@ func stop_adventure() -> void:
 		CombatPlayer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
 	PassiveSystem.decrement_cooldowns()
-	CycleData.last_cycle_summary = _build_summary(false)
+	CycleData.last_cycle_summary = _build_summary(false, true)
 	EventBus.adventure_stopped.emit()
 
 # Bonus ATK/DEF du modificateur de cycle + bonus de combo.
@@ -255,6 +262,7 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 	if not benedictions.is_empty():
 		var bene             = benedictions[randi() % benedictions.size()]
 		enc_data["effect"]   = bene
+		_grant_event_mastery_xp(bene.get("id", ""))
 		GameData.record_encounter(
 			bene.get("id", ""), bene.get("nom_affichage_fr", "?"), "Bénédiction", current_biome_id, 5.0
 		)
@@ -290,6 +298,14 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 			_cycle_luck += int(effect_value)
 			EventBus.luck_boosted.emit(_cycle_luck)
 
+# Distribue l'XP de maîtrise à un piège/bénédiction rencontré — comme une créature.
+# generator_tier = tier de l'entité elle-même (écart 0 → ×1.0).
+func _grant_event_mastery_xp(entity_id: String) -> void:
+	if entity_id == "":
+		return
+	var xp := EVENT_MASTERY_XP * float(current_modifier.get("xp_mult", 1.0))
+	MasterySystem.add_xp_to_entity(entity_id, xp, GameData.get_entity(entity_id).get("current_tier", 0))
+
 # ─── Rencontre Piège ──────────────────────────────────────────
 
 # Tire un piège aléatoire et applique ses dégâts (sauf si modificateur "Fantôme").
@@ -304,6 +320,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 
 	var trap           = traps[randi() % traps.size()]
 	enc_data["trap"]   = trap
+	_grant_event_mastery_xp(trap.get("id", ""))
 
 	if current_modifier.get("ignore_traps", false):
 		enc_data["ignored"] = true
@@ -369,6 +386,9 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	# XP au héro (20 % de l'XP du cycle)
 	var hero_id = GameData.player.get("active_creature_id", "")
 	MasterySystem.add_xp_to_entity(hero_id, xp_earned * 0.20, gen_tier)
+
+	# XP de Maîtrise à la créature affrontée — elle s'endurcit à force de combats (design 4.1)
+	MasterySystem.add_xp_to_entity(enemy.get("id", ""), xp_earned, gen_tier)
 
 	# Hall des Évolutions
 	GameData.record_encounter(
@@ -628,9 +648,10 @@ func _end_adventure(victory: bool) -> void:
 	CycleData.last_cycle_summary = summary
 	EventBus.adventure_cycle_ended.emit(summary)
 
-func _build_summary(victory: bool) -> Dictionary:
+func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 	return {
 		"victory":              victory,
+		"interrupted":          interrupted,
 		"biome_id":             current_biome_id,
 		"creature_id":          GameData.player.get("active_creature_id", ""),
 		"modifier":             current_modifier,
@@ -639,6 +660,7 @@ func _build_summary(victory: bool) -> Dictionary:
 		"xp_biome":             _cycle_xp_biome,
 		"xp_passives_total":    _cycle_xp_passives_total,
 		"xp_passives_detail":   _cycle_xp_passives_detail,
+		"xp_entities_detail":   _cycle_xp_entities_detail,
 		"loot_total":           _cycle_loot,
 		"combo_max":            _cycle_combo_max,
 		"combats_won":          _cycle_combats_won,

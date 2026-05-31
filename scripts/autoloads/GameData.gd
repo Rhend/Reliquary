@@ -92,6 +92,9 @@ func _load_all_entities() -> void:
 	# Contenu VS : créatures, passifs uniques
 	_load_tres_entities_from_folder("res://data/creatures/",       "creature")
 	_load_tres_entities_from_folder("res://data/passifs_uniques/", "passif_unique")
+	# Pièges et bénédictions : entités de maîtrise (XP + évolution manuelle)
+	_load_tres_entities_from_folder("res://data/pieges/",          "trap")
+	_load_tres_entities_from_folder("res://data/benedictions/",    "benediction")
 	# Données statiques VS
 	_load_tres_data_from_folder("res://data/ingredients/", "ingredient")
 	_load_tres_data_from_folder("res://data/fragments/",   "fragment")

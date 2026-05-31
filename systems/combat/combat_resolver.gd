@@ -18,8 +18,8 @@
 class_name CombatResolver
 
 const GAUGE_THRESHOLD: float = 100.0
-const CRIT_CHANCE:     float = 0.10
-const CRIT_MULTIPLIER: float = 2.0
+const CRIT_CHANCE:     float = 0.20
+const CRIT_MULTIPLIER: float = 1.8
 const MAX_STEPS:       int   = 500
 
 static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
