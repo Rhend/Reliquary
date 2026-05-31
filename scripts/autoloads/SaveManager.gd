@@ -8,7 +8,7 @@
 #
 # Étendre la sauvegarde :
 #   • Nouvelle donnée joueur  → l'ajouter dans GameData.player (sauvegardé automatiquement).
-#   • Nouvelle entité         → rien à faire (détectée via current_tier).
+#   • Nouvelle entité         → rien à faire (détectée via maitrise_actuelle).
 #   • Nouvel état de système  → ajouter une clé dans _save_systems() et _load_systems().
 #
 # Déclenchement :
@@ -23,7 +23,7 @@
 extends Node
 
 const SAVE_PATH     := "user://IdleEvolutionSave.json"
-const SAVE_VER      := 9
+const SAVE_VER      := 10
 const SAVE_DEBOUNCE := 2.0
 
 var _save_dirty:  bool  = false
@@ -83,14 +83,14 @@ func _save_entities() -> Dictionary:
 		var e: Dictionary = GameData.entities[entity_id]
 		var entry: Dictionary = {}
 
-		if e.has("current_tier"):
-			entry["current_tier"]      = e.get("current_tier",      0)
-			entry["current_xp"]        = e.get("current_xp",        0.0)
+		if e.has("maitrise_actuelle"):
+			entry["maitrise_actuelle"]      = e.get("maitrise_actuelle",      0)
+			entry["xp_maitrise_actuelle"]        = e.get("xp_maitrise_actuelle",        0.0)
 			entry["unlocked_passives"] = e.get("unlocked_passives", [])
 
 		# Champs d'état propres aux nouvelles entités
 		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-				"est_collecte", "est_debloque", "quantite_en_stock", "maitrise_actuelle"]:
+				"est_collecte", "est_debloque", "quantite_en_stock"]:
 			if e.has(field):
 				entry[field] = e[field]
 
@@ -154,13 +154,14 @@ func _load_entities(data: Dictionary) -> void:
 		var saved: Dictionary = data["entities"][entity_id]
 		var e: Dictionary     = GameData.entities[entity_id]
 
-		if e.has("current_tier"):
-			e["current_tier"]      = saved.get("current_tier",      0)
-			e["current_xp"]        = saved.get("current_xp",        0.0)
+		if e.has("maitrise_actuelle"):
+			e["maitrise_actuelle"]      = saved.get("maitrise_actuelle",      0)
+			e["xp_maitrise_actuelle"]        = saved.get("xp_maitrise_actuelle",        0.0)
 			e["unlocked_passives"] = saved.get("unlocked_passives", [])
+			e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
 
 		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-				"est_collecte", "est_debloque", "quantite_en_stock", "maitrise_actuelle"]:
+				"est_collecte", "est_debloque", "quantite_en_stock"]:
 			if e.has(field) and saved.has(field):
 				e[field] = saved[field]
 

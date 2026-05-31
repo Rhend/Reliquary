@@ -1,0 +1,198 @@
+# ============================================================
+# Balance.gd — Source de vérité UNIQUE de l'équilibrage du jeu.
+#
+# Toutes les constantes d'équilibrage globales (combat, XP,
+# maîtrise, combo, drops, zones, modificateurs de cycle…) sont
+# regroupées ici pour pouvoir retoucher les chiffres et les
+# règles à un seul endroit lors des refontes mathématiques.
+#
+# Classe utilitaire (class_name), PAS un autoload : les
+# constantes se résolvent directement sur le type — y compris
+# depuis les fonctions statiques (ex. CombatResolver). Même
+# convention que UIHelpers.gd.
+#
+# Usage : Balance.CRIT_CHANCE, Balance.XP_THRESHOLDS, etc.
+#
+# Ce qui N'EST PAS ici (volontairement) :
+#   • Stats de base par entité           → fichiers .tres (contenu)
+#   • Tables d'événements par biome       → .tres des biomes
+#   • Configs de passifs (bouclier/poison)→ .tres des passifs
+#   • Cadence/timings & animations        → AdventureSystem / CombatPlayer
+# ============================================================
+class_name Balance
+
+# ═══════════════════════════════════════════════════════════
+#  Combat — résolution (CombatResolver)
+# ═══════════════════════════════════════════════════════════
+
+const GAUGE_THRESHOLD: float = 100.0  # jauge d'action requise pour agir (+VIT/tick)
+const CRIT_CHANCE:     float = 0.20   # probabilité de coup critique
+const CRIT_MULTIPLIER: float = 1.8    # multiplicateur de dégâts en cas de critique
+const MIN_DAMAGE:      float = 1.0    # plancher de dégâts après défense (ATK − DEF)
+
+# ─── Poison de biome (Marécage Putride) ──────────────────────
+const BIOME_POISON_DMG_PCT:   float = 0.05  # % de l'ATK héro infligé par stack
+const BIOME_POISON_MAX_STACKS: int  = 3     # stacks maximum
+const BIOME_POISON_DURATION:   int  = 3     # tours avant expiration des stacks
+
+# ─── Bouclier d'urgence (défauts si la config du passif est incomplète) ──
+const SHIELD_THRESHOLD_DEFAULT: float = 0.30  # % PV max déclenchant le bouclier
+const SHIELD_VALUE_PCT_DEFAULT: float = 0.15  # % PV max absorbé par le bouclier
+
+# ═══════════════════════════════════════════════════════════
+#  Progression — Maîtrise (ex-mastery_config.json)
+# ═══════════════════════════════════════════════════════════
+
+# XP requis pour franchir du palier n au palier n+1 (index = palier source).
+# Courbe : seuil(n) = 6000 × 2.2^n. L'index 0 est inutilisé (pas de palier −1→0).
+# Légendaire→Unique (index 5) ne concerne que biomes / pièges / bénédictions
+# (les créatures s'arrêtent à Légendaire — voir ENTITY_MAX_TIER).
+const XP_THRESHOLDS: Array = [0, 6000, 13200, 29040, 63888, 140554]
+
+# Modificateur d'XP selon l'écart de Maîtrise = (palier de l'entité − palier de l'événement),
+# clampé à ±4. Entité plus FAIBLE que l'événement (écart négatif) → plus d'XP (catch-up).
+# Table de correspondance FIXE (pas une formule : les deux branches n'ont pas la même progression).
+const XP_GAP_MODIFIERS: Dictionary = {
+	-4: 5.00, -3: 3.34, -2: 2.24, -1: 1.49,
+	 0: 1.00,  1: 0.47,  2: 0.22,  3: 0.11, 4: 0.05,
+}
+const XP_GAP_CLAMP: int = 4  # écart clampé à ±4
+
+# ═══════════════════════════════════════════════════════════
+#  XP de base par type d'événement résolu
+# ═══════════════════════════════════════════════════════════
+
+const XP_BASE_COMBAT:      float = 10.0  # créature résolue
+const XP_BASE_TRAP:        float = 6.0   # piège déclenché
+const XP_BASE_BENEDICTION: float = 6.0   # bénédiction rencontrée
+
+# ═══════════════════════════════════════════════════════════
+#  Coefficient de progression par type d'entité réceptrice
+# ═══════════════════════════════════════════════════════════
+# À chaque événement, XP reçue = XP de base × modificateur d'écart × coefficient.
+# Tout type absent → DEFAULT_XP_COEF (créatures, pièges, bénédictions, passifs, biomes : ×1.0).
+
+const DEFAULT_XP_COEF: float = 1.0
+const ENTITY_XP_COEF: Dictionary = {
+	"hero":    0.05,
+	"village": 0.75,
+}
+
+# ═══════════════════════════════════════════════════════════
+#  Palier maximum par type d'entité
+# ═══════════════════════════════════════════════════════════
+# Créatures (Surface/Profondeur) : s'arrêtent à Légendaire (4).
+# Tout le reste (pièges, bénédictions, biomes, village, héros, équipements) : Unique (5).
+
+const DEFAULT_MAX_TIER: int = 5
+const ENTITY_MAX_TIER: Dictionary = {
+	"creature": 4,
+}
+
+# ═══════════════════════════════════════════════════════════
+#  Plafond de Maîtrise des créatures selon le palier du biome
+# ═══════════════════════════════════════════════════════════
+# Palier max franchissable par une créature selon le palier du biome et sa zone.
+# L'XP au-delà du plafond n'est pas perdue : elle reste stockée et débloque des
+# paliers quand le biome monte (réévaluation à l'évolution du biome).
+# Profondeur : zone non débloquée tant que le biome < Rare (2) → absente de la table.
+# Clé = palier du biome (0..5), valeur = palier max de la créature.
+
+const CREATURE_CAP_SURFACE: Dictionary = {
+	0: 1, 1: 2, 2: 3, 3: 4, 4: 4, 5: 4,
+}
+const CREATURE_CAP_PROFONDEUR: Dictionary = {
+	2: 1, 3: 2, 4: 3, 5: 4,
+}
+
+# ═══════════════════════════════════════════════════════════
+#  Village — passage de Tier de bâtiments (distinct du palier de Maîtrise)
+# ═══════════════════════════════════════════════════════════
+# T1 → T2 (déblocage du Forgeron) : double condition simultanée
+#   1) XP de Maîtrise cumulée du Village ≥ VILLAGE_T2_XP
+#   2) Fragments de Mémoire ≥ requis (voir GameData.VILLAGE_TIER_REQUIREMENTS)
+
+const VILLAGE_T2_XP: float = 19200.0
+
+# ═══════════════════════════════════════════════════════════
+#  Combo
+# ═══════════════════════════════════════════════════════════
+
+const COMBO_HP_THRESHOLD:  float = 0.25  # PV perdu max (%) pour conserver le combo
+const COMBO_ATK_BONUS_PCT: float = 0.05  # +5 % ATK par niveau de combo au-dessus de 1
+
+# ═══════════════════════════════════════════════════════════
+#  Régénération
+# ═══════════════════════════════════════════════════════════
+
+const DEFAULT_REGEN_PCT: float = 0.0  # régen par défaut entre rencontres (hors modificateur)
+
+# ═══════════════════════════════════════════════════════════
+#  Bonus de maîtrise au combat (familiarité du bestiaire)
+# ═══════════════════════════════════════════════════════════
+
+const MASTERY_COMBAT_ATK_PER_TIER: float = 2.0  # ATK bonus par tier de bestiaire face à l'ennemi
+
+# ═══════════════════════════════════════════════════════════
+#  Luck
+# ═══════════════════════════════════════════════════════════
+
+const LUCK_EVENT_SHIFT_PER_POINT: float = 0.01  # déplacement piège→bénédiction par point de luck
+const LUCK_DROP_BONUS_PER_POINT:  float = 0.01  # bonus de chance de drop par point de luck
+
+# ═══════════════════════════════════════════════════════════
+#  Drops
+# ═══════════════════════════════════════════════════════════
+
+const CREATURE_INGREDIENT_DROP_CHANCE: float = 0.5  # chance de drop d'ingrédient par créature non-unique
+
+# ═══════════════════════════════════════════════════════════
+#  Zones
+# ═══════════════════════════════════════════════════════════
+
+const ZONE_TRANSITION_THRESHOLD: int = 5  # événements résolus avant transition de zone
+
+# Multiplicateur d'intensité des pièges et bénédictions selon la zone.
+const ZONE_INTENSITY_SURFACE:    float = 1.0
+const ZONE_INTENSITY_PROFONDEUR: float = 2.0
+const ZONE_INTENSITY_ABYSSE:     float = 3.5
+
+const ABYSS_BENEDICTION_CHANCE: float = 0.5  # Abysse : proba bénédiction (sinon piège)
+
+# Tier de Maîtrise du biome requis pour débloquer chaque zone.
+const ZONE_UNLOCK_TIER_PROFONDEUR: int = 2
+const ZONE_UNLOCK_TIER_ABYSSE:     int = 4
+
+# ═══════════════════════════════════════════════════════════
+#  Pondération du pool de créatures par zone
+# ═══════════════════════════════════════════════════════════
+
+const POOL_WEIGHT_SURFACE:      float = 100.0  # créature Surface en zone Surface
+const POOL_WEIGHT_DEEP_SURFACE: float = 30.0   # créature Surface en zone Profondeur
+const POOL_WEIGHT_DEEP_DEEP:    float = 70.0   # créature Profondeur en zone Profondeur
+
+# ═══════════════════════════════════════════════════════════
+#  Modificateurs de cycle (tirage pondéré au lancement d'aventure)
+# ═══════════════════════════════════════════════════════════
+
+const CYCLE_MODIFIERS: Array = [
+	{
+		"id": "none", "name": "—", "desc": "", "xp_mult": 1.0, "weight": 66
+	},
+	{
+		"id": "bonus_xp", "name": "Cycle Chanceux",
+		"desc": "XP ×1.5 ce cycle", "xp_mult": 1.5, "weight": 15
+	},
+	{
+		"id": "resilient", "name": "Endurance",
+		"desc": "Régénère 30 % entre combats", "xp_mult": 0.8, "regen_pct": 0.30, "weight": 10
+	},
+	{
+		"id": "ghost", "name": "Fantôme",
+		"desc": "Pièges ignorés, XP ×0.7", "xp_mult": 0.7, "ignore_traps": true, "weight": 5
+	},
+	{
+		"id": "berserker_mod", "name": "Frénésie",
+		"desc": "ATK ×1.3, DEF ×0.6", "xp_mult": 1.1, "atk_mult": 1.3, "def_mult": 0.6, "weight": 4
+	},
+]

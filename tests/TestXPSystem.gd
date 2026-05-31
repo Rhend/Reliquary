@@ -15,15 +15,16 @@ func _run_all_tests() -> void:
 
 func _test_xp_modifiers() -> void:
 	print("\n[TEST] Modificateurs XP")
-	# [generator_tier, receiver_tier, base_xp, expected_result]
+	# [event_tier, receiver_tier, base_xp, expected_result]
+	# écart = receiver − event ; entité plus faible que l'événement → plus d'XP.
 	var cases = [
-		[0, 0, 10.0, 10.0 ],   # même palier       → 100%
-		[1, 0, 10.0,  7.0 ],   # générateur +1     →  70%
-		[0, 1, 10.0, 15.0 ],   # générateur -1     → 150%
-		[4, 0, 10.0,  0.5 ],   # générateur +4     →   5%
-		[0, 4, 10.0, 50.0 ],   # générateur -4     → 500%
-		[2, 0, 10.0,  4.0 ],   # générateur +2     →  40%
-		[0, 2, 10.0, 20.0 ],   # générateur -2     → 200%
+		[0, 0, 10.0, 10.0 ],   # même palier              → 100%
+		[1, 0, 10.0, 14.9 ],   # entité 1 SOUS l'événement → 149%
+		[0, 1, 10.0,  4.7 ],   # entité 1 au-dessus        →  47%
+		[4, 0, 10.0, 50.0 ],   # entité 4 sous             → 500%
+		[0, 4, 10.0,  0.5 ],   # entité 4 au-dessus        →   5%
+		[2, 0, 10.0, 22.4 ],   # entité 2 sous             → 224%
+		[0, 2, 10.0,  2.2 ],   # entité 2 au-dessus        →  22%
 	]
 	var passed = 0
 	for c in cases:
@@ -47,8 +48,8 @@ func _test_evolution() -> void:
 		return
 
 	# Remise à zéro
-	entity["current_tier"] = 0
-	entity["current_xp"]   = 0.0
+	entity["maitrise_actuelle"] = 0
+	entity["xp_maitrise_actuelle"]   = 0.0
 	entity["unlocked_passives"] = []
 
 	# Doit refuser l'évolution sans XP
@@ -56,11 +57,11 @@ func _test_evolution() -> void:
 	print("  Refus sans XP suffisant : %s" % ("OK" if refused else "ECHEC"))
 
 	# Donner exactement le seuil du palier 1
-	entity["current_xp"] = float(GameData.xp_thresholds[1])
+	entity["xp_maitrise_actuelle"] = float(GameData.xp_thresholds[1])
 	var evolved = MasterySystem.evolve_entity(test_id)
 	print("  Évolution vers palier 1 : %s" % ("OK" if evolved else "ECHEC"))
-	print("  Palier actuel = %d (%s)" % [entity["current_tier"], GameData.get_tier_name(entity["current_tier"])])
-	print("  XP résiduel   = %.1f" % entity["current_xp"])
+	print("  Palier actuel = %d (%s)" % [entity["maitrise_actuelle"], GameData.get_tier_name(entity["maitrise_actuelle"])])
+	print("  XP résiduel   = %.1f" % entity["xp_maitrise_actuelle"])
 
 	# Vérifier le déverrouillage du passif au palier 1
 	var has_passive = "passive_regeneration" in entity.get("unlocked_passives", [])
@@ -74,11 +75,11 @@ func _test_xp_distribution() -> void:
 	GameData.player["active_passives"]    = []
 
 	var entity = GameData.get_entity(creature_id)
-	entity["current_tier"] = 0
-	entity["current_xp"]   = 0.0
+	entity["maitrise_actuelle"] = 0
+	entity["xp_maitrise_actuelle"]   = 0.0
 
 	MasterySystem.add_xp_to_all_active(100.0, 0)
 
-	var xp_after = entity.get("current_xp", 0.0)
+	var xp_after = entity.get("xp_maitrise_actuelle", 0.0)
 	var ok       = abs(xp_after - 100.0) < 0.001
 	print("  Créature reçoit 100 XP (même palier) : %s (valeur=%.1f)" % ["OK" if ok else "ECHEC", xp_after])

@@ -8,7 +8,7 @@
 #
 # Structure des entités :
 #   • Entités à maîtrise (creature / biome / passive / equipment) :
-#     dict JSON + entity_type + current_tier + current_xp + unlocked_passives
+#     dict JSON + entity_type + maitrise_actuelle + xp_maitrise_actuelle + unlocked_passives
 #   • Données statiques (resource / recipe) :
 #     dict JSON + entity_type  (pas de progression)
 # ============================================================
@@ -28,11 +28,13 @@ const VILLAGE_TIER_REQUIREMENTS: Array[int] = [
 	1,  # T1→T2 : 1 Fragment requis
 ]
 
-# ─── Données chargées depuis mastery_config.json ────────────
+# ─── Données de progression (source : Balance.gd) ───────────
+# Référencées ici pour rester le point d'accès runtime habituel
+# (GameData.xp_thresholds) ; la source de vérité reste Balance.
 
 # XP cumulatif requis pour atteindre chaque tier [0, 100, 500, …]
 var xp_thresholds: Array = []
-# Dictionnaire écart_de_tier (string) → multiplicateur d'XP reçu (float)
+# Dictionnaire écart_de_tier (int) → multiplicateur d'XP reçu (float)
 var xp_modifiers: Dictionary = {}
 
 # ─── Catalogue d'entités ────────────────────────────────────
@@ -48,6 +50,7 @@ var pending_evolution: Dictionary = {}
 var village: Dictionary = {
 	"tier_actuel":         1,
 	"fragments_collectes": [],
+	"xp_maitrise":         0.0,   # XP de Maîtrise cumulée du Village (coef ×0.75) — gate de passage de Tier
 }
 
 var player: Dictionary = {
@@ -73,17 +76,14 @@ var player: Dictionary = {
 # ═══════════════════════════════════════════════════════════
 
 func _ready() -> void:
-	_load_mastery_config()
+	_init_progression_constants()
 	_load_all_entities()
 	EventBus.entity_evolved.connect(_on_entity_evolved)
 
-func _load_mastery_config() -> void:
-	var config = _read_json("res://data/mastery_config.json")
-	if config.is_empty():
-		push_error("GameData: mastery_config.json introuvable ou invalide")
-		return
-	xp_thresholds = config.get("xp_thresholds", [])
-	xp_modifiers  = config.get("xp_modifiers",  {})
+# Référence les constantes de progression depuis Balance (source unique).
+func _init_progression_constants() -> void:
+	xp_thresholds = Balance.XP_THRESHOLDS
+	xp_modifiers  = Balance.XP_GAP_MODIFIERS
 
 # Charge toutes les entités depuis leurs dossiers respectifs.
 func _load_all_entities() -> void:
@@ -100,7 +100,7 @@ func _load_all_entities() -> void:
 	_load_tres_data_from_folder("res://data/fragments/",   "fragment")
 	# Héro : chargé depuis .tres (source de vérité)
 	_load_tres_entities_from_folder("res://data/hero/", "hero")
-	_load_entities_from_folder("res://data/passives/",  "passive")
+	_load_tres_entities_from_folder("res://data/passives/", "passive")
 	_load_tres_entities_from_folder("res://data/equipements/", "equipment")
 	# Données statiques JSON
 	_load_data_from_folder("res://data/resources/", "resource")
@@ -119,10 +119,14 @@ func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:
 			var id_val = res.get("id") if res != null else null
 			if id_val != null and id_val != "":
 				var data := _resource_to_dict(res)
-				data["entity_type"]       = entity_type
-				data["current_tier"]      = 0
-				data["current_xp"]        = 0.0
+				data["entity_type"] = entity_type
+				# maitrise_actuelle / xp_maitrise_actuelle proviennent du .tres (source de vérité).
+				if not data.has("maitrise_actuelle"):
+					data["maitrise_actuelle"] = 0
+				if not data.has("xp_maitrise_actuelle"):
+					data["xp_maitrise_actuelle"] = 0.0
 				data["unlocked_passives"] = []
+				data["xp_maitrise_palier_suivant"] = palier_suivant_cost(entity_type, int(data["maitrise_actuelle"]))
 				entities[data["id"]] = data
 		file_name = dir.get_next()
 	dir.list_dir_end()
@@ -166,25 +170,6 @@ func _resource_to_dict(res: Resource) -> Dictionary:
 			else:
 				data[prop.name] = val
 	return data
-
-# Charge un dossier JSON et initialise les champs de maîtrise.
-func _load_entities_from_folder(path: String, entity_type: String) -> void:
-	var dir = DirAccess.open(path)
-	if dir == null:
-		return
-	dir.list_dir_begin()
-	var file_name = dir.get_next()
-	while file_name != "":
-		if file_name.ends_with(".json"):
-			var data = _read_json(path + file_name)
-			if not data.is_empty() and data.has("id"):
-				data["entity_type"]       = entity_type
-				data["current_tier"]      = 0
-				data["current_xp"]        = 0.0
-				data["unlocked_passives"] = []
-				entities[data["id"]]      = data
-		file_name = dir.get_next()
-	dir.list_dir_end()
 
 # Charge un dossier de données statiques (sans champs de progression).
 func _load_data_from_folder(path: String, entity_type: String) -> void:
@@ -231,6 +216,10 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 	if entity.get("entity_type", "") != "biome":
 		return
 
+	# Le plafond des créatures du biome vient de monter : réévaluer leur XP stockée
+	# pour signaler les paliers redevenus franchissables (cf. plafonnement créature/biome).
+	MasterySystem.reevaluate_creatures_for_biome(entity_id)
+
 	# Rare (tier 2) → libération du Fragment
 	if new_tier == 2:
 		for fid in entities:
@@ -258,12 +247,27 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 		EventBus.biome_revele.emit(secondary_id)
 
 # Retourne true si le Village peut passer au Tier suivant.
+# T1 → T2 (Forgeron) : double condition — XP de Maîtrise ≥ VILLAGE_T2_XP ET Fragments ≥ requis.
 func can_upgrade_village() -> bool:
 	var current := int(village.get("tier_actuel", 1))
 	if current >= VILLAGE_TIER_REQUIREMENTS.size():
 		return false
 	var req := VILLAGE_TIER_REQUIREMENTS[current]
-	return village.get("fragments_collectes", []).size() >= req
+	if village.get("fragments_collectes", []).size() < req:
+		return false
+	if current == 1 and float(village.get("xp_maitrise", 0.0)) < Balance.VILLAGE_T2_XP:
+		return false
+	return true
+
+# Distribue de l'XP de Maîtrise au Village (accumulateur cumulé, coef ×0.75).
+# Le Village n'a pas encore de paliers de Maîtrise : son palier reste 0 pour le
+# calcul d'écart. Sert au gate de passage de Tier (voir can_upgrade_village).
+func add_village_mastery_xp(base_xp: float, event_tier: int) -> void:
+	var coef   := float(Balance.ENTITY_XP_COEF.get("village", Balance.DEFAULT_XP_COEF))
+	var gained := MasterySystem.calculate_xp(base_xp, event_tier, 0) * coef
+	if gained <= 0.0:
+		return
+	village["xp_maitrise"] = float(village.get("xp_maitrise", 0.0)) + gained
 
 # Passe le Village au Tier suivant. Retourne false si impossible.
 func upgrade_village() -> bool:
@@ -287,13 +291,25 @@ func get_tier_name(tier: int) -> String:
 		return "Inconnu"
 	return MASTERY_TIERS[tier]
 
+# Palier maximum d'un type d'entité (créatures → Légendaire 4 ; reste → Unique 5).
+func get_max_tier_for_type(entity_type: String) -> int:
+	return int(Balance.ENTITY_MAX_TIER.get(entity_type, Balance.DEFAULT_MAX_TIER))
+
+# Coût d'XP pour franchir le palier suivant (courbe Balance), ou 0.0 si palier max
+# de type atteint / hors courbe. Sert à alimenter xp_maitrise_palier_suivant.
+func palier_suivant_cost(entity_type: String, tier: int) -> float:
+	var next_idx := tier + 1
+	if tier >= get_max_tier_for_type(entity_type) or next_idx >= xp_thresholds.size():
+		return 0.0
+	return float(xp_thresholds[next_idx])
+
 # Stats de base d'une entité après application de sa progression de tier.
 # Exemple : héro tier 2 avec tier_scaling.atk=3 → atk_base + 2×3 = +6 ATK.
 func get_effective_stats(entity_id: String) -> Dictionary:
 	var entity = get_entity(entity_id)
 	if entity.is_empty():
 		return {}
-	var tier := int(entity.get("current_tier", 0))
+	var tier := int(entity.get("maitrise_actuelle", 0))
 	return {
 		"atk": int(entity.get("atk", 0)) + tier * int(entity.get("atk_par_tier", 0)),
 		"def": int(entity.get("def", 0)) + tier * int(entity.get("def_par_tier", 0)),
@@ -484,8 +500,8 @@ func add_resource(item_id: String, qty: int) -> void:
 # ═══════════════════════════════════════════════════════════
 
 # Retourne un bonus d'ATK basé sur la maîtrise accumulée face à cet ennemi précis.
-# Formule : tier_hall × 2 ATK.
+# Formule : tier_hall × Balance.MASTERY_COMBAT_ATK_PER_TIER.
 # Récompense les joueurs qui s'acharnent sur le même type d'ennemi.
 func get_mastery_combat_bonus(enemy_id: String) -> float:
 	var entry = player.get("bestiary", {}).get(enemy_id, {})
-	return float(entry.get("tier", 0)) * 2.0
+	return float(entry.get("tier", 0)) * Balance.MASTERY_COMBAT_ATK_PER_TIER

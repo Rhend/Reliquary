@@ -52,7 +52,7 @@ func _apply_passive_effects(passive_id: String) -> void:
 	var passive = GameData.get_entity(passive_id)
 	if passive.is_empty():
 		return
-	var tier: int      = passive.get("current_tier", 0) as int
+	var tier: int      = passive.get("maitrise_actuelle", 0) as int
 	var te_list: Array = passive.get("tier_effects", [])
 	var effects: Array = []
 	if tier < te_list.size():
@@ -102,7 +102,7 @@ func get_passive_combat_effects(h_atk: float) -> Dictionary:
 		var passive := GameData.get_entity(pid)
 		if passive.is_empty():
 			continue
-		var tier: int      = passive.get("current_tier", 0) as int
+		var tier: int      = passive.get("maitrise_actuelle", 0) as int
 		var te_list: Array = passive.get("tier_effects", [])
 		if tier >= te_list.size():
 			continue

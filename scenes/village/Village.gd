@@ -61,8 +61,8 @@ func _active_creature() -> Dictionary:
 	return GameData.get_entity(cid)
 
 # Tier actuel de la créature active — détermine le layout et les couleurs du hub.
-func _current_tier() -> int:
-	return _active_creature().get("current_tier", 0) as int
+func _maitrise_actuelle() -> int:
+	return _active_creature().get("maitrise_actuelle", 0) as int
 
 # ─── Construction principale ──────────────────────────────────
 # Point d'entrée de construction : tier 0 → orbe cliquable, tier 1+ → hub hexagonal.
@@ -74,7 +74,7 @@ func _build_ui() -> void:
 	add_child(bg)
 
 	var creature := _active_creature()
-	var tier     := creature.get("current_tier", 0) as int
+	var tier     := creature.get("maitrise_actuelle", 0) as int
 	if tier == 0:
 		_build_tier0(creature)
 	else:
@@ -86,7 +86,7 @@ func _build_ui() -> void:
 # ─── Tier 0 : clicker ─────────────────────────────────────────
 func _build_tier0(creature: Dictionary) -> void:
 	var diam  := (RING_RADIUS + 24.0) * 2.0
-	var xp    := creature.get("current_xp", 0.0) as float
+	var xp    := creature.get("xp_maitrise_actuelle", 0.0) as float
 	var xpmax := float(GameData.xp_thresholds[1])
 
 	_ring = CircleRing.new()
@@ -119,7 +119,7 @@ func _build_tier0(creature: Dictionary) -> void:
 	_center(_xp_label, Vector2(0.0, 56.0), Vector2(160.0, 20.0))
 	add_child(_xp_label)
 
-	var from_t := creature.get("current_tier", 0) as int
+	var from_t := creature.get("maitrise_actuelle", 0) as int
 	_evolve_btn = Button.new()
 	_evolve_btn.text    = "ÉVOLUER ▲"
 	_evolve_btn.visible = MasterySystem.can_evolve("hero")
@@ -289,7 +289,7 @@ func _swap_panel_content(panel_id: String) -> void:
 # ─── Construction du cadre JRPG ──────────────────────────────
 # Crée le JRPGPanel, le titre, le bouton fermer et la zone scrollable.
 func _build_panel_frame(panel_id: String) -> void:
-	var tcolor := UIColors.tier_color(_current_tier())
+	var tcolor := UIColors.tier_color(_maitrise_actuelle())
 
 	var frame := JRPGPanel.new()
 	frame.panel_color = tcolor
@@ -357,8 +357,8 @@ func _fill_panel_content(panel_id: String) -> void:
 func _panel_hero() -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var c      := GameData.get_entity(cid)
-	var tier   := c.get("current_tier", 0) as int
-	var xp     := c.get("current_xp",   0.0) as float
+	var tier   := c.get("maitrise_actuelle", 0) as int
+	var xp     := c.get("xp_maitrise_actuelle",   0.0) as float
 	var ni     := mini(tier + 1, GameData.xp_thresholds.size() - 1)
 	var xpmax  := float(GameData.xp_thresholds[ni])
 	var can_ev := tier < GameData.MAX_TIER and xp >= xpmax
@@ -489,8 +489,8 @@ func _normalize_unique_passive(eid: String, e: Dictionary) -> Dictionary:
 	return {
 		"id":           eid,
 		"name":         e.get("nom_affichage_fr", eid),
-		"current_tier": int(e.get("maitrise_actuelle", 0)),
-		"current_xp":   float(e.get("xp_maitrise_actuelle", 0.0)),
+		"maitrise_actuelle": int(e.get("maitrise_actuelle", 0)),
+		"xp_maitrise_actuelle":   float(e.get("xp_maitrise_actuelle", 0.0)),
 		"tier_effects": e.get("tier_effects", []),
 		"entity_type":  "passif_unique",
 	}
@@ -498,13 +498,13 @@ func _normalize_unique_passive(eid: String, e: Dictionary) -> Dictionary:
 # Retourne une carte dépliable pour un passif : en-tête (nom | palier | XP),
 # corps avec effet courant + cascade des paliers à débloquer.
 func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
-	var rarity   := pdata.get("current_tier", 0) as int
+	var rarity   := pdata.get("maitrise_actuelle", 0) as int
 	var rcolor   := UIColors.tier_color(rarity)
 	var rname    := GameData.get_tier_name(rarity)
 	var has_evos := rarity < GameData.MASTERY_TIERS.size() - 1
 
 	# Calcul de la progression XP vers le palier suivant
-	var xp_cur  : float = pdata.get("current_xp", 0.0) as float
+	var xp_cur  : float = pdata.get("xp_maitrise_actuelle", 0.0) as float
 	var xp_need : int   = 0
 	var xp_fill := 0.0
 	if has_evos and rarity + 1 < GameData.xp_thresholds.size():
@@ -621,7 +621,7 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	var tc      := UIColors.tier_color(t)
 	var tn      := GameData.get_tier_name(t)
 	var indent  := (t - base_rarity) * 14
-	var xp_cur  : float = pdata.get("current_xp", 0.0) as float
+	var xp_cur  : float = pdata.get("xp_maitrise_actuelle", 0.0) as float
 	var is_max  : bool  = t >= GameData.MAX_TIER
 	var xp_need : int   = 0
 	if not is_max and t + 1 < GameData.xp_thresholds.size():
@@ -703,7 +703,7 @@ func _xp_fmt(xp: int) -> String:
 
 # Panneau Expéditions : placeholder ou bouton de départ + accordéon des biomes disponibles.
 func _panel_adventure() -> void:
-	var tier   := _current_tier()
+	var tier   := _maitrise_actuelle()
 	var tcolor := UIColors.tier_color(tier)
 
 	# Invalide la sélection si l'entité n'existe plus (pas d'auto-select)
@@ -821,7 +821,7 @@ func _on_start_selected_expedition() -> void:
 # Construit la carte accordéon d'un biome avec ses catégories (créatures, pièges, etc.).
 # Retourne { wrapper, panel, section, arrow } pour que _panel_adventure connecte le gui_input.
 func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
-	var btier  := biome.get("current_tier", 0) as int
+	var btier  := biome.get("maitrise_actuelle", 0) as int
 	var bcolor := UIColors.tier_color(btier)
 	var bdisp  := MasteryRegistry.get_mastery_display(biome_id)
 	var pools  := MasteryRegistry.get_biome_entity_pools(biome_id)
@@ -1003,13 +1003,13 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 			is_equip   = entity.get("entity_type", "") == "equipment"
 			disp_name  = entry.get("nom_affichage_fr", entry.get("name", "?"))
 			if not entity.is_empty() and not is_equip:
-				entity_tier = entity.get("current_tier", 0)
-				entity_xp   = entity.get("current_xp",   0.0)
-				at_max      = entity_tier >= GameData.MAX_TIER
+				entity_tier = entity.get("maitrise_actuelle", 0)
+				entity_xp   = entity.get("xp_maitrise_actuelle",   0.0)
+				at_max      = entity_tier >= GameData.get_max_tier_for_type(entity.get("entity_type", ""))
 			elif not bentry.is_empty():
 				entity_tier = bentry.get("tier", entry.get("tier", 0))
 				entity_xp   = bentry.get("xp",   0.0)
-				at_max      = entity_tier >= GameData.MAX_TIER
+				at_max      = entity_tier >= GameData.get_max_tier_for_type(entity.get("entity_type", ""))
 			else:
 				entity_tier = entry.get("tier", 0)
 
@@ -1165,7 +1165,7 @@ func _panel_forge() -> void:
 		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		_rp_content.add_child(lbl)
 		return
-	var tcolor := UIColors.tier_color(int(_active_creature().get("current_tier", 0)))
+	var tcolor := UIColors.tier_color(int(_active_creature().get("maitrise_actuelle", 0)))
 
 	# ── Inventaire ingrédients ──────────────────────────────
 	_rp_content.add_child(UIHelpers.section_header("◆  INGRÉDIENTS", tcolor))
@@ -1237,11 +1237,11 @@ func _forge_equip_card(equip_id: String, equip: Dictionary, tcolor: Color) -> Co
 		lm.add_child(lbl)
 		return locked
 
-	var current_tier := int(equip.get("maitrise_actuelle", 0))
+	var equip_tier := int(equip.get("maitrise_actuelle", 0))
 	var nom          := equip.get("nom_affichage_fr", equip_id) as String
-	var tier_name    := GameData.get_tier_name(current_tier)
-	var at_max       := current_tier >= GameData.MAX_TIER
-	var next_tier    := current_tier + 1
+	var tier_name    := GameData.get_tier_name(equip_tier)
+	var at_max       := equip_tier >= GameData.MAX_TIER
+	var next_tier    := equip_tier + 1
 	var recipe       := GameData.get_forge_recipe(equip_id, next_tier)
 	var forgeable    := GameData.can_forge(equip_id)
 
@@ -1277,7 +1277,7 @@ func _forge_equip_card(equip_id: String, equip: Dictionary, tcolor: Color) -> Co
 	var tier_lbl := Label.new()
 	tier_lbl.text = tier_name
 	tier_lbl.add_theme_font_size_override("font_size", 12)
-	tier_lbl.add_theme_color_override("font_color", UIColors.tier_color(current_tier))
+	tier_lbl.add_theme_color_override("font_color", UIColors.tier_color(equip_tier))
 	header.add_child(tier_lbl)
 
 	if at_max:
@@ -1389,7 +1389,7 @@ func _rebuild_hub() -> void:
 	_hex_items.clear()
 	_active_panel_id = ""
 	var creature := _active_creature()
-	var tier     := creature.get("current_tier", 0) as int
+	var tier     := creature.get("maitrise_actuelle", 0) as int
 	if tier > 0:
 		_build_hub(creature, tier)
 
@@ -1497,20 +1497,20 @@ func _build_debug_buttons() -> void:
 # Incrémente le tier du héro, réinitialise son XP et recharge la scène.
 func _debug_tier_up() -> void:
 	var hero := GameData.get_entity("hero")
-	var tier := hero.get("current_tier", 0) as int
+	var tier := hero.get("maitrise_actuelle", 0) as int
 	if tier < GameData.MAX_TIER:
-		hero["current_tier"] = tier + 1
-		hero["current_xp"]   = 0.0
+		hero["maitrise_actuelle"] = tier + 1
+		hero["xp_maitrise_actuelle"]   = 0.0
 		SaveManager.save()
 		_launch_evolution_ritual("village", "hero", "Village", tier, tier + 1)
 
 # Décrémente le tier du héro, réinitialise son XP et recharge la scène.
 func _debug_tier_down() -> void:
 	var hero := GameData.get_entity("hero")
-	var tier := hero.get("current_tier", 0) as int
+	var tier := hero.get("maitrise_actuelle", 0) as int
 	if tier > 0:
-		hero["current_tier"] = tier - 1
-		hero["current_xp"]   = 0.0
+		hero["maitrise_actuelle"] = tier - 1
+		hero["xp_maitrise_actuelle"]   = 0.0
 		SaveManager.save()
 		_launch_evolution_ritual("village", "hero", "Village", tier, tier - 1)
 
@@ -1536,10 +1536,10 @@ func _build_fullscreen_btn() -> void:
 func _on_hero_click() -> void:
 	var hero  := GameData.get_entity("hero")
 	var xpmax := float(GameData.xp_thresholds[1])
-	if hero.get("current_xp", 0.0) as float >= xpmax:
+	if hero.get("xp_maitrise_actuelle", 0.0) as float >= xpmax:
 		return
-	var xp := minf(hero.get("current_xp", 0.0) as float + XP_PER_CLICK, xpmax)
-	hero["current_xp"] = xp
+	var xp := minf(hero.get("xp_maitrise_actuelle", 0.0) as float + XP_PER_CLICK, xpmax)
+	hero["xp_maitrise_actuelle"] = xp
 	_ring.fill_fraction = minf(xp / xpmax, 1.0)
 	_xp_label.text      = "%d / %d XP" % [int(xp), int(xpmax)]
 	EventBus.xp_gained.emit("hero", XP_PER_CLICK)
@@ -1606,7 +1606,7 @@ func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Calla
 	item.icon_text   = icon
 	item.label_text  = lbl
 	item.tier_color  = tcolor
-	item.tier        = _current_tier()
+	item.tier        = _maitrise_actuelle()
 	item.outward_dir = pos.normalized()
 	item.callback    = cb
 	_center(item, pos, HEX_SIZE)

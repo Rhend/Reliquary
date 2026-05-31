@@ -10,3 +10,7 @@ nom_affichage_en = "Magic Mushroom"
 biome_source_id = "biome_marecage"
 effet = "luck"
 valeur = 10
+
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0.0
+xp_maitrise_palier_suivant = 0.0

@@ -37,8 +37,8 @@ func _ready() -> void:
 func _fill_content(vb: VBoxContainer) -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var c      := GameData.get_entity(cid)
-	var tier   := c.get("current_tier", 0) as int
-	var xp     := c.get("current_xp",   0.0) as float
+	var tier   := c.get("maitrise_actuelle", 0) as int
+	var xp     := c.get("xp_maitrise_actuelle",   0.0) as float
 	var ni     := mini(tier + 1, GameData.xp_thresholds.size() - 1)
 	var xp_max := float(GameData.xp_thresholds[ni])
 	var can_ev := tier < GameData.MAX_TIER and xp >= xp_max

@@ -10,3 +10,7 @@ nom_affichage_en = "Lucky Charm"
 biome_source_id = "biome_foret"
 effet = "luck"
 valeur = 5
+
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0.0
+xp_maitrise_palier_suivant = 0.0

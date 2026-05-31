@@ -28,39 +28,13 @@
 # ============================================================
 extends Node
 
-# ─── Constantes ─────────────────────────────────────────────
+# ─── Constantes de cadence ──────────────────────────────────
+# (Timings de boucle uniquement. Tout l'équilibrage chiffré — XP,
+#  combo, régén, zones, modificateurs de cycle — est dans Balance.gd.)
 
-const FIRST_ENCOUNTER_DELAY:    float = 1.0   # délai avant la toute première rencontre du cycle
-const COMBAT_POST_DELAY:        float = 2.5   # pause après la fin d'un combat
-const INSTANT_EVENT_DELAY:      float = 1.0   # pause après piège ou bénédiction
-const DEFAULT_REGEN_PCT:        float = 0.0
-const COMBO_HP_THRESHOLD:       float = 0.25
-const COMBO_ATK_BONUS_PCT:      float = 0.05  # +5 % ATK par niveau de combo au-dessus de 1
-const ZONE_TRANSITION_THRESHOLD: int  = 5     # événements résolus avant transition de zone
-const EVENT_MASTERY_XP:         float = 10.0  # XP de maîtrise gagnée par un piège/bénédiction à la rencontre
-
-# ─── Modificateurs de cycle disponibles ─────────────────────
-const CYCLE_MODIFIERS: Array = [
-	{
-		"id": "none", "name": "—", "desc": "", "xp_mult": 1.0, "weight": 66
-	},
-	{
-		"id": "bonus_xp", "name": "Cycle Chanceux",
-		"desc": "XP ×1.5 ce cycle", "xp_mult": 1.5, "weight": 15
-	},
-	{
-		"id": "resilient", "name": "Endurance",
-		"desc": "Régénère 30 % entre combats", "xp_mult": 0.8, "regen_pct": 0.30, "weight": 10
-	},
-	{
-		"id": "ghost", "name": "Fantôme",
-		"desc": "Pièges ignorés, XP ×0.7", "xp_mult": 0.7, "ignore_traps": true, "weight": 5
-	},
-	{
-		"id": "berserker_mod", "name": "Frénésie",
-		"desc": "ATK ×1.3, DEF ×0.6", "xp_mult": 1.1, "atk_mult": 1.3, "def_mult": 0.6, "weight": 4
-	},
-]
+const FIRST_ENCOUNTER_DELAY: float = 1.0  # délai avant la toute première rencontre du cycle
+const COMBAT_POST_DELAY:     float = 2.5  # pause après la fin d'un combat
+const INSTANT_EVENT_DELAY:   float = 1.0  # pause après piège ou bénédiction
 
 # ─── État runtime ────────────────────────────────────────────
 
@@ -109,14 +83,15 @@ func _ready() -> void:
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.xp_gained.connect(_on_xp_gained_tracking)
 
-# Accumule l'XP biome et passifs pour le résumé de cycle.
+# Accumule l'XP héro/biome/passifs/entités pour le résumé de cycle.
 # Appelé par EventBus.xp_gained à chaque attribution MasterySystem.
-# Ignoré hors aventure et pour les héros (déjà comptés dans _resolve_victory).
 func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
 	if not is_running:
 		return
 	var entity := GameData.get_entity(entity_id)
 	match entity.get("entity_type", ""):
+		"hero":
+			_cycle_xp_hero += amount
 		"biome":
 			_cycle_xp_biome += amount
 		"passive":
@@ -193,7 +168,7 @@ func stop_adventure() -> void:
 # Bonus ATK/DEF du modificateur de cycle + bonus de combo.
 # Le combo donne +COMBO_ATK_BONUS_PCT par niveau au-dessus de 1.
 func get_modifier_bonuses() -> Dictionary:
-	var combo_mult = 1.0 + maxf(0.0, float(_combo_count - 1)) * COMBO_ATK_BONUS_PCT
+	var combo_mult = 1.0 + maxf(0.0, float(_combo_count - 1)) * Balance.COMBO_ATK_BONUS_PCT
 	return {
 		"atk_mult": float(current_modifier.get("atk_mult", 1.0)) * combo_mult,
 		"def_mult": float(current_modifier.get("def_mult", 1.0))
@@ -262,7 +237,7 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 	if not benedictions.is_empty():
 		var bene             = benedictions[randi() % benedictions.size()]
 		enc_data["effect"]   = bene
-		_grant_event_mastery_xp(bene.get("id", ""))
+		_distribute_mastery_xp(bene.get("id", ""), Balance.XP_BASE_BENEDICTION)
 		GameData.record_encounter(
 			bene.get("id", ""), bene.get("nom_affichage_fr", "?"), "Bénédiction", current_biome_id, 5.0
 		)
@@ -278,9 +253,9 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 # Multiplicateur d'intensité des pièges et bénédictions selon la zone.
 func _get_zone_intensity() -> float:
 	match zone_courante:
-		Enums.Zone.PROFONDEUR: return 2.0
-		Enums.Zone.ABYSSE:     return 3.5
-		_:                     return 1.0
+		Enums.Zone.PROFONDEUR: return Balance.ZONE_INTENSITY_PROFONDEUR
+		Enums.Zone.ABYSSE:     return Balance.ZONE_INTENSITY_ABYSSE
+		_:                     return Balance.ZONE_INTENSITY_SURFACE
 
 # Applique l'effet d'une bénédiction (soin ou bonus de luck), modulé par la zone.
 func _apply_benediction_effect(bene: Dictionary) -> void:
@@ -298,13 +273,24 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 			_cycle_luck += int(effect_value)
 			EventBus.luck_boosted.emit(_cycle_luck)
 
-# Distribue l'XP de maîtrise à un piège/bénédiction rencontré — comme une créature.
-# generator_tier = tier de l'entité elle-même (écart 0 → ×1.0).
-func _grant_event_mastery_xp(entity_id: String) -> void:
-	if entity_id == "":
+# Distribue l'XP de Maîtrise d'un événement résolu à TOUTES les entités actives :
+# l'entité rencontrée, le héro, le biome, le village et les passifs actifs.
+# Pour chacune : XP = base × modificateur d'écart × coefficient de type (cf. MasterySystem).
+# event_id   = id de l'entité rencontrée (créature / piège / bénédiction).
+# event_base = XP de base du type d'événement (avant modificateur de cycle).
+func _distribute_mastery_xp(event_id: String, event_base: float) -> void:
+	if event_id == "":
 		return
-	var xp := EVENT_MASTERY_XP * float(current_modifier.get("xp_mult", 1.0))
-	MasterySystem.add_xp_to_entity(entity_id, xp, GameData.get_entity(entity_id).get("current_tier", 0))
+	var base       := event_base * float(current_modifier.get("xp_mult", 1.0))
+	var event_tier := int(GameData.get_entity(event_id).get("maitrise_actuelle", 0))
+
+	MasterySystem.add_xp_to_entity(event_id, base, event_tier)                                       # entité rencontrée
+	MasterySystem.add_xp_to_entity(GameData.player.get("active_creature_id", ""), base, event_tier)  # héro
+	MasterySystem.add_xp_to_entity(current_biome_id, base, event_tier)                               # biome
+	MasterySystem.add_xp_to_all_active(base, event_tier)                                             # passifs actifs
+	GameData.add_village_mastery_xp(base, event_tier)                                                # village
+
+	_cycle_xp += base
 
 # ─── Rencontre Piège ──────────────────────────────────────────
 
@@ -320,7 +306,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 
 	var trap           = traps[randi() % traps.size()]
 	enc_data["trap"]   = trap
-	_grant_event_mastery_xp(trap.get("id", ""))
+	_distribute_mastery_xp(trap.get("id", ""), Balance.XP_BASE_TRAP)
 
 	if current_modifier.get("ignore_traps", false):
 		enc_data["ignored"] = true
@@ -372,27 +358,14 @@ func _on_combat_ended(result: Dictionary) -> void:
 
 # Distribue l'XP, le loot et les ingrédients après une victoire.
 func _resolve_victory(enemy: Dictionary) -> void:
-	var xp_base     = float(enemy.get("xp_reward", 10))
-	var gen_tier    = int(enemy.get("tier", 0))
-	var xp_mult     = float(current_modifier.get("xp_mult", 1.0))
-	var xp_earned   = xp_base * xp_mult
-
-	# XP aux passifs actifs
-	MasterySystem.add_xp_to_all_active(xp_earned, gen_tier)
-
-	# XP au biome (40 % de l'XP du cycle)
-	MasterySystem.add_xp_to_entity(current_biome_id, xp_earned * 0.40, gen_tier)
-
-	# XP au héro (20 % de l'XP du cycle)
 	var hero_id = GameData.player.get("active_creature_id", "")
-	MasterySystem.add_xp_to_entity(hero_id, xp_earned * 0.20, gen_tier)
 
-	# XP de Maîtrise à la créature affrontée — elle s'endurcit à force de combats (design 4.1)
-	MasterySystem.add_xp_to_entity(enemy.get("id", ""), xp_earned, gen_tier)
+	# XP de Maîtrise distribuée à toutes les entités actives (base de combat)
+	_distribute_mastery_xp(enemy.get("id", ""), Balance.XP_BASE_COMBAT)
 
 	# Hall des Évolutions
 	GameData.record_encounter(
-		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, xp_base
+		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, Balance.XP_BASE_COMBAT
 	)
 
 	# Loot ennemi
@@ -400,21 +373,19 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_drop_ingredient_from_creature(enemy)
 
 	# Ingrédients biome (uniquement si Village Tier ≥ 2)
-	if GameData.get_entity("hero").get("current_tier", 0) >= 2:
+	if GameData.get_entity("hero").get("maitrise_actuelle", 0) >= 2:
 		_drop_ingredients()
 
 	# Combo
 	var max_hp      = get_max_hp()
 	var hp_lost_pct = (_combat_start_hp - current_hp) / max_hp if max_hp > 0.0 else 1.0
-	if hp_lost_pct <= COMBO_HP_THRESHOLD:
+	if hp_lost_pct <= Balance.COMBO_HP_THRESHOLD:
 		_combo_count += 1
 	else:
 		_combo_count = 0
 	EventBus.combo_changed.emit(_combo_count)
 
 	# Statistiques du cycle
-	_cycle_xp          += xp_earned
-	_cycle_xp_hero     += xp_earned * 0.20
 	_cycle_combats_won += 1
 	_cycle_combo_max    = maxi(_cycle_combo_max, _combo_count)
 
@@ -429,7 +400,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 # Régénère regen_pct% des PV max après chaque rencontre.
 # Sources : modificateur de cycle (regen_pct) + passifs actifs (hp_regen_pct).
 func _apply_regen(_hero_id: String) -> void:
-	var regen_pct := float(current_modifier.get("regen_pct", DEFAULT_REGEN_PCT)) \
+	var regen_pct := float(current_modifier.get("regen_pct", Balance.DEFAULT_REGEN_PCT)) \
 			+ PassiveSystem.get_effect("hp_regen_pct")
 	if regen_pct <= 0.0:
 		return
@@ -457,7 +428,7 @@ func _schedule_next_encounter(delay: float = INSTANT_EVENT_DELAY) -> void:
 func _roll_encounter_type() -> String:
 	# Abysse : pas de combat — 50 % bénédictions / 50 % pièges
 	if zone_courante == Enums.Zone.ABYSSE:
-		return "benediction" if randf() < 0.5 else "trap"
+		return "benediction" if randf() < Balance.ABYSS_BENEDICTION_CHANCE else "trap"
 
 	# Surface et Profondeur : distribution standard du biome
 	var biome      = GameData.get_entity(current_biome_id)
@@ -470,7 +441,7 @@ func _roll_encounter_type() -> String:
 
 	var luck        = float(_get_effective_luck())
 	var trap_base   = float(event_table.get("trap", 0.15))
-	var luck_shift  = minf(luck * 0.01, trap_base)
+	var luck_shift  = minf(luck * Balance.LUCK_EVENT_SHIFT_PER_POINT, trap_base)
 
 	var creature_chance    = float(event_table.get("creature",    0.70))
 	var benediction_chance = float(event_table.get("benediction", 0.15)) + luck_shift
@@ -486,12 +457,12 @@ func _roll_encounter_type() -> String:
 # Tire le modificateur de cycle par tirage pondéré.
 func _pick_modifier() -> void:
 	var total_weight: int = 0
-	for m in CYCLE_MODIFIERS:
+	for m in Balance.CYCLE_MODIFIERS:
 		total_weight += int(m.get("weight", 1))
 
 	var roll       = randi() % total_weight
 	var cumulative = 0
-	for m in CYCLE_MODIFIERS:
+	for m in Balance.CYCLE_MODIFIERS:
 		cumulative += int(m.get("weight", 1))
 		if roll < cumulative:
 			current_modifier = m
@@ -505,7 +476,7 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 	if pool.is_empty():
 		return
 	var drops:      Array = []
-	var luck_bonus: float = float(_get_effective_luck()) * 0.01
+	var luck_bonus: float = float(_get_effective_luck()) * Balance.LUCK_DROP_BONUS_PER_POINT
 	for entry in pool:
 		var roll_threshold := minf(float(entry.get("chance", 0.0)) + luck_bonus, 1.0)
 		if randf() >= roll_threshold:
@@ -537,7 +508,7 @@ func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
 	if creature.is_empty() or creature.get("est_unique", false):
 		return
 	var pool := creature.get("ingredients_drop_ids", []) as Array
-	if pool.is_empty() or randf() >= 0.5:
+	if pool.is_empty() or randf() >= Balance.CREATURE_INGREDIENT_DROP_CHANCE:
 		return
 	var ingredient_id: String = pool[randi() % pool.size()]
 	var ingr := GameData.get_entity(ingredient_id)
@@ -557,7 +528,7 @@ func _drop_ingredients() -> void:
 	if ingredients.is_empty():
 		return
 	var drops:      Array = []
-	var luck_bonus: float = float(_get_effective_luck()) * 0.01
+	var luck_bonus: float = float(_get_effective_luck()) * Balance.LUCK_DROP_BONUS_PER_POINT
 	for ingr in ingredients:
 		var ingr_dict := ingr as Dictionary
 		var roll_threshold := minf(float(ingr_dict.get("chance", 0.0)) + luck_bonus, 1.0)
@@ -595,10 +566,10 @@ func _build_available_creatures(biome_id: String) -> void:
 
 	match zone_courante:
 		Enums.Zone.SURFACE:
-			_pool_add(surface,    100.0)
+			_pool_add(surface,    Balance.POOL_WEIGHT_SURFACE)
 		Enums.Zone.PROFONDEUR:
-			_pool_add(surface,    30.0)
-			_pool_add(profondeur, 70.0)
+			_pool_add(surface,    Balance.POOL_WEIGHT_DEEP_SURFACE)
+			_pool_add(profondeur, Balance.POOL_WEIGHT_DEEP_DEEP)
 
 # Convertit un dict créature en entrée de combat et l'ajoute au pool avec son poids.
 func _pool_add(creature: Dictionary, weight: float) -> void:
@@ -728,23 +699,16 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 		if not passif.is_empty():
 			passif["est_debloque"] = true
 
-	# XP et loot (traité comme une victoire de combat standard)
-	var xp_base  := float(enemy.get("xp_reward", 0))
-	var xp_mult  := float(current_modifier.get("xp_mult", 1.0))
-	var xp_earned := xp_base * xp_mult
-	MasterySystem.add_xp_to_all_active(xp_earned, 2)
-	MasterySystem.add_xp_to_entity(current_biome_id, xp_earned * 0.40, 2)
-	var hero_id: String = GameData.player.get("active_creature_id", "")
-	MasterySystem.add_xp_to_entity(hero_id, xp_earned * 0.20, 2)
-	GameData.record_encounter(enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, xp_base)
+	# XP de Maîtrise (distribution standard, base de combat) + loot
+	_distribute_mastery_xp(enemy.get("id", ""), Balance.XP_BASE_COMBAT)
+	GameData.record_encounter(enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, Balance.XP_BASE_COMBAT)
 	_drop_loot(enemy)
 
-	_cycle_xp          += xp_earned
-	_cycle_xp_hero     += xp_earned * 0.20
 	_cycle_combats_won += 1
 
 	EventBus.creature_unique_vaincue.emit(current_biome_id, ingr_id, passif_id)
 
+	var hero_id: String = GameData.player.get("active_creature_id", "")
 	_apply_regen(hero_id)
 	_schedule_next_encounter(COMBAT_POST_DELAY)
 
@@ -752,13 +716,13 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 #  Zones
 # ═══════════════════════════════════════════════════════════
 
-# Zone maximale débloquée selon la Maîtrise (current_tier) du biome.
+# Zone maximale débloquée selon la Maîtrise (maitrise_actuelle) du biome.
 # Commun/Peu Commun → Surface ; Rare/Épique → Profondeur ; Légendaire/Unique → Abysse.
 func _get_max_zone(biome_id: String) -> Enums.Zone:
-	var tier: int = GameData.get_entity(biome_id).get("current_tier", 0)
-	if tier >= 4:
+	var tier: int = GameData.get_entity(biome_id).get("maitrise_actuelle", 0)
+	if tier >= Balance.ZONE_UNLOCK_TIER_ABYSSE:
 		return Enums.Zone.ABYSSE
-	elif tier >= 2:
+	elif tier >= Balance.ZONE_UNLOCK_TIER_PROFONDEUR:
 		return Enums.Zone.PROFONDEUR
 	else:
 		return Enums.Zone.SURFACE
@@ -767,7 +731,7 @@ func _get_max_zone(biome_id: String) -> Enums.Zone:
 # est débloquée, transition et émission du signal zone_changee.
 func _check_zone_transition() -> void:
 	_nb_evenements_zone += 1
-	if _nb_evenements_zone < ZONE_TRANSITION_THRESHOLD:
+	if _nb_evenements_zone < Balance.ZONE_TRANSITION_THRESHOLD:
 		return
 	var next_zone: int = int(zone_courante) + 1
 	if next_zone > int(Enums.Zone.ABYSSE):

@@ -33,7 +33,7 @@ func _build_ui() -> void:
 
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var hero   := GameData.get_entity(cid)
-	var tcolor := UIColors.tier_color(hero.get("current_tier", 0) as int)
+	var tcolor := UIColors.tier_color(hero.get("maitrise_actuelle", 0) as int)
 
 	var biome      := GameData.get_entity(data.get("biome_id", "") as String)
 	var biome_name := biome.get("nom_affichage_fr", "Biome Inconnu") as String
@@ -175,7 +175,7 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 		biome: Dictionary, tcolor: Color) -> void:
 	var biome_id := data.get("biome_id", "") as String
-	var btier    := biome.get("current_tier", 0) as int
+	var btier    := biome.get("maitrise_actuelle", 0) as int
 	var pools    := MasteryRegistry.get_biome_entity_pools(biome_id)
 
 	var creatures := _filter_zone(pools["creatures"],    btier)
@@ -255,7 +255,7 @@ func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictiona
 	if gained <= 0.0 or entity.is_empty():
 		return
 	var thresh := _next_tier_threshold(entity)
-	var after  := entity.get("current_xp", 0.0) as float
+	var after  := entity.get("xp_maitrise_actuelle", 0.0) as float
 	var before := maxf(after - gained, 0.0)
 	var card   := _xp_card(icon, label, icon_color)
 	vb.add_child(card["container"])
@@ -292,7 +292,7 @@ func _section_evolutions(vb: VBoxContainer) -> void:
 		_fade_register(lbl)
 
 func _evolution_card(vb: VBoxContainer, entity_id: String, entity: Dictionary) -> void:
-	var tier := entity.get("current_tier", 0) as int
+	var tier := entity.get("maitrise_actuelle", 0) as int
 	var nc   := UIColors.tier_color(tier + 1)
 	var nom  := entity.get("nom_affichage_fr", entity.get("name", entity_id)) as String
 
@@ -453,9 +453,9 @@ func _discovery_check(parent: VBoxContainer, label: String, done: bool) -> void:
 
 # Seuil XP du prochain tier de l'entité (dernier seuil si au max).
 func _next_tier_threshold(entity: Dictionary) -> float:
-	var tier := entity.get("current_tier", 0) as int
+	var tier := entity.get("maitrise_actuelle", 0) as int
 	var next_idx := tier + 1
-	if tier >= GameData.MAX_TIER or next_idx >= GameData.xp_thresholds.size():
+	if tier >= GameData.get_max_tier_for_type(entity.get("entity_type", "")) or next_idx >= GameData.xp_thresholds.size():
 		return float(GameData.xp_thresholds.back())
 	return float(GameData.xp_thresholds[next_idx])
 

@@ -263,7 +263,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var c      := GameData.get_entity(cid)
-	var htier  := int(c.get("current_tier", 0))
+	var htier  := int(c.get("maitrise_actuelle", 0))
 	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héro")) as String).to_upper()
 	_hero_ring.setup(UIColors.tier_color(htier))
 	_hero_ring.set_hp(AdventureSystem.current_hp, AdventureSystem.current_hp)
@@ -307,7 +307,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 func _on_combat_started(creature_id: String, enemy: Dictionary,
 		hero_hp: float, enemy_hp: float) -> void:
 	var c        := GameData.get_entity(creature_id)
-	var htier    := int(c.get("current_tier", 0))
+	var htier    := int(c.get("maitrise_actuelle", 0))
 	var hero_max := AdventureSystem.get_max_hp()
 	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héro")) as String).to_upper()
 	_hero_ring.setup(UIColors.tier_color(htier))
@@ -603,7 +603,7 @@ func _update_xp_label() -> void:
 
 func _hero_tier_color() -> Color:
 	var cid := GameData.player.get("active_creature_id", "") as String
-	return UIColors.tier_color(int(GameData.get_entity(cid).get("current_tier", 0)))
+	return UIColors.tier_color(int(GameData.get_entity(cid).get("maitrise_actuelle", 0)))
 
 # Convertit une couleur en chaîne hex "#rrggbb" pour le BBCode.
 func _hex(c: Color) -> String:
