@@ -1,21 +1,21 @@
 # ============================================================
-# CycleSummaryScreen.gd — Écran de résumé de fin de cycle.
+# CycleSummaryScreen.gd — Écran de résultat d'expédition.
 #
-# Animation en 3 phases séquentielles :
-#   Phase 1 — Fade-in staggeré (top → bottom) de tous les éléments
-#   Phase 2 — Compteurs stat (0 → N, accélération EASE_IN, un par un)
-#   Phase 3 — Remplissage barres XP (0 → N, EASE_OUT, une par une)
+# Affiché après victoire, défaite ou interruption volontaire.
+# Trois sections :
+#   1. Découvertes — état de complétion du biome (zones débloquées)
+#   2. Répartition XP — total + une barre universelle par entité
+#   3. Évolutions disponibles — cartes avec bouton (déclenchement manuel)
+#
+# Traitement visuel uniforme quel que soit le résultat ; seul le tag change.
+# La logique XP / évolution n'est pas modifiée ici.
 # ============================================================
 extends Control
 
-var _fade_nodes: Array = []   # Controls à révéler en phase 1
-var _stat_anims: Array = []   # {label, target, prefix, suffix}
-var _xp_anims:   Array = []   # {bar, xp_label, target, max_val}
+var _fade_nodes: Array = []   # Controls révélés en phase 1
+var _xp_anims:   Array = []   # {bar, xp_label, gained, before_frac, after_frac}
 
 # ═══════════════════════════════════════════════════════════
-#  Initialisation
-# ═══════════════════════════════════════════════════════════
-
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build_ui()
@@ -33,26 +33,22 @@ func _build_ui() -> void:
 
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var hero   := GameData.get_entity(cid)
-	var tier   := hero.get("current_tier", 0) as int
-	var tcolor := UIColors.tier_color(tier)
+	var tcolor := UIColors.tier_color(hero.get("maitrise_actuelle", 0) as int)
 
 	var biome      := GameData.get_entity(data.get("biome_id", "") as String)
 	var biome_name := biome.get("nom_affichage_fr", "Biome Inconnu") as String
 
-	# ── Fond BG_DARK ────────────────────────────────────────
 	var bg := ColorRect.new()
 	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	bg.color = UIColors.BG_DARK
 	add_child(bg)
 
-	# ── Marges extérieures ──────────────────────────────────
 	var outer_margin := MarginContainer.new()
 	outer_margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
 		outer_margin.add_theme_constant_override(side, 16)
 	add_child(outer_margin)
 
-	# ── Panel principal ─────────────────────────────────────
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical   = Control.SIZE_EXPAND_FILL
@@ -69,47 +65,60 @@ func _build_ui() -> void:
 	col.add_theme_constant_override("separation", 0)
 	panel.add_child(col)
 
-	# ── Barre titre ─────────────────────────────────────────
-	var tb_color := tcolor.darkened(0.55)
-	tb_color.a   = 0.85
+	# ── Barre titre + tag de résultat ───────────────────────
+	var tb_color := tcolor.darkened(0.55); tb_color.a = 0.85
 	var title_bar := PanelContainer.new()
 	title_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var tb_style := StyleBoxFlat.new()
 	tb_style.bg_color = tb_color
-	tb_style.set_border_width_all(0)
 	title_bar.add_theme_stylebox_override("panel", tb_style)
 	col.add_child(title_bar)
 	_fade_register(title_bar)
 
 	var title_m := MarginContainer.new()
-	for side in ["margin_left", "margin_right"]:
-		title_m.add_theme_constant_override(side, 14)
-	for side in ["margin_top", "margin_bottom"]:
-		title_m.add_theme_constant_override(side, 8)
+	title_m.add_theme_constant_override("margin_left", 14)
+	title_m.add_theme_constant_override("margin_right", 14)
+	title_m.add_theme_constant_override("margin_top", 8)
+	title_m.add_theme_constant_override("margin_bottom", 8)
 	title_bar.add_child(title_m)
 
 	var title_hb := HBoxContainer.new()
+	title_hb.add_theme_constant_override("separation", 10)
 	title_m.add_child(title_hb)
 
 	var title_lbl := Label.new()
 	title_lbl.text                  = "CYCLE TERMINÉ  —  %s" % biome_name.to_upper()
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_lbl.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.vertical_alignment    = VERTICAL_ALIGNMENT_CENTER
 	title_lbl.add_theme_font_size_override("font_size", 16)
 	title_lbl.add_theme_color_override("font_color", Color.WHITE)
 	title_hb.add_child(title_lbl)
 
+	# Tag de fin de cycle — style uniforme, seul le texte change.
+	var tag_text := "Défaite"
+	if data.get("interrupted", false):
+		tag_text = "Interruption"
+	elif data.get("victory", false):
+		tag_text = "Victoire"
+	var tag := PanelContainer.new()
+	tag.add_theme_stylebox_override("panel", UIHelpers.card_style(tcolor, 0.22, 0.80, 1, 10))
+	var tag_lbl := Label.new()
+	tag_lbl.text = tag_text
+	tag_lbl.add_theme_font_size_override("font_size", 13)
+	tag_lbl.add_theme_color_override("font_color", Color.WHITE)
+	tag.add_child(tag_lbl)
+	title_hb.add_child(tag)
 
 	# ── Séparateur ──────────────────────────────────────────
 	var sep_color := tcolor; sep_color.a = 0.55
-	var sep_line  := ColorRect.new()
+	var sep_line := ColorRect.new()
 	sep_line.color                 = sep_color
 	sep_line.custom_minimum_size   = Vector2(0, 1)
 	sep_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(sep_line)
 	_fade_register(sep_line)
 
-	# ── Zone de contenu scrollable ───────────────────────────
+	# ── Contenu scrollable ──────────────────────────────────
 	var content_m := MarginContainer.new()
 	content_m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_m.size_flags_vertical   = Control.SIZE_EXPAND_FILL
@@ -127,14 +136,14 @@ func _build_ui() -> void:
 	vb.add_theme_constant_override("separation", 14)
 	scroll.add_child(vb)
 
-	_fill_content(vb, data, biome_name, tcolor)
+	_fill_content(vb, data, biome, biome_name, tcolor)
 
-	# ── Bouton retour ────────────────────────────────────────
+	# ── Footer : Retour au village uniquement ────────────────
 	var btn_m := MarginContainer.new()
 	btn_m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn_m.add_theme_constant_override("margin_left",   16)
-	btn_m.add_theme_constant_override("margin_right",  16)
-	btn_m.add_theme_constant_override("margin_top",    8)
+	btn_m.add_theme_constant_override("margin_left", 16)
+	btn_m.add_theme_constant_override("margin_right", 16)
+	btn_m.add_theme_constant_override("margin_top", 8)
 	btn_m.add_theme_constant_override("margin_bottom", 12)
 	col.add_child(btn_m)
 
@@ -144,18 +153,8 @@ func _build_ui() -> void:
 	btn.custom_minimum_size   = Vector2(0, 52)
 	btn.add_theme_font_size_override("font_size", 17)
 	btn.add_theme_color_override("font_color", tcolor)
-
-	var s_n := StyleBoxFlat.new()
-	s_n.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.14)
-	s_n.border_color = tcolor
-	s_n.set_border_width_all(2)
-	s_n.set_corner_radius_all(6)
-	btn.add_theme_stylebox_override("normal", s_n)
-
-	var s_h := s_n.duplicate() as StyleBoxFlat
-	s_h.bg_color = Color(tcolor.r, tcolor.g, tcolor.b, 0.30)
-	btn.add_theme_stylebox_override("hover", s_h)
-
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	btn.pressed.connect(_go_to_village)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(btn)
@@ -167,134 +166,195 @@ func _build_ui() -> void:
 # ═══════════════════════════════════════════════════════════
 
 func _fill_content(vb: VBoxContainer, data: Dictionary,
+		biome: Dictionary, biome_name: String, tcolor: Color) -> void:
+	_section_discoveries(vb, data, biome, tcolor)
+	_section_xp(vb, data, biome_name, tcolor)
+	_section_evolutions(vb)
+
+# ── Section 1 : Découvertes (état du biome) ────────────────
+func _section_discoveries(vb: VBoxContainer, data: Dictionary,
+		biome: Dictionary, tcolor: Color) -> void:
+	var biome_id := data.get("biome_id", "") as String
+	var btier    := biome.get("maitrise_actuelle", 0) as int
+	var pools    := MasteryRegistry.get_biome_entity_pools(biome_id)
+
+	var creatures := _filter_zone(pools["creatures"],    btier)
+	var traps     := _filter_zone(pools["traps"],        btier)
+	var benes     := _filter_zone(pools["benedictions"], btier)
+
+	var sh := UIHelpers.section_header("◆  DÉCOUVERTES", tcolor)
+	vb.add_child(sh)
+	_fade_register(sh)
+
+	# Conteneur dense : lignes serrées (même esprit que les listes d'entités).
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 4)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(rows)
+
+	_discovery_row(rows, "Créatures rencontrées", MasteryRegistry.count_discovered(creatures), creatures.size())
+	_discovery_row(rows, "Pièges identifiés",     MasteryRegistry.count_discovered(traps),     traps.size())
+	_discovery_row(rows, "Bénédictions trouvées",  MasteryRegistry.count_discovered(benes),     benes.size())
+
+	# Fragment de Mémoire du biome
+	var frag_done := false
+	for fid in GameData.entities:
+		var f := GameData.entities[fid] as Dictionary
+		if f.get("entity_type", "") == "fragment" and f.get("biome_source_id", "") == biome_id:
+			frag_done = f.get("est_collecte", false)
+			break
+	_discovery_check(rows, "Fragment de Mémoire", frag_done)
+	_discovery_check(rows, "Créature Unique", biome.get("creature_unique_vaincue", false) as bool)
+
+# ── Section 2 : Répartition XP ─────────────────────────────
+func _section_xp(vb: VBoxContainer, data: Dictionary,
 		biome_name: String, tcolor: Color) -> void:
+	var sh := UIHelpers.section_header("◆  RÉPARTITION XP", tcolor)
+	vb.add_child(sh)
+	_fade_register(sh)
 
-	# ── ◆ STATISTIQUES ───────────────────────────────────────
-	var sh1 := UIHelpers.section_header("◆  STATISTIQUES", tcolor)
-	vb.add_child(sh1)
-	_fade_register(sh1)
+	# XP total du cycle en tête de section (déplacé du footer).
+	var total_lbl := Label.new()
+	total_lbl.text = "XP total — %d" % int(data.get("xp_total", 0.0))
+	total_lbl.add_theme_font_size_override("font_size", 18)
+	total_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
+	vb.add_child(total_lbl)
+	_fade_register(total_lbl)
 
-	var cols := HBoxContainer.new()
-	cols.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cols.add_theme_constant_override("separation", 24)
-	vb.add_child(cols)
-	_fade_register(cols)
+	var cid := data.get("creature_id", "") as String
+	_xp_entity(vb, "⚔", "Héro", GameData.get_entity(cid),
+			data.get("xp_hero", 0.0) as float, UIColors.STAT_ATK)
+	_xp_entity(vb, "🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String),
+			data.get("xp_biome", 0.0) as float, UIColors.TYPE_BIOME)
 
-	var left := VBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.add_theme_constant_override("separation", 6)
-	cols.add_child(left)
+	# Entités rencontrées ce cycle : créatures, pièges, bénédictions.
+	var entities_xp := data.get("xp_entities_detail", {}) as Dictionary
+	for ent_id: String in entities_xp:
+		var e := GameData.get_entity(ent_id)
+		var e_name := e.get("nom_affichage_fr", e.get("name", ent_id)) as String
+		var icon := "🐾"
+		var col := UIColors.TYPE_CREATURE
+		match e.get("entity_type", ""):
+			"trap":
+				icon = "▲"
+				col = UIColors.TYPE_TRAP
+			"benediction":
+				icon = "✦"
+				col = UIColors.TYPE_BENEDICTION
+		_xp_entity(vb, icon, e_name, e, entities_xp[ent_id] as float, col)
 
-	var right := VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_theme_constant_override("separation", 6)
-	cols.add_child(right)
-
-	var events_total  := data.get("events_total",    0) as int
-	var combats_won   := data.get("combats_won",     0) as int
-	var positive_evts := data.get("positive_events", 0) as int
-	var traps         := data.get("traps_triggered", 0) as int
-	var combo_max     := data.get("combo_max",       0) as int
-	var loot          := data.get("loot_total",      0) as int
-	var luck          := data.get("cycle_luck",       0) as int
-
-	# Colonne gauche
-	var lbl_ev  := _stat_row_into(left,  "Événements",    UIColors.TEXT_HEADER)
-	var lbl_cbt := _stat_row_into(left,  "Combats gagnés",
-		UIColors.LOG_VICTORY if combats_won > 0 else UIColors.TEXT_MUTED)
-	var lbl_pos := _stat_row_into(left,  "Évén. positifs",
-		UIColors.HEAL_COLOR  if positive_evts > 0 else UIColors.TEXT_MUTED)
-
-	# Colonne droite
-	var lbl_trap   := _stat_row_into(right, "Pièges",
-		UIColors.LOG_TRAP    if traps > 0      else UIColors.TEXT_MUTED)
-	var lbl_combo  := _stat_row_into(right, "Meilleur combo",
-		UIColors.COMBO_COLOR if combo_max > 1  else UIColors.TEXT_MUTED)
-	var lbl_loot   := _stat_row_into(right, "Objets", UIColors.LOG_LOOT)
-
-	lbl_combo.text = "x0"
-
-	_stat_anims.append({"label": lbl_ev,    "target": events_total,  "prefix": "",  "suffix": ""})
-	_stat_anims.append({"label": lbl_cbt,   "target": combats_won,   "prefix": "",  "suffix": ""})
-	_stat_anims.append({"label": lbl_pos,   "target": positive_evts, "prefix": "",  "suffix": ""})
-	_stat_anims.append({"label": lbl_trap,  "target": traps,         "prefix": "",  "suffix": ""})
-	_stat_anims.append({"label": lbl_combo, "target": combo_max,     "prefix": "x", "suffix": ""})
-	_stat_anims.append({"label": lbl_loot,  "target": loot,          "prefix": "",  "suffix": ""})
-
-	if luck > 0:
-		var lbl_luck := _stat_row_into(right, "Luck", UIColors.FILTER_ON)
-		lbl_luck.text = "+0"
-		_stat_anims.append({"label": lbl_luck, "target": luck, "prefix": "+", "suffix": ""})
-
-	# ── ◆ RÉPARTITION XP ─────────────────────────────────────
-	var sh2 := UIHelpers.section_header("◆  RÉPARTITION XP", tcolor)
-	vb.add_child(sh2)
-	_fade_register(sh2)
-
-	var xp_hero  := data.get("xp_hero",  0.0) as float
-	var xp_biome := data.get("xp_biome", 0.0) as float
-	var detail   := data.get("xp_passives_detail", {}) as Dictionary
-
-	# Héro — barre vs seuil du prochain tier héro
-	var cid         := data.get("creature_id", "") as String
-	var hero_thresh := _next_tier_threshold(GameData.get_entity(cid))
-	var hero_card   := _xp_card("⚔", "Héro", hero_thresh, UIColors.STAT_ATK, tcolor)
-	vb.add_child(hero_card["container"])
-	_fade_register(hero_card["container"])
-	_xp_anims.append({"bar": hero_card["bar"], "xp_label": hero_card["xp_label"],
-		"target": xp_hero, "max_val": hero_thresh})
-
-	# Biome — barre vs seuil du prochain tier biome
-	var biome_entity := GameData.get_entity(data.get("biome_id", "") as String)
-	var biome_thresh := _next_tier_threshold(biome_entity)
-	var biome_card   := _xp_card("🌿", biome_name, biome_thresh, UIColors.TYPE_BIOME, tcolor)
-	vb.add_child(biome_card["container"])
-	_fade_register(biome_card["container"])
-	_xp_anims.append({"bar": biome_card["bar"], "xp_label": biome_card["xp_label"],
-		"target": xp_biome, "max_val": biome_thresh})
-
-	# Passifs — une carte par passif vs son propre seuil de tier-up
+	var detail := data.get("xp_passives_detail", {}) as Dictionary
 	for passive_id: String in detail:
-		var p_entity := GameData.get_entity(passive_id)
-		var p_name   := p_entity.get("nom_affichage_fr", p_entity.get("name", passive_id)) as String
-		var p_xp     := detail[passive_id] as float
-		var p_thresh := _next_tier_threshold(p_entity)
-		var p_card   := _xp_card("⚡", p_name, p_thresh, UIColors.COMBO_COLOR, tcolor)
-		vb.add_child(p_card["container"])
-		_fade_register(p_card["container"])
-		_xp_anims.append({"bar": p_card["bar"], "xp_label": p_card["xp_label"],
-			"target": p_xp, "max_val": p_thresh})
+		var p := GameData.get_entity(passive_id)
+		var p_name := p.get("nom_affichage_fr", p.get("name", passive_id)) as String
+		_xp_entity(vb, "⚡", p_name, p, detail[passive_id] as float, UIColors.COMBO_COLOR)
 
-	# ── ◆ ÉVOLUTION DISPONIBLE ───────────────────────────────
-	var ready_names: Array = []
+# Ajoute une carte XP pour une entité ayant reçu de l'XP (sinon ignorée).
+func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictionary,
+		gained: float, icon_color: Color) -> void:
+	if gained <= 0.0 or entity.is_empty():
+		return
+	var thresh := _next_tier_threshold(entity)
+	var after  := entity.get("xp_maitrise_actuelle", 0.0) as float
+	var before := maxf(after - gained, 0.0)
+	var card   := _xp_card(icon, label, icon_color)
+	vb.add_child(card["container"])
+	_fade_register(card["container"])
+	_xp_anims.append({
+		"bar":         card["bar"],
+		"xp_label":    card["xp_label"],
+		"gained":      gained,
+		"before_frac": clampf(before / thresh, 0.0, 1.0) if thresh > 0.0 else 0.0,
+		"after_frac":  clampf(after / thresh,  0.0, 1.0) if thresh > 0.0 else 1.0,
+	})
+
+# ── Section 3 : Évolutions disponibles ─────────────────────
+func _section_evolutions(vb: VBoxContainer) -> void:
+	var sh := UIHelpers.section_header("◆  ÉVOLUTIONS DISPONIBLES", UIColors.FILTER_ON)
+	vb.add_child(sh)
+	_fade_register(sh)
+
+	var found := false
 	for eid: String in GameData.entities:
-		var e: Dictionary = GameData.entities[eid]
-		if e.get("entity_type", "") not in ["hero", "biome"]:
-			continue
-		var e_tier := e.get("current_tier", 0) as int
-		if e_tier >= GameData.MAX_TIER:
-			continue
-		if e.get("current_xp", 0.0) >= float(GameData.xp_thresholds[e_tier + 1]):
-			ready_names.append(e.get("nom_affichage_fr", e.get("name", eid)))
+		var e := GameData.entities[eid] as Dictionary
+		if e.get("entity_type", "") == "equipment":
+			continue   # l'équipement évolue via la Forge, pas le rituel
+		if MasterySystem.can_evolve(eid):
+			found = true
+			_evolution_card(vb, eid, e)
 
-	if not ready_names.is_empty():
-		var sh3 := UIHelpers.section_header("◆  ÉVOLUTION DISPONIBLE", UIColors.FILTER_ON)
-		vb.add_child(sh3)
-		_fade_register(sh3)
+	if not found:
+		var lbl := Label.new()
+		lbl.text = "Aucune évolution disponible"
+		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		vb.add_child(lbl)
+		_fade_register(lbl)
 
-		var evo_lbl := Label.new()
-		evo_lbl.text = "▲  " + ", ".join(PackedStringArray(ready_names))
-		evo_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
-		evo_lbl.add_theme_font_size_override("font_size", 13)
-		evo_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vb.add_child(evo_lbl)
-		_fade_register(evo_lbl)
+func _evolution_card(vb: VBoxContainer, entity_id: String, entity: Dictionary) -> void:
+	var tier := entity.get("maitrise_actuelle", 0) as int
+	var nc   := UIColors.tier_color(tier + 1)
+	var nom  := entity.get("nom_affichage_fr", entity.get("name", entity_id)) as String
+
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.10, 0.60, 1, 4))
+	vb.add_child(panel)
+	_fade_register(panel)
+
+	var m := UIHelpers.margin_of(8)
+	panel.add_child(m)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	m.add_child(hb)
+
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 2)
+	hb.add_child(info)
+
+	var name_lbl := Label.new()
+	name_lbl.text = nom
+	name_lbl.add_theme_font_size_override("font_size", 14)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	info.add_child(name_lbl)
+
+	var tier_lbl := Label.new()
+	tier_lbl.text = "%s  →  %s" % [GameData.get_tier_name(tier), GameData.get_tier_name(tier + 1)]
+	tier_lbl.add_theme_font_size_override("font_size", 11)
+	tier_lbl.add_theme_color_override("font_color", nc)
+	info.add_child(tier_lbl)
+
+	var btn := Button.new()
+	btn.text = "ÉVOLUER ▲"
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_color_override("font_color", nc)
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(nc, 0.15, 1.0, 1, 4))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(nc, 0.30, 1.0, 1, 4))
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var etype := entity.get("entity_type", "creature") as String
+	btn.pressed.connect(_launch_evolution.bind(entity_id, nom, etype, tier))
+	hb.add_child(btn)
+
+# Déclenche l'évolution (manuel) puis le rituel — réutilise le flux existant.
+func _launch_evolution(entity_id: String, entity_name: String,
+		entity_type: String, from_tier: int) -> void:
+	if not MasterySystem.evolve_entity(entity_id):
+		return
+	SaveManager.save()
+	GameData.pending_evolution = {
+		"entity_type": entity_type,
+		"entity_id":   entity_id,
+		"entity_name": entity_name,
+		"from_tier":   from_tier,
+		"to_tier":     from_tier + 1,
+	}
+	get_tree().change_scene_to_file("res://scenes/village/EvolutionRitual.tscn")
 
 # ═══════════════════════════════════════════════════════════
 #  Animations
 # ═══════════════════════════════════════════════════════════
 
-# Enregistre un nœud pour la phase 1 (invisible dès maintenant).
 func _fade_register(node: Control) -> void:
 	node.modulate.a = 0.0
 	_fade_nodes.append(node)
@@ -302,147 +362,132 @@ func _fade_register(node: Control) -> void:
 func _run_animation_sequence() -> void:
 	await get_tree().create_timer(0.25).timeout
 
-	# ── Phase 1 : fade-in staggeré ───────────────────────────
+	# Phase 1 — fade-in staggeré
 	var tw1 := create_tween().set_parallel(true)
-	var d   := 0.0
+	var d := 0.0
 	for node: Control in _fade_nodes:
-		tw1.tween_property(node, "modulate:a", 1.0, 0.20) \
-			.set_delay(d).set_ease(Tween.EASE_OUT)
+		tw1.tween_property(node, "modulate:a", 1.0, 0.20).set_delay(d).set_ease(Tween.EASE_OUT)
 		d += 0.05
 	await tw1.finished
 
-	# ── Phase 2 : compteurs stats (séquentiels) ──────────────
-	for stat: Dictionary in _stat_anims:
-		await _count_stat(stat)
-
-	# ── Phase 3 : remplissage barres XP (séquentiels) ────────
+	# Phase 2 — remplissage des barres XP (avant → après), une par une
 	for xp: Dictionary in _xp_anims:
 		await _fill_xp_bar(xp)
 
-# Compte un label de 0 → target avec accélération (EASE_IN QUAD).
-func _count_stat(stat: Dictionary) -> void:
-	var label : Label  = stat["label"]
-	var target: int    = stat["target"]
-	var prefix: String = stat["prefix"]
-	var suffix: String = stat["suffix"]
-
-	if target <= 0:
-		label.text = prefix + "0" + suffix
-		return
-
-	# Durée proportionnelle à la valeur, bornée entre 0.3 s et 0.9 s.
-	var duration := clampf(0.3 + float(target) * 0.008, 0.3, 0.9)
-
-	var tw := create_tween()
-	tw.tween_method(func(v: float) -> void:
-		label.text = prefix + str(int(v)) + suffix
-	, 0.0, float(target), duration) \
-		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	await tw.finished
-
-# Remplit une barre XP et son label de 0 → target (EASE_OUT CUBIC).
+# Remplit une barre XP de son état AVANT vers son état APRÈS le cycle.
 func _fill_xp_bar(xp: Dictionary) -> void:
-	var bar     : ProgressBar = xp["bar"]
-	var xp_lbl  : Label       = xp["xp_label"]
-	var target  : float       = xp["target"]
-	var max_val : float       = xp["max_val"]
+	var bar     : XPCard = xp["bar"]
+	var xp_lbl  : Label  = xp["xp_label"]
+	var gained  : float  = xp["gained"]
+	var before  : float  = xp["before_frac"]
+	var after   : float  = xp["after_frac"]
 
-	bar.max_value = max_val
-	bar.value     = 0.0
-	xp_lbl.text   = "+0 XP"
-
-	if target <= 0.0:
-		return
+	bar.xp_fill = before
+	xp_lbl.text = "+0 XP"
 
 	var tw := create_tween().set_parallel(true)
-	tw.tween_property(bar, "value", target, 0.75) \
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_property(bar, "xp_fill", after, 0.75).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_method(func(v: float) -> void:
 		xp_lbl.text = "+%.0f XP" % v
-	, 0.0, target, 0.75) \
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	, 0.0, gained, 0.75).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	await tw.finished
 
 # ═══════════════════════════════════════════════════════════
-#  Navigation
+#  Helpers
 # ═══════════════════════════════════════════════════════════
 
-func _go_to_village() -> void:
-	get_tree().change_scene_to_file("res://scenes/village/village.tscn")
+# Zone d'enfoncement la plus profonde débloquée selon le tier du biome.
+func _biome_max_zone(tier: int) -> int:
+	if tier >= 4: return 2
+	elif tier >= 2: return 1
+	else: return 0
 
-# ═══════════════════════════════════════════════════════════
-#  Helpers UI
-# ═══════════════════════════════════════════════════════════
+# Garde les entrées dont la zone est débloquée (sans zone = transversal, conservé).
+func _filter_zone(pool: Array, tier: int) -> Array:
+	var mz := _biome_max_zone(tier)
+	var out: Array = []
+	for entry: Dictionary in pool:
+		if entry.has("zone_associee") and int(entry["zone_associee"]) > mz:
+			continue
+		out.append(entry)
+	return out
 
-# Retourne le seuil XP du prochain tier de l'entité.
-# Si l'entité est au tier max, retourne le dernier seuil (barre pleine = déjà max).
-func _next_tier_threshold(entity: Dictionary) -> float:
-	var entity_tier := entity.get("current_tier", 0) as int
-	var next_idx    := entity_tier + 1
-	if entity_tier >= GameData.MAX_TIER or next_idx >= GameData.xp_thresholds.size():
-		return float(GameData.xp_thresholds.back())
-	return float(GameData.xp_thresholds[next_idx])
-
-# Crée une ligne clé:valeur dans un VBoxContainer. Retourne le Label valeur.
-# La valeur s'affiche "0" au départ ; le compteur l'animera ensuite.
-func _stat_row_into(parent: VBoxContainer, key: String, val_color: Color) -> Label:
+# Ligne "label : n / total" — vert si complet.
+func _discovery_row(parent: VBoxContainer, label: String, n: int, total: int) -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
 	parent.add_child(hb)
+	_fade_register(hb)
 
 	var kl := Label.new()
-	kl.text                  = key + " :"
+	kl.text = label + " :"
 	kl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	hb.add_child(kl)
 
 	var vl := Label.new()
-	vl.text = "0"
+	vl.text = "%d / %d" % [n, total]
 	vl.add_theme_font_size_override("font_size", 14)
-	vl.add_theme_color_override("font_color", val_color)
+	vl.add_theme_color_override("font_color",
+			UIColors.LOG_VICTORY if (total > 0 and n >= total) else UIColors.TEXT_HEADER)
 	hb.add_child(vl)
 
-	return vl
-
-# Card XP — barre vide + "+0 XP" au départ. Retourne container/bar/xp_label.
-func _xp_card(icon: String, label: String, xp_max: float,
-		icon_color: Color, card_color: Color) -> Dictionary:
-	var wrapper := VBoxContainer.new()
-	wrapper.add_theme_constant_override("separation", 2)
-	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var panel := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(card_color.r, card_color.g, card_color.b, 0.07)
-	style.border_color = Color(card_color.r, card_color.g, card_color.b, 0.60)
-	style.set_border_width_all(1)
-	for prop: String in ["corner_radius_top_left", "corner_radius_top_right",
-			"corner_radius_bottom_left", "corner_radius_bottom_right"]:
-		style.set(prop, 4)
-	panel.add_theme_stylebox_override("panel", style)
-	wrapper.add_child(panel)
-
-	var m := MarginContainer.new()
-	for s in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		m.add_theme_constant_override(s, 6)
-	panel.add_child(m)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 4)
-	m.add_child(vb)
-
+# Ligne "label : ✔/—" — ✔ vert si fait, neutre sinon.
+func _discovery_check(parent: VBoxContainer, label: String, done: bool) -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
-	vb.add_child(hb)
+	parent.add_child(hb)
+	_fade_register(hb)
+
+	var kl := Label.new()
+	kl.text = label + " :"
+	kl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	hb.add_child(kl)
+
+	var vl := Label.new()
+	vl.text = "✔" if done else "—"
+	vl.add_theme_font_size_override("font_size", 14)
+	vl.add_theme_color_override("font_color", UIColors.LOG_VICTORY if done else UIColors.TEXT_MUTED)
+	hb.add_child(vl)
+
+# Seuil XP du prochain tier de l'entité (dernier seuil si au max).
+func _next_tier_threshold(entity: Dictionary) -> float:
+	var tier := entity.get("maitrise_actuelle", 0) as int
+	var next_idx := tier + 1
+	if tier >= GameData.get_max_tier_for_type(entity.get("entity_type", "")) or next_idx >= GameData.xp_thresholds.size():
+		return float(GameData.xp_thresholds.back())
+	return float(GameData.xp_thresholds[next_idx])
+
+# Carte XP — exactement le composant des cartes de passifs : la carte EST un
+# XPCard (fond = remplissage XP + bulles), avec le contenu par-dessus.
+func _xp_card(icon: String, label: String, fill_color: Color) -> Dictionary:
+	var card := XPCard.new()
+	card.fill_color = fill_color
+	card.xp_fill    = 0.0
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Fond sombre/neutre : seule la partie remplie (xp_fill) est colorée, pas toute la largeur.
+	var sb := StyleBoxFlat.new()
+	sb.bg_color     = UIColors.BG_BAR
+	sb.border_color = Color(fill_color.r, fill_color.g, fill_color.b, 0.55)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(4)
+	card.add_theme_stylebox_override("panel", sb)
+
+	var m := UIHelpers.margin_of(6)
+	card.add_child(m)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	m.add_child(hb)
 
 	var icon_lbl := Label.new()
 	icon_lbl.text = icon
 	icon_lbl.add_theme_font_size_override("font_size", 14)
-	icon_lbl.add_theme_color_override("font_color", icon_color)
+	icon_lbl.add_theme_color_override("font_color", fill_color)
 	hb.add_child(icon_lbl)
 
 	var name_lbl := Label.new()
-	name_lbl.text                  = label
+	name_lbl.text = label
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.add_theme_font_size_override("font_size", 12)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
@@ -451,27 +496,14 @@ func _xp_card(icon: String, label: String, xp_max: float,
 	var xp_lbl := Label.new()
 	xp_lbl.text = "+0 XP"
 	xp_lbl.add_theme_font_size_override("font_size", 12)
-	xp_lbl.add_theme_color_override("font_color", icon_color)
+	xp_lbl.add_theme_color_override("font_color", fill_color)
 	hb.add_child(xp_lbl)
 
-	var bar := ProgressBar.new()
-	bar.min_value           = 0.0
-	bar.max_value           = xp_max
-	bar.value               = 0.0
-	bar.show_percentage     = false
-	bar.custom_minimum_size = Vector2(0, 5)
+	return {"container": card, "bar": card, "xp_label": xp_lbl}
 
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = icon_color
-	fill.set_corner_radius_all(2)
-	bar.add_theme_stylebox_override("fill", fill)
+# ═══════════════════════════════════════════════════════════
+#  Navigation
+# ═══════════════════════════════════════════════════════════
 
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = UIColors.BG_BAR
-	bg_style.set_corner_radius_all(2)
-	bar.add_theme_stylebox_override("background", bg_style)
-
-	vb.add_child(bar)
-
-	return {"container": wrapper, "bar": bar, "xp_label": xp_lbl}
-
+func _go_to_village() -> void:
+	get_tree().change_scene_to_file("res://scenes/village/village.tscn")

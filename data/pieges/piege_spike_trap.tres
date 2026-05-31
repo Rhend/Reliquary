@@ -9,3 +9,9 @@ nom_affichage_fr = "Pièges à pointes"
 nom_affichage_en = "Spike Trap"
 biome_source_id = "biome_foret"
 degats = 15
+
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0.0
+xp_maitrise_palier_suivant = 0.0
+
+inflict_saignement = true

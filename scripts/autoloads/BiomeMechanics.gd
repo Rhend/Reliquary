@@ -37,9 +37,9 @@ func initialize_for_biome(biome_id: String) -> void:
 		return
 
 	var required_tier: int = UNLOCK_TIER
-	var current_tier:  int = int(biome.get("current_tier", 0))
+	var biome_tier:  int = int(biome.get("maitrise_actuelle", 0))
 
-	if current_tier >= required_tier:
+	if biome_tier >= required_tier:
 		active_mechanic = mechanic
 		EventBus.biome_mechanic_activated.emit(mechanic)
 

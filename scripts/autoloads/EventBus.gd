@@ -56,6 +56,11 @@ signal combo_changed(count: int)
 @warning_ignore("unused_signal")
 signal heal_applied(amount: float, new_hp: float)
 
+# Émis à chaque tick de saignement (infligé par certains pièges).
+# damage = dégâts appliqués, new_hp = PV restants, remaining = ticks restants.
+@warning_ignore("unused_signal")
+signal bleed_ticked(damage: float, new_hp: float, remaining: int)
+
 # Émis quand un événement positif de chance booste la luck du cycle.
 @warning_ignore("unused_signal")
 signal luck_boosted(cycle_luck: int)

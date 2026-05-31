@@ -13,3 +13,6 @@ extends Resource
 @export var hp_par_tier:       int        = 0
 @export var vit_par_tier:      int        = 0
 @export var passifs_par_palier: Dictionary = {}
+@export var maitrise_actuelle:          int   = 0
+@export var xp_maitrise_actuelle:       float = 0.0
+@export var xp_maitrise_palier_suivant: float = 0.0

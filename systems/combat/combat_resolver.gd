@@ -2,7 +2,7 @@
 # CombatResolver — Résolution instantanée d'un combat VIT-based.
 #
 # Chaque entité accumule +VIT par tick dans sa jauge d'action.
-# Quand jauge >= GAUGE_THRESHOLD, l'entité attaque et la jauge
+# Quand jauge >= Balance.GAUGE_THRESHOLD, l'entité attaque et la jauge
 # revient à 0. En cas d'égalité simultanée, le Héro agit en premier.
 #
 # Usage : CombatResolver.resolve(hero_stats, enemy_stats) → Array[CombatStep]
@@ -17,10 +17,9 @@
 # ============================================================
 class_name CombatResolver
 
-const GAUGE_THRESHOLD: float = 100.0
-const CRIT_CHANCE:     float = 0.10
-const CRIT_MULTIPLIER: float = 2.0
-const MAX_STEPS:       int   = 500
+# Équilibrage centralisé dans Balance.gd (jauge, critique, dégâts min,
+# poison de biome & bouclier d'urgence).
+const MAX_STEPS: int = 500  # garde-fou anti-boucle infinie (non-balance)
 
 static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		options: Dictionary = {}) -> Array:
@@ -42,7 +41,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 
 	# Poison biome (Marécage Putride)
 	var use_poison:           bool  = options.get("poison", false)
-	var poison_dmg_per_stack: float = h_atk * 0.05
+	var poison_dmg_per_stack: float = h_atk * Balance.BIOME_POISON_DMG_PCT
 	var poison_stacks:        int   = 0
 	var poison_turns_left:    int   = 0
 
@@ -50,12 +49,12 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	var shield_cfg       := options.get("passive_shield", {}) as Dictionary
 	var h_shield:        float = 0.0
 	var shield_available: bool = false
-	var shield_threshold: float = 0.30
+	var shield_threshold: float = Balance.SHIELD_THRESHOLD_DEFAULT
 	var shield_value_pct: float = 0.0
 	if not shield_cfg.is_empty() and shield_cfg.get("available", false):
 		shield_available  = true
-		shield_threshold  = float(shield_cfg.get("threshold", 0.30))
-		shield_value_pct  = float(shield_cfg.get("value_pct", 0.15))
+		shield_threshold  = float(shield_cfg.get("threshold", Balance.SHIELD_THRESHOLD_DEFAULT))
+		shield_value_pct  = float(shield_cfg.get("value_pct", Balance.SHIELD_VALUE_PCT_DEFAULT))
 
 	# Poison passif (Contact Venimeux Rare+)
 	var pp_cfg          := options.get("passive_poison", {}) as Dictionary
@@ -93,17 +92,17 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		e_gauge += e_vit
 
 		# ── Tour héro ───────────────────────────────────────────
-		if h_gauge >= GAUGE_THRESHOLD:
-			h_gauge -= GAUGE_THRESHOLD
+		if h_gauge >= Balance.GAUGE_THRESHOLD:
+			h_gauge -= Balance.GAUGE_THRESHOLD
 			var step := _make_hero_step(h_atk, e_def, e_hp)
 			step.tick_time = current_tick
 			e_hp = float(step.target_hp_after)
 			steps.append(step)
 
-			# Poison biome : chaque coup héro incrémente les stacks (max 3)
+			# Poison biome : chaque coup héro incrémente les stacks (max BIOME_POISON_MAX_STACKS)
 			if use_poison and e_hp > 0.0:
-				poison_stacks     = mini(poison_stacks + 1, 3)
-				poison_turns_left = 3
+				poison_stacks     = mini(poison_stacks + 1, Balance.BIOME_POISON_MAX_STACKS)
+				poison_turns_left = Balance.BIOME_POISON_DURATION
 
 			# Poison passif : roll de proc sur chaque coup héro
 			if use_passive_poison and e_hp > 0.0 and pp_chance > 0.0:
@@ -115,8 +114,8 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 				break
 
 		# ── Tour ennemi ─────────────────────────────────────────
-		if e_gauge >= GAUGE_THRESHOLD and h_hp > 0.0:
-			e_gauge -= GAUGE_THRESHOLD
+		if e_gauge >= Balance.GAUGE_THRESHOLD and h_hp > 0.0:
+			e_gauge -= Balance.GAUGE_THRESHOLD
 			var step := _make_enemy_step(e_atk, h_def, h_hp, h_shield)
 			step.tick_time = current_tick
 			h_hp     = float(step.target_hp_after)
@@ -187,9 +186,9 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 
 # Step héro : dégâts simples sur l'ennemi (pas de bouclier côté ennemi).
 static func _make_hero_step(atk: float, target_def: float, target_hp: float) -> CombatStep:
-	var is_crit  := randf() < CRIT_CHANCE
-	var base_dmg := maxf(atk - target_def, 1.0)
-	var damage   := base_dmg * (CRIT_MULTIPLIER if is_crit else 1.0)
+	var is_crit  := randf() < Balance.CRIT_CHANCE
+	var base_dmg := maxf(atk - target_def, Balance.MIN_DAMAGE)
+	var damage   := base_dmg * (Balance.CRIT_MULTIPLIER if is_crit else 1.0)
 	var new_hp   := maxf(target_hp - damage, 0.0)
 
 	var step := CombatStep.new()
@@ -204,9 +203,9 @@ static func _make_hero_step(atk: float, target_def: float, target_hp: float) -> 
 # shield_absorbed est mis à jour dans le step ; les HP héro réels = target_hp - (raw - absorbed).
 static func _make_enemy_step(atk: float, target_def: float,
 		target_hp: float, current_shield: float) -> CombatStep:
-	var is_crit  := randf() < CRIT_CHANCE
-	var base_dmg := maxf(atk - target_def, 1.0)
-	var raw_dmg  := base_dmg * (CRIT_MULTIPLIER if is_crit else 1.0)
+	var is_crit  := randf() < Balance.CRIT_CHANCE
+	var base_dmg := maxf(atk - target_def, Balance.MIN_DAMAGE)
+	var raw_dmg  := base_dmg * (Balance.CRIT_MULTIPLIER if is_crit else 1.0)
 
 	# Absorption bouclier
 	var absorbed  := minf(raw_dmg, current_shield)

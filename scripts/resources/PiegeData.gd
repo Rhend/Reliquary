@@ -6,3 +6,7 @@ extends Resource
 @export var nom_affichage_en: String = ""
 @export var biome_source_id:  String = ""
 @export var degats:           int    = 0
+@export var inflict_saignement:         bool  = false
+@export var maitrise_actuelle:          int   = 0
+@export var xp_maitrise_actuelle:       float = 0.0
+@export var xp_maitrise_palier_suivant: float = 0.0

@@ -101,25 +101,27 @@ static func info_panel(title: String, color: Color, builder: Callable) -> Contro
 	builder.call(vbox)
 	return panel
 
-# Retourne un ProgressBar avec fill coloré et fond BG_BAR.
+# Retourne la barre XP universelle (XPCard : fill coloré + bulles animées).
+# Composant de référence unique pour toutes les barres XP du jeu.
 #   height   : hauteur minimale en pixels (défaut 16).
-#   show_pct : affiche le pourcentage textuel dans la barre (défaut true).
+#   show_pct : affiche le pourcentage textuel centré dans la barre (défaut true).
 static func xp_bar(value: float, max_value: float, color: Color,
-		height: int = 16, show_pct: bool = true) -> ProgressBar:
-	var bar := ProgressBar.new()
-	bar.min_value           = 0.0
-	bar.max_value           = max_value
-	bar.value               = minf(value, max_value)
-	bar.show_percentage     = show_pct
-	bar.custom_minimum_size = Vector2(0.0, float(height))
-	var sf := StyleBoxFlat.new()
-	sf.bg_color = color
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = UIColors.BG_BAR
-	bar.add_theme_stylebox_override("fill",       sf)
-	bar.add_theme_stylebox_override("background", sb)
-	bar.add_theme_color_override("font_color", Color.WHITE)
-	bar.add_theme_font_size_override("font_size", 10)
+		height: int = 16, show_pct: bool = true) -> XPCard:
+	var frac := clampf(value / max_value, 0.0, 1.0) if max_value > 0.0 else 0.0
+	var bar := XPCard.new()
+	bar.fill_color            = color
+	bar.xp_fill               = frac
+	bar.custom_minimum_size   = Vector2(0.0, float(height))
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_theme_stylebox_override("panel", card_style(color))
+	if show_pct:
+		var pct := Label.new()
+		pct.text                 = "%d%%" % int(round(frac * 100.0))
+		pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pct.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+		pct.add_theme_font_size_override("font_size", 10)
+		pct.add_theme_color_override("font_color", Color.WHITE)
+		bar.add_child(pct)
 	return bar
 
 # Retourne un Label "Aucun" en TEXT_MUTED — état vide pour les listes.

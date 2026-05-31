@@ -46,7 +46,7 @@ func get_entities_by_type(entity_type: String) -> Array:
 		var e = GameData.entities[eid]
 		if e.get("entity_type", "") == entity_type:
 			result.append(e)
-	result.sort_custom(func(a, b): return a.get("current_tier", 0) > b.get("current_tier", 0))
+	result.sort_custom(func(a, b): return a.get("maitrise_actuelle", 0) > b.get("maitrise_actuelle", 0))
 	return result
 
 # Retourne les entités associées à un biome spécifique.
@@ -79,8 +79,8 @@ func get_mastery_display(entity_id: String) -> Dictionary:
 	var e = GameData.get_entity(entity_id)
 	if e.is_empty():
 		return {}
-	var tier: int      = e.get("current_tier", 0)
-	var xp: float      = e.get("current_xp",   0.0)
+	var tier: int      = e.get("maitrise_actuelle", 0)
+	var xp: float      = e.get("xp_maitrise_actuelle",   0.0)
 	var next_idx: int  = mini(tier + 1, GameData.xp_thresholds.size() - 1)
 	var xp_max: float  = float(GameData.xp_thresholds[next_idx])
 	return {
@@ -90,5 +90,5 @@ func get_mastery_display(entity_id: String) -> Dictionary:
 		"xp":         xp,
 		"xp_max":     xp_max,
 		"can_evolve": MasterySystem.can_evolve(entity_id),
-		"at_max":     tier >= GameData.MAX_TIER,
+		"at_max":     tier >= GameData.get_max_tier_for_type(e.get("entity_type", "")),
 	}

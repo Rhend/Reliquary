@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PassifData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/PassifData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "passive_resistance"
+name = "Résistance"
+base_stats = {"effects": [{"id": "def_pct", "value": 5, "description": "−5 % dégâts subis"}]}
+tier_effects = [{"effects": [{"id": "def_pct", "value": 5, "description": "−5 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 8, "description": "−8 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 12, "description": "−12 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 18, "description": "−18 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 25, "description": "−25 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 35, "description": "−35 % dégâts subis"}]}]
+passive_slots = []
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0.0
+xp_maitrise_palier_suivant = 0.0

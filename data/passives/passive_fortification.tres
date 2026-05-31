@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PassifData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/PassifData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "passive_fortification"
+name = "Fortification"
+base_stats = {"effects": [{"id": "def_bonus", "value": 10, "description": "+10 DEF permanente"}, {"id": "hp_bonus", "value": 15, "description": "+15 PV maximum"}]}
+tier_effects = [{"effects": [{"id": "def_bonus", "value": 10, "description": "+10 DEF permanente"}, {"id": "hp_bonus", "value": 15, "description": "+15 PV maximum"}]}, {"effects": [{"id": "def_bonus", "value": 16, "description": "+16 DEF permanente"}, {"id": "hp_bonus", "value": 25, "description": "+25 PV maximum"}]}, {"effects": [{"id": "def_bonus", "value": 24, "description": "+24 DEF permanente"}, {"id": "hp_bonus", "value": 40, "description": "+40 PV maximum"}]}, {"effects": [{"id": "def_bonus", "value": 35, "description": "+35 DEF permanente"}, {"id": "hp_bonus", "value": 60, "description": "+60 PV maximum"}]}, {"effects": [{"id": "def_bonus", "value": 50, "description": "+50 DEF permanente"}, {"id": "hp_bonus", "value": 90, "description": "+90 PV maximum"}]}, {"effects": [{"id": "def_bonus", "value": 70, "description": "+70 DEF permanente"}, {"id": "hp_bonus", "value": 130, "description": "+130 PV maximum"}]}]
+passive_slots = []
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0.0
+xp_maitrise_palier_suivant = 0.0

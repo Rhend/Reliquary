@@ -1,75 +1,108 @@
 # ============================================================
-# MasterySystem.gd — Gestion de la progression par maîtrise.
+# MasterySystem.gd — Gestion de la progression par Maîtrise.
 #
-# Principes fondamentaux :
-#   • Le héro lui-même n'évolue PAS — ce sont les entités
-#     autour de lui (passifs, biomes) qui progressent.
-#   • L'XP reçue est modulée par l'écart de tier entre le
-#     générateur (l'ennemi vaincu) et le récepteur :
-#       - Générateur plus fort → moins d'XP (diminishing returns)
-#       - Générateur plus faible → plus d'XP (catch-up mechanic)
-#   • L'évolution est toujours déclenchée manuellement par
-#     le joueur ; le système ne fait que signaler quand c'est possible.
+# Principes :
+#   • Toutes les entités progressent en Maîtrise par paliers.
+#   • À chaque événement résolu, l'XP de base est distribuée à toutes
+#     les entités actives : XP = base × modificateur d'écart × coef de type.
+#   • Écart de Maîtrise = (palier de l'entité − palier de l'événement),
+#     clampé à ±4. Entité plus FAIBLE que l'événement → plus d'XP (catch-up).
+#   • Palier max selon le type (créatures → Légendaire ; autres → Unique)
+#     et, pour les créatures, un plafond imposé par le palier du biome + la zone.
+#   • L'évolution est TOUJOURS manuelle : le système accumule l'XP (même
+#     au-delà du plafond, elle reste stockée) et signale via
+#     entity_ready_to_evolve qu'un palier est disponible. C'est une action
+#     joueur explicite (evolve_entity) qui consomme le seuil et fait monter.
 # ============================================================
 extends Node
 
 # ─── Calcul XP ──────────────────────────────────────────────
 
-# Applique le modificateur d'écart de tier à l'XP de base.
-# écart = generator_tier - receiver_tier, clampé entre -4 et +4.
-func calculate_xp(base_xp: float, generator_tier: int, receiver_tier: int) -> float:
-	var ecart    = clampi(generator_tier - receiver_tier, -4, 4)
-	var modifier = float(GameData.xp_modifiers.get(str(ecart), 1.0))
+# Applique le modificateur d'écart à l'XP de base.
+# écart = receiver_tier − event_tier, clampé à ±XP_GAP_CLAMP.
+func calculate_xp(base_xp: float, event_tier: int, receiver_tier: int) -> float:
+	var ecart    = clampi(receiver_tier - event_tier, -Balance.XP_GAP_CLAMP, Balance.XP_GAP_CLAMP)
+	var modifier = float(Balance.XP_GAP_MODIFIERS.get(ecart, 1.0))
 	return base_xp * modifier
+
+# ─── Paliers : max de type + plafond créature/biome ─────────
+
+# Palier maximum effectif d'une entité : min(plafond de type, plafond créature).
+func effective_max_tier(entity: Dictionary) -> int:
+	var type_max := GameData.get_max_tier_for_type(entity.get("entity_type", ""))
+	if entity.get("entity_type", "") != "creature":
+		return type_max
+	return mini(type_max, _creature_biome_cap(entity))
+
+# Plafond imposé à une créature par le palier de Maîtrise de son biome + sa zone.
+# Profondeur sous Rare → zone non débloquée (−1, aucun palier franchissable).
+func _creature_biome_cap(creature: Dictionary) -> int:
+	var biome      := GameData.get_entity(str(creature.get("biome_id", "")))
+	var biome_tier := int(biome.get("maitrise_actuelle", 0))
+	var zone       := int(creature.get("zone_associee", 0))
+	if zone == Enums.ZoneCreature.PROFONDEUR:
+		return int(Balance.CREATURE_CAP_PROFONDEUR.get(biome_tier, -1))
+	if zone == Enums.ZoneCreature.SURFACE:
+		return int(Balance.CREATURE_CAP_SURFACE.get(biome_tier, 0))
+	# Zone Abysse / créature unique : pas de plafond de biome (limité au max de type).
+	return Balance.DEFAULT_MAX_TIER
+
+# Seuil d'XP pour franchir le palier courant, ou -1 s'il n'y a pas de palier
+# suivant (palier max de type atteint, plafond créature atteint, ou hors courbe).
+# Convention "pas de palier suivant" unifiée pour toutes les entités.
+func _next_threshold(entity: Dictionary) -> float:
+	var tier := int(entity.get("maitrise_actuelle", 0))
+	if tier >= effective_max_tier(entity):
+		return -1.0
+	var next_idx := tier + 1
+	if next_idx >= GameData.xp_thresholds.size():
+		return -1.0
+	return float(GameData.xp_thresholds[next_idx])
 
 # ─── Distribution d'XP ──────────────────────────────────────
 
-# Distribue de l'XP à une seule entité et vérifie si elle peut évoluer.
-# Retourne true si l'entité peut évoluer (seuil atteint, pas au tier max).
+# Retourne true si l'entité a atteint le seuil de son palier suivant
+# (et qu'un palier suivant existe — plafond de type/biome compris).
 func can_evolve(entity_id: String) -> bool:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return false
-	var tier = entity.get("current_tier", 0)
-	if tier >= GameData.MAX_TIER:
+	var threshold := _next_threshold(entity)
+	if threshold < 0.0:
 		return false
-	var next_idx = tier + 1
-	if next_idx >= GameData.xp_thresholds.size():
-		return false
-	return entity.get("current_xp", 0.0) >= float(GameData.xp_thresholds[next_idx])
+	return entity.get("xp_maitrise_actuelle", 0.0) >= threshold
 
-func add_xp_to_entity(entity_id: String, base_xp: float, generator_tier: int) -> void:
-	if entity_id == "hero":
-		return   # Le Héro ne reçoit pas d'XP de Maîtrise (SPEC 1)
+# Distribue de l'XP de Maîtrise à une entité : base × écart × coef de type.
+# event_tier = palier de Maîtrise de l'entité rencontrée (générateur de l'XP).
+# L'XP s'accumule même si l'entité est plafonnée (elle reste stockée).
+func add_xp_to_entity(entity_id: String, base_xp: float, event_tier: int) -> void:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return
-
-	var receiver_tier = entity.get("current_tier", 0)
-	var xp_gained     = calculate_xp(base_xp, generator_tier, receiver_tier)
-	var xp_before     = entity.get("current_xp", 0.0)
-	entity["current_xp"] = xp_before + xp_gained
+	var receiver_tier := int(entity.get("maitrise_actuelle", 0))
+	var coef          := float(Balance.ENTITY_XP_COEF.get(entity.get("entity_type", ""), Balance.DEFAULT_XP_COEF))
+	var xp_gained     := calculate_xp(base_xp, event_tier, receiver_tier) * coef
+	if xp_gained <= 0.0:
+		return
+	var xp_before = entity.get("xp_maitrise_actuelle", 0.0)
+	entity["xp_maitrise_actuelle"] = xp_before + xp_gained
 	EventBus.xp_gained.emit(entity_id, xp_gained)
 	_check_evolution(entity_id, xp_before)
 
-# Distribue de l'XP à tous les passifs actifs du joueur.
-# Le héro reçoit son XP séparément via add_xp_to_entity dans AdventureSystem.
+# Distribue de l'XP à tous les passifs actifs du joueur (coef passif = ×1.0).
 #
 # Deux sources de passifs actifs :
 #   1. player["active_passives"]        — passifs activés manuellement
 #   2. entity["unlocked_passives"] (*)  — passifs débloqués sur héro/biomes
-# (*) Dédoublonnés pour éviter qu'un même passif partagé entre entités
-#     reçoive de l'XP plusieurs fois.
-func add_xp_to_all_active(base_xp: float, generator_tier: int) -> void:
+# (*) Dédoublonnés pour éviter qu'un même passif partagé reçoive l'XP plusieurs fois.
+func add_xp_to_all_active(base_xp: float, event_tier: int) -> void:
 	var seen: Dictionary = {}
 
-	# Passifs directement activés par le joueur
 	for passive_id in GameData.player.get("active_passives", []):
 		if not seen.has(passive_id):
 			seen[passive_id] = true
-			add_xp_to_entity(passive_id, base_xp * 0.5, generator_tier)
+			add_xp_to_entity(passive_id, base_xp, event_tier)
 
-	# Passifs débloqués via l'évolution de créatures et de biomes
 	for entity_id in GameData.entities:
 		var e = GameData.entities[entity_id]
 		if e.get("entity_type") not in ["hero", "biome"]:
@@ -77,51 +110,52 @@ func add_xp_to_all_active(base_xp: float, generator_tier: int) -> void:
 		for passive_id in e.get("unlocked_passives", []):
 			if not seen.has(passive_id):
 				seen[passive_id] = true
-				add_xp_to_entity(passive_id, base_xp * 0.5, generator_tier)
+				add_xp_to_entity(passive_id, base_xp, event_tier)
 
 # ─── Contrôle d'évolution ───────────────────────────────────
 
-# Vérifie si le seuil vient d'être franchi et émet le signal une seule fois.
+# Émet entity_ready_to_evolve une seule fois, au franchissement du seuil.
 # xp_before = XP de l'entité AVANT l'ajout courant.
-# Le signal n'est émis que si on passe de "sous le seuil" à "au-dessus",
-# évitant le spam de signal sur chaque XP ultérieur.
 func _check_evolution(entity_id: String, xp_before: float) -> void:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return
-	var tier = entity.get("current_tier", 0)
-	if tier >= GameData.MAX_TIER:
+	var threshold := _next_threshold(entity)
+	if threshold < 0.0:
 		return
-	var next_idx = tier + 1
-	if next_idx >= GameData.xp_thresholds.size():
-		return
-	var threshold = float(GameData.xp_thresholds[next_idx])
-	# Émet uniquement au franchissement (avant < seuil, maintenant ≥ seuil)
-	if xp_before < threshold and entity.get("current_xp", 0.0) >= threshold:
+	# Émet uniquement au franchissement (avant < seuil, maintenant ≥ seuil).
+	if xp_before < threshold and entity.get("xp_maitrise_actuelle", 0.0) >= threshold:
 		EventBus.entity_ready_to_evolve.emit(entity_id)
 
-# Fait monter une entité d'un tier sur action explicite du joueur.
-# Retourne true si l'évolution a réussi, false sinon (XP insuffisant, tier max).
+# Réévalue les créatures d'un biome après son évolution : le plafond ayant monté,
+# l'XP stockée peut rendre de nouveaux paliers franchissables → on (re)signale.
+func reevaluate_creatures_for_biome(biome_id: String) -> void:
+	for eid in GameData.entities:
+		var e = GameData.entities[eid]
+		if e.get("entity_type", "") != "creature":
+			continue
+		if str(e.get("biome_id", "")) != biome_id:
+			continue
+		if can_evolve(eid):
+			EventBus.entity_ready_to_evolve.emit(eid)
+
+# Fait monter une entité d'un palier sur action explicite du joueur.
+# Retourne true si l'évolution a réussi, false sinon (XP insuffisant, plafond/tier max).
 func evolve_entity(entity_id: String) -> bool:
 	var entity = GameData.get_entity(entity_id)
 	if entity.is_empty():
 		return false
-
-	var tier = entity.get("current_tier", 0)
-	if tier >= GameData.MAX_TIER:
+	var threshold := _next_threshold(entity)
+	if threshold < 0.0:
+		return false
+	if entity.get("xp_maitrise_actuelle", 0.0) < threshold:
 		return false
 
-	var next_idx = tier + 1
-	if next_idx >= GameData.xp_thresholds.size():
-		return false
-
-	var threshold = float(GameData.xp_thresholds[next_idx])
-	if entity.get("current_xp", 0.0) < threshold:
-		return false
-
-	# Monte le tier et soustrait l'XP dépensée (le surplus est conservé)
-	entity["current_tier"]  = tier + 1
-	entity["current_xp"]    = entity["current_xp"] - threshold
+	# Monte le palier et soustrait l'XP dépensée (le surplus est conservé).
+	var tier := int(entity.get("maitrise_actuelle", 0))
+	entity["maitrise_actuelle"] = tier + 1
+	entity["xp_maitrise_actuelle"]   = entity["xp_maitrise_actuelle"] - threshold
+	entity["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(entity.get("entity_type", ""), tier + 1)
 
 	_unlock_passives_for_tier(entity_id, tier + 1)
 	EventBus.entity_evolved.emit(entity_id, tier + 1)

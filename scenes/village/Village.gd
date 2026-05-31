@@ -19,8 +19,7 @@ const XP_PER_CLICK := 20.0
 const MENU_ITEMS: Array = [
 	["HÉRO",        "👤", 1, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  1, "_go_adventure", "adventure" ],
-	["VILLAGE",     "🏘", 1, "_go_village",   "village"   ],
-	["FORGE",       "🔨", 1, "_go_forge",     "forge"     ],
+	["FORGE",       "🔨", 2, "_go_forge",     "forge"     ],
 	["SANCTUAIRE",  "✦",  3, "_go_sanctuary", "sanctuary" ],
 	["RELIQUE",     "◈",  4, "_go_relic",     "relic"     ],
 	["?",           "?",  5, "_go_tbd",       "tbd"       ],
@@ -29,7 +28,6 @@ const MENU_ITEMS: Array = [
 const PANEL_TITLES: Dictionary = {
 	"hero":      "HÉRO",
 	"adventure": "EXPÉDITIONS",
-	"village":   "VILLAGE",
 	"forge":     "FORGE",
 	"sanctuary": "SANCTUAIRE",
 	"relic":     "RELIQUE",
@@ -63,8 +61,8 @@ func _active_creature() -> Dictionary:
 	return GameData.get_entity(cid)
 
 # Tier actuel de la créature active — détermine le layout et les couleurs du hub.
-func _current_tier() -> int:
-	return _active_creature().get("current_tier", 0) as int
+func _maitrise_actuelle() -> int:
+	return _active_creature().get("maitrise_actuelle", 0) as int
 
 # ─── Construction principale ──────────────────────────────────
 # Point d'entrée de construction : tier 0 → orbe cliquable, tier 1+ → hub hexagonal.
@@ -76,18 +74,19 @@ func _build_ui() -> void:
 	add_child(bg)
 
 	var creature := _active_creature()
-	var tier     := creature.get("current_tier", 0) as int
+	var tier     := creature.get("maitrise_actuelle", 0) as int
 	if tier == 0:
 		_build_tier0(creature)
 	else:
 		_build_hub(creature, tier)
 
+	_build_debug_buttons()
 	_build_fullscreen_btn()
 
 # ─── Tier 0 : clicker ─────────────────────────────────────────
 func _build_tier0(creature: Dictionary) -> void:
 	var diam  := (RING_RADIUS + 24.0) * 2.0
-	var xp    := creature.get("current_xp", 0.0) as float
+	var xp    := creature.get("xp_maitrise_actuelle", 0.0) as float
 	var xpmax := float(GameData.xp_thresholds[1])
 
 	_ring = CircleRing.new()
@@ -120,7 +119,7 @@ func _build_tier0(creature: Dictionary) -> void:
 	_center(_xp_label, Vector2(0.0, 56.0), Vector2(160.0, 20.0))
 	add_child(_xp_label)
 
-	var from_t := creature.get("current_tier", 0) as int
+	var from_t := creature.get("maitrise_actuelle", 0) as int
 	_evolve_btn = Button.new()
 	_evolve_btn.text    = "ÉVOLUER ▲"
 	_evolve_btn.visible = MasterySystem.can_evolve("hero")
@@ -290,7 +289,7 @@ func _swap_panel_content(panel_id: String) -> void:
 # ─── Construction du cadre JRPG ──────────────────────────────
 # Crée le JRPGPanel, le titre, le bouton fermer et la zone scrollable.
 func _build_panel_frame(panel_id: String) -> void:
-	var tcolor := UIColors.tier_color(_current_tier())
+	var tcolor := UIColors.tier_color(_maitrise_actuelle())
 
 	var frame := JRPGPanel.new()
 	frame.panel_color = tcolor
@@ -349,7 +348,6 @@ func _fill_panel_content(panel_id: String) -> void:
 	match panel_id:
 		"hero":      _panel_hero()
 		"adventure": _panel_adventure()
-		"village":   _panel_village()
 		"forge":     _panel_forge()
 		"sanctuary": _panel_soon("SANCTUAIRE")
 		"relic":     _panel_soon("RELIQUE")
@@ -359,8 +357,8 @@ func _fill_panel_content(panel_id: String) -> void:
 func _panel_hero() -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var c      := GameData.get_entity(cid)
-	var tier   := c.get("current_tier", 0) as int
-	var xp     := c.get("current_xp",   0.0) as float
+	var tier   := c.get("maitrise_actuelle", 0) as int
+	var xp     := c.get("xp_maitrise_actuelle",   0.0) as float
 	var ni     := mini(tier + 1, GameData.xp_thresholds.size() - 1)
 	var xpmax  := float(GameData.xp_thresholds[ni])
 	var can_ev := tier < GameData.MAX_TIER and xp >= xpmax
@@ -373,6 +371,18 @@ func _panel_hero() -> void:
 	lname.add_theme_font_size_override("font_size", 16)
 	lname.add_theme_color_override("font_color", tcolor)
 	_rp_content.add_child(lname)
+
+	# ── Barre XP (sous le titre, avant les statistiques) ──────
+	if tier < GameData.MAX_TIER:
+		var xp_color := UIColors.FILTER_ON if can_ev else UIColors.STAT_HP
+		_rp_content.add_child(UIHelpers.xp_bar(xp, xpmax, xp_color))
+
+		var xl := Label.new()
+		xl.text = "XP  %.0f / %.0f" % [xp, xpmax]
+		xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		xl.add_theme_font_size_override("font_size", 10)
+		xl.add_theme_color_override("font_color", UIColors.FILTER_ON if can_ev else UIColors.TEXT_MUTED)
+		_rp_content.add_child(xl)
 
 	# ── Sous-section STATISTIQUES ─────────────────────────────
 	_rp_content.add_child(UIHelpers.section_header("◆  STATISTIQUES", tcolor))
@@ -388,40 +398,36 @@ func _panel_hero() -> void:
 	var hp_base   := int(eff.get("hp", 0))
 	var hp_bonus  := int(eq.get("hp", 0)) + int(pas.get("hp_bonus", 0))
 
+	# Les trois stats sur une seule ligne horizontale, espacées pour lisibilité.
+	var stats_row := HBoxContainer.new()
+	stats_row.add_theme_constant_override("separation", 24)
+	stats_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rp_content.add_child(stats_row)
+
 	for row: Array in [
 		["ATK", atk_base + atk_bonus, atk_base, atk_bonus, UIColors.STAT_ATK],
 		["DEF", def_base + def_bonus, def_base, def_bonus, UIColors.STAT_DEF],
 		["PV",  hp_base  + hp_bonus,  hp_base,  hp_bonus,  UIColors.STAT_HP ],
 	]:
-		var hb := HBoxContainer.new()
-		hb.add_theme_constant_override("separation", 8)
-		_rp_content.add_child(hb)
+		var grp := HBoxContainer.new()
+		grp.add_theme_constant_override("separation", 4)
+		stats_row.add_child(grp)
 		var kl := Label.new()
 		kl.text = str(row[0]) + " :"
 		kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		hb.add_child(kl)
+		grp.add_child(kl)
 		var vl := Label.new()
 		vl.text = str(row[1])
 		vl.add_theme_font_size_override("font_size", 14)
 		vl.add_theme_color_override("font_color", row[4])
-		hb.add_child(vl)
+		grp.add_child(vl)
 		var detail := Label.new()
 		detail.text = "(%d + %d)" % [row[2], row[3]]
 		detail.add_theme_font_size_override("font_size", 10)
 		detail.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		hb.add_child(detail)
+		grp.add_child(detail)
 
 	if tier < GameData.MAX_TIER:
-		var xp_color := UIColors.FILTER_ON if can_ev else UIColors.STAT_HP
-		_rp_content.add_child(UIHelpers.xp_bar(xp, xpmax, xp_color))
-
-		var xl := Label.new()
-		xl.text = "XP  %.0f / %.0f" % [xp, xpmax]
-		xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		xl.add_theme_font_size_override("font_size", 10)
-		xl.add_theme_color_override("font_color", UIColors.FILTER_ON if can_ev else UIColors.TEXT_MUTED)
-		_rp_content.add_child(xl)
-
 		if can_ev:
 			_rp_content.add_child(_make_evolve_btn(
 				cid, c.get("nom_affichage_fr", c.get("name", cid)) as String,
@@ -434,20 +440,29 @@ func _panel_hero() -> void:
 		ml.add_theme_color_override("font_color", UIColors.FILTER_ON)
 		_rp_content.add_child(ml)
 
-	# ── Sous-section PASSIFS ──────────────────────────────────
+	# ── Sous-section PASSIFS (standard + uniques débloqués, même carte) ──
 	_rp_content.add_child(UIHelpers.section_header("◆  PASSIFS", tcolor))
 
-	var unlocked: Array        = c.get("unlocked_passives", [])
-	var standalone: Array      = GameData.player.get("active_passives", [])
-	var all_passives: Array    = []
-	for pid in unlocked:
-		if pid not in all_passives:
-			all_passives.append(pid)
-	for pid in standalone:
-		if pid not in all_passives:
-			all_passives.append(pid)
+	# Seuls les passifs débloqués apparaissent — aucune carte verrouillée.
+	var cards: Array[Control] = []
+	var seen: Array           = []
+	for pid in (c.get("unlocked_passives", []) as Array) + (GameData.player.get("active_passives", []) as Array):
+		if pid in seen:
+			continue
+		seen.append(pid)
+		var pdata := GameData.get_entity(pid)
+		if not pdata.is_empty():
+			cards.append(_passive_card(pdata, tcolor))
 
-	if all_passives.is_empty():
+	for eid in GameData.entities:
+		var e := GameData.entities[eid] as Dictionary
+		if e.get("entity_type", "") != "passif_unique":
+			continue
+		if not (e.get("est_debloque", false) as bool):
+			continue
+		cards.append(_passive_card(_normalize_unique_passive(eid, e), tcolor))
+
+	if cards.is_empty():
 		var none_lbl := Label.new()
 		none_lbl.text = "Aucun passif débloqué"
 		none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -455,33 +470,41 @@ func _panel_hero() -> void:
 		none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		_rp_content.add_child(none_lbl)
 	else:
-		for pid in all_passives:
-			var pdata := GameData.get_entity(pid)
-			if not pdata.is_empty():
-				_rp_content.add_child(_passive_card(pdata, tcolor))
+		for card in cards:
+			_rp_content.add_child(card)
 
-	# ── Sous-section PASSIFS UNIQUES ─────────────────────────
-	_rp_content.add_child(UIHelpers.section_header("◆  PASSIFS UNIQUES", tcolor))
-	var has_unique_passif := false
-	for eid in GameData.entities:
-		var e := GameData.entities[eid] as Dictionary
-		if e.get("entity_type", "") != "passif_unique":
-			continue
-		has_unique_passif = true
-		_rp_content.add_child(_passif_unique_card(eid, e, tcolor))
-	if not has_unique_passif:
-		_rp_content.add_child(UIHelpers.none_label(11))
+	# ── Sous-section INGRÉDIENTS (placeholder, masquée si Village < T2) ──
+	var ingredients_section := VBoxContainer.new()
+	ingredients_section.name = "IngredientsSection"
+	ingredients_section.add_theme_constant_override("separation", 5)
+	ingredients_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ingredients_section.visible = (GameData.village.get("tier_actuel", 1) as int) >= 2
+	ingredients_section.add_child(UIHelpers.section_header("◆  INGRÉDIENTS", tcolor))
+	_rp_content.add_child(ingredients_section)
 
 
-# Retourne une XPCard pour un passif : nom, badge tier, barre XP, effets du palier.
+# Convertit un passif unique vers la forme attendue par _passive_card
+# (champs nom_affichage_fr / maitrise_actuelle / xp_maitrise_actuelle).
+func _normalize_unique_passive(eid: String, e: Dictionary) -> Dictionary:
+	return {
+		"id":           eid,
+		"name":         e.get("nom_affichage_fr", eid),
+		"maitrise_actuelle": int(e.get("maitrise_actuelle", 0)),
+		"xp_maitrise_actuelle":   float(e.get("xp_maitrise_actuelle", 0.0)),
+		"tier_effects": e.get("tier_effects", []),
+		"entity_type":  "passif_unique",
+	}
+
+# Retourne une carte dépliable pour un passif : en-tête (nom | palier | XP),
+# corps avec effet courant + cascade des paliers à débloquer.
 func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
-	var rarity   := pdata.get("current_tier", 0) as int
+	var rarity   := pdata.get("maitrise_actuelle", 0) as int
 	var rcolor   := UIColors.tier_color(rarity)
 	var rname    := GameData.get_tier_name(rarity)
 	var has_evos := rarity < GameData.MASTERY_TIERS.size() - 1
 
 	# Calcul de la progression XP vers le palier suivant
-	var xp_cur  : float = pdata.get("current_xp", 0.0) as float
+	var xp_cur  : float = pdata.get("xp_maitrise_actuelle", 0.0) as float
 	var xp_need : int   = 0
 	var xp_fill := 0.0
 	if has_evos and rarity + 1 < GameData.xp_thresholds.size():
@@ -498,9 +521,6 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	panel.xp_fill    = xp_fill
 	panel.fill_color = rcolor
 	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(rcolor))
-	if has_evos:
-		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		UIHelpers.add_hover_feedback(panel)
 	wrapper.add_child(panel)
 
 	var m := UIHelpers.margin_of(6)
@@ -510,6 +530,7 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	vb.add_theme_constant_override("separation", 3)
 	m.add_child(vb)
 
+	# ── En-tête (toujours visible) : nom | palier | flèche | XP ──
 	var header := HBoxContainer.new()
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_child(header)
@@ -528,85 +549,70 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	header.add_child(badge)
 
 	var arrow := Label.new()
-	arrow.text = "  ▶" if has_evos else ""
 	arrow.add_theme_font_size_override("font_size", 9)
 	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	header.add_child(arrow)
 
-	var cur_effs: Array = _tier_effects(pdata, rarity)
-	var eff_descs: Array[String] = []
-	for effect in cur_effs:
-		var desc := effect.get("description", "") as String
-		if not desc.is_empty():
-			eff_descs.append(desc)
-
-	var xp_text := ""
-	var xp_color := UIColors.TEXT_MUTED
+	var xp_lbl := Label.new()
 	if rarity >= GameData.MAX_TIER:
-		xp_text  = "RANG MAX"
-		xp_color = rcolor
+		xp_lbl.text = "RANG MAX"
+		xp_lbl.add_theme_color_override("font_color", rcolor)
 	else:
-		xp_text = "%s / %s XP" % [_xp_fmt(int(xp_cur)), _xp_fmt(xp_need)]
+		xp_lbl.text = "%s / %s XP" % [_xp_fmt(int(xp_cur)), _xp_fmt(xp_need)]
+		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	xp_lbl.add_theme_font_size_override("font_size", 10)
+	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	header.add_child(xp_lbl)
 
-	for i in eff_descs.size():
-		var hb := HBoxContainer.new()
-		hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		vb.add_child(hb)
-
-		var eff_lbl := Label.new()
-		eff_lbl.text = eff_descs[i]
-		eff_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		eff_lbl.add_theme_font_size_override("font_size", 10)
-		eff_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		eff_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hb.add_child(eff_lbl)
-
-		if i == eff_descs.size() - 1:
-			var xp_lbl := Label.new()
-			xp_lbl.text = xp_text
-			xp_lbl.add_theme_font_size_override("font_size", 10)
-			xp_lbl.add_theme_color_override("font_color", xp_color)
-			xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			hb.add_child(xp_lbl)
-
-	if eff_descs.is_empty():
-		var xp_lbl := Label.new()
-		xp_lbl.text = xp_text
-		xp_lbl.add_theme_font_size_override("font_size", 10)
-		xp_lbl.add_theme_color_override("font_color", xp_color)
-		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		xp_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		vb.add_child(xp_lbl)
-
+	# Bouton évoluer (action manuelle, si éligible)
 	var pid_ev := pdata.get("id", "") as String
 	if MasterySystem.can_evolve(pid_ev):
 		wrapper.add_child(_make_evolve_btn(pid_ev,
 				pdata.get("name", pid_ev) as String,
 				pdata.get("entity_type", "passive") as String, rarity))
 
-	# ── Arbre d'évolutions (caché par défaut) ─────────────────
-	var evo_tree := VBoxContainer.new()
-	evo_tree.add_theme_constant_override("separation", 2)
-	evo_tree.visible = false
-	wrapper.add_child(evo_tree)
+	# ── Corps déplié (toggle) : effet courant + cascade à débloquer ──
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 2)
+	body.visible = false
+	wrapper.add_child(body)
 
-	var unlock_hdr := Label.new()
-	unlock_hdr.text = "— À DÉBLOQUER —"
-	unlock_hdr.add_theme_font_size_override("font_size", 9)
-	unlock_hdr.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	unlock_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	evo_tree.add_child(unlock_hdr)
+	# Description de l'effet au palier actuel
+	for effect in _tier_effects(pdata, rarity):
+		var desc := effect.get("description", "") as String
+		if desc.is_empty():
+			continue
+		var eff_lbl := Label.new()
+		eff_lbl.text = desc
+		eff_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		eff_lbl.add_theme_font_size_override("font_size", 10)
+		eff_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		eff_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.add_child(eff_lbl)
 
-	for t in range(rarity + 1, GameData.MASTERY_TIERS.size()):
-		evo_tree.add_child(_evo_row(t, rarity, pdata))
-
+	# Cascade des paliers non encore atteints
 	if has_evos:
+		var unlock_hdr := Label.new()
+		unlock_hdr.text = "— À DÉBLOQUER —"
+		unlock_hdr.add_theme_font_size_override("font_size", 9)
+		unlock_hdr.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		unlock_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		body.add_child(unlock_hdr)
+
+		for t in range(rarity + 1, GameData.MASTERY_TIERS.size()):
+			body.add_child(_evo_row(t, rarity, pdata))
+
+	# Toggle uniquement si le corps a du contenu à révéler
+	if body.get_child_count() > 0:
+		arrow.text = "  ▶"
+		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		UIHelpers.add_hover_feedback(panel)
 		panel.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton \
 					and event.button_index == MOUSE_BUTTON_LEFT \
 					and event.pressed:
-				evo_tree.visible = not evo_tree.visible
-				arrow.text = "  ▼" if evo_tree.visible else "  ▶"
+				body.visible = not body.visible
+				arrow.text = "  ▼" if body.visible else "  ▶"
 		)
 
 	return wrapper
@@ -615,7 +621,7 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	var tc      := UIColors.tier_color(t)
 	var tn      := GameData.get_tier_name(t)
 	var indent  := (t - base_rarity) * 14
-	var xp_cur  : float = pdata.get("current_xp", 0.0) as float
+	var xp_cur  : float = pdata.get("xp_maitrise_actuelle", 0.0) as float
 	var is_max  : bool  = t >= GameData.MAX_TIER
 	var xp_need : int   = 0
 	if not is_max and t + 1 < GameData.xp_thresholds.size():
@@ -697,7 +703,7 @@ func _xp_fmt(xp: int) -> String:
 
 # Panneau Expéditions : placeholder ou bouton de départ + accordéon des biomes disponibles.
 func _panel_adventure() -> void:
-	var tier   := _current_tier()
+	var tier   := _maitrise_actuelle()
 	var tcolor := UIColors.tier_color(tier)
 
 	# Invalide la sélection si l'entité n'existe plus (pas d'auto-select)
@@ -780,8 +786,16 @@ func _panel_adventure() -> void:
 			if bid == _adv_selected_biome_id:
 				section.visible = not section.visible
 				arrow.text = "  ▼" if section.visible else "  ▶"
-				btn.text = ("⚔   PARTIR EN EXPÉDITION — " + bname) if section.visible \
-						else "⚔   PARTIR EN EXPÉDITION"
+				if section.visible:
+					# Ré-sélection : bouton actif.
+					btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+					btn.visible = true
+					placeholder.visible = false
+				else:
+					# Désélection : plus de biome choisi → bouton masqué, placeholder affiché.
+					_adv_selected_biome_id = ""
+					btn.visible = false
+					placeholder.visible = true
 			else:
 				if _adv_selected_biome_id in contents \
 						and is_instance_valid(contents[_adv_selected_biome_id]):
@@ -807,7 +821,7 @@ func _on_start_selected_expedition() -> void:
 # Construit la carte accordéon d'un biome avec ses catégories (créatures, pièges, etc.).
 # Retourne { wrapper, panel, section, arrow } pour que _panel_adventure connecte le gui_input.
 func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
-	var btier  := biome.get("current_tier", 0) as int
+	var btier  := biome.get("maitrise_actuelle", 0) as int
 	var bcolor := UIColors.tier_color(btier)
 	var bdisp  := MasteryRegistry.get_mastery_display(biome_id)
 	var pools  := MasteryRegistry.get_biome_entity_pools(biome_id)
@@ -872,39 +886,6 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		pvb.add_child(xp_lbl)
 
-	# ── Indicateurs : zone max + Fragment + créature Unique ──
-	var info_row := HBoxContainer.new()
-	info_row.add_theme_constant_override("separation", 8)
-	pvb.add_child(info_row)
-
-	var zone_lbl := Label.new()
-	zone_lbl.text = "📍 " + _zone_max_name(btier)
-	zone_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	zone_lbl.add_theme_font_size_override("font_size", 10)
-	zone_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	info_row.add_child(zone_lbl)
-
-	# Fragment collecté ?
-	var frag_done := false
-	for fid in GameData.entities:
-		var f := GameData.entities[fid] as Dictionary
-		if f.get("entity_type","") == "fragment" and f.get("biome_source_id","") == biome_id:
-			frag_done = f.get("est_collecte", false)
-			break
-	var frag_lbl := Label.new()
-	frag_lbl.text = "🔮 %s" % ("✔" if frag_done else "☐")
-	frag_lbl.add_theme_font_size_override("font_size", 10)
-	frag_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY if frag_done else UIColors.TEXT_MUTED)
-	info_row.add_child(frag_lbl)
-
-	# Créature Unique vaincue ?
-	var unique_done := biome.get("creature_unique_vaincue", false) as bool
-	var uniq_lbl := Label.new()
-	uniq_lbl.text = "☠ %s" % ("✔" if unique_done else "☐")
-	uniq_lbl.add_theme_font_size_override("font_size", 10)
-	uniq_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY if unique_done else UIColors.TEXT_MUTED)
-	info_row.add_child(uniq_lbl)
-
 	# ── Section catégories (repliée par défaut) ───────────────
 	var section := VBoxContainer.new()
 	section.add_theme_constant_override("separation", 2)
@@ -923,9 +904,10 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	cat_vb.add_theme_constant_override("separation", 3)
 	indent.add_child(cat_vb)
 
-	_adv_category_card(cat_vb, "CRÉATURES",    pools["creatures"],    UIColors.TYPE_CREATURE)
-	_adv_category_card(cat_vb, "PIÈGES",       pools["traps"],        UIColors.TYPE_TRAP)
-	_adv_category_card(cat_vb, "BÉNÉDICTIONS", pools["benedictions"], UIColors.TYPE_BENEDICTION)
+	# Filtrage par zone débloquée : seuls les éléments des zones actives comptent et s'affichent.
+	_adv_category_card(cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE)
+	_adv_category_card(cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP)
+	_adv_category_card(cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION)
 	_adv_ingredient_section(cat_vb, pools["ingredients"])
 
 	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
@@ -1000,103 +982,87 @@ func _adv_category_card(parent: VBoxContainer, label: String, pool: Array, color
 			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
 	)
 
-# Remplit parent avec une XPCard par entité du pool. Entités non découvertes → ligne "????".
+# Remplit parent avec une carte par entité du pool, même format pour tous les types.
+# Entité non découverte → nom "?", palier Commun, XP 0 / seuil (placeholder homogène).
 func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void:
-	var total := pool.size()
-	for i: int in range(total):
-		var entry    := pool[i] as Dictionary
+	for entry: Dictionary in pool:
 		var entry_id := entry.get("id", "") as String
 		var is_known := MasteryRegistry.is_discovered(entry_id)
 
-		if is_known:
-			var entity      := GameData.get_entity(entry_id)
-			var bentry      := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
-			var is_equip    : bool = entity.get("entity_type", "") == "equipment"
-			var entity_tier := 0
-			var entity_xp   := 0.0
-			var at_max      := false
+		# Valeurs d'affichage — placeholder Commun si non découvert.
+		var disp_name   := "?"
+		var entity_tier := 0
+		var entity_xp   := 0.0
+		var at_max      := false
+		var is_equip    := false
+		var entity: Dictionary = {}
 
+		if is_known:
+			entity = GameData.get_entity(entry_id)
+			var bentry := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
+			is_equip   = entity.get("entity_type", "") == "equipment"
+			disp_name  = entry.get("nom_affichage_fr", entry.get("name", "?"))
 			if not entity.is_empty() and not is_equip:
-				entity_tier = entity.get("current_tier", 0)
-				entity_xp   = entity.get("current_xp",   0.0)
-				at_max      = entity_tier >= GameData.MAX_TIER
+				entity_tier = entity.get("maitrise_actuelle", 0)
+				entity_xp   = entity.get("xp_maitrise_actuelle",   0.0)
+				at_max      = entity_tier >= GameData.get_max_tier_for_type(entity.get("entity_type", ""))
 			elif not bentry.is_empty():
 				entity_tier = bentry.get("tier", entry.get("tier", 0))
 				entity_xp   = bentry.get("xp",   0.0)
-				at_max      = entity_tier >= GameData.MAX_TIER
+				at_max      = entity_tier >= GameData.get_max_tier_for_type(entity.get("entity_type", ""))
 			else:
 				entity_tier = entry.get("tier", 0)
 
-			var ec       := UIColors.tier_color(entity_tier)
-			var xp_need  := 0
-			var xp_fill  := 0.0
-			if not at_max and not is_equip and entity_tier + 1 < GameData.xp_thresholds.size():
-				xp_need = int(GameData.xp_thresholds[entity_tier + 1])
-				if xp_need > 0:
-					xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
+		var ec      := UIColors.tier_color(entity_tier)
+		var xp_need := 0
+		var xp_fill := 0.0
+		if not at_max and not is_equip and entity_tier + 1 < GameData.xp_thresholds.size():
+			xp_need = int(GameData.xp_thresholds[entity_tier + 1])
+			if xp_need > 0:
+				xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
 
-			var panel := XPCard.new()
-			panel.xp_fill    = xp_fill
-			panel.fill_color = ec
-			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			panel.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.38, 1, 3))
-			parent.add_child(panel)
+		var panel := XPCard.new()
+		panel.xp_fill    = xp_fill
+		panel.fill_color = ec
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.38, 1, 3))
+		parent.add_child(panel)
 
-			var pm := UIHelpers.margin_of(4)
-			panel.add_child(pm)
+		var pm := UIHelpers.margin_of(4)
+		panel.add_child(pm)
 
-			var hb := HBoxContainer.new()
-			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			pm.add_child(hb)
+		var hb := HBoxContainer.new()
+		hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pm.add_child(hb)
 
-			var name_lbl := Label.new()
-			name_lbl.text = entry.get("name", "?")
-			name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			name_lbl.add_theme_font_size_override("font_size", 11)
-			name_lbl.add_theme_color_override("font_color", Color.WHITE)
-			hb.add_child(name_lbl)
+		var name_lbl := Label.new()
+		name_lbl.text = disp_name
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.add_theme_font_size_override("font_size", 11)
+		name_lbl.add_theme_color_override("font_color", Color.WHITE if is_known else UIColors.TEXT_MUTED)
+		hb.add_child(name_lbl)
 
-			var tbadge := Label.new()
-			tbadge.text = GameData.get_tier_name(entity_tier)
-			tbadge.add_theme_font_size_override("font_size", 10)
-			tbadge.add_theme_color_override("font_color", ec)
-			hb.add_child(tbadge)
+		var tbadge := Label.new()
+		tbadge.text = GameData.get_tier_name(entity_tier)
+		tbadge.add_theme_font_size_override("font_size", 10)
+		tbadge.add_theme_color_override("font_color", ec)
+		hb.add_child(tbadge)
 
-			if not is_equip:
-				var xp_text := "RANG MAX" if at_max \
-						else "%s / %s XP" % [_xp_fmt(int(entity_xp)), _xp_fmt(xp_need)]
-				var xp_lbl := Label.new()
-				xp_lbl.text = xp_text
-				xp_lbl.add_theme_font_size_override("font_size", 9)
-				xp_lbl.add_theme_color_override("font_color", ec if at_max else UIColors.TEXT_MUTED)
-				xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-				hb.add_child(xp_lbl)
+		if not is_equip:
+			var xp_text := "RANG MAX" if at_max \
+					else "%s / %s XP" % [_xp_fmt(int(entity_xp)), _xp_fmt(xp_need)]
+			var xp_lbl := Label.new()
+			xp_lbl.text = xp_text
+			xp_lbl.add_theme_font_size_override("font_size", 9)
+			xp_lbl.add_theme_color_override("font_color", ec if at_max else UIColors.TEXT_MUTED)
+			xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			hb.add_child(xp_lbl)
 
-			if MasterySystem.can_evolve(entry_id):
-				parent.add_child(_make_evolve_btn(
-						entry_id, entry.get("name", "?") as String,
-						entity.get("entity_type", "creature") as String,
-						entity_tier))
-		else:
-			# Entité non découverte — style "À DÉBLOQUER"
-			var panel := PanelContainer.new()
-			panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			panel.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.04, 0.20, 1, 3))
-			parent.add_child(panel)
-
-			var pm := UIHelpers.margin_of(4)
-			panel.add_child(pm)
-
-			var hb := HBoxContainer.new()
-			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			pm.add_child(hb)
-
-			var unk := Label.new()
-			unk.text = "????   %d / %d" % [i + 1, total]
-			unk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			unk.add_theme_font_size_override("font_size", 11)
-			unk.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-			hb.add_child(unk)
+		if is_known and MasterySystem.can_evolve(entry_id):
+			parent.add_child(_make_evolve_btn(
+					entry_id, disp_name,
+					entity.get("entity_type", "creature") as String,
+					entity_tier))
 
 # Carte catégorie dédiée aux ingrédients de biome.
 # Verrouillée tant que village_tier < 2 : affiche uniquement un message de prérequis.
@@ -1104,7 +1070,9 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	if pool.is_empty():
 		return
-	var locked: bool = GameData.get_entity("hero").get("current_tier", 0) < 2
+	# Section absente (pas grisée) tant que le Village n'a pas atteint le Tier 2 (Forgeron).
+	if (GameData.village.get("tier_actuel", 1) as int) < 2:
+		return
 	var nc := UIColors.CARD_NEUTRAL
 
 	var cat_wrap := VBoxContainer.new()
@@ -1114,9 +1082,8 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 
 	var cat_panel := PanelContainer.new()
 	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if not locked:
-		cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		UIHelpers.add_hover_feedback(cat_panel)
+	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UIHelpers.add_hover_feedback(cat_panel)
 	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
 	cat_wrap.add_child(cat_panel)
 
@@ -1133,14 +1100,6 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	clbl.add_theme_font_size_override("font_size", 11)
 	clbl.add_theme_color_override("font_color", nc)
 	chdr.add_child(clbl)
-
-	if locked:
-		var lock_lbl := Label.new()
-		lock_lbl.text = "Village Tier 2"
-		lock_lbl.add_theme_font_size_override("font_size", 10)
-		lock_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		chdr.add_child(lock_lbl)
-		return
 
 	var cat_arrow := Label.new()
 	cat_arrow.text = "  ▶"
@@ -1195,154 +1154,6 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
 	)
 
-# ─── Panneau Village ──────────────────────────────────────────
-
-func _panel_village() -> void:
-	var vtier  := GameData.village.get("tier_actuel", 1) as int
-	var vcolor := UIColors.tier_color(vtier)
-
-	# ── Tier actuel ────────────────────────────────────────
-	_rp_content.add_child(UIHelpers.section_header("◆  TIER VILLAGE", vcolor))
-	var tier_lbl := Label.new()
-	tier_lbl.text = "Village — Tier %d" % vtier
-	tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tier_lbl.add_theme_font_size_override("font_size", 15)
-	tier_lbl.add_theme_color_override("font_color", vcolor)
-	_rp_content.add_child(tier_lbl)
-
-	# ── Fragments ──────────────────────────────────────────
-	_rp_content.add_child(UIHelpers.section_header("◆  FRAGMENTS", vcolor))
-
-	for eid in GameData.entities:
-		var e := GameData.entities[eid] as Dictionary
-		if e.get("entity_type", "") != "fragment":
-			continue
-		var nom      := e.get("nom_affichage_fr", eid) as String
-		var biome_id := e.get("biome_source_id", "") as String
-		var biome    := GameData.get_entity(biome_id)
-		var bnom     := biome.get("nom_affichage_fr", biome_id) as String
-		var collected := e.get("est_collecte", false) as bool
-
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		_rp_content.add_child(row)
-
-		var icon := Label.new()
-		icon.text = "✔" if collected else "☐"
-		icon.add_theme_font_size_override("font_size", 13)
-		icon.add_theme_color_override("font_color", UIColors.LOG_VICTORY if collected else UIColors.TEXT_MUTED)
-		row.add_child(icon)
-
-		var nl := Label.new()
-		nl.text = "%s  —  %s" % [nom, bnom]
-		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		nl.add_theme_font_size_override("font_size", 12)
-		nl.add_theme_color_override("font_color", Color.WHITE if collected else UIColors.TEXT_MUTED)
-		row.add_child(nl)
-
-	# ── Progression Tier suivant ────────────────────────────
-	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
-		var req        := GameData.VILLAGE_TIER_REQUIREMENTS[vtier]
-		var have: int  = (GameData.village.get("fragments_collectes", []) as Array).size()
-		var is_ready: bool = have >= req
-		var prog_color := UIColors.FILTER_ON if is_ready else UIColors.TEXT_MUTED
-
-		_rp_content.add_child(UIHelpers.section_header("◆  TIER SUIVANT", vcolor))
-
-		var prog_lbl := Label.new()
-		prog_lbl.text = "%d / %d fragment%s pour passer au Tier %d" % [have, req, "s" if req > 1 else "", vtier + 1]
-		prog_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		prog_lbl.add_theme_font_size_override("font_size", 12)
-		prog_lbl.add_theme_color_override("font_color", prog_color)
-		_rp_content.add_child(prog_lbl)
-
-		const TIER_EFFECTS: Array = ["", "Forgeron débloqué"]
-		if vtier < TIER_EFFECTS.size() and TIER_EFFECTS[vtier] != "":
-			var effect_lbl := Label.new()
-			effect_lbl.text = "→ " + TIER_EFFECTS[vtier]
-			effect_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			effect_lbl.add_theme_font_size_override("font_size", 11)
-			effect_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-			_rp_content.add_child(effect_lbl)
-
-		if ready:
-			var ubtn := Button.new()
-			ubtn.text = "▲  Faire évoluer le Village → Tier %d" % (vtier + 1)
-			ubtn.add_theme_font_size_override("font_size", 13)
-			ubtn.add_theme_color_override("font_color", vcolor)
-			ubtn.add_theme_stylebox_override("normal", UIHelpers.card_style(vcolor, 0.12, 1.0, 1, 4))
-			ubtn.add_theme_stylebox_override("hover",  UIHelpers.card_style(vcolor, 0.28, 1.0, 1, 4))
-			ubtn.pressed.connect(func() -> void:
-				if GameData.upgrade_village():
-					_open_panel("village")
-			)
-			_rp_content.add_child(ubtn)
-
-# Carte d'un passif unique : colorée si débloqué, grisée avec 🔒 sinon.
-func _passif_unique_card(passif_id: String, passif: Dictionary, _tcolor: Color) -> Control:
-	var unlocked  := passif.get("est_debloque", false) as bool
-	var nom       := passif.get("nom_affichage_fr", passif_id) as String
-	var biome_id  := passif.get("biome_source_id", "") as String
-	var biome     := GameData.get_entity(biome_id)
-	var bnom      := biome.get("nom_affichage_fr", biome_id) as String
-	var pc        := UIColors.tier_color(int(passif.get("maitrise_actuelle", 0))) if unlocked else UIColors.TEXT_MUTED
-
-	var card := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(pc.r, pc.g, pc.b, 0.07 if unlocked else 0.03)
-	style.border_color = Color(pc.r, pc.g, pc.b, 0.50 if unlocked else 0.20)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(4)
-	card.add_theme_stylebox_override("panel", style)
-
-	var m := MarginContainer.new()
-	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		m.add_theme_constant_override(side, 8)
-	card.add_child(m)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 3)
-	m.add_child(vb)
-
-	var hdr := HBoxContainer.new()
-	hdr.add_theme_constant_override("separation", 6)
-	vb.add_child(hdr)
-
-	var icon_lbl := Label.new()
-	icon_lbl.text = "✔" if unlocked else "🔒"
-	icon_lbl.add_theme_font_size_override("font_size", 13)
-	icon_lbl.add_theme_color_override("font_color", pc)
-	hdr.add_child(icon_lbl)
-
-	var name_lbl := Label.new()
-	name_lbl.text = nom
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 13)
-	name_lbl.add_theme_color_override("font_color", pc)
-	hdr.add_child(name_lbl)
-
-	var biome_lbl := Label.new()
-	biome_lbl.text = bnom
-	biome_lbl.add_theme_font_size_override("font_size", 11)
-	biome_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	vb.add_child(biome_lbl)
-
-	if not unlocked:
-		var hint := Label.new()
-		# Trouver le nom de la créature unique qui débloque ce passif
-		var creature_nom := "la créature Unique"
-		for eid in GameData.entities:
-			var e := GameData.entities[eid] as Dictionary
-			if e.get("entity_type", "") == "creature" and e.get("passif_debloque_id", "") == passif_id:
-				creature_nom = e.get("nom_affichage_fr", creature_nom) as String
-				break
-		hint.text = "Vaincre %s pour débloquer" % creature_nom
-		hint.add_theme_font_size_override("font_size", 11)
-		hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		vb.add_child(hint)
-
-	return card
-
 # ─── Panneau Forge ────────────────────────────────────────────
 
 func _panel_forge() -> void:
@@ -1354,7 +1165,7 @@ func _panel_forge() -> void:
 		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		_rp_content.add_child(lbl)
 		return
-	var tcolor := UIColors.tier_color(int(_active_creature().get("current_tier", 0)))
+	var tcolor := UIColors.tier_color(int(_active_creature().get("maitrise_actuelle", 0)))
 
 	# ── Inventaire ingrédients ──────────────────────────────
 	_rp_content.add_child(UIHelpers.section_header("◆  INGRÉDIENTS", tcolor))
@@ -1426,11 +1237,11 @@ func _forge_equip_card(equip_id: String, equip: Dictionary, tcolor: Color) -> Co
 		lm.add_child(lbl)
 		return locked
 
-	var current_tier := int(equip.get("maitrise_actuelle", 0))
+	var equip_tier := int(equip.get("maitrise_actuelle", 0))
 	var nom          := equip.get("nom_affichage_fr", equip_id) as String
-	var tier_name    := GameData.get_tier_name(current_tier)
-	var at_max       := current_tier >= GameData.MAX_TIER
-	var next_tier    := current_tier + 1
+	var tier_name    := GameData.get_tier_name(equip_tier)
+	var at_max       := equip_tier >= GameData.MAX_TIER
+	var next_tier    := equip_tier + 1
 	var recipe       := GameData.get_forge_recipe(equip_id, next_tier)
 	var forgeable    := GameData.can_forge(equip_id)
 
@@ -1466,7 +1277,7 @@ func _forge_equip_card(equip_id: String, equip: Dictionary, tcolor: Color) -> Co
 	var tier_lbl := Label.new()
 	tier_lbl.text = tier_name
 	tier_lbl.add_theme_font_size_override("font_size", 12)
-	tier_lbl.add_theme_color_override("font_color", UIColors.tier_color(current_tier))
+	tier_lbl.add_theme_color_override("font_color", UIColors.tier_color(equip_tier))
 	header.add_child(tier_lbl)
 
 	if at_max:
@@ -1548,6 +1359,24 @@ func _zone_max_name(tier: int) -> String:
 	elif tier >= 2: return "Profondeur"
 	else: return "Surface"
 
+# Zone d'enfoncement la plus profonde débloquée selon le tier de maîtrise du biome.
+# 0 = Surface (toujours), 1 = Profondeur (Rare+), 2 = Abysse (Légendaire+).
+func _biome_max_zone(tier: int) -> int:
+	if tier >= 4: return 2
+	elif tier >= 2: return 1
+	else: return 0
+
+# Garde uniquement les entrées dont la zone est débloquée pour ce tier de biome.
+# Les entrées sans champ de zone (pièges, bénédictions — transversaux) sont conservées.
+func _filter_pool_by_zone(pool: Array, tier: int) -> Array:
+	var max_zone := _biome_max_zone(tier)
+	var out: Array = []
+	for entry: Dictionary in pool:
+		if entry.has("zone_associee") and int(entry["zone_associee"]) > max_zone:
+			continue
+		out.append(entry)
+	return out
+
 # ─── Village ──────────────────────────────────────────────────
 
 # Recrée le hub (après upgrade village ou changement de tier).
@@ -1560,7 +1389,7 @@ func _rebuild_hub() -> void:
 	_hex_items.clear()
 	_active_panel_id = ""
 	var creature := _active_creature()
-	var tier     := creature.get("current_tier", 0) as int
+	var tier     := creature.get("maitrise_actuelle", 0) as int
 	if tier > 0:
 		_build_hub(creature, tier)
 
@@ -1640,6 +1469,51 @@ func _show_fragment_banner(fragment_nom: String) -> void:
 	tw.tween_property(banner, "modulate:a", 0.0, 0.5)
 	tw.tween_callback(banner.queue_free)
 
+# ─── Debug : boutons tier ─────────────────────────────────────
+# Ajoute les boutons "Tier +/-" pour tester visuellement les tiers sans sauvegarder.
+func _build_debug_buttons() -> void:
+	var vb := VBoxContainer.new()
+	vb.anchor_left   = 0.0; vb.anchor_top    = 0.0
+	vb.anchor_right  = 0.0; vb.anchor_bottom = 0.0
+	vb.offset_left   = 10;  vb.offset_top    = 10
+	vb.offset_right  = 10;  vb.offset_bottom = 10
+	vb.add_theme_constant_override("separation", 4)
+	add_child(vb)
+
+	var row1 := HBoxContainer.new()
+	row1.add_theme_constant_override("separation", 6)
+	vb.add_child(row1)
+
+	var up := Button.new()
+	up.text = "Tier +"
+	up.pressed.connect(_debug_tier_up)
+	row1.add_child(up)
+
+	var dn := Button.new()
+	dn.text = "Tier −"
+	dn.pressed.connect(_debug_tier_down)
+	row1.add_child(dn)
+
+# Incrémente le tier du héro, réinitialise son XP et recharge la scène.
+func _debug_tier_up() -> void:
+	var hero := GameData.get_entity("hero")
+	var tier := hero.get("maitrise_actuelle", 0) as int
+	if tier < GameData.MAX_TIER:
+		hero["maitrise_actuelle"] = tier + 1
+		hero["xp_maitrise_actuelle"]   = 0.0
+		SaveManager.save()
+		_launch_evolution_ritual("village", "hero", "Village", tier, tier + 1)
+
+# Décrémente le tier du héro, réinitialise son XP et recharge la scène.
+func _debug_tier_down() -> void:
+	var hero := GameData.get_entity("hero")
+	var tier := hero.get("maitrise_actuelle", 0) as int
+	if tier > 0:
+		hero["maitrise_actuelle"] = tier - 1
+		hero["xp_maitrise_actuelle"]   = 0.0
+		SaveManager.save()
+		_launch_evolution_ritual("village", "hero", "Village", tier, tier - 1)
+
 # Ajoute le bouton ⛶ en haut à droite pour basculer le plein écran.
 func _build_fullscreen_btn() -> void:
 	var btn := Button.new()
@@ -1662,10 +1536,10 @@ func _build_fullscreen_btn() -> void:
 func _on_hero_click() -> void:
 	var hero  := GameData.get_entity("hero")
 	var xpmax := float(GameData.xp_thresholds[1])
-	if hero.get("current_xp", 0.0) as float >= xpmax:
+	if hero.get("xp_maitrise_actuelle", 0.0) as float >= xpmax:
 		return
-	var xp := minf(hero.get("current_xp", 0.0) as float + XP_PER_CLICK, xpmax)
-	hero["current_xp"] = xp
+	var xp := minf(hero.get("xp_maitrise_actuelle", 0.0) as float + XP_PER_CLICK, xpmax)
+	hero["xp_maitrise_actuelle"] = xp
 	_ring.fill_fraction = minf(xp / xpmax, 1.0)
 	_xp_label.text      = "%d / %d XP" % [int(xp), int(xpmax)]
 	EventBus.xp_gained.emit("hero", XP_PER_CLICK)
@@ -1732,7 +1606,7 @@ func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Calla
 	item.icon_text   = icon
 	item.label_text  = lbl
 	item.tier_color  = tcolor
-	item.tier        = _current_tier()
+	item.tier        = _maitrise_actuelle()
 	item.outward_dir = pos.normalized()
 	item.callback    = cb
 	_center(item, pos, HEX_SIZE)
@@ -1743,7 +1617,6 @@ func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Calla
 # ─── Navigation → panneaux ────────────────────────────────────
 func _go_hero()       -> void: _open_panel("hero")
 func _go_adventure()  -> void: _open_panel("adventure")
-func _go_village()   -> void: _open_panel("village")
 func _go_forge()     -> void: _open_panel("forge")
 func _go_sanctuary() -> void: _open_panel("sanctuary")
 func _go_relic()     -> void: _open_panel("relic")
