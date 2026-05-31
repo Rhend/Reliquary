@@ -1,8 +1,8 @@
 # ============================================================
 # Village.gd — Hub central du jeu.
 #
-# Tier 0  : orbe cliquable → XP manual → déblocage Tier 1.
-# Tier 1+ : hub hexagonal + panneau JRPG glissant (40/60 viewport).
+# Éclosion : orbe cliquable (100 clics) → naissance du Village en T0.
+# T0+      : hub hexagonal + panneau JRPG glissant (40/60 viewport).
 #
 # Widgets visuels dans scenes/village/widgets/ :
 #   CircleRing, ClickOrb, HexItem, JRPGPanel, XPCard
@@ -13,16 +13,17 @@ extends Control
 const RING_RADIUS  := 165.0
 const HEX_SIZE     := Vector2(152.0, 152.0)
 const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
-const XP_PER_CLICK := 20.0
 
 # [label, icon, tier_min, callback_name, panel_id]
+# tier_min = palier du héro requis ; exception : FORGE est gated par le Tier du Village.
+# Gates décalés d'un rang : le Village éclot en T0 et débloque déjà les expéditions.
 const MENU_ITEMS: Array = [
-	["HÉRO",        "👤", 1, "_go_hero",      "hero"      ],
-	["EXPÉDITIONS", "⚔",  1, "_go_adventure", "adventure" ],
-	["FORGE",       "🔨", 2, "_go_forge",     "forge"     ],
-	["SANCTUAIRE",  "✦",  3, "_go_sanctuary", "sanctuary" ],
-	["RELIQUE",     "◈",  4, "_go_relic",     "relic"     ],
-	["?",           "?",  5, "_go_tbd",       "tbd"       ],
+	["HÉRO",        "👤", 0, "_go_hero",      "hero"      ],
+	["EXPÉDITIONS", "⚔",  0, "_go_adventure", "adventure" ],
+	["FORGE",       "🔨", 1, "_go_forge",     "forge"     ],
+	["SANCTUAIRE",  "✦",  2, "_go_sanctuary", "sanctuary" ],
+	["RELIQUE",     "◈",  3, "_go_relic",     "relic"     ],
+	["?",           "?",  4, "_go_tbd",       "tbd"       ],
 ]
 
 const PANEL_TITLES: Dictionary = {
@@ -36,9 +37,8 @@ const PANEL_TITLES: Dictionary = {
 
 # ─── État ─────────────────────────────────────────────────────
 var _ring            : CircleRing         # anneau animé central (XP fill + tier visuel)
-var _xp_label        : Label              # label "X / Y XP" sous l'orbe (tier 0 uniquement)
-var _evolve_btn      : Button            = null  # bouton ÉVOLUER (tier 0, visible quand XP plein)
-var _hub_root        : Control            # conteneur du hub hexagonal (tier 1+)
+var _xp_label        : Label              # compteur de clics sous l'orbe (phase d'éclosion)
+var _hub_root        : Control            # conteneur du hub hexagonal
 var _rp_root         : Control            # panneau droit JRPG — null si fermé
 var _rp_content      : VBoxContainer      # zone de contenu scrollable du panneau droit
 var _rp_title        : Label              # label titre dans la barre du panneau droit
@@ -75,62 +75,47 @@ func _build_ui() -> void:
 
 	var creature := _active_creature()
 	var tier     := creature.get("maitrise_actuelle", 0) as int
-	if tier == 0:
-		_build_tier0(creature)
+	# Tant que le Village n'a pas éclos : phase préliminaire (100 clics).
+	# Une fois éclos, le hub est disponible dès T0 (expéditions incluses).
+	if not GameData.village.get("eclos", false):
+		_build_birth(creature)
 	else:
 		_build_hub(creature, tier)
 
 	_build_debug_buttons()
 	_build_fullscreen_btn()
 
-# ─── Tier 0 : clicker ─────────────────────────────────────────
-func _build_tier0(creature: Dictionary) -> void:
-	var diam  := (RING_RADIUS + 24.0) * 2.0
-	var xp    := creature.get("xp_maitrise_actuelle", 0.0) as float
-	var xpmax := float(GameData.xp_thresholds[1])
-
-	_ring = CircleRing.new()
-	_ring.ring_color    = TIER_0_COLOR
-	_ring.ring_width    = 13.0
-	_ring.fill_fraction = minf(xp / xpmax, 1.0)
-	_center(_ring, Vector2.ZERO, Vector2(diam, diam))
-	add_child(_ring)
-
-	var lname := Label.new()
-	lname.text = "Village"
-	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lname.add_theme_font_size_override("font_size", 22)
-	lname.add_theme_color_override("font_color", TIER_0_COLOR.lightened(0.2))
-	_center(lname, Vector2(0.0, -60.0), Vector2(180.0, 30.0))
-	add_child(lname)
+# ─── Phase d'éclosion : naissance du Village (pré-T0) ─────────
+# Le Village n'existe pas encore : on clique Balance.ECLOSION_CLICS fois pour
+# faire éclore l'incarnation. Au dernier clic → éclosion en T0 + cinématique.
+# UI minimale : orbe cliquable + compteur + message (pas d'anneau).
+func _build_birth(_creature: Dictionary) -> void:
+	var clics  := int(GameData.village.get("clics_eclosion", 0))
+	var needed := Balance.ECLOSION_CLICS
 
 	var orb := ClickOrb.new()
 	orb.tier_color   = TIER_0_COLOR
-	orb.callback     = Callable(self, "_on_hero_click")
-	_center(orb, Vector2(0.0, -4.0), Vector2(90.0, 90.0))
-	orb.pivot_offset = Vector2(45.0, 45.0)
+	orb.callback     = Callable(self, "_on_birth_click")
+	_center(orb, Vector2(0.0, -10.0), Vector2(96.0, 96.0))
+	orb.pivot_offset = Vector2(48.0, 48.0)
 	add_child(orb)
 
 	_xp_label = Label.new()
-	_xp_label.text = "%d / %d XP" % [int(xp), int(xpmax)]
+	_xp_label.text = "%d / %d" % [clics, needed]
 	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_xp_label.add_theme_font_size_override("font_size", 11)
+	_xp_label.add_theme_font_size_override("font_size", 15)
 	_xp_label.add_theme_color_override("font_color", TIER_0_COLOR.lightened(0.3))
-	_center(_xp_label, Vector2(0.0, 56.0), Vector2(160.0, 20.0))
+	_center(_xp_label, Vector2(0.0, 56.0), Vector2(160.0, 24.0))
 	add_child(_xp_label)
 
-	var from_t := creature.get("maitrise_actuelle", 0) as int
-	_evolve_btn = Button.new()
-	_evolve_btn.text    = "ÉVOLUER ▲"
-	_evolve_btn.visible = MasterySystem.can_evolve("hero")
-	_evolve_btn.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	_evolve_btn.pressed.connect(func() -> void:
-		MasterySystem.evolve_entity("hero")
-		SaveManager.save()
-		_launch_evolution_ritual("village", "hero", "Village", from_t, from_t + 1)
-	)
-	_center(_evolve_btn, Vector2(0.0, 88.0), Vector2(160.0, 34.0))
-	add_child(_evolve_btn)
+	var flavor := Label.new()
+	flavor.text = "Frappez l'étincelle pour faire éclore le Village…"
+	flavor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	flavor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	flavor.add_theme_font_size_override("font_size", 12)
+	flavor.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	_center(flavor, Vector2(0.0, 92.0), Vector2(320.0, 44.0))
+	add_child(flavor)
 
 # ─── Tier 1+ : hub hexagonal ──────────────────────────────────
 # Construit le hub circulaire avec les hexagones débloqués par le tier.
@@ -168,8 +153,8 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	_hub_root.add_child(ltier)
 
 	# ── Info Village (tier + fragments) ──────────────────────
-	var vtier := GameData.village.get("tier_actuel", 1) as int
-	var vcolor := Color(0.55, 0.85, 0.55) if vtier >= 2 else Color(0.6, 0.6, 0.7)
+	var vtier := GameData.village.get("tier_actuel", 0) as int
+	var vcolor := Color(0.55, 0.85, 0.55) if vtier >= 1 else Color(0.6, 0.6, 0.7)
 
 	var vlabel := Label.new()
 	vlabel.text = "Village T%d" % vtier
@@ -478,7 +463,7 @@ func _panel_hero() -> void:
 	ingredients_section.name = "IngredientsSection"
 	ingredients_section.add_theme_constant_override("separation", 5)
 	ingredients_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ingredients_section.visible = (GameData.village.get("tier_actuel", 1) as int) >= 2
+	ingredients_section.visible = (GameData.village.get("tier_actuel", 0) as int) >= 1
 	ingredients_section.add_child(UIHelpers.section_header("◆  INGRÉDIENTS", tcolor))
 	_rp_content.add_child(ingredients_section)
 
@@ -1070,8 +1055,8 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	if pool.is_empty():
 		return
-	# Section absente (pas grisée) tant que le Village n'a pas atteint le Tier 2 (Forgeron).
-	if (GameData.village.get("tier_actuel", 1) as int) < 2:
+	# Section absente (pas grisée) tant que la Forge n'est pas débloquée (Village Tier 1).
+	if (GameData.village.get("tier_actuel", 0) as int) < 1:
 		return
 	var nc := UIColors.CARD_NEUTRAL
 
@@ -1157,7 +1142,7 @@ func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 # ─── Panneau Forge ────────────────────────────────────────────
 
 func _panel_forge() -> void:
-	if GameData.village.get("tier_actuel", 1) < 2:
+	if GameData.village.get("tier_actuel", 0) < 1:
 		var lbl := Label.new()
 		lbl.text = "🔨  Le Forgeron\n\n« Je ne peux pas encore\nvous aider. »\n\nLibérez un Fragment pour\nfaire évoluer le Village."
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1390,7 +1375,7 @@ func _rebuild_hub() -> void:
 	_active_panel_id = ""
 	var creature := _active_creature()
 	var tier     := creature.get("maitrise_actuelle", 0) as int
-	if tier > 0:
+	if GameData.village.get("eclos", false):
 		_build_hub(creature, tier)
 
 # Fragment libéré : feedback + rebuild hub (le bouton upgrade peut apparaître).
@@ -1531,21 +1516,24 @@ func _build_fullscreen_btn() -> void:
 	btn.pressed.connect(func() -> void: GameSettings.set_fullscreen(not GameSettings.fullscreen))
 	add_child(btn)
 
-# ─── Clicker (tier 0) ─────────────────────────────────────────
-# Ajoute XP_PER_CLICK XP au héro et évolue automatiquement si le seuil est atteint.
-func _on_hero_click() -> void:
-	var hero  := GameData.get_entity("hero")
-	var xpmax := float(GameData.xp_thresholds[1])
-	if hero.get("xp_maitrise_actuelle", 0.0) as float >= xpmax:
+# ─── Phase d'éclosion : clic ─────────────────────────────────
+# Incrémente le compteur de clics ; au dernier, déclenche l'éclosion en T0.
+func _on_birth_click() -> void:
+	if GameData.village.get("eclos", false):
 		return
-	var xp := minf(hero.get("xp_maitrise_actuelle", 0.0) as float + XP_PER_CLICK, xpmax)
-	hero["xp_maitrise_actuelle"] = xp
-	_ring.fill_fraction = minf(xp / xpmax, 1.0)
-	_xp_label.text      = "%d / %d XP" % [int(xp), int(xpmax)]
-	EventBus.xp_gained.emit("hero", XP_PER_CLICK)
-	if MasterySystem.can_evolve("hero"):
-		if is_instance_valid(_evolve_btn):
-			_evolve_btn.visible = true
+	var needed := Balance.ECLOSION_CLICS
+	var clics  := int(GameData.village.get("clics_eclosion", 0)) + Balance.ECLOSION_CLIC_VALUE
+	GameData.village["clics_eclosion"] = clics
+	if is_instance_valid(_xp_label):
+		_xp_label.text = "%d / %d" % [mini(clics, needed), needed]
+	if clics >= needed:
+		_hatch_village()
+
+# Fait éclore le Village en T0, sauvegarde, puis lance la cinématique d'éclosion.
+func _hatch_village() -> void:
+	GameData.village["eclos"] = true
+	SaveManager.save()
+	_launch_evolution_ritual("village", "hero", "Village", 0, 0, {"eclosion": true})
 
 # ─── Bouton ÉVOLUER pulsant ──────────────────────────────────
 # Fabrique un bouton ÉVOLUER avec pulsation scale 1.0→1.05→1.0 en boucle.
@@ -1579,7 +1567,7 @@ func _make_evolve_btn(entity_id: String, entity_name: String,
 # ─── Rituel d'ascension ──────────────────────────────────────
 # Stocke les paramètres dans GameData puis fond vers noir avant de changer de scène.
 func _launch_evolution_ritual(entity_type: String, entity_id: String,
-		entity_name: String, from_tier: int, to_tier: int) -> void:
+		entity_name: String, from_tier: int, to_tier: int, extra: Dictionary = {}) -> void:
 	GameData.pending_evolution = {
 		"entity_type": entity_type,
 		"entity_id":   entity_id,
@@ -1587,6 +1575,7 @@ func _launch_evolution_ritual(entity_type: String, entity_id: String,
 		"from_tier":   from_tier,
 		"to_tier":     to_tier,
 	}
+	GameData.pending_evolution.merge(extra, true)
 	var overlay := ColorRect.new()
 	overlay.color = Color.BLACK
 	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)

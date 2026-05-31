@@ -23,7 +23,7 @@
 extends Node
 
 const SAVE_PATH     := "user://IdleEvolutionSave.json"
-const SAVE_VER      := 10
+const SAVE_VER      := 11
 const SAVE_DEBOUNCE := 2.0
 
 var _save_dirty:  bool  = false

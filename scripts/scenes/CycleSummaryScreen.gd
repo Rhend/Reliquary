@@ -13,7 +13,7 @@
 extends Control
 
 var _fade_nodes: Array = []   # Controls révélés en phase 1
-var _xp_anims:   Array = []   # {bar, xp_label, gained, before_frac, after_frac}
+var _xp_anims:   Array = []   # {card, xp_label, gained, before_frac, after_frac}
 
 # ═══════════════════════════════════════════════════════════
 func _ready() -> void:
@@ -186,9 +186,11 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 	vb.add_child(sh)
 	_fade_register(sh)
 
-	# Conteneur dense : lignes serrées (même esprit que les listes d'entités).
-	var rows := VBoxContainer.new()
-	rows.add_theme_constant_override("separation", 4)
+	# Grille 2 colonnes : items de découverte répartis sur deux colonnes.
+	var rows := GridContainer.new()
+	rows.columns = 2
+	rows.add_theme_constant_override("h_separation", 24)
+	rows.add_theme_constant_override("v_separation", 4)
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_child(rows)
 
@@ -222,50 +224,53 @@ func _section_xp(vb: VBoxContainer, data: Dictionary,
 	_fade_register(total_lbl)
 
 	var cid := data.get("creature_id", "") as String
-	_xp_entity(vb, "⚔", "Héro", GameData.get_entity(cid),
-			data.get("xp_hero", 0.0) as float, UIColors.STAT_ATK)
+	_xp_entity(vb, "⚔", "Héro", GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
 	_xp_entity(vb, "🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String),
-			data.get("xp_biome", 0.0) as float, UIColors.TYPE_BIOME)
+			data.get("xp_biome", 0.0) as float)
 
 	# Entités rencontrées ce cycle : créatures, pièges, bénédictions.
+	# (l'icône indique le type ; la couleur de la carte vient du palier de l'entité)
 	var entities_xp := data.get("xp_entities_detail", {}) as Dictionary
 	for ent_id: String in entities_xp:
 		var e := GameData.get_entity(ent_id)
 		var e_name := e.get("nom_affichage_fr", e.get("name", ent_id)) as String
 		var icon := "🐾"
-		var col := UIColors.TYPE_CREATURE
 		match e.get("entity_type", ""):
-			"trap":
-				icon = "▲"
-				col = UIColors.TYPE_TRAP
-			"benediction":
-				icon = "✦"
-				col = UIColors.TYPE_BENEDICTION
-		_xp_entity(vb, icon, e_name, e, entities_xp[ent_id] as float, col)
+			"trap":        icon = "▲"
+			"benediction": icon = "✦"
+		_xp_entity(vb, icon, e_name, e, entities_xp[ent_id] as float)
 
 	var detail := data.get("xp_passives_detail", {}) as Dictionary
 	for passive_id: String in detail:
 		var p := GameData.get_entity(passive_id)
 		var p_name := p.get("nom_affichage_fr", p.get("name", passive_id)) as String
-		_xp_entity(vb, "⚡", p_name, p, detail[passive_id] as float, UIColors.COMBO_COLOR)
+		_xp_entity(vb, "⚡", p_name, p, detail[passive_id] as float)
 
-# Ajoute une carte XP pour une entité ayant reçu de l'XP (sinon ignorée).
+# Ajoute une ligne XP pour une entité ayant reçu de l'XP ce cycle (sinon ignorée).
+# La couleur de la carte = couleur du palier (tier) courant de l'entité.
+# xp_avant = XP au début du cycle, xp_apres = XP à la fin, xp_max = seuil du palier courant.
 func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictionary,
-		gained: float, icon_color: Color) -> void:
+		gained: float) -> void:
 	if gained <= 0.0 or entity.is_empty():
 		return
-	var thresh := _next_tier_threshold(entity)
-	var after  := entity.get("xp_maitrise_actuelle", 0.0) as float
-	var before := maxf(after - gained, 0.0)
-	var card   := _xp_card(icon, label, icon_color)
+	var tier         := entity.get("maitrise_actuelle", 0) as int
+	var entity_color := UIColors.tier_color(tier)
+	var xp_max    := _next_tier_threshold(entity)
+	var xp_apres  := entity.get("xp_maitrise_actuelle", 0.0) as float
+	var xp_avant  := maxf(xp_apres - gained, 0.0)
+	var tier_name := GameData.get_tier_name(tier)
+	var avant_frac := clampf(xp_avant / xp_max, 0.0, 1.0) if xp_max > 0.0 else 0.0
+	var apres_frac := clampf(xp_apres / xp_max, 0.0, 1.0) if xp_max > 0.0 else 1.0
+
+	var card := _xp_card(icon, label, entity_color, xp_apres, xp_max, tier_name)
 	vb.add_child(card["container"])
 	_fade_register(card["container"])
 	_xp_anims.append({
-		"bar":         card["bar"],
+		"card":        card["card"],
 		"xp_label":    card["xp_label"],
 		"gained":      gained,
-		"before_frac": clampf(before / thresh, 0.0, 1.0) if thresh > 0.0 else 0.0,
-		"after_frac":  clampf(after / thresh,  0.0, 1.0) if thresh > 0.0 else 1.0,
+		"before_frac": avant_frac,
+		"after_frac":  apres_frac,
 	})
 
 # ── Section 3 : Évolutions disponibles ─────────────────────
@@ -374,19 +379,20 @@ func _run_animation_sequence() -> void:
 	for xp: Dictionary in _xp_anims:
 		await _fill_xp_bar(xp)
 
-# Remplit une barre XP de son état AVANT vers son état APRÈS le cycle.
+# Anime une carte : le remplissage du fond va de xp_avant vers xp_apres,
+# pendant que "+X XP" compte de 0 au gain du cycle.
 func _fill_xp_bar(xp: Dictionary) -> void:
-	var bar     : XPCard = xp["bar"]
-	var xp_lbl  : Label  = xp["xp_label"]
-	var gained  : float  = xp["gained"]
-	var before  : float  = xp["before_frac"]
-	var after   : float  = xp["after_frac"]
+	var card   : XPCard = xp["card"]
+	var xp_lbl : Label  = xp["xp_label"]
+	var gained : float  = xp["gained"]
+	var before : float  = xp["before_frac"]
+	var after  : float  = xp["after_frac"]
 
-	bar.xp_fill = before
+	card.xp_fill = before
 	xp_lbl.text = "+0 XP"
 
 	var tw := create_tween().set_parallel(true)
-	tw.tween_property(bar, "xp_fill", after, 0.75).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_property(card, "xp_fill", after, 0.75).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_method(func(v: float) -> void:
 		xp_lbl.text = "+%.0f XP" % v
 	, 0.0, gained, 0.75).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
@@ -413,9 +419,10 @@ func _filter_zone(pool: Array, tier: int) -> Array:
 	return out
 
 # Ligne "label : n / total" — vert si complet.
-func _discovery_row(parent: VBoxContainer, label: String, n: int, total: int) -> void:
+func _discovery_row(parent: Container, label: String, n: int, total: int) -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
+	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(hb)
 	_fade_register(hb)
 
@@ -433,9 +440,10 @@ func _discovery_row(parent: VBoxContainer, label: String, n: int, total: int) ->
 	hb.add_child(vl)
 
 # Ligne "label : ✔/—" — ✔ vert si fait, neutre sinon.
-func _discovery_check(parent: VBoxContainer, label: String, done: bool) -> void:
+func _discovery_check(parent: Container, label: String, done: bool) -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
+	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(hb)
 	_fade_register(hb)
 
@@ -459,47 +467,66 @@ func _next_tier_threshold(entity: Dictionary) -> float:
 		return float(GameData.xp_thresholds.back())
 	return float(GameData.xp_thresholds[next_idx])
 
-# Carte XP — exactement le composant des cartes de passifs : la carte EST un
-# XPCard (fond = remplissage XP + bulles), avec le contenu par-dessus.
-func _xp_card(icon: String, label: String, fill_color: Color) -> Dictionary:
+# Carte XP au style des cartes de biome : XPCard au fond rempli (couleur entité
+# jusqu'au niveau d'XP, à 35 % via le composant), animée avant→après.
+# Toutes les infos sont DANS la carte :
+#   En-tête   : icône + nom | palier | "+X XP" vert (animé)
+#   Sous-ligne: "XP cur / max"
+# Retourne { container, card, xp_label } pour l'animation.
+func _xp_card(icon: String, label: String, entity_color: Color,
+		xp_apres: float, xp_max: float, tier_name: String) -> Dictionary:
 	var card := XPCard.new()
-	card.fill_color = fill_color
+	card.fill_color = entity_color
 	card.xp_fill    = 0.0
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# Fond sombre/neutre : seule la partie remplie (xp_fill) est colorée, pas toute la largeur.
-	var sb := StyleBoxFlat.new()
-	sb.bg_color     = UIColors.BG_BAR
-	sb.border_color = Color(fill_color.r, fill_color.g, fill_color.b, 0.55)
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(4)
-	card.add_theme_stylebox_override("panel", sb)
+	card.add_theme_stylebox_override("panel", UIHelpers.card_style(entity_color))
 
-	var m := UIHelpers.margin_of(6)
+	var m := UIHelpers.margin_of(8)
 	card.add_child(m)
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 8)
-	m.add_child(hb)
+	var vbx := VBoxContainer.new()
+	vbx.add_theme_constant_override("separation", 4)
+	m.add_child(vbx)
+
+	# ── En-tête : icône + nom | palier | +X XP (vert) ────────
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 8)
+	vbx.add_child(hdr)
 
 	var icon_lbl := Label.new()
 	icon_lbl.text = icon
 	icon_lbl.add_theme_font_size_override("font_size", 14)
-	icon_lbl.add_theme_color_override("font_color", fill_color)
-	hb.add_child(icon_lbl)
+	icon_lbl.add_theme_color_override("font_color", entity_color)
+	hdr.add_child(icon_lbl)
 
 	var name_lbl := Label.new()
 	name_lbl.text = label
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 12)
+	name_lbl.add_theme_font_size_override("font_size", 13)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	hb.add_child(name_lbl)
+	hdr.add_child(name_lbl)
 
+	var palier_lbl := Label.new()
+	palier_lbl.text = tier_name
+	palier_lbl.add_theme_font_size_override("font_size", 11)
+	palier_lbl.add_theme_color_override("font_color", entity_color)
+	hdr.add_child(palier_lbl)
+
+	var gain_lbl := Label.new()
+	gain_lbl.text = "+0 XP"
+	gain_lbl.add_theme_font_size_override("font_size", 12)
+	gain_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY)
+	hdr.add_child(gain_lbl)
+
+	# ── Sous-ligne : XP cur / max (dans la carte) ────────────
 	var xp_lbl := Label.new()
-	xp_lbl.text = "+0 XP"
-	xp_lbl.add_theme_font_size_override("font_size", 12)
-	xp_lbl.add_theme_color_override("font_color", fill_color)
-	hb.add_child(xp_lbl)
+	xp_lbl.text = "XP  %d / %d" % [int(xp_apres), int(xp_max)]
+	xp_lbl.horizontal_alignment  = HORIZONTAL_ALIGNMENT_RIGHT
+	xp_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	xp_lbl.add_theme_font_size_override("font_size", 10)
+	xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	vbx.add_child(xp_lbl)
 
-	return {"container": card, "bar": card, "xp_label": xp_lbl}
+	return {"container": card, "card": card, "xp_label": gain_lbl}
 
 # ═══════════════════════════════════════════════════════════
 #  Navigation

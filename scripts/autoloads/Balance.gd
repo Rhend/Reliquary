@@ -154,11 +154,19 @@ const CREATURE_CAP_PROFONDEUR: Dictionary = {
 # ═══════════════════════════════════════════════════════════
 #  Village — passage de Tier de bâtiments (distinct du palier de Maîtrise)
 # ═══════════════════════════════════════════════════════════
-# T1 → T2 (déblocage du Forgeron) : double condition simultanée
-#   1) XP de Maîtrise cumulée du Village ≥ VILLAGE_T2_XP
+# T0 → T1 (déblocage du Forgeron) : double condition simultanée
+#   1) XP de Maîtrise cumulée du Village ≥ VILLAGE_FORGE_XP
 #   2) Fragments de Mémoire ≥ requis (voir GameData.VILLAGE_TIER_REQUIREMENTS)
 
-const VILLAGE_T2_XP: float = 19200.0
+const VILLAGE_FORGE_XP: float = 19200.0
+
+# ─── Éclosion : naissance du Village (phase préliminaire, pré-T0) ───
+# Progression requise pour faire éclore le Village en T0 et débloquer
+# les expéditions (remplace l'ancien clicker d'XP menant à T1).
+const ECLOSION_CLICS: int = 100
+# Progression ajoutée par clic. Valeur normale : 1 (≈ 100 clics).
+# Réglée à 20 pour accélérer les tests (≈ 5 clics suffisent).
+const ECLOSION_CLIC_VALUE: int = 20
 
 # ═══════════════════════════════════════════════════════════
 #  Combo

@@ -24,8 +24,7 @@ const MAX_TIER: int = 5
 
 # Fragments requis pour passer du Tier n au Tier n+1 (index = tier source).
 const VILLAGE_TIER_REQUIREMENTS: Array[int] = [
-	0,  # T0→T1 : automatique
-	1,  # T1→T2 : 1 Fragment requis
+	1,  # T0→T1 (Forgeron) : 1 Fragment requis
 ]
 
 # ─── Données de progression (source : Balance.gd) ───────────
@@ -48,9 +47,11 @@ var entities: Dictionary = {}
 var pending_evolution: Dictionary = {}
 
 var village: Dictionary = {
-	"tier_actuel":         1,
+	"tier_actuel":         0,     # T0 = Village fraîchement éclos ; T1 = Forgeron (Forge)
 	"fragments_collectes": [],
 	"xp_maitrise":         0.0,   # XP de Maîtrise cumulée du Village (coef ×0.75) — gate de passage de Tier
+	"eclos":               false, # le Village n'existe pas tant qu'il n'a pas éclos (phase préliminaire)
+	"clics_eclosion":      0,     # progression de la phase d'éclosion (→ Balance.ECLOSION_CLICS)
 }
 
 var player: Dictionary = {
@@ -247,15 +248,15 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 		EventBus.biome_revele.emit(secondary_id)
 
 # Retourne true si le Village peut passer au Tier suivant.
-# T1 → T2 (Forgeron) : double condition — XP de Maîtrise ≥ VILLAGE_T2_XP ET Fragments ≥ requis.
+# T0 → T1 (Forgeron) : double condition — XP de Maîtrise ≥ VILLAGE_FORGE_XP ET Fragments ≥ requis.
 func can_upgrade_village() -> bool:
-	var current := int(village.get("tier_actuel", 1))
+	var current := int(village.get("tier_actuel", 0))
 	if current >= VILLAGE_TIER_REQUIREMENTS.size():
 		return false
 	var req := VILLAGE_TIER_REQUIREMENTS[current]
 	if village.get("fragments_collectes", []).size() < req:
 		return false
-	if current == 1 and float(village.get("xp_maitrise", 0.0)) < Balance.VILLAGE_T2_XP:
+	if current == 0 and float(village.get("xp_maitrise", 0.0)) < Balance.VILLAGE_FORGE_XP:
 		return false
 	return true
 
@@ -273,7 +274,7 @@ func add_village_mastery_xp(base_xp: float, event_tier: int) -> void:
 func upgrade_village() -> bool:
 	if not can_upgrade_village():
 		return false
-	village["tier_actuel"] = int(village.get("tier_actuel", 1)) + 1
+	village["tier_actuel"] = int(village.get("tier_actuel", 0)) + 1
 	EventBus.village_tier_change.emit(village["tier_actuel"])
 	return true
 

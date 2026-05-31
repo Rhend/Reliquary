@@ -14,6 +14,7 @@
 extends Control
 
 const VILLAGE_SCENE := "res://scenes/village/village.tscn"
+const ECLOSION_COLOR := Color(1.0, 0.85, 0.4)  # doré chaud — naissance du Village
 
 # ─── Nœuds UI ────────────────────────────────────────────────
 var _card:           Control           = null
@@ -124,7 +125,7 @@ func _build_tier_label() -> void:
 	var to_tier := _params.get("to_tier", 1) as int
 
 	_tier_label = Label.new()
-	_tier_label.text                 = GameData.get_tier_name(to_tier).to_upper()
+	_tier_label.text                 = "ÉCLOSION" if _params.get("eclosion", false) else GameData.get_tier_name(to_tier).to_upper()
 	_tier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tier_label.add_theme_font_size_override("font_size", 56)
 	_tier_label.add_theme_color_override("font_color", Color.WHITE)
@@ -145,6 +146,8 @@ func _build_particles() -> void:
 	var vp      := get_viewport_rect().size
 	var to_tier := _params.get("to_tier", 1) as int
 	var color   := _get_tier_particle_color(to_tier)
+	if _params.get("eclosion", false):
+		color = ECLOSION_COLOR
 
 	_particles = CPUParticles2D.new()
 	_particles.emitting              = false
@@ -190,6 +193,12 @@ func _get_tier_particle_color(tier: int) -> Color:
 		4: return Color(1.00, 0.65, 0.10)
 		5: return Color(1.00, 0.10, 0.80)
 		_: return Color.WHITE
+
+# Couleur d'accent de la séquence : dorée pour l'éclosion, sinon couleur du palier cible.
+func _accent_color() -> Color:
+	if _params.get("eclosion", false):
+		return ECLOSION_COLOR
+	return UIColors.tier_color(_params.get("to_tier", 1) as int)
 
 # ─── Sons générés procéduralement ────────────────────────────
 
@@ -307,6 +316,9 @@ func _phase3_ascension_start() -> void:
 	# Transition de couleur de la carte (from_tier → to_tier)
 	var from_color := UIColors.tier_color(_params.get("from_tier", 0) as int)
 	var to_color   := UIColors.tier_color(_params.get("to_tier",   1) as int)
+	if _params.get("eclosion", false):
+		from_color = Color(0.15, 0.15, 0.20)  # ténèbres avant la naissance
+		to_color   = ECLOSION_COLOR
 	create_tween().set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE) \
 		.tween_method(_update_card_color.bind(from_color, to_color), 0.0, 1.0, 2.0)
 
@@ -332,7 +344,9 @@ func _phase4_revelation() -> void:
 	appear_tw.tween_property(_tier_label, "scale", Vector2.ONE, 0.1) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	appear_tw.tween_interval(0.25)  # pause visible en haut avant la descente
-	appear_tw.tween_callback(_start_tier_descent)
+	# Éclosion : naissance (pas une montée de palier) → pas de morph dans la carte.
+	if not _params.get("eclosion", false):
+		appear_tw.tween_callback(_start_tier_descent)
 
 func _start_tier_descent() -> void:
 	if not is_instance_valid(_from_tier_lbl): return
@@ -386,6 +400,10 @@ func _finish_tier_replacement() -> void:
 
 # ─── Phase 5 : carte remonte au tiers supérieur + texte bonus surgit ────────
 func _phase5_celebration() -> void:
+	# Éclosion : le grand mot « ÉCLOSION » disparaît en fondu (pas de morph dans la carte).
+	if _params.get("eclosion", false) and is_instance_valid(_tier_label):
+		create_tween().tween_property(_tier_label, "modulate:a", 0.0, 0.3)
+
 	# Carte glisse vers le tiers supérieur avec effet élastique d'arrivée
 	var slide := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	slide.set_parallel(true)
@@ -395,8 +413,7 @@ func _phase5_celebration() -> void:
 	# Panneau cadre + label bonus, 120px sous le bas de la carte
 	var bonus_text := _get_evolution_text()
 	if not bonus_text.is_empty():
-		var to_tier  := _params.get("to_tier", 1) as int
-		var to_color := UIColors.tier_color(to_tier)
+		var to_color := _accent_color()
 
 		var panel_style := StyleBoxFlat.new()
 		panel_style.bg_color     = Color(to_color.r, to_color.g, to_color.b, 0.08)
@@ -444,15 +461,17 @@ func _get_evolution_text() -> String:
 	var entity_id   := _params.get("entity_id", "")   as String
 	var to_tier     := _params.get("to_tier", 1)       as int
 
-	# Village — textes figés par tier (entity_type "village" depuis Village.gd)
+	# Éclosion du Village (phase préliminaire) → ouverture des expéditions.
+	if _params.get("eclosion", false):
+		return "Le Village a éclos !\nVous pouvez maintenant\npartir en expédition !"
+
+	# Village — jalons du hub par palier du héro (gates décalés d'un rang).
 	if entity_type == "village":
 		match to_tier:
-			1: return "Vous pouvez maintenant\npartir en expédition !"
-			2: return "La Forge est déverrouillée !"
-			3: return "Le Sanctuaire est accessible !"
-			4: return "La Relique est accessible !"
-			5: return "Le mystère ultime s'ouvre…"
-			_: return ""
+			2: return "Le Sanctuaire est accessible !"
+			3: return "La Relique est accessible !"
+			4: return "Le mystère ultime s'ouvre…"
+			_: return "Nouveau palier du Village !"
 
 	# Entités génériques — lire tier_effects + passifs_par_palier
 	var entity := GameData.get_entity(entity_id)
@@ -480,8 +499,7 @@ func _get_evolution_text() -> String:
 
 # ─── Bouton retour village ───────────────────────────────────
 func _show_return_button() -> void:
-	var to_tier  := _params.get("to_tier", 1) as int
-	var to_color := UIColors.tier_color(to_tier)
+	var to_color := _accent_color()
 
 	var btn := Button.new()
 	btn.text = "REVENIR AU VILLAGE"
