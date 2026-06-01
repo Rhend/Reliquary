@@ -116,12 +116,14 @@ static func xp_panel(fill_color: Color, xp_fill: float,
 	return card
 
 # Carte XP standard d'une entité — DA UNIQUE du jeu pour ce motif.
-# XPCard (fond rempli au palier courant) + en-tête « nom (gauche) | palier
-# (badge) | XP (droite) ». À réutiliser partout plutôt que reconstruire
+# XPCard (fond rempli au palier courant) + en-tête « [icône] nom (gauche) |
+# palier (badge) | XP (droite) ». À réutiliser partout plutôt que reconstruire
 # l'en-tête à la main. Palier max → passer xp_max = 0 → affiche « RANG MAX ».
+# icon : préfixe optionnel (emoji/symbole) devant le nom (ex. récap de cycle).
 # Retourne { card, header } : ajouter `card` au parent ; `header` (HBox) reste
-# accessible pour y greffer un élément optionnel (flèche d'accordéon, etc.).
-static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: float) -> Dictionary:
+# accessible pour y greffer un élément optionnel (flèche d'accordéon, gain…).
+static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: float,
+		icon: String = "") -> Dictionary:
 	var color := UIColors.tier_color(tier)
 	var at_max := xp_max <= 0.0
 	var frac := 0.0
@@ -137,6 +139,13 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 	header.add_theme_constant_override("separation", 8)
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	m.add_child(header)
+
+	if not icon.is_empty():
+		var icon_lbl := Label.new()
+		icon_lbl.text = icon
+		icon_lbl.add_theme_font_size_override("font_size", 14)
+		icon_lbl.add_theme_color_override("font_color", color)
+		header.add_child(icon_lbl)
 
 	var name_lbl := Label.new()
 	name_lbl.text = display_name

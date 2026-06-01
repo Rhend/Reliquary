@@ -253,16 +253,14 @@ func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictiona
 		gained: float) -> void:
 	if gained <= 0.0 or entity.is_empty():
 		return
-	var tier         := entity.get("maitrise_actuelle", 0) as int
-	var entity_color := UIColors.tier_color(tier)
+	var tier      := entity.get("maitrise_actuelle", 0) as int
 	var xp_max    := _next_tier_threshold(entity)
 	var xp_apres  := entity.get("xp_maitrise_actuelle", 0.0) as float
 	var xp_avant  := maxf(xp_apres - gained, 0.0)
-	var tier_name := GameData.get_tier_name(tier)
 	var avant_frac := clampf(xp_avant / xp_max, 0.0, 1.0) if xp_max > 0.0 else 0.0
 	var apres_frac := clampf(xp_apres / xp_max, 0.0, 1.0) if xp_max > 0.0 else 1.0
 
-	var card := _xp_card(icon, label, entity_color, xp_apres, xp_max, tier_name)
+	var card := _xp_card(icon, label, tier, xp_apres, xp_max)
 	vb.add_child(card["container"])
 	_fade_register(card["container"])
 	_xp_anims.append({
@@ -461,61 +459,22 @@ func _next_tier_threshold(entity: Dictionary) -> float:
 		return float(GameData.xp_thresholds.back())
 	return float(GameData.xp_thresholds[next_idx])
 
-# Carte XP au style des cartes de biome : XPCard au fond rempli (couleur entité
-# jusqu'au niveau d'XP, à 35 % via le composant), animée avant→après.
-# Toutes les infos sont DANS la carte :
-#   En-tête   : icône + nom | palier | "+X XP" vert (animé)
-#   Sous-ligne: "XP cur / max"
-# Retourne { container, card, xp_label } pour l'animation.
-func _xp_card(icon: String, label: String, entity_color: Color,
-		xp_apres: float, xp_max: float, tier_name: String) -> Dictionary:
-	var card := UIHelpers.xp_panel(entity_color, 0.0)
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var m := UIHelpers.margin_of(8)
-	card.add_child(m)
-	var vbx := VBoxContainer.new()
-	vbx.add_theme_constant_override("separation", 4)
-	m.add_child(vbx)
-
-	# ── En-tête : icône + nom | palier | +X XP (vert) ────────
-	var hdr := HBoxContainer.new()
-	hdr.add_theme_constant_override("separation", 8)
-	vbx.add_child(hdr)
-
-	var icon_lbl := Label.new()
-	icon_lbl.text = icon
-	icon_lbl.add_theme_font_size_override("font_size", 14)
-	icon_lbl.add_theme_color_override("font_color", entity_color)
-	hdr.add_child(icon_lbl)
-
-	var name_lbl := Label.new()
-	name_lbl.text = label
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 13)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	hdr.add_child(name_lbl)
-
-	var palier_lbl := Label.new()
-	palier_lbl.text = tier_name
-	palier_lbl.add_theme_font_size_override("font_size", 11)
-	palier_lbl.add_theme_color_override("font_color", entity_color)
-	hdr.add_child(palier_lbl)
+# Carte XP du récap : carte d'entité commune (UIHelpers.entity_xp_card —
+# même DA que les panneaux du Village : fond rempli, « icône | nom | palier |
+# XP à droite ») + un gain « +X XP » vert greffé à droite de l'en-tête, animé
+# (compteur 0→gain) en parallèle du remplissage du fond.
+# Retourne { container, card, xp_label } pour l'animation (_fill_xp_bar).
+func _xp_card(icon: String, label: String, tier: int,
+		xp_apres: float, xp_max: float) -> Dictionary:
+	var built := UIHelpers.entity_xp_card(label, tier, xp_apres, xp_max, icon)
+	var card := built["card"] as XPCard
+	var header := built["header"] as HBoxContainer
 
 	var gain_lbl := Label.new()
 	gain_lbl.text = "+0 XP"
 	gain_lbl.add_theme_font_size_override("font_size", 12)
 	gain_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY)
-	hdr.add_child(gain_lbl)
-
-	# ── Sous-ligne : XP cur / max (dans la carte) ────────────
-	var xp_lbl := Label.new()
-	xp_lbl.text = "XP  %d / %d" % [int(xp_apres), int(xp_max)]
-	xp_lbl.horizontal_alignment  = HORIZONTAL_ALIGNMENT_RIGHT
-	xp_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	xp_lbl.add_theme_font_size_override("font_size", 10)
-	xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	vbx.add_child(xp_lbl)
+	header.add_child(gain_lbl)
 
 	return {"container": card, "card": card, "xp_label": gain_lbl}
 
