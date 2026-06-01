@@ -15,7 +15,7 @@ const BG_DARK := Color(0.06, 0.07, 0.11)
 const BG_CARD := Color(0.10, 0.11, 0.16)
 const BG_BAR  := Color(0.07, 0.07, 0.12)
 
-# ── Barres de PV — Héro (vert → jaune → rouge → rouge vif) ─
+# ── Barres de PV — Héros (vert → jaune → rouge → rouge vif) ─
 const HP_HIGH     := Color(0.18, 0.82, 0.32)   # > 60 %
 const HP_MID      := Color(0.90, 0.74, 0.08)   # 30–60 %
 const HP_LOW      := Color(0.88, 0.18, 0.12)   # 15–30 %
@@ -27,7 +27,7 @@ const ENEMY_HIGH := Color(0.88, 0.18, 0.12)
 const ENEMY_MID  := Color(0.90, 0.52, 0.08)
 const ENEMY_LOW  := Color(0.88, 0.82, 0.08)
 
-# ── Labels de statistiques du héro ─────────────────────────
+# ── Labels de statistiques du héros ─────────────────────────
 const STAT_ATK := Color(1.00, 0.55, 0.20)
 const STAT_DEF := Color(0.30, 0.70, 1.00)
 const STAT_HP  := Color(0.20, 0.85, 0.35)
@@ -51,7 +51,7 @@ const LOG_IGNORED  := Color(0.50, 0.55, 0.92)
 const MODIFIER_ACTIVE := Color(0.95, 0.75, 0.10)
 
 # ── Effets visuels ──────────────────────────────────────────
-const VICTORY_GLOW := Color(0.22, 1.00, 0.48)   # flash carte héro après victoire
+const VICTORY_GLOW := Color(0.22, 1.00, 0.48)   # flash carte héros après victoire
 const HEAL_COLOR   := Color(0.25, 0.95, 0.40)   # nombres flottants de soin
 
 # ── Forge / Recettes ────────────────────────────────────────
@@ -85,9 +85,9 @@ const TEXT_BONUS  := Color(0.55, 1.00, 0.55)
 const FILTER_ON   := Color(1.00, 0.88, 0.20)
 
 # ── Dégâts flottants ────────────────────────────────────────
-const DMG_BY_HERO   := Color(1.00, 0.92, 0.05)   # dégâts infligés par le héro (faible/moyen)
-const DMG_BY_ENEMY  := Color(1.00, 0.30, 0.15)   # dégâts reçus par le héro (faible)
-const DMG_HEAVY_HERO  := Color(1.00, 0.50, 0.08)   # orange éclatant — dégâts forts par le héro
+const DMG_BY_HERO   := Color(1.00, 0.92, 0.05)   # dégâts infligés par le héros (faible/moyen)
+const DMG_BY_ENEMY  := Color(1.00, 0.30, 0.15)   # dégâts reçus par le héros (faible)
+const DMG_HEAVY_HERO  := Color(1.00, 0.50, 0.08)   # orange éclatant — dégâts forts par le héros
 const DMG_HEAVY_ENEMY := Color(1.00, 0.08, 0.08)   # rouge vif — dégâts forts par l'ennemi
 
 # ── Combo ────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ const COMBO_COLOR := Color(1.00, 0.62, 0.05)
 #  Fonctions utilitaires (logique conditionnelle)
 # ───────────────────────────────────────────────────────────
 
-# Couleur de la barre de PV du héro — 4 niveaux de danger.
+# Couleur de la barre de PV du héros — 4 niveaux de danger.
 func hero_hp(pct: float) -> Color:
 	if pct > 0.60: return HP_HIGH
 	if pct > 0.30: return HP_MID

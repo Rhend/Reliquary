@@ -9,7 +9,7 @@
 #      (créature / bénédiction / piège) selon la table du biome.
 #   4. Les rencontres de type créature délèguent à CombatPlayer et
 #      attendent le signal combat_ended avant de continuer.
-#   5. Après chaque rencontre, le héro régénère REGEN_PCT de
+#   5. Après chaque rencontre, le héros régénère REGEN_PCT de
 #      ses PV max (modifiable par le modificateur de cycle).
 #
 # Modificateurs de cycle :
@@ -17,7 +17,7 @@
 #   Exemples : XP ×1.5, régénération 30 %, pièges ignorés.
 #
 # Combo :
-#   Incrémenté si le héro perd ≤ COMBO_HP_THRESHOLD % de ses PV.
+#   Incrémenté si le héros perd ≤ COMBO_HP_THRESHOLD % de ses PV.
 #   Le combo donne un bonus d'ATK multiplicatif au combat suivant
 #   (+5 % par niveau de combo au-dessus de 1).
 #
@@ -40,7 +40,7 @@ const INSTANT_EVENT_DELAY:   float = 1.0  # pause après piège ou bénédiction
 
 var is_running:               bool       = false  # vrai pendant qu'une aventure est en cours
 var current_biome_id:         String     = ""     # id du biome actuellement exploré
-var current_hp:               float      = 0.0    # PV courants du héro
+var current_hp:               float      = 0.0    # PV courants du héros
 var current_modifier:         Dictionary = {}     # modificateur de cycle actif
 var zone_courante:            Enums.Zone = Enums.Zone.SURFACE
 var _nb_evenements_zone:      int        = 0      # événements résolus dans la zone courante
@@ -50,7 +50,7 @@ var _encounter_timer:         Timer              # timer qui cadence les rencont
 var _first_encounter_pending: bool  = false      # vrai uniquement pour la toute première rencontre du cycle
 var _is_first_combat:         bool  = true       # vrai jusqu'au premier combat du cycle (embuscade)
 var _combo_count:             int   = 0          # combo courant (remis à 0 si trop de dégâts reçus)
-var _combat_start_hp:         float = 0.0        # PV du héro au début du combat (pour calcul combo)
+var _combat_start_hp:         float = 0.0        # PV du héros au début du combat (pour calcul combo)
 
 # Créatures disponibles ce cycle avec leurs poids pondérés.
 # Rempli une fois par cycle via _build_available_creatures().
@@ -60,7 +60,7 @@ var available_creatures: Array = []
 # ─── Statistiques du cycle en cours ─────────────────────────
 
 var _cycle_luck:               int        = 0    # Luck temporaire accumulée par les bénédictions de type "luck"
-var _cycle_xp:                 float      = 0.0  # XP totale gagnée par le héro ce cycle
+var _cycle_xp:                 float      = 0.0  # XP totale gagnée par le héros ce cycle
 var _cycle_loot:               int        = 0    # Nombre total d'objets droppés
 var _cycle_combo_max:          int        = 0    # Meilleur combo atteint
 var _cycle_combats_won:        int        = 0    # Combats remportés
@@ -87,7 +87,7 @@ func _ready() -> void:
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.xp_gained.connect(_on_xp_gained_tracking)
 
-# Accumule l'XP héro/biome/passifs/entités pour le résumé de cycle.
+# Accumule l'XP héros/biome/passifs/entités pour le résumé de cycle.
 # Appelé par EventBus.xp_gained à chaque attribution MasterySystem.
 func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
 	if not is_running:
@@ -117,7 +117,7 @@ func start_adventure(biome_id: String) -> void:
 	var hero    = GameData.get_entity(hero_id)
 
 	if biome.is_empty() or hero.is_empty():
-		push_error("AdventureSystem: biome ou héro manquant pour démarrer")
+		push_error("AdventureSystem: biome ou héros manquant pour démarrer")
 		return
 
 	current_biome_id = biome_id
@@ -180,7 +180,7 @@ func get_modifier_bonuses() -> Dictionary:
 		"def_mult": float(current_modifier.get("def_mult", 1.0))
 	}
 
-# XP totale gagnée par le héro depuis le début du cycle courant (lecture seule, pour l'UI).
+# XP totale gagnée par le héros depuis le début du cycle courant (lecture seule, pour l'UI).
 func get_cycle_xp() -> float:
 	return _cycle_xp
 
@@ -291,7 +291,7 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 			_cycle_luck  += int(luck_val)
 
 # Distribue l'XP de Maîtrise d'un événement résolu à TOUTES les entités actives :
-# l'entité rencontrée, le héro, le biome, le village et les passifs actifs.
+# l'entité rencontrée, le héros, le biome, le village et les passifs actifs.
 # Pour chacune : XP = base × modificateur d'écart × coefficient de type (cf. MasterySystem).
 # event_id   = id de l'entité rencontrée (créature / piège / bénédiction).
 # event_base = XP de base du type d'événement (avant modificateur de cycle).
@@ -303,7 +303,7 @@ func _distribute_mastery_xp(event_id: String, event_base: float) -> void:
 	var event_tier := int(GameData.get_entity(event_id).get("maitrise_actuelle", 0))
 
 	MasterySystem.add_xp_to_entity(event_id, base, event_tier)                                       # entité rencontrée
-	MasterySystem.add_xp_to_entity(GameData.player.get("active_creature_id", ""), base, event_tier)  # héro
+	MasterySystem.add_xp_to_entity(GameData.player.get("active_creature_id", ""), base, event_tier)  # héros
 	MasterySystem.add_xp_to_entity(current_biome_id, base, event_tier)                               # biome
 	MasterySystem.add_xp_to_all_active(base, event_tier)                                             # passifs actifs
 	GameData.add_village_mastery_xp(base, event_tier)                                                # village
@@ -452,7 +452,7 @@ func _trap_dmg_pct() -> float:
 		Enums.Zone.ABYSSE:     return Balance.TRAP_DMG_PCT_ABYSSE
 		_:                     return Balance.TRAP_DMG_PCT_SURFACE
 
-# Calcule les PV max effectifs du héro (stats de base + équipement + passifs).
+# Calcule les PV max effectifs du héros (stats de base + équipement + passifs).
 func get_max_hp() -> float:
 	var hero_id  = GameData.player.get("active_creature_id", "")
 	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)

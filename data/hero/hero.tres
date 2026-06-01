@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = "hero"
-nom_affichage_fr = "Héro"
+nom_affichage_fr = "Héros"
 nom_affichage_en = "Hero"
 passifs_par_palier = {}
 

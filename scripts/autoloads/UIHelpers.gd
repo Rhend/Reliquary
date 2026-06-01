@@ -115,28 +115,70 @@ static func xp_panel(fill_color: Color, xp_fill: float,
 			card_style(fill_color, bg_alpha, border_alpha, border_width, corner_radius))
 	return card
 
-# Retourne la barre XP universelle (XPCard : fill coloré + bulles animées).
-# Composant de référence unique pour toutes les barres XP du jeu.
-#   height   : hauteur minimale en pixels (défaut 16).
-#   show_pct : affiche le pourcentage textuel centré dans la barre (défaut true).
-static func xp_bar(value: float, max_value: float, color: Color,
-		height: int = 16, show_pct: bool = true) -> XPCard:
-	var frac := clampf(value / max_value, 0.0, 1.0) if max_value > 0.0 else 0.0
-	var bar := XPCard.new()
-	bar.fill_color            = color
-	bar.xp_fill               = frac
-	bar.custom_minimum_size   = Vector2(0.0, float(height))
-	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.add_theme_stylebox_override("panel", card_style(color))
-	if show_pct:
-		var pct := Label.new()
-		pct.text                 = "%d%%" % int(round(frac * 100.0))
-		pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		pct.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-		pct.add_theme_font_size_override("font_size", 10)
-		pct.add_theme_color_override("font_color", Color.WHITE)
-		bar.add_child(pct)
-	return bar
+# Carte XP standard d'une entité — DA UNIQUE du jeu pour ce motif.
+# XPCard (fond rempli au palier courant) + en-tête « [icône] nom (gauche) |
+# palier (badge) | XP (droite) ». À réutiliser partout plutôt que reconstruire
+# l'en-tête à la main. Palier max → passer xp_max = 0 → affiche « RANG MAX ».
+# icon : préfixe optionnel (emoji/symbole) devant le nom (ex. récap de cycle).
+# Retourne { card, header } : ajouter `card` au parent ; `header` (HBox) reste
+# accessible pour y greffer un élément optionnel (flèche d'accordéon, gain…).
+static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: float,
+		icon: String = "") -> Dictionary:
+	var color := UIColors.tier_color(tier)
+	var at_max := xp_max <= 0.0
+	var frac := 0.0
+	if not at_max:
+		frac = clampf(xp / xp_max, 0.0, 1.0)
+
+	var card := xp_panel(color, frac)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var m := margin_of(8)
+	card.add_child(m)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	m.add_child(header)
+
+	if not icon.is_empty():
+		var icon_lbl := Label.new()
+		icon_lbl.text = icon
+		icon_lbl.add_theme_font_size_override("font_size", 14)
+		icon_lbl.add_theme_color_override("font_color", color)
+		header.add_child(icon_lbl)
+
+	var name_lbl := Label.new()
+	name_lbl.text = display_name
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	header.add_child(name_lbl)
+
+	var tbadge := Label.new()
+	tbadge.text = GameData.get_tier_name(tier)
+	tbadge.add_theme_font_size_override("font_size", 11)
+	tbadge.add_theme_color_override("font_color", color)
+	header.add_child(tbadge)
+
+	var xp_lbl := Label.new()
+	if at_max:
+		xp_lbl.text = "RANG MAX"
+		xp_lbl.add_theme_color_override("font_color", color)
+	else:
+		xp_lbl.text = "XP  %s / %s" % [xp_fmt(int(xp)), xp_fmt(int(xp_max))]
+		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	xp_lbl.add_theme_font_size_override("font_size", 10)
+	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	header.add_child(xp_lbl)
+
+	return {"card": card, "header": header}
+
+# Formate un entier XP avec séparateur de milliers (ex: 1 234).
+static func xp_fmt(xp: int) -> String:
+	if xp >= 1000:
+		var s := str(xp)
+		return s.left(s.length() - 3) + " " + s.right(3)
+	return str(xp)
 
 # Retourne un Label "Aucun" en TEXT_MUTED — état vide pour les listes.
 static func none_label(font_size: int = 13) -> Label:

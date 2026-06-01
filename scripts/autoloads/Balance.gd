@@ -21,7 +21,7 @@
 class_name Balance
 
 # ═══════════════════════════════════════════════════════════
-#  Stats du héro par palier de Maîtrise [T0..T5]
+#  Stats du héros par palier de Maîtrise [T0..T5]
 #  Source de vérité (spec "Fondations du jeu").
 #  T3-T5 extrapolés à ~×1.7/tier HP/ATK, ×2.0 DEF.
 # ═══════════════════════════════════════════════════════════
@@ -45,7 +45,7 @@ const CREATURE_PROFONDEUR_HP:  Array[int] = [60,  95,  155, 255, 415, 675]
 const CREATURE_PROFONDEUR_ATK: Array[int] = [14,  21,  33,  53,  85,  135]
 
 # ═══════════════════════════════════════════════════════════
-#  Pièges — dégâts en % des PV max du héro (palier Commun)
+#  Pièges — dégâts en % des PV max du héros (palier Commun)
 #  Modulés par zone. Première passe ; la modulation par
 #  Maîtrise du piège sera calibrée dans une passe dédiée.
 # ═══════════════════════════════════════════════════════════
@@ -77,7 +77,7 @@ const CRIT_MULTIPLIER: float = 1.8    # multiplicateur de dégâts en cas de cri
 const MIN_DAMAGE:      float = 1.0    # plancher de dégâts après défense (ATK − DEF)
 
 # ─── Poison de biome (Marécage Putride) ──────────────────────
-const BIOME_POISON_DMG_PCT:   float = 0.05  # % de l'ATK héro infligé par stack
+const BIOME_POISON_DMG_PCT:   float = 0.05  # % de l'ATK héros infligé par stack
 const BIOME_POISON_MAX_STACKS: int  = 3     # stacks maximum
 const BIOME_POISON_DURATION:   int  = 3     # tours avant expiration des stacks
 

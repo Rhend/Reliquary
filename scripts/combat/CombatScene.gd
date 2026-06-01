@@ -2,12 +2,12 @@
 # CombatScene — Scène de combat (refonte UI).
 #
 # Layout :
-#   Zone combat : colonne Héro (gauche) ↔ colonne Ennemi (droite),
+#   Zone combat : colonne Héros (gauche) ↔ colonne Ennemi (droite),
 #                 séparées par un séparateur diagonal "VS".
 #                 Chaque colonne : nom · double anneau (cooldown + PV)
 #                 · pill d'action · pills d'états.
 #   Feed passifs : bande de pills transitoires.
-#   Journal      : log filtrable par onglets (Tout/Héro/Monstre/…).
+#   Journal      : log filtrable par onglets (Tout/Héros/Monstre/…).
 #   Barre de bas : "XP ce cycle — X"  ·  bouton fin d'expédition.
 #
 # La logique de combat (CombatPlayer / CombatResolver / AdventureSystem)
@@ -16,7 +16,7 @@
 class_name CombatScene extends Control
 
 # ─── Filtres du journal ──────────────────────────────────────
-const LOG_TABS := ["Tout", "Héro", "Monstre", "Attaque", "Défense", "Soin", "État"]
+const LOG_TABS := ["Tout", "Héros", "Monstre", "Attaque", "Défense", "Soin", "État"]
 
 # ─── Nœuds racine ────────────────────────────────────────────
 var _shaker: Control          # conteneur décalé pour le shake d'écran
@@ -89,7 +89,7 @@ func _build_ui() -> void:
 
 # ── Zone de combat : 2 colonnes + séparateur diagonal ──────
 func _build_combat_area() -> Control:
-	# Héro (moitié gauche) | séparateur centré 80px | Ennemi (moitié droite).
+	# Héros (moitié gauche) | séparateur centré 80px | Ennemi (moitié droite).
 	# La diagonale est tracée dans le band central et ne déborde pas sur les colonnes.
 	var hbox := HBoxContainer.new()
 	hbox.size_flags_vertical   = Control.SIZE_EXPAND_FILL
@@ -264,7 +264,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var c      := GameData.get_entity(cid)
 	var htier  := int(c.get("maitrise_actuelle", 0))
-	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héro")) as String).to_upper()
+	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héros")) as String).to_upper()
 	_hero_ring.setup(UIColors.tier_color(htier))
 	_hero_ring.set_hp(AdventureSystem.current_hp, AdventureSystem.current_hp)
 	_hide_action(_hero_action)
@@ -309,7 +309,7 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	var c        := GameData.get_entity(creature_id)
 	var htier    := int(c.get("maitrise_actuelle", 0))
 	var hero_max := AdventureSystem.get_max_hp()
-	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héro")) as String).to_upper()
+	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héros")) as String).to_upper()
 	_hero_ring.setup(UIColors.tier_color(htier))
 	_hero_ring.set_hp(hero_hp, hero_max)
 
@@ -366,7 +366,7 @@ func _on_step_ended(step: CombatStep) -> void:
 		_enemy_ring.damage(step.damage, step.is_crit)
 		if step.is_crit:
 			_screen_shake()
-		_log_attack(_hero_name.text, step.damage, step.is_crit, ["Héro", "Attaque"])
+		_log_attack(_hero_name.text, step.damage, step.is_crit, ["Héros", "Attaque"])
 		if step.passive_poison_proc:
 			_add_log("[color=%s]Contact Venimeux[/color]" % _hex(UIColors.TIER_EPIQUE), ["État"])
 	else:
@@ -402,7 +402,7 @@ func _on_combat_ended(result: Dictionary) -> void:
 		_enemy_ring.fade_defeated()
 		_cycle_xp = AdventureSystem.get_cycle_xp()
 		_update_xp_label()
-		_add_log("[color=%s]Victoire[/color]" % _hex(UIColors.LOG_VICTORY), ["Héro"])
+		_add_log("[color=%s]Victoire[/color]" % _hex(UIColors.LOG_VICTORY), ["Héros"])
 	else:
 		_enemy_ring.celebrate()
 		_hero_ring.fade_defeated()
@@ -591,7 +591,7 @@ func _on_creature_unique_vaincue(_biome_id: String, ingredient_id: String, passi
 	var ingr := GameData.get_entity(ingredient_id).get("nom_affichage_fr", ingredient_id) as String
 	var passif := GameData.get_entity(passif_id).get("nom_affichage_fr", passif_id) as String
 	_add_log("[color=%s]Créature Unique vaincue — %s, %s[/color]"
-			% [_hex(Color(1.0, 0.8, 0.2)), ingr, passif], ["Héro"])
+			% [_hex(Color(1.0, 0.8, 0.2)), ingr, passif], ["Héros"])
 
 # ═══════════════════════════════════════════════════════════
 #  Helpers
