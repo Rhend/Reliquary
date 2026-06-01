@@ -143,67 +143,30 @@ static func _normalize_unique_passive(eid: String, e: Dictionary) -> Dictionary:
 # corps avec effet courant + cascade des paliers à débloquer.
 static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> Control:
 	var rarity   := pdata.get("maitrise_actuelle", 0) as int
-	var rcolor   := UIColors.tier_color(rarity)
-	var rname    := GameData.get_tier_name(rarity)
 	var has_evos := rarity < GameData.MASTERY_TIERS.size() - 1
+	var xp_cur   := pdata.get("xp_maitrise_actuelle", 0.0) as float
+	var name_txt := pdata.get("name", pdata.get("id", "?")) as String
 
-	# Calcul de la progression XP vers le palier suivant
-	var xp_cur  : float = pdata.get("xp_maitrise_actuelle", 0.0) as float
-	var xp_need : int   = 0
-	var xp_fill := 0.0
+	# Seuil du palier suivant (0 si plus d'évolution → carte « RANG MAX »).
+	var xp_max := 0.0
 	if has_evos and rarity + 1 < GameData.xp_thresholds.size():
-		xp_need = int(GameData.xp_thresholds[rarity + 1])
-		if xp_need > 0:
-			xp_fill = clampf(xp_cur / float(xp_need), 0.0, 1.0)
+		xp_max = float(GameData.xp_thresholds[rarity + 1])
 
 	var wrapper := VBoxContainer.new()
 	wrapper.add_theme_constant_override("separation", 2)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# ── Carte principale avec barre XP en fond ──────────────
-	var panel := UIHelpers.xp_panel(rcolor, xp_fill)
+	# ── Carte principale via le template commun (nom | palier | XP) ──
+	var built := UIHelpers.entity_xp_card(name_txt, rarity, xp_cur, xp_max)
+	var panel := built["card"] as XPCard
+	var header := built["header"] as HBoxContainer
 	wrapper.add_child(panel)
 
-	var m := UIHelpers.margin_of(6)
-	panel.add_child(m)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 3)
-	m.add_child(vb)
-
-	# ── En-tête (toujours visible) : nom | palier | flèche | XP ──
-	var header := HBoxContainer.new()
-	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(header)
-
-	var name_lbl := Label.new()
-	name_lbl.text = pdata.get("name", pdata.get("id", "?")) as String
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 12)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	header.add_child(name_lbl)
-
-	var badge := Label.new()
-	badge.text = rname
-	badge.add_theme_font_size_override("font_size", 10)
-	badge.add_theme_color_override("font_color", rcolor)
-	header.add_child(badge)
-
+	# Flèche d'accordéon, ajoutée à droite de l'en-tête du template.
 	var arrow := Label.new()
-	arrow.add_theme_font_size_override("font_size", 9)
+	arrow.add_theme_font_size_override("font_size", 10)
 	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	header.add_child(arrow)
-
-	var xp_lbl := Label.new()
-	if rarity >= GameData.MAX_TIER:
-		xp_lbl.text = "RANG MAX"
-		xp_lbl.add_theme_color_override("font_color", rcolor)
-	else:
-		xp_lbl.text = "%s / %s XP" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(xp_need)]
-		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	xp_lbl.add_theme_font_size_override("font_size", 10)
-	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	header.add_child(xp_lbl)
 
 	# Bouton évoluer (action manuelle, si éligible)
 	var pid_ev := pdata.get("id", "") as String

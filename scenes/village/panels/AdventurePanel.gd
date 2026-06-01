@@ -121,67 +121,36 @@ static func build(host: Village) -> void:
 # Construit la carte accordéon d'un biome avec ses catégories (créatures, pièges, etc.).
 # Retourne { wrapper, panel, section, arrow } pour que build() connecte le gui_input.
 static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) -> Dictionary:
-	var btier  := biome.get("maitrise_actuelle", 0) as int
-	var bcolor := UIColors.tier_color(btier)
-	var bdisp  := MasteryRegistry.get_mastery_display(biome_id)
-	var pools  := MasteryRegistry.get_biome_entity_pools(biome_id)
+	var btier := biome.get("maitrise_actuelle", 0) as int
+	var bdisp := MasteryRegistry.get_mastery_display(biome_id)
+	var pools := MasteryRegistry.get_biome_entity_pools(biome_id)
 
-	var xp_fill := 0.0
-	if not bdisp.is_empty() and not bdisp.get("at_max", false) and bdisp.get("xp_max", 0.0) > 0.0:
-		xp_fill = clampf(bdisp["xp"] / bdisp["xp_max"], 0.0, 1.0)
+	# XP courante / seuil pour la carte (0 si palier max → « RANG MAX »).
+	var xp_cur := 0.0
+	var xp_max := 0.0
+	if not bdisp.is_empty() and not bdisp.get("at_max", false):
+		xp_cur = float(bdisp.get("xp", 0.0))
+		xp_max = float(bdisp.get("xp_max", 0.0))
 
 	var wrapper := VBoxContainer.new()
 	wrapper.add_theme_constant_override("separation", 2)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# ── Panneau principal (toujours visible, XPCard avec fill XP) ──
-	var panel := UIHelpers.xp_panel(bcolor, xp_fill)
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# ── Carte principale via le template commun (nom | palier | XP) ──
+	var built := UIHelpers.entity_xp_card(
+			(biome.get("nom_affichage_fr", biome_id) as String).to_upper(), btier, xp_cur, xp_max)
+	var panel := built["card"] as XPCard
+	var header := built["header"] as HBoxContainer
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(panel)
 	wrapper.add_child(panel)
 
-	var pm := UIHelpers.margin_of(8)
-	panel.add_child(pm)
-
-	var pvb := VBoxContainer.new()
-	pvb.add_theme_constant_override("separation", 4)
-	pm.add_child(pvb)
-
-	var hdr := HBoxContainer.new()
-	hdr.add_theme_constant_override("separation", 8)
-	pvb.add_child(hdr)
-
-	var name_lbl := Label.new()
-	name_lbl.text = biome.get("nom_affichage_fr", biome_id).to_upper()
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 13)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	hdr.add_child(name_lbl)
-
-	var tlbl := Label.new()
-	tlbl.text = GameData.get_tier_name(btier)
-	tlbl.add_theme_font_size_override("font_size", 11)
-	tlbl.add_theme_color_override("font_color", bcolor)
-	hdr.add_child(tlbl)
-
+	# Flèche d'accordéon, à droite de l'en-tête du template.
 	var arrow := Label.new()
 	arrow.text = "  ▶"
 	arrow.add_theme_font_size_override("font_size", 10)
 	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	hdr.add_child(arrow)
-
-	if not bdisp.is_empty():
-		var xp_lbl := Label.new()
-		if bdisp.get("at_max", false):
-			xp_lbl.text = "RANG MAX"
-			xp_lbl.add_theme_color_override("font_color", bcolor)
-		else:
-			xp_lbl.text = "XP  %s / %s" % [UIHelpers.xp_fmt(int(bdisp.get("xp", 0.0))), UIHelpers.xp_fmt(int(bdisp.get("xp_max", 0.0)))]
-			xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		xp_lbl.add_theme_font_size_override("font_size", 10)
-		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		pvb.add_child(xp_lbl)
+	header.add_child(arrow)
 
 	# ── Section catégories (repliée par défaut) ───────────────
 	var section := VBoxContainer.new()
