@@ -115,29 +115,6 @@ static func xp_panel(fill_color: Color, xp_fill: float,
 			card_style(fill_color, bg_alpha, border_alpha, border_width, corner_radius))
 	return card
 
-# Retourne la barre XP universelle (XPCard : fill coloré + bulles animées).
-# Composant de référence unique pour toutes les barres XP du jeu.
-#   height   : hauteur minimale en pixels (défaut 16).
-#   show_pct : affiche le pourcentage textuel centré dans la barre (défaut true).
-static func xp_bar(value: float, max_value: float, color: Color,
-		height: int = 16, show_pct: bool = true) -> XPCard:
-	var frac := clampf(value / max_value, 0.0, 1.0) if max_value > 0.0 else 0.0
-	var bar := XPCard.new()
-	bar.fill_color            = color
-	bar.xp_fill               = frac
-	bar.custom_minimum_size   = Vector2(0.0, float(height))
-	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.add_theme_stylebox_override("panel", card_style(color))
-	if show_pct:
-		var pct := Label.new()
-		pct.text                 = "%d%%" % int(round(frac * 100.0))
-		pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		pct.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-		pct.add_theme_font_size_override("font_size", 10)
-		pct.add_theme_color_override("font_color", Color.WHITE)
-		bar.add_child(pct)
-	return bar
-
 # Formate un entier XP avec séparateur de milliers (ex: 1 234).
 static func xp_fmt(xp: int) -> String:
 	if xp >= 1000:

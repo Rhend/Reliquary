@@ -27,17 +27,22 @@ static func build(host: Village) -> void:
 	lname.add_theme_color_override("font_color", tcolor)
 	host._rp_content.add_child(lname)
 
-	# ── Barre XP (sous le titre, avant les statistiques) ──────
+	# ── Barre XP (même DA que les autres panneaux : XPCard à fond rempli animé) ──
 	if tier < GameData.MAX_TIER:
+		var frac := clampf(xp / xpmax, 0.0, 1.0) if xpmax > 0.0 else 0.0
 		var xp_color := UIColors.FILTER_ON if can_ev else UIColors.STAT_HP
-		host._rp_content.add_child(UIHelpers.xp_bar(xp, xpmax, xp_color))
+		var xp_card := UIHelpers.xp_panel(xp_color, frac)
+		xp_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		host._rp_content.add_child(xp_card)
 
+		var xpm := UIHelpers.margin_of(6)
+		xp_card.add_child(xpm)
 		var xl := Label.new()
 		xl.text = "XP  %.0f / %.0f" % [xp, xpmax]
 		xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		xl.add_theme_font_size_override("font_size", 10)
-		xl.add_theme_color_override("font_color", UIColors.FILTER_ON if can_ev else UIColors.TEXT_MUTED)
-		host._rp_content.add_child(xl)
+		xl.add_theme_font_size_override("font_size", 11)
+		xl.add_theme_color_override("font_color", Color.WHITE)
+		xpm.add_child(xl)
 
 	# ── Sous-section STATISTIQUES ─────────────────────────────
 	host._rp_content.add_child(UIHelpers.section_header("◆  STATISTIQUES", tcolor))
