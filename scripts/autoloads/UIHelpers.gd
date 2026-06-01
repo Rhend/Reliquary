@@ -138,6 +138,13 @@ static func xp_bar(value: float, max_value: float, color: Color,
 		bar.add_child(pct)
 	return bar
 
+# Formate un entier XP avec séparateur de milliers (ex: 1 234).
+static func xp_fmt(xp: int) -> String:
+	if xp >= 1000:
+		var s := str(xp)
+		return s.left(s.length() - 3) + " " + s.right(3)
+	return str(xp)
+
 # Retourne un Label "Aucun" en TEXT_MUTED — état vide pour les listes.
 static func none_label(font_size: int = 13) -> Label:
 	var lbl := Label.new()
