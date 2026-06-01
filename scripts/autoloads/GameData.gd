@@ -248,7 +248,10 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 		EventBus.biome_revele.emit(secondary_id)
 
 # Retourne true si le Village peut passer au Tier suivant.
-# T0 → T1 (Forgeron) : double condition — XP de Maîtrise ≥ VILLAGE_FORGE_XP ET Fragments ≥ requis.
+# T0 → T1 (Forgeron) : triple condition simultanée —
+#   1) Fragments de Mémoire ≥ requis
+#   2) XP de Maîtrise du Village ≥ VILLAGE_FORGE_XP
+#   3) Héro à l'XP max de son palier (prêt à évoluer) — voir hero_at_full_xp().
 func can_upgrade_village() -> bool:
 	var current := int(village.get("tier_actuel", 0))
 	if current >= VILLAGE_TIER_REQUIREMENTS.size():
@@ -256,9 +259,23 @@ func can_upgrade_village() -> bool:
 	var req := VILLAGE_TIER_REQUIREMENTS[current]
 	if village.get("fragments_collectes", []).size() < req:
 		return false
-	if current == 0 and float(village.get("xp_maitrise", 0.0)) < Balance.VILLAGE_FORGE_XP:
-		return false
+	if current == 0:
+		if float(village.get("xp_maitrise", 0.0)) < Balance.VILLAGE_FORGE_XP:
+			return false
+		if not hero_at_full_xp():
+			return false
 	return true
+
+# Vrai si le héro actif a atteint le seuil d'XP de son palier suivant (barre pleine).
+# Au palier max (plus de seuil), considéré comme plein.
+func hero_at_full_xp() -> bool:
+	var hero := get_entity(player.get("active_creature_id", ""))
+	if hero.is_empty():
+		return false
+	var next_idx := int(hero.get("maitrise_actuelle", 0)) + 1
+	if next_idx >= xp_thresholds.size():
+		return true
+	return float(hero.get("xp_maitrise_actuelle", 0.0)) >= float(xp_thresholds[next_idx])
 
 # Distribue de l'XP de Maîtrise au Village (accumulateur cumulé, coef ×0.75).
 # Le Village n'a pas encore de paliers de Maîtrise : son palier reste 0 pour le

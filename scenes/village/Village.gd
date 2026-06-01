@@ -157,7 +157,7 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	_center(ltier, Vector2(0.0, 16.0), Vector2(150.0, 24.0))
 	_hub_root.add_child(ltier)
 
-	# ── Info Village (tier + fragments) ──────────────────────
+	# ── Info Village + conditions d'évolution ─────────────────
 	var vtier := GameData.village.get("tier_actuel", 0) as int
 	var vcolor := Color(0.55, 0.85, 0.55) if vtier >= 1 else Color(0.6, 0.6, 0.7)
 
@@ -170,29 +170,7 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	_hub_root.add_child(vlabel)
 
 	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
-		var frags_needed := GameData.VILLAGE_TIER_REQUIREMENTS[vtier]
-		var frags_have: int = (GameData.village.get("fragments_collectes", []) as Array).size()
-		var fprog := Label.new()
-		fprog.text = "🔮 %d / %d fragment%s" % [frags_have, frags_needed, "s" if frags_needed > 1 else ""]
-		fprog.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		fprog.add_theme_font_size_override("font_size", 11)
-		fprog.add_theme_color_override("font_color", UIColors.FILTER_ON if frags_have >= frags_needed else UIColors.TEXT_MUTED)
-		_center(fprog, Vector2(0.0, 57.0), Vector2(180.0, 16.0))
-		_hub_root.add_child(fprog)
-
-		if GameData.can_upgrade_village():
-			var ubtn := Button.new()
-			ubtn.text = "▲  Faire évoluer le Village"
-			ubtn.add_theme_font_size_override("font_size", 11)
-			ubtn.add_theme_color_override("font_color", vcolor)
-			ubtn.add_theme_stylebox_override("normal", UIHelpers.card_style(vcolor, 0.12, 1.0, 1, 4))
-			ubtn.add_theme_stylebox_override("hover",  UIHelpers.card_style(vcolor, 0.28, 1.0, 1, 4))
-			ubtn.pressed.connect(func() -> void:
-				if GameData.upgrade_village():
-					_rebuild_hub()
-			)
-			_center(ubtn, Vector2(0.0, 78.0), Vector2(200.0, 26.0))
-			_hub_root.add_child(ubtn)
+		_build_village_conditions(vtier, vcolor)
 
 	# ── Hex items (forge débloquée par village tier, reste par hero tier) ──
 	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
@@ -207,6 +185,79 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 		var pos := Vector2(cos(ang), sin(ang)) * RING_RADIUS
 		var d: Array = unlocked[i]
 		_make_hex(d[0], d[1], tcolor, pos, Callable(self, d[3]), d[4])
+
+# ─── Conditions d'évolution du Village ────────────────────────
+# Affiche, sous le cercle, chaque condition « actuel / requis » (verte si
+# remplie), puis le bouton « Faire évoluer » lorsque toutes le sont.
+func _build_village_conditions(vtier: int, vcolor: Color) -> void:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	box.anchor_left   = 0.5; box.anchor_right  = 0.5
+	box.anchor_top    = 0.5; box.anchor_bottom = 0.5
+	box.offset_left   = -130.0; box.offset_right  = 130.0
+	box.offset_top    = 52.0;   box.offset_bottom = 168.0
+
+	for cond: Dictionary in _village_upgrade_conditions(vtier):
+		var row := Label.new()
+		row.text = "%s%s  %s" % ["✓ " if cond["met"] else "• ", cond["label"], cond["value"]]
+		row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_theme_font_size_override("font_size", 11)
+		row.add_theme_color_override("font_color", UIColors.LOG_VICTORY if cond["met"] else UIColors.TEXT_MUTED)
+		box.add_child(row)
+
+	if GameData.can_upgrade_village():
+		var ubtn := Button.new()
+		ubtn.text = "▲  Faire évoluer le Village"
+		ubtn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		ubtn.custom_minimum_size = Vector2(200.0, 26.0)
+		ubtn.add_theme_font_size_override("font_size", 11)
+		ubtn.add_theme_color_override("font_color", vcolor)
+		ubtn.add_theme_stylebox_override("normal", UIHelpers.card_style(vcolor, 0.12, 1.0, 1, 4))
+		ubtn.add_theme_stylebox_override("hover",  UIHelpers.card_style(vcolor, 0.28, 1.0, 1, 4))
+		ubtn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		ubtn.pressed.connect(func() -> void:
+			if GameData.upgrade_village():
+				_rebuild_hub()
+		)
+		box.add_child(ubtn)
+
+	_hub_root.add_child(box)
+
+# Conditions de passage T(vtier)→T(vtier+1), formatées « actuel / requis ».
+# Chaque entrée : { label, value, met }.
+func _village_upgrade_conditions(vtier: int) -> Array:
+	var conds: Array = []
+
+	var frags_need := GameData.VILLAGE_TIER_REQUIREMENTS[vtier]
+	var frags_have: int = (GameData.village.get("fragments_collectes", []) as Array).size()
+	conds.append({
+		"label": "🔮 Fragments",
+		"value": "%d / %d" % [frags_have, frags_need],
+		"met":   frags_have >= frags_need,
+	})
+
+	# Conditions propres au passage T0 → T1 (déblocage du Forgeron).
+	if vtier == 0:
+		var vxp := float(GameData.village.get("xp_maitrise", 0.0))
+		conds.append({
+			"label": "✦ Maîtrise du Village",
+			"value": "%s / %s" % [UIHelpers.xp_fmt(int(vxp)), UIHelpers.xp_fmt(int(Balance.VILLAGE_FORGE_XP))],
+			"met":   vxp >= Balance.VILLAGE_FORGE_XP,
+		})
+
+		var hero := _active_creature()
+		var htier := int(hero.get("maitrise_actuelle", 0))
+		var hxp := float(hero.get("xp_maitrise_actuelle", 0.0))
+		var hreq := 0.0
+		if htier + 1 < GameData.xp_thresholds.size():
+			hreq = float(GameData.xp_thresholds[htier + 1])
+		conds.append({
+			"label": "👤 Héro à l'XP max",
+			"value": "%s / %s" % [UIHelpers.xp_fmt(int(hxp)), UIHelpers.xp_fmt(int(hreq))],
+			"met":   GameData.hero_at_full_xp(),
+		})
+
+	return conds
 
 # ─── Panneau droite ───────────────────────────────────────────
 # Ouvre le panneau JRPG pour panel_id. Re-clic sur le même id → ferme (toggle).
