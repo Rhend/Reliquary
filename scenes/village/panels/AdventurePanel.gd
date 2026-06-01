@@ -183,70 +183,73 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 static func _adv_category_card(host: Village, parent: VBoxContainer, label: String, pool: Array, color: Color) -> void:
 	if pool.is_empty():
 		return
-	var total      := pool.size()
-	var discovered := MasteryRegistry.count_discovered(pool)
+	var body := _accordion(parent, label, "%d / %d" % [MasteryRegistry.count_discovered(pool), pool.size()])
+	_adv_entity_rows(host, body, pool, color)
 
-	var cat_wrap := VBoxContainer.new()
-	cat_wrap.add_theme_constant_override("separation", 2)
-	cat_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(cat_wrap)
-
+# Construit un « accordéon » repliable : panneau neutre cliquable
+# [label | (compteur) | ▶] + section repliée dessous. Retourne le VBox interne
+# (vide) à remplir par l'appelant. count_text == "" → pas de compteur affiché.
+static func _accordion(parent: VBoxContainer, label: String, count_text: String) -> VBoxContainer:
 	var nc := UIColors.CARD_NEUTRAL
-	var cat_panel := PanelContainer.new()
-	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	UIHelpers.add_hover_feedback(cat_panel)
-	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
-	cat_wrap.add_child(cat_panel)
 
-	var cpm := UIHelpers.margin_of(6)
-	cat_panel.add_child(cpm)
+	var wrap := VBoxContainer.new()
+	wrap.add_theme_constant_override("separation", 2)
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(wrap)
 
-	var chdr := HBoxContainer.new()
-	chdr.add_theme_constant_override("separation", 8)
-	cpm.add_child(chdr)
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UIHelpers.add_hover_feedback(panel)
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
+	wrap.add_child(panel)
 
-	var clbl := Label.new()
-	clbl.text = label
-	clbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	clbl.add_theme_font_size_override("font_size", 11)
-	clbl.add_theme_color_override("font_color", nc)
-	chdr.add_child(clbl)
+	var m := UIHelpers.margin_of(6)
+	panel.add_child(m)
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 8)
+	m.add_child(hdr)
 
-	var count_lbl := Label.new()
-	count_lbl.text = "%d / %d" % [discovered, total]
-	count_lbl.add_theme_font_size_override("font_size", 10)
-	count_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	chdr.add_child(count_lbl)
+	var lbl := Label.new()
+	lbl.text = label
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", nc)
+	hdr.add_child(lbl)
 
-	var cat_arrow := Label.new()
-	cat_arrow.text = "  ▶"
-	cat_arrow.add_theme_font_size_override("font_size", 10)
-	cat_arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	chdr.add_child(cat_arrow)
+	if count_text != "":
+		var count_lbl := Label.new()
+		count_lbl.text = count_text
+		count_lbl.add_theme_font_size_override("font_size", 10)
+		count_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		hdr.add_child(count_lbl)
 
-	# Liste des entités (repliée par défaut)
-	var ent_section := VBoxContainer.new()
-	ent_section.add_theme_constant_override("separation", 3)
-	ent_section.visible = false
-	cat_wrap.add_child(ent_section)
+	var arrow := Label.new()
+	arrow.text = "  ▶"
+	arrow.add_theme_font_size_override("font_size", 10)
+	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	hdr.add_child(arrow)
 
-	var ent_indent := MarginContainer.new()
-	ent_indent.add_theme_constant_override("margin_left", 10)
-	ent_indent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ent_section.add_child(ent_indent)
+	var section := VBoxContainer.new()
+	section.add_theme_constant_override("separation", 3)
+	section.visible = false
+	wrap.add_child(section)
 
-	var ent_vb := VBoxContainer.new()
-	ent_vb.add_theme_constant_override("separation", 3)
-	ent_indent.add_child(ent_vb)
+	var indent := MarginContainer.new()
+	indent.add_theme_constant_override("margin_left", 10)
+	indent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section.add_child(indent)
 
-	_adv_entity_rows(host, ent_vb, pool, color)
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 3)
+	indent.add_child(body)
 
-	cat_panel.gui_input.connect(func(ev: InputEvent) -> void:
+	panel.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
-			ent_section.visible = not ent_section.visible
-			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
+			section.visible = not section.visible
+			arrow.text = "  ▼" if section.visible else "  ▶"
 	)
+	return body
 
 # Remplit parent avec une carte par entité du pool, même format pour tous les types.
 # Entité non découverte → nom "?", palier Commun, XP 0 / seuil (placeholder homogène).
@@ -336,59 +339,12 @@ static func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	# Section absente (pas grisée) tant que la Forge n'est pas débloquée (Village Tier 1).
 	if (GameData.village.get("tier_actuel", 0) as int) < 1:
 		return
-	var nc := UIColors.CARD_NEUTRAL
-
-	var cat_wrap := VBoxContainer.new()
-	cat_wrap.add_theme_constant_override("separation", 2)
-	cat_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(cat_wrap)
-
-	var cat_panel := PanelContainer.new()
-	cat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cat_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	UIHelpers.add_hover_feedback(cat_panel)
-	cat_panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
-	cat_wrap.add_child(cat_panel)
-
-	var cpm := UIHelpers.margin_of(6)
-	cat_panel.add_child(cpm)
-
-	var chdr := HBoxContainer.new()
-	chdr.add_theme_constant_override("separation", 8)
-	cpm.add_child(chdr)
-
-	var clbl := Label.new()
-	clbl.text = "INGRÉDIENTS"
-	clbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	clbl.add_theme_font_size_override("font_size", 11)
-	clbl.add_theme_color_override("font_color", nc)
-	chdr.add_child(clbl)
-
-	var cat_arrow := Label.new()
-	cat_arrow.text = "  ▶"
-	cat_arrow.add_theme_font_size_override("font_size", 10)
-	cat_arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	chdr.add_child(cat_arrow)
-
-	var ent_section := VBoxContainer.new()
-	ent_section.add_theme_constant_override("separation", 3)
-	ent_section.visible = false
-	cat_wrap.add_child(ent_section)
-
-	var ent_indent := MarginContainer.new()
-	ent_indent.add_theme_constant_override("margin_left", 10)
-	ent_indent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ent_section.add_child(ent_indent)
-
-	var ent_vb := VBoxContainer.new()
-	ent_vb.add_theme_constant_override("separation", 3)
-	ent_indent.add_child(ent_vb)
-
+	var body := _accordion(parent, "INGRÉDIENTS", "")
 	for entry: Dictionary in pool:
 		var ec := UIColors.tier_color(int(entry.get("tier", 0)))
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
-		ent_vb.add_child(row)
+		body.add_child(row)
 
 		var name_lbl := Label.new()
 		name_lbl.text = entry.get("name", "?")
@@ -410,12 +366,6 @@ static func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 		chance_lbl.add_theme_font_size_override("font_size", 10)
 		chance_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		row.add_child(chance_lbl)
-
-	cat_panel.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
-			ent_section.visible = not ent_section.visible
-			cat_arrow.text = "  ▼" if ent_section.visible else "  ▶"
-	)
 
 # Garde uniquement les entrées dont la zone est débloquée pour ce tier de biome.
 # Les entrées sans champ de zone (pièges, bénédictions — transversaux) sont conservées.
