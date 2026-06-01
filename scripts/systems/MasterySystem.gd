@@ -40,9 +40,9 @@ func _creature_biome_cap(creature: Dictionary) -> int:
 	var biome      := GameData.get_entity(str(creature.get("biome_id", "")))
 	var biome_tier := int(biome.get("maitrise_actuelle", 0))
 	var zone       := int(creature.get("zone_associee", 0))
-	if zone == Enums.ZoneCreature.PROFONDEUR:
+	if zone == Enums.Zone.PROFONDEUR:
 		return int(Balance.CREATURE_CAP_PROFONDEUR.get(biome_tier, -1))
-	if zone == Enums.ZoneCreature.SURFACE:
+	if zone == Enums.Zone.SURFACE:
 		return int(Balance.CREATURE_CAP_SURFACE.get(biome_tier, 0))
 	# Zone Abysse / créature unique : pas de plafond de biome (limité au max de type).
 	return Balance.DEFAULT_MAX_TIER

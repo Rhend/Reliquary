@@ -40,16 +40,11 @@ signal loot_dropped(drops: Array, enemy_name: String)
 @warning_ignore("unused_signal")
 signal resources_changed()
 
-# ── Modificateurs de cycle & Combo ─────────────────────────
+# ── Modificateurs de cycle, soin & saignement ──────────────
 
 # Émis par AdventureSystem au lancement d'une aventure avec le modificateur tiré.
 @warning_ignore("unused_signal")
 signal modifier_activated(modifier: Dictionary)
-
-# Émis après chaque victoire de combat avec le compteur de combo courant.
-# count = 0 si le combo a été cassé.
-@warning_ignore("unused_signal")
-signal combo_changed(count: int)
 
 # Émis quand un événement positif de soin restaure des PV.
 # amount = PV effectivement restaurés, new_hp = PV après soin.
@@ -61,10 +56,6 @@ signal heal_applied(amount: float, new_hp: float)
 @warning_ignore("unused_signal")
 signal bleed_ticked(damage: float, new_hp: float, remaining: int)
 
-# Émis quand un événement positif de chance booste la luck du cycle.
-@warning_ignore("unused_signal")
-signal luck_boosted(cycle_luck: int)
-
 # ── Passifs ─────────────────────────────────────────────────
 
 # Émis quand un passif est débloqué sur une entité (palier de tier atteint).
@@ -74,13 +65,6 @@ signal passive_unlocked(entity_id: String, passive_id: String)
 # Émis par PassiveSystem après un recalcul complet des effets actifs.
 @warning_ignore("unused_signal")
 signal passives_refreshed()
-
-# ── Mécaniques de biome ─────────────────────────────────────
-
-# Émis par BiomeMechanics.initialize_for_biome() quand une mécanique forte se déclenche.
-# mechanic = "ambush" | "poison" | "bonne_etoile"
-@warning_ignore("unused_signal")
-signal biome_mechanic_activated(mechanic: String)
 
 # ── Aventure ────────────────────────────────────────────────
 
@@ -117,11 +101,6 @@ signal adventure_stopped()
 signal combat_started(creature_id: String, enemy: Dictionary,
 		creature_hp: float, enemy_hp: float)
 
-# combat_turn    : attacker = "creature" | "enemy", damage, HP actuels.
-@warning_ignore("unused_signal")
-signal combat_turn(attacker: String, damage: float,
-		creature_hp: float, enemy_hp: float)
-
 # combat_ended   : { victory, remaining_creature_hp, enemy }
 @warning_ignore("unused_signal")
 signal combat_ended(result: Dictionary)
@@ -134,12 +113,6 @@ signal equipment_changed()
 # Émis après la forge d'un équipement (passage au palier suivant).
 @warning_ignore("unused_signal")
 signal equipement_evolue(equipment_id: String, nouveau_palier: int)
-
-# ── État joueur ─────────────────────────────────────────────
-
-# Émis quand une donnée joueur change hors des circuits habituels.
-@warning_ignore("unused_signal")
-signal player_state_changed()
 
 # ── Sauvegarde ──────────────────────────────────────────────
 

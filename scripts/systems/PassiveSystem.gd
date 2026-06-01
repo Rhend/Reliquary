@@ -77,10 +77,6 @@ func get_combat_bonuses() -> Dictionary:
 		"hp_bonus":  _active_effects.get("hp_bonus",  0.0)
 	}
 
-# Alias explicite pour le calcul de stats en début de cycle.
-func recalculate_stats() -> Dictionary:
-	return get_combat_bonuses()
-
 # Retourne la valeur cumulée d'un effet arbitraire.
 func get_effect(effect_id: String) -> float:
 	return _active_effects.get(effect_id, 0.0)

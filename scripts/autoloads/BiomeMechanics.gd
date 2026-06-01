@@ -41,7 +41,6 @@ func initialize_for_biome(biome_id: String) -> void:
 
 	if biome_tier >= required_tier:
 		active_mechanic = mechanic
-		EventBus.biome_mechanic_activated.emit(mechanic)
 
 # Retourne vrai si l'embuscade est active ce cycle.
 func is_ambush_active() -> bool:

@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://biome"]
-
-[ext_resource type="Script" path="res://scripts/Biome.gd" id="1_biome"]
-
-[node name="Biome" type="Control"]
-script = ExtResource("1_biome")

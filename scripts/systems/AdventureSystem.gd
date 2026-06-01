@@ -180,6 +180,10 @@ func get_modifier_bonuses() -> Dictionary:
 		"def_mult": float(current_modifier.get("def_mult", 1.0))
 	}
 
+# XP totale gagnée par le héro depuis le début du cycle courant (lecture seule, pour l'UI).
+func get_cycle_xp() -> float:
+	return _cycle_xp
+
 # Luck effective = luck permanente du joueur + luck temporaire du cycle.
 func _get_effective_luck() -> int:
 	return int(GameData.player.get("luck", 0)) + _cycle_luck
@@ -285,7 +289,6 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 		"luck":
 			var luck_val := float(bene.get("valeur", 0.0)) * _get_zone_intensity()
 			_cycle_luck  += int(luck_val)
-			EventBus.luck_boosted.emit(_cycle_luck)
 
 # Distribue l'XP de Maîtrise d'un événement résolu à TOUTES les entités actives :
 # l'entité rencontrée, le héro, le biome, le village et les passifs actifs.
@@ -404,7 +407,6 @@ func _resolve_victory(enemy: Dictionary) -> void:
 		_combo_count += 1
 	else:
 		_combo_count = 0
-	EventBus.combo_changed.emit(_combo_count)
 
 	# Statistiques du cycle
 	_cycle_combats_won += 1
@@ -775,12 +777,7 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 # Commun/Peu Commun → Surface ; Rare/Épique → Profondeur ; Légendaire/Unique → Abysse.
 func _get_max_zone(biome_id: String) -> Enums.Zone:
 	var tier: int = GameData.get_entity(biome_id).get("maitrise_actuelle", 0)
-	if tier >= Balance.ZONE_UNLOCK_TIER_ABYSSE:
-		return Enums.Zone.ABYSSE
-	elif tier >= Balance.ZONE_UNLOCK_TIER_PROFONDEUR:
-		return Enums.Zone.PROFONDEUR
-	else:
-		return Enums.Zone.SURFACE
+	return Balance.max_unlocked_zone(tier) as Enums.Zone
 
 # Appelée après chaque événement résolu. Si le seuil est atteint et la zone suivante
 # est débloquée, transition et émission du signal zone_changee.

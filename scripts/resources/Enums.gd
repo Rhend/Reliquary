@@ -18,12 +18,9 @@ enum SlotEquipement {
 	TALISMAN,
 }
 
-enum ZoneCreature {
-	SURFACE,
-	PROFONDEUR,
-	ABYSSE,
-}
-
+# Zones d'enfoncement d'un biome. Sert à la fois pour la zone d'exploration
+# courante (AdventureSystem) et pour la zone d'appartenance d'une créature
+# (CreatureData.zone_associee) — c'est le même référentiel ordonné.
 enum Zone {
 	SURFACE    = 0,
 	PROFONDEUR = 1,

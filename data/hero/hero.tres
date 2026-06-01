@@ -7,14 +7,6 @@ script = ExtResource("1")
 id = "hero"
 nom_affichage_fr = "Héro"
 nom_affichage_en = "Hero"
-atk = 15
-def = 7
-hp = 110
-vit = 20
-atk_par_tier = 3
-def_par_tier = 2
-hp_par_tier = 20
-vit_par_tier = 1
 passifs_par_palier = {}
 
 maitrise_actuelle = 0

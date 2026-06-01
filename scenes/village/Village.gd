@@ -122,8 +122,8 @@ func _build_birth(_creature: Dictionary) -> void:
 func _build_hub(_creature: Dictionary, tier: int) -> void:
 	var vp     := get_viewport_rect().size
 	var tcolor := UIColors.tier_color(tier)
-	var _diam_margins := [70.0, 70.0, 82.0, 104.0, 136.0, 164.0]
-	var diam: float = RING_RADIUS * 2.0 + float(_diam_margins[tier])
+	var diam_margins := [70.0, 70.0, 82.0, 104.0, 136.0, 164.0]
+	var diam: float = RING_RADIUS * 2.0 + float(diam_margins[tier])
 
 	_hub_root = Control.new()
 	_hub_root.size = vp
@@ -502,10 +502,7 @@ func _passive_card(pdata: Dictionary, _tcolor: Color) -> Control:
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ── Carte principale avec barre XP en fond ──────────────
-	var panel := XPCard.new()
-	panel.xp_fill    = xp_fill
-	panel.fill_color = rcolor
-	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(rcolor))
+	var panel := UIHelpers.xp_panel(rcolor, xp_fill)
 	wrapper.add_child(panel)
 
 	var m := UIHelpers.margin_of(6)
@@ -619,10 +616,7 @@ func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	margin.add_theme_constant_override("margin_left", indent)
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	var panel := XPCard.new()
-	panel.xp_fill    = xp_fill
-	panel.fill_color = tc
-	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(tc, 0.06, 0.38, 1, 3))
+	var panel := UIHelpers.xp_panel(tc, xp_fill, 0.06, 0.38, 1, 3)
 	margin.add_child(panel)
 
 	var pm := UIHelpers.margin_of(4)
@@ -820,13 +814,10 @@ func _adv_biome_card(biome_id: String, biome: Dictionary) -> Dictionary:
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ── Panneau principal (toujours visible, XPCard avec fill XP) ──
-	var panel := XPCard.new()
-	panel.xp_fill    = xp_fill
-	panel.fill_color = bcolor
+	var panel := UIHelpers.xp_panel(bcolor, xp_fill)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(panel)
-	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(bcolor))
 	wrapper.add_child(panel)
 
 	var pm := UIHelpers.margin_of(8)
@@ -1006,11 +997,8 @@ func _adv_entity_rows(parent: VBoxContainer, pool: Array, _color: Color) -> void
 			if xp_need > 0:
 				xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
 
-		var panel := XPCard.new()
-		panel.xp_fill    = xp_fill
-		panel.fill_color = ec
+		var panel := UIHelpers.xp_panel(ec, xp_fill, 0.06, 0.38, 1, 3)
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		panel.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.38, 1, 3))
 		parent.add_child(panel)
 
 		var pm := UIHelpers.margin_of(4)
@@ -1338,23 +1326,10 @@ func _panel_soon(label: String) -> void:
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	_rp_content.add_child(lbl)
 
-# Zone maximum accessible selon le tier du biome.
-func _zone_max_name(tier: int) -> String:
-	if tier >= 4: return "Abysse"
-	elif tier >= 2: return "Profondeur"
-	else: return "Surface"
-
-# Zone d'enfoncement la plus profonde débloquée selon le tier de maîtrise du biome.
-# 0 = Surface (toujours), 1 = Profondeur (Rare+), 2 = Abysse (Légendaire+).
-func _biome_max_zone(tier: int) -> int:
-	if tier >= 4: return 2
-	elif tier >= 2: return 1
-	else: return 0
-
 # Garde uniquement les entrées dont la zone est débloquée pour ce tier de biome.
 # Les entrées sans champ de zone (pièges, bénédictions — transversaux) sont conservées.
 func _filter_pool_by_zone(pool: Array, tier: int) -> Array:
-	var max_zone := _biome_max_zone(tier)
+	var max_zone := Balance.max_unlocked_zone(tier)
 	var out: Array = []
 	for entry: Dictionary in pool:
 		if entry.has("zone_associee") and int(entry["zone_associee"]) > max_zone:

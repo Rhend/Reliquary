@@ -42,7 +42,6 @@ func _ready() -> void:
 	EventBus.resources_changed.connect(_on_progress)
 	EventBus.entity_evolved.connect(_on_progress)
 	EventBus.passive_unlocked.connect(_on_progress)
-	EventBus.player_state_changed.connect(_on_progress)
 	EventBus.equipment_changed.connect(_on_progress)
 
 func _on_progress(_a = null, _b = null) -> void:
@@ -84,9 +83,9 @@ func _save_entities() -> Dictionary:
 		var entry: Dictionary = {}
 
 		if e.has("maitrise_actuelle"):
-			entry["maitrise_actuelle"]      = e.get("maitrise_actuelle",      0)
-			entry["xp_maitrise_actuelle"]        = e.get("xp_maitrise_actuelle",        0.0)
-			entry["unlocked_passives"] = e.get("unlocked_passives", [])
+			entry["maitrise_actuelle"]    = e.get("maitrise_actuelle",    0)
+			entry["xp_maitrise_actuelle"] = e.get("xp_maitrise_actuelle", 0.0)
+			entry["unlocked_passives"]    = e.get("unlocked_passives",    [])
 
 		# Champs d'état propres aux nouvelles entités
 		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
@@ -155,9 +154,9 @@ func _load_entities(data: Dictionary) -> void:
 		var e: Dictionary     = GameData.entities[entity_id]
 
 		if e.has("maitrise_actuelle"):
-			e["maitrise_actuelle"]      = saved.get("maitrise_actuelle",      0)
-			e["xp_maitrise_actuelle"]        = saved.get("xp_maitrise_actuelle",        0.0)
-			e["unlocked_passives"] = saved.get("unlocked_passives", [])
+			e["maitrise_actuelle"]    = saved.get("maitrise_actuelle",    0)
+			e["xp_maitrise_actuelle"] = saved.get("xp_maitrise_actuelle", 0.0)
+			e["unlocked_passives"]    = saved.get("unlocked_passives",    [])
 			e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
 
 		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",

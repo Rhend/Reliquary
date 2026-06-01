@@ -126,9 +126,6 @@ func _play_next() -> void:
 		_current_hero_hp = float(step.target_hp_after)
 
 	step_started.emit(step)
-	EventBus.combat_turn.emit(
-		step.attacker, float(step.damage), _current_hero_hp, _current_enemy_hp
-	)
 
 	var ticks    := maxi(step.tick_time - _prev_tick, 1)
 	_prev_tick    = step.tick_time

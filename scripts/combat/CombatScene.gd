@@ -400,7 +400,7 @@ func _on_combat_ended(result: Dictionary) -> void:
 	if result.get("victory", false):
 		_hero_ring.celebrate()
 		_enemy_ring.fade_defeated()
-		_cycle_xp = AdventureSystem._cycle_xp
+		_cycle_xp = AdventureSystem.get_cycle_xp()
 		_update_xp_label()
 		_add_log("[color=%s]Victoire[/color]" % _hex(UIColors.LOG_VICTORY), ["Héro"])
 	else:

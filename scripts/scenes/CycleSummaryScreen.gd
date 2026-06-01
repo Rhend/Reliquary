@@ -402,15 +402,9 @@ func _fill_xp_bar(xp: Dictionary) -> void:
 #  Helpers
 # ═══════════════════════════════════════════════════════════
 
-# Zone d'enfoncement la plus profonde débloquée selon le tier du biome.
-func _biome_max_zone(tier: int) -> int:
-	if tier >= 4: return 2
-	elif tier >= 2: return 1
-	else: return 0
-
 # Garde les entrées dont la zone est débloquée (sans zone = transversal, conservé).
 func _filter_zone(pool: Array, tier: int) -> Array:
-	var mz := _biome_max_zone(tier)
+	var mz := Balance.max_unlocked_zone(tier)
 	var out: Array = []
 	for entry: Dictionary in pool:
 		if entry.has("zone_associee") and int(entry["zone_associee"]) > mz:
@@ -475,11 +469,8 @@ func _next_tier_threshold(entity: Dictionary) -> float:
 # Retourne { container, card, xp_label } pour l'animation.
 func _xp_card(icon: String, label: String, entity_color: Color,
 		xp_apres: float, xp_max: float, tier_name: String) -> Dictionary:
-	var card := XPCard.new()
-	card.fill_color = entity_color
-	card.xp_fill    = 0.0
+	var card := UIHelpers.xp_panel(entity_color, 0.0)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.add_theme_stylebox_override("panel", UIHelpers.card_style(entity_color))
 
 	var m := UIHelpers.margin_of(8)
 	card.add_child(m)

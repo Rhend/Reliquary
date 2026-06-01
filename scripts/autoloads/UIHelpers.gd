@@ -101,6 +101,20 @@ static func info_panel(title: String, color: Color, builder: Callable) -> Contro
 	builder.call(vbox)
 	return panel
 
+# Crée une XPCard (PanelContainer à fond rempli proportionnel à l'XP) déjà stylée
+# en « carte de tier » (card_style). Le caller y ajoute ensuite son contenu
+# (marge + labels). Factory commune des cartes d'entité du jeu (passifs, biomes,
+# récap de cycle…) : centralise la création + le stylebox identiques partout.
+static func xp_panel(fill_color: Color, xp_fill: float,
+		bg_alpha: float = 0.07, border_alpha: float = 0.60,
+		border_width: int = 1, corner_radius: int = 4) -> XPCard:
+	var card := XPCard.new()
+	card.xp_fill    = clampf(xp_fill, 0.0, 1.0)
+	card.fill_color = fill_color
+	card.add_theme_stylebox_override("panel",
+			card_style(fill_color, bg_alpha, border_alpha, border_width, corner_radius))
+	return card
+
 # Retourne la barre XP universelle (XPCard : fill coloré + bulles animées).
 # Composant de référence unique pour toutes les barres XP du jeu.
 #   height   : hauteur minimale en pixels (défaut 16).

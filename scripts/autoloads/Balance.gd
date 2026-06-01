@@ -217,6 +217,17 @@ const ABYSS_BENEDICTION_CHANCE: float = 0.5  # Abysse : proba bénédiction (sin
 const ZONE_UNLOCK_TIER_PROFONDEUR: int = 2
 const ZONE_UNLOCK_TIER_ABYSSE:     int = 4
 
+# Zone d'enfoncement la plus profonde débloquée selon le palier de Maîtrise du biome.
+# Renvoie l'index de zone (0 = Surface, toujours ; 1 = Profondeur, ≥ Rare ;
+# 2 = Abysse, ≥ Légendaire) — compatible avec Enums.Zone. Source unique de cette
+# règle, utilisée par AdventureSystem (transitions) et l'UI (filtrage par zone).
+static func max_unlocked_zone(biome_tier: int) -> int:
+	if biome_tier >= ZONE_UNLOCK_TIER_ABYSSE:
+		return 2
+	if biome_tier >= ZONE_UNLOCK_TIER_PROFONDEUR:
+		return 1
+	return 0
+
 # ═══════════════════════════════════════════════════════════
 #  Pondération du pool de créatures par zone
 # ═══════════════════════════════════════════════════════════
