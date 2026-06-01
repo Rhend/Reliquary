@@ -33,7 +33,7 @@ func _ready() -> void:
 	_timer.timeout.connect(_on_timer)
 	add_child(_timer)
 
-# Lance un nouveau combat contre l'ennemi donné depuis les HP courants du héro.
+# Lance un nouveau combat contre l'ennemi donné depuis les HP courants du héros.
 # modifier_bonuses : multiplicateurs fournis par AdventureSystem (atk_mult, def_mult).
 # combat_options   : options de mécaniques de biome { "ambush": bool, "poison": bool }.
 func start_combat(enemy: Dictionary, current_hp: float,
@@ -57,7 +57,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	) * float(modifier_bonuses.get("def_mult", 1.0))
 	var h_vit: float = float(stats.get("vit", 20))
 
-	# HP maximum du héro (pour le calcul du seuil de bouclier)
+	# HP maximum du héros (pour le calcul du seuil de bouclier)
 	var h_hp_max: float = (
 		float(stats.get("hp", 100))
 		+ float(passives.get("hp_bonus", 0.0))

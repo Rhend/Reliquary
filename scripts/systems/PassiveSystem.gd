@@ -86,7 +86,7 @@ func get_effect(effect_id: String) -> float:
 # ═══════════════════════════════════════════════════════════
 
 # Retourne les effets conditionnels actifs pour la prochaine résolution de combat.
-# h_atk : ATK effective du héro, nécessaire pour calculer les dégâts de poison passif.
+# h_atk : ATK effective du héros, nécessaire pour calculer les dégâts de poison passif.
 #
 # Résultat :
 #   "shield"         → {} si aucun bouclier actif, sinon config complète

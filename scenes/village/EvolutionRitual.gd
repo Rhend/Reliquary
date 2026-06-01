@@ -465,7 +465,7 @@ func _get_evolution_text() -> String:
 	if _params.get("eclosion", false):
 		return "Le Village a éclos !\nVous pouvez maintenant\npartir en expédition !"
 
-	# Village — jalons du hub par palier du héro (gates décalés d'un rang).
+	# Village — jalons du hub par palier du héros (gates décalés d'un rang).
 	if entity_type == "village":
 		match to_tier:
 			2: return "Le Sanctuaire est accessible !"

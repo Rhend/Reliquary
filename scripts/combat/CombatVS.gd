@@ -2,7 +2,7 @@
 # CombatVS — Séparateur diagonal central de la zone de combat.
 #
 # Deux lignes fines (3px + 1px) en diagonale : coin supérieur côté
-# ennemi (droite) → coin inférieur côté héro (gauche). Le label "VS"
+# ennemi (droite) → coin inférieur côté héros (gauche). Le label "VS"
 # est posé par-dessus, incliné dans l'axe de la diagonale, fond opaque
 # pour couvrir les lignes derrière.
 # ============================================================
@@ -48,7 +48,7 @@ func _layout_vs() -> void:
 
 func _draw() -> void:
 	var p1 := Vector2(size.x, 0.0)   # coin supérieur droit (ennemi)
-	var p2 := Vector2(0.0, size.y)   # coin inférieur gauche (héro)
+	var p2 := Vector2(0.0, size.y)   # coin inférieur gauche (héros)
 	var dir := (p2 - p1).normalized()
 	var perp := Vector2(-dir.y, dir.x) * 10.0
 

@@ -1,5 +1,5 @@
 # ============================================================
-# HeroPanel — Contenu du panneau glissant « Héro » du Village.
+# HeroPanel — Contenu du panneau glissant « Héros » du Village.
 #
 # Construit dans host._rp_content : nom + palier, barre XP, statistiques
 # (base + bonus), bouton d'évolution, et cartes de passifs dépliables
@@ -8,7 +8,7 @@
 # ============================================================
 class_name HeroPanel
 
-# Point d'entrée : peuple host._rp_content avec la fiche du héro actif.
+# Point d'entrée : peuple host._rp_content avec la fiche du héros actif.
 static func build(host: Village) -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var c      := GameData.get_entity(cid)
@@ -25,7 +25,7 @@ static func build(host: Village) -> void:
 	if tier >= GameData.MAX_TIER:
 		hero_xp_max = 0.0
 	var id_card := UIHelpers.entity_xp_card(
-			c.get("nom_affichage_fr", c.get("name", "Héro")) as String, tier, xp, hero_xp_max)
+			c.get("nom_affichage_fr", c.get("name", "Héros")) as String, tier, xp, hero_xp_max)
 	host._rp_content.add_child(id_card["card"] as Control)
 
 	# ── Sous-section STATISTIQUES ─────────────────────────────

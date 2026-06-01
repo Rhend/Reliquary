@@ -99,7 +99,7 @@ func _load_all_entities() -> void:
 	# Données statiques VS
 	_load_tres_data_from_folder("res://data/ingredients/", "ingredient")
 	_load_tres_data_from_folder("res://data/fragments/",   "fragment")
-	# Héro : chargé depuis .tres (source de vérité)
+	# Héros : chargé depuis .tres (source de vérité)
 	_load_tres_entities_from_folder("res://data/hero/", "hero")
 	_load_tres_entities_from_folder("res://data/passives/", "passive")
 	_load_tres_entities_from_folder("res://data/equipements/", "equipment")
@@ -251,7 +251,7 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 # T0 → T1 (Forgeron) : triple condition simultanée —
 #   1) Fragments de Mémoire ≥ requis
 #   2) XP de Maîtrise du Village ≥ VILLAGE_FORGE_XP
-#   3) Héro à l'XP max de son palier (prêt à évoluer) — voir hero_at_full_xp().
+#   3) Héros à l'XP max de son palier (prêt à évoluer) — voir hero_at_full_xp().
 func can_upgrade_village() -> bool:
 	var current := int(village.get("tier_actuel", 0))
 	if current >= VILLAGE_TIER_REQUIREMENTS.size():
@@ -266,7 +266,7 @@ func can_upgrade_village() -> bool:
 			return false
 	return true
 
-# Vrai si le héro actif a atteint le seuil d'XP de son palier suivant (barre pleine).
+# Vrai si le héros actif a atteint le seuil d'XP de son palier suivant (barre pleine).
 # Au palier max (plus de seuil), considéré comme plein.
 func hero_at_full_xp() -> bool:
 	var hero := get_entity(player.get("active_creature_id", ""))
@@ -322,7 +322,7 @@ func palier_suivant_cost(entity_type: String, tier: int) -> float:
 	return float(xp_thresholds[next_idx])
 
 # Stats effectives d'une entité au palier courant.
-# Héro          → tables Balance.HERO_*_PER_TIER (non-linéaires, source unique).
+# Héros          → tables Balance.HERO_*_PER_TIER (non-linéaires, source unique).
 # Créatures     → stats_par_palier[tier] du .tres (descend jusqu'au tier 0 si nécessaire).
 # Équipements   → inchangé (géré par get_equipment_bonuses).
 # Autres entités→ formule linéaire (atk_base + tier × atk_par_tier).

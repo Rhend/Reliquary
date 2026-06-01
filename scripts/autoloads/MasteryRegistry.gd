@@ -8,7 +8,7 @@
 # ============================================================
 extends Node
 
-# Types d'entités soumises à la Maîtrise (le Héro est exclu).
+# Types d'entités soumises à la Maîtrise (le Héros est exclu).
 const MASTERY_TYPES := ["creature", "biome", "passive", "equipment", "trap", "benediction"]
 
 # ═══════════════════════════════════════════════════════════

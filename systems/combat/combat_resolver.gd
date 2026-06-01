@@ -3,7 +3,7 @@
 #
 # Chaque entité accumule +VIT par tick dans sa jauge d'action.
 # Quand jauge >= Balance.GAUGE_THRESHOLD, l'entité attaque et la jauge
-# revient à 0. En cas d'égalité simultanée, le Héro agit en premier.
+# revient à 0. En cas d'égalité simultanée, le Héros agit en premier.
 #
 # Usage : CombatResolver.resolve(hero_stats, enemy_stats) → Array[CombatStep]
 # hero_stats attend : hp, hp_max, atk, def, vit.
@@ -91,7 +91,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		h_gauge += h_vit
 		e_gauge += e_vit
 
-		# ── Tour héro ───────────────────────────────────────────
+		# ── Tour héros ───────────────────────────────────────────
 		if h_gauge >= Balance.GAUGE_THRESHOLD:
 			h_gauge -= Balance.GAUGE_THRESHOLD
 			var step := _make_hero_step(h_atk, e_def, e_hp)
@@ -99,12 +99,12 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 			e_hp = float(step.target_hp_after)
 			steps.append(step)
 
-			# Poison biome : chaque coup héro incrémente les stacks (max BIOME_POISON_MAX_STACKS)
+			# Poison biome : chaque coup héros incrémente les stacks (max BIOME_POISON_MAX_STACKS)
 			if use_poison and e_hp > 0.0:
 				poison_stacks     = mini(poison_stacks + 1, Balance.BIOME_POISON_MAX_STACKS)
 				poison_turns_left = Balance.BIOME_POISON_DURATION
 
-			# Poison passif : roll de proc sur chaque coup héro
+			# Poison passif : roll de proc sur chaque coup héros
 			if use_passive_poison and e_hp > 0.0 and pp_chance > 0.0:
 				if randf() < pp_chance:
 					passive_poisons.append({"damage": pp_dmg_per_turn, "turns": pp_duration})
@@ -184,7 +184,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 
 # ─── Factories de steps ─────────────────────────────────────
 
-# Step héro : dégâts simples sur l'ennemi (pas de bouclier côté ennemi).
+# Step héros : dégâts simples sur l'ennemi (pas de bouclier côté ennemi).
 static func _make_hero_step(atk: float, target_def: float, target_hp: float) -> CombatStep:
 	var is_crit  := randf() < Balance.CRIT_CHANCE
 	var base_dmg := maxf(atk - target_def, Balance.MIN_DAMAGE)
@@ -199,8 +199,8 @@ static func _make_hero_step(atk: float, target_def: float, target_hp: float) -> 
 	step.is_crit         = is_crit
 	return step
 
-# Step ennemi : dégâts avec absorption bouclier héro.
-# shield_absorbed est mis à jour dans le step ; les HP héro réels = target_hp - (raw - absorbed).
+# Step ennemi : dégâts avec absorption bouclier héros.
+# shield_absorbed est mis à jour dans le step ; les HP héros réels = target_hp - (raw - absorbed).
 static func _make_enemy_step(atk: float, target_def: float,
 		target_hp: float, current_shield: float) -> CombatStep:
 	var is_crit  := randf() < Balance.CRIT_CHANCE

@@ -93,7 +93,7 @@ func add_xp_to_entity(entity_id: String, base_xp: float, event_tier: int) -> voi
 #
 # Deux sources de passifs actifs :
 #   1. player["active_passives"]        — passifs activés manuellement
-#   2. entity["unlocked_passives"] (*)  — passifs débloqués sur héro/biomes
+#   2. entity["unlocked_passives"] (*)  — passifs débloqués sur héros/biomes
 # (*) Dédoublonnés pour éviter qu'un même passif partagé reçoive l'XP plusieurs fois.
 func add_xp_to_all_active(base_xp: float, event_tier: int) -> void:
 	var seen: Dictionary = {}

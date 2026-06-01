@@ -224,7 +224,7 @@ func _section_xp(vb: VBoxContainer, data: Dictionary,
 	_fade_register(total_lbl)
 
 	var cid := data.get("creature_id", "") as String
-	_xp_entity(vb, "⚔", "Héro", GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
+	_xp_entity(vb, "⚔", "Héros", GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
 	_xp_entity(vb, "🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String),
 			data.get("xp_biome", 0.0) as float)
 

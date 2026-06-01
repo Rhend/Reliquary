@@ -7,7 +7,7 @@
 # Widgets visuels dans scenes/village/widgets/ :
 #   CircleRing, ClickOrb, HexItem, JRPGPanel, XPCard
 #
-# Le contenu des panneaux glissants (Héro / Expéditions / Forge) est délégué à
+# Le contenu des panneaux glissants (Héros / Expéditions / Forge) est délégué à
 # des modules dédiés dans scenes/village/panels/ ; ils reçoivent ce nœud (host)
 # pour accéder à _rp_content et aux helpers partagés (_make_evolve_btn, etc.).
 # ============================================================
@@ -20,7 +20,7 @@ const HEX_SIZE     := Vector2(152.0, 152.0)
 const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
 
 # [label, icon, tier_min, callback_name, panel_id]
-# tier_min = palier du héro requis ; exception : FORGE est gated par le Tier du Village.
+# tier_min = palier du héros requis ; exception : FORGE est gated par le Tier du Village.
 # Gates décalés d'un rang : le Village éclot en T0 et débloque déjà les expéditions.
 const MENU_ITEMS: Array = [
 	["HÉRO",        "👤", 0, "_go_hero",      "hero"      ],
@@ -252,7 +252,7 @@ func _village_upgrade_conditions(vtier: int) -> Array:
 		if htier + 1 < GameData.xp_thresholds.size():
 			hreq = float(GameData.xp_thresholds[htier + 1])
 		conds.append({
-			"label": "👤 Héro à l'XP max",
+			"label": "👤 Héros à l'XP max",
 			"value": "%s / %s" % [UIHelpers.xp_fmt(int(hxp)), UIHelpers.xp_fmt(int(hreq))],
 			"met":   GameData.hero_at_full_xp(),
 		})
@@ -528,7 +528,7 @@ func _build_debug_buttons() -> void:
 	dn.pressed.connect(_debug_tier_down)
 	row1.add_child(dn)
 
-# Incrémente le tier du héro, réinitialise son XP et recharge la scène.
+# Incrémente le tier du héros, réinitialise son XP et recharge la scène.
 func _debug_tier_up() -> void:
 	var hero := GameData.get_entity("hero")
 	var tier := hero.get("maitrise_actuelle", 0) as int
@@ -538,7 +538,7 @@ func _debug_tier_up() -> void:
 		SaveManager.save()
 		_launch_evolution_ritual("village", "hero", "Village", tier, tier + 1)
 
-# Décrémente le tier du héro, réinitialise son XP et recharge la scène.
+# Décrémente le tier du héros, réinitialise son XP et recharge la scène.
 func _debug_tier_down() -> void:
 	var hero := GameData.get_entity("hero")
 	var tier := hero.get("maitrise_actuelle", 0) as int

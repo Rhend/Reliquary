@@ -1,5 +1,5 @@
 # ============================================================
-# HeroData — Resource du Héro unique.
+# HeroData — Resource du Héros unique.
 #
 # IMPORTANT : les stats de combat du héros (ATK/DEF/PV/VIT) NE sont PAS
 # stockées ici. Elles proviennent des tables par palier de Balance.gd
