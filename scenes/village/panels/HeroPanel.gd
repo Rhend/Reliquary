@@ -19,30 +19,14 @@ static func build(host: Village) -> void:
 	var can_ev := tier < GameData.MAX_TIER and xp >= xpmax
 	var tcolor := UIColors.tier_color(tier)
 
-	# Nom + tier
-	var lname := Label.new()
-	lname.text = "%s  —  %s" % [c.get("nom_affichage_fr", c.get("name", "Héro")), GameData.get_tier_name(tier)]
-	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lname.add_theme_font_size_override("font_size", 16)
-	lname.add_theme_color_override("font_color", tcolor)
-	host._rp_content.add_child(lname)
-
-	# ── Barre XP (même DA que les autres panneaux : XPCard à fond rempli animé) ──
-	if tier < GameData.MAX_TIER:
-		var frac := clampf(xp / xpmax, 0.0, 1.0) if xpmax > 0.0 else 0.0
-		var xp_color := UIColors.FILTER_ON if can_ev else UIColors.STAT_HP
-		var xp_card := UIHelpers.xp_panel(xp_color, frac)
-		xp_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		host._rp_content.add_child(xp_card)
-
-		var xpm := UIHelpers.margin_of(6)
-		xp_card.add_child(xpm)
-		var xl := Label.new()
-		xl.text = "XP  %.0f / %.0f" % [xp, xpmax]
-		xl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		xl.add_theme_font_size_override("font_size", 11)
-		xl.add_theme_color_override("font_color", Color.WHITE)
-		xpm.add_child(xl)
+	# ── Carte d'identité + XP (DA commune — UIHelpers.entity_xp_card) ──
+	# Palier max → xp_max = 0 → la carte affiche « RANG MAX ».
+	var hero_xp_max := xpmax
+	if tier >= GameData.MAX_TIER:
+		hero_xp_max = 0.0
+	var id_card := UIHelpers.entity_xp_card(
+			c.get("nom_affichage_fr", c.get("name", "Héro")) as String, tier, xp, hero_xp_max)
+	host._rp_content.add_child(id_card["card"] as Control)
 
 	# ── Sous-section STATISTIQUES ─────────────────────────────
 	host._rp_content.add_child(UIHelpers.section_header("◆  STATISTIQUES", tcolor))
