@@ -431,7 +431,8 @@ func _rebuild_hub() -> void:
 func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
 	var frag: Dictionary = GameData.get_entity(fragment_id)
 	var nom  := frag.get("nom_affichage_fr", fragment_id) as String
-	_show_fragment_banner(nom)
+	_show_banner("🔮  Fragment libéré : %s" % nom,
+			Color(0.55, 0.85, 0.55), Color(0.05, 0.05, 0.20, 0.92), 2.5, 0.5)
 	_rebuild_hub()
 
 # Village tier change : rebuild hub (nouvelle couleur, nouveau bouton forge).
@@ -442,65 +443,40 @@ func _on_village_tier_change(_nouveau_tier: int) -> void:
 func _on_biome_revele(biome_id: String) -> void:
 	var biome := GameData.get_entity(biome_id)
 	var nom   := biome.get("nom_affichage_fr", biome_id) as String
-	_show_biome_revele_banner(nom)
+	_show_banner("✦  Nouveau biome révélé : %s  ✦" % nom,
+			Color(0.4, 0.7, 1.0), Color(0.05, 0.10, 0.25, 0.92), 3.0, 0.6)
 	if _active_panel_id == "adventure":
 		_open_panel("adventure")
 
-func _show_biome_revele_banner(biome_nom: String) -> void:
+# Bannière temporaire en haut de l'écran : texte + couleur d'accent, fond `bg`,
+# affichée `hold` s puis fondue en `fade` s avant disparition. Mutualisée par
+# les notifications (Fragment libéré, biome révélé…).
+func _show_banner(text: String, accent: Color, bg: Color, hold: float, fade: float) -> void:
 	var banner := PanelContainer.new()
 	banner.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	banner.offset_top    = 20
 	banner.offset_bottom = 80
 	banner.mouse_filter  = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(0.05, 0.10, 0.25, 0.92)
-	style.border_color = Color(0.4, 0.7, 1.0)
+	style.bg_color     = bg
+	style.border_color = accent
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(6)
 	banner.add_theme_stylebox_override("panel", style)
 	add_child(banner)
 
 	var lbl := Label.new()
-	lbl.text = "✦  Nouveau biome révélé : %s  ✦" % biome_nom
+	lbl.text = text
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	lbl.add_theme_font_size_override("font_size", 16)
-	lbl.add_theme_color_override("font_color", Color(0.4, 0.7, 1.0))
+	lbl.add_theme_color_override("font_color", accent)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	banner.add_child(lbl)
 
 	var tw := create_tween()
-	tw.tween_interval(3.0)
-	tw.tween_property(banner, "modulate:a", 0.0, 0.6)
-	tw.tween_callback(banner.queue_free)
-
-# Bannière temporaire lors de la libération d'un Fragment.
-func _show_fragment_banner(fragment_nom: String) -> void:
-	var banner := PanelContainer.new()
-	banner.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	banner.offset_top    = 20
-	banner.offset_bottom = 80
-	banner.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	style.bg_color     = Color(0.05, 0.05, 0.20, 0.92)
-	style.border_color = Color(0.55, 0.85, 0.55)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
-	banner.add_theme_stylebox_override("panel", style)
-	add_child(banner)
-
-	var lbl := Label.new()
-	lbl.text = "🔮  Fragment libéré : %s" % fragment_nom
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	lbl.add_theme_font_size_override("font_size", 16)
-	lbl.add_theme_color_override("font_color", Color(0.55, 0.85, 0.55))
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	banner.add_child(lbl)
-
-	var tw := create_tween()
-	tw.tween_interval(2.5)
-	tw.tween_property(banner, "modulate:a", 0.0, 0.5)
+	tw.tween_interval(hold)
+	tw.tween_property(banner, "modulate:a", 0.0, fade)
 	tw.tween_callback(banner.queue_free)
 
 # ─── Debug : boutons tier ─────────────────────────────────────
