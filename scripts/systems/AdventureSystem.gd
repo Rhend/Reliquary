@@ -74,6 +74,10 @@ var _cycle_xp_passives_total:  float      = 0.0
 var _cycle_xp_passives_detail: Dictionary = {}
 # XP par entité rencontrée ce cycle (créatures, pièges, bénédictions).
 var _cycle_xp_entities_detail: Dictionary = {}
+# XP par équipement équipé ce cycle.
+var _cycle_xp_equip_detail:    Dictionary = {}
+# Ingrédients collectés ce cycle : item_id → qty total.
+var _cycle_loot_detail:        Dictionary = {}
 # Saignement : ticks restants et dégâts par tick (calculés à l'application).
 var _bleed_remaining: int   = 0
 # Bénédiction XP : multiplicateur d'XP de base appliqué UNE fois sur le prochain événement.
@@ -102,6 +106,9 @@ func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
 			_cycle_xp_passives_total               += amount
 			_cycle_xp_passives_detail[entity_id]    = \
 				_cycle_xp_passives_detail.get(entity_id, 0.0) + amount
+		"equipment":
+			_cycle_xp_equip_detail[entity_id] = \
+				_cycle_xp_equip_detail.get(entity_id, 0.0) + amount
 		"creature", "trap", "benediction":
 			_cycle_xp_entities_detail[entity_id]    = \
 				_cycle_xp_entities_detail.get(entity_id, 0.0) + amount
@@ -149,6 +156,8 @@ func start_adventure(biome_id: String) -> void:
 	_cycle_xp_passives_total  = 0.0
 	_cycle_xp_passives_detail = {}
 	_cycle_xp_entities_detail = {}
+	_cycle_xp_equip_detail    = {}
+	_cycle_loot_detail        = {}
 	_bleed_remaining          = 0
 	_bless_xp_mult            = 1.0
 
@@ -546,6 +555,9 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 		})
 	if not drops.is_empty():
 		_cycle_loot += drops.size()
+		for d in drops:
+			var did: String = d.get("item_id", "")
+			_cycle_loot_detail[did] = _cycle_loot_detail.get(did, 0) + int(d.get("qty", 1))
 		EventBus.loot_dropped.emit(drops, source_name)
 
 # Drop le loot spécifique à l'ennemi vaincu (loot_table de l'ennemi).
@@ -565,6 +577,8 @@ func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
 	if ingr.is_empty():
 		return
 	ingr["quantite_en_stock"] = int(ingr.get("quantite_en_stock", 0)) + 1
+	_cycle_loot_detail[ingredient_id] = _cycle_loot_detail.get(ingredient_id, 0) + 1
+	_cycle_loot += 1
 	EventBus.loot_dropped.emit(
 		[{"item_id": ingredient_id, "name": ingr.get("nom_affichage_fr", ingredient_id), "qty": 1}],
 		enemy.get("name", "?")
@@ -592,6 +606,7 @@ func _drop_ingredients() -> void:
 		var qty:     int = randi_range(qty_min, qty_max)
 		GameData.add_resource(item_id, qty)
 		drops.append({"item_id": item_id, "name": ingr_dict.get("nom_affichage_fr", item_id), "qty": qty})
+		_cycle_loot_detail[item_id] = _cycle_loot_detail.get(item_id, 0) + qty
 	if not drops.is_empty():
 		_cycle_loot += drops.size()
 		EventBus.loot_dropped.emit(drops, "Biome")
@@ -693,6 +708,8 @@ func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 		"xp_passives_detail":   _cycle_xp_passives_detail,
 		"xp_entities_detail":   _cycle_xp_entities_detail,
 		"loot_total":           _cycle_loot,
+		"loot_detail":          _cycle_loot_detail.duplicate(),
+		"xp_equip_detail":      _cycle_xp_equip_detail.duplicate(),
 		"combo_max":            _cycle_combo_max,
 		"combats_won":          _cycle_combats_won,
 		"events":               _cycle_events,

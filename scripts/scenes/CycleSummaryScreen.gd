@@ -168,6 +168,7 @@ func _build_ui() -> void:
 func _fill_content(vb: VBoxContainer, data: Dictionary,
 		biome: Dictionary, biome_name: String, tcolor: Color) -> void:
 	_section_discoveries(vb, data, biome, tcolor)
+	_section_loot(vb, data, tcolor)
 	_section_xp(vb, data, biome_name, tcolor)
 	_section_evolutions(vb)
 
@@ -208,7 +209,45 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 	_discovery_check(rows, "Fragment de Mémoire", frag_done)
 	_discovery_check(rows, "Créature Unique", biome.get("creature_unique_vaincue", false) as bool)
 
-# ── Section 2 : Répartition XP ─────────────────────────────
+# ── Section 2 : Ressources collectées ──────────────────────────
+func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
+	var loot_detail := data.get("loot_detail", {}) as Dictionary
+	if loot_detail.is_empty():
+		return
+	var sh := UIHelpers.section_header("◆  RESSOURCES COLLECTÉES", tcolor)
+	vb.add_child(sh)
+	_fade_register(sh)
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 3)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(grid)
+	_fade_register(grid)
+
+	for item_id: String in loot_detail:
+		var qty      := int(loot_detail[item_id])
+		var item     := GameData.get_entity(item_id)
+		var nom      := item.get("nom_affichage_fr", item_id) as String
+		var is_unique := item.get("est_unique", false) as bool
+		var ic       := UIColors.TIER_LEGENDAIRE if is_unique else UIColors.FILTER_ON
+		var row      := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		grid.add_child(row)
+		var nl := Label.new()
+		nl.text = ("✦ %s" % nom) if is_unique else nom
+		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nl.add_theme_font_size_override("font_size", 12)
+		nl.add_theme_color_override("font_color", ic)
+		row.add_child(nl)
+		var ql := Label.new()
+		ql.text = "+%d" % qty
+		ql.add_theme_font_size_override("font_size", 12)
+		ql.add_theme_color_override("font_color", ic)
+		row.add_child(ql)
+
+# ── Section 3 : Répartition XP ─────────────────────────────
 func _section_xp(vb: VBoxContainer, data: Dictionary,
 		biome_name: String, tcolor: Color) -> void:
 	var sh := UIHelpers.section_header("◆  RÉPARTITION XP", tcolor)
@@ -245,6 +284,12 @@ func _section_xp(vb: VBoxContainer, data: Dictionary,
 		var p := GameData.get_entity(passive_id)
 		var p_name := p.get("nom_affichage_fr", p.get("name", passive_id)) as String
 		_xp_entity(vb, "⚡", p_name, p, detail[passive_id] as float)
+
+	var equip_detail := data.get("xp_equip_detail", {}) as Dictionary
+	for equip_id: String in equip_detail:
+		var eq := GameData.get_entity(equip_id)
+		var eq_name := eq.get("nom_affichage_fr", equip_id) as String
+		_xp_entity(vb, "🔨", eq_name, eq, equip_detail[equip_id] as float)
 
 # Ajoute une ligne XP pour une entité ayant reçu de l'XP ce cycle (sinon ignorée).
 # La couleur de la carte = couleur du palier (tier) courant de l'entité.
