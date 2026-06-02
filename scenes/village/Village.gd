@@ -75,6 +75,7 @@ func _ready() -> void:
 	EventBus.biome_revele.connect(_on_biome_revele)
 	EventBus.resources_changed.connect(_on_resources_changed_refresh)
 	EventBus.equipement_evolue.connect(func(_id, _tier): _on_resources_changed_refresh())
+	EventBus.equipment_changed.connect(_on_resources_changed_refresh)
 
 # Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
 func _active_creature() -> Dictionary:

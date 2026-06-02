@@ -8,6 +8,12 @@
 # ============================================================
 class_name HeroPanel
 
+const EQUIP_SLOTS: Array = [
+	["arme",   "⚔",  "equipment_arme",   "Arme"  ],
+	["anneau", "💍", "equipment_anneau", "Anneau"],
+	["armure", "🛡", "equipment_armure",  "Armure"],
+]
+
 # Point d'entrée : peuple host._rp_content avec la fiche du héros actif.
 static func build(host: Village) -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
@@ -84,6 +90,18 @@ static func build(host: Village) -> void:
 		ml.add_theme_font_size_override("font_size", 11)
 		ml.add_theme_color_override("font_color", UIColors.FILTER_ON)
 		host._rp_content.add_child(ml)
+
+	# ── Sous-section ÉQUIPEMENT (slots des 3 biomes) ──────────────
+	host._rp_content.add_child(UIHelpers.section_header("◆  ÉQUIPEMENT", tcolor))
+	for entry in EQUIP_SLOTS:
+		var slot_key:  String = entry[0]
+		var slot_icon: String = entry[1]
+		var equip_id:  String = entry[2]
+		var slot_name: String = entry[3]
+		var equip := GameData.get_entity(equip_id)
+		if equip.is_empty() or not equip.get("est_debloque", false):
+			continue
+		host._rp_content.add_child(_equip_slot_card(host, slot_key, slot_icon, slot_name, equip_id, equip, tcolor))
 
 	# ── Sous-section PASSIFS (standard + uniques débloqués, même carte) ──
 	host._rp_content.add_child(UIHelpers.section_header("◆  PASSIFS", tcolor))
@@ -289,6 +307,102 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 		vb.add_child(eff_lbl)
 
 	return margin
+
+# Carte d'équipement pour un slot (arme / anneau / armure).
+static func _equip_slot_card(host: Village, slot_key: String, slot_icon: String,
+		slot_name: String, equip_id: String, equip: Dictionary, tcolor: Color) -> Control:
+	var equipped_id := GameData.player.get("equipped", {}).get(slot_key, "") as String
+	var is_equipped := equipped_id == equip_id
+	var etier       := int(equip.get("maitrise_actuelle", 0))
+	var enom        := equip.get("nom_affichage_fr", equip_id) as String
+	var ec          := UIColors.tier_color(etier)
+
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.35, 1, 4))
+	var m := UIHelpers.margin_of(8)
+	card.add_child(m)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	m.add_child(vb)
+
+	# Ligne 1 : icône slot + nom item + badge équipé
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 6)
+	vb.add_child(header)
+
+	var slot_lbl := Label.new()
+	slot_lbl.text = "%s  %s" % [slot_icon, slot_name]
+	slot_lbl.add_theme_font_size_override("font_size", 11)
+	slot_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	header.add_child(slot_lbl)
+
+	var name_lbl := Label.new()
+	name_lbl.text = enom
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	header.add_child(name_lbl)
+
+	var tier_lbl := Label.new()
+	tier_lbl.text = GameData.get_tier_name(etier)
+	tier_lbl.add_theme_font_size_override("font_size", 11)
+	tier_lbl.add_theme_color_override("font_color", ec)
+	header.add_child(tier_lbl)
+
+	# Ligne 2 : stats actuelles
+	var stats_dict := equip.get("stats_par_palier", {}) as Dictionary
+	var stats_at   := stats_dict.get(etier, stats_dict.get(0, {})) as Dictionary
+	if not stats_at.is_empty():
+		var parts: PackedStringArray = []
+		if int(stats_at.get("atk", 0)) != 0:
+			parts.append("ATK +%d" % int(stats_at["atk"]))
+		if int(stats_at.get("def", 0)) != 0:
+			parts.append("DEF +%d" % int(stats_at["def"]))
+		if int(stats_at.get("hp", 0)) != 0:
+			parts.append("PV +%d" % int(stats_at["hp"]))
+		if int(stats_at.get("attack_speed_pct", 0)) != 0:
+			parts.append("VIT +%d%%" % int(stats_at["attack_speed_pct"]))
+		if parts.size() > 0:
+			var sl := Label.new()
+			sl.text = "  ".join(parts)
+			sl.add_theme_font_size_override("font_size", 11)
+			sl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+			vb.add_child(sl)
+
+	# Bouton équiper / badge équipé
+	if is_equipped:
+		var badge := Label.new()
+		badge.text = "✓  Équipé"
+		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge.add_theme_font_size_override("font_size", 11)
+		badge.add_theme_color_override("font_color", UIColors.LOG_VICTORY)
+		vb.add_child(badge)
+	else:
+		var btn := Button.new()
+		btn.text = "Équiper"
+		btn.add_theme_font_size_override("font_size", 12)
+		btn.add_theme_color_override("font_color", ec)
+		btn.add_theme_stylebox_override("normal", UIHelpers.card_style(ec, 0.12, 1.0, 1, 4))
+		btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(ec, 0.28, 1.0, 1, 4))
+		btn.pressed.connect(func() -> void:
+			GameData.equip_item(equip_id)
+			host._open_panel("hero")
+		)
+		vb.add_child(btn)
+
+	# Tooltip JRPG
+	var tt := "Slot : %s  ·  Rang : %s" % [slot_name, GameData.get_tier_name(etier)]
+	if not stats_at.is_empty():
+		var sl2: PackedStringArray = []
+		if int(stats_at.get("atk", 0)) != 0: sl2.append("ATK +%d" % int(stats_at["atk"]))
+		if int(stats_at.get("def", 0)) != 0: sl2.append("DEF +%d" % int(stats_at["def"]))
+		if int(stats_at.get("hp", 0)) != 0: sl2.append("PV +%d" % int(stats_at["hp"]))
+		if int(stats_at.get("attack_speed_pct", 0)) != 0: sl2.append("VIT +%d%%" % int(stats_at["attack_speed_pct"]))
+		if sl2.size() > 0:
+			tt += "\n" + "  ".join(sl2)
+	UIHelpers.register_tooltip(card, enom, tt, ec)
+
+	return card
 
 # Retourne la liste d'effets pour le palier t, ou les effets de base si absent.
 static func _tier_effects(pdata: Dictionary, t: int) -> Array:
