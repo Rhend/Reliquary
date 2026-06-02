@@ -260,7 +260,7 @@ func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictiona
 	var avant_frac := clampf(xp_avant / xp_max, 0.0, 1.0) if xp_max > 0.0 else 0.0
 	var apres_frac := clampf(xp_apres / xp_max, 0.0, 1.0) if xp_max > 0.0 else 1.0
 
-	var card := _xp_card(icon, label, tier, xp_apres, xp_max)
+	var card := _xp_card(icon, label, tier, xp_apres, xp_max, entity.get("entity_type", "") as String)
 	vb.add_child(card["container"])
 	_fade_register(card["container"])
 	_xp_anims.append({
@@ -465,8 +465,8 @@ func _next_tier_threshold(entity: Dictionary) -> float:
 # (compteur 0→gain) en parallèle du remplissage du fond.
 # Retourne { container, card, xp_label } pour l'animation (_fill_xp_bar).
 func _xp_card(icon: String, label: String, tier: int,
-		xp_apres: float, xp_max: float) -> Dictionary:
-	var built := UIHelpers.entity_xp_card(label, tier, xp_apres, xp_max, icon)
+		xp_apres: float, xp_max: float, entity_type: String = "") -> Dictionary:
+	var built := UIHelpers.entity_xp_card(label, tier, xp_apres, xp_max, icon, entity_type)
 	var card := built["card"] as XPCard
 	var header := built["header"] as HBoxContainer
 

@@ -107,10 +107,12 @@ static func info_panel(title: String, color: Color, builder: Callable) -> Contro
 # récap de cycle…) : centralise la création + le stylebox identiques partout.
 static func xp_panel(fill_color: Color, xp_fill: float,
 		bg_alpha: float = 0.07, border_alpha: float = 0.60,
-		border_width: int = 1, corner_radius: int = 4) -> XPCard:
+		border_width: int = 1, corner_radius: int = 4,
+		motif: int = XPCard.Motif.BUBBLES) -> XPCard:
 	var card := XPCard.new()
 	card.xp_fill    = clampf(xp_fill, 0.0, 1.0)
 	card.fill_color = fill_color
+	card.motif      = motif
 	card.add_theme_stylebox_override("panel",
 			card_style(fill_color, bg_alpha, border_alpha, border_width, corner_radius))
 	return card
@@ -120,17 +122,18 @@ static func xp_panel(fill_color: Color, xp_fill: float,
 # palier (badge) | XP (droite) ». À réutiliser partout plutôt que reconstruire
 # l'en-tête à la main. Palier max → passer xp_max = 0 → affiche « RANG MAX ».
 # icon : préfixe optionnel (emoji/symbole) devant le nom (ex. récap de cycle).
+# entity_type : détermine le motif de particules de la barre (cf. XPCard.motif_for_type).
 # Retourne { card, header } : ajouter `card` au parent ; `header` (HBox) reste
 # accessible pour y greffer un élément optionnel (flèche d'accordéon, gain…).
 static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: float,
-		icon: String = "") -> Dictionary:
+		icon: String = "", entity_type: String = "") -> Dictionary:
 	var color := UIColors.tier_color(tier)
 	var at_max := xp_max <= 0.0
 	var frac := 0.0
 	if not at_max:
 		frac = clampf(xp / xp_max, 0.0, 1.0)
 
-	var card := xp_panel(color, frac)
+	var card := xp_panel(color, frac, 0.07, 0.60, 1, 4, XPCard.motif_for_type(entity_type))
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	var m := margin_of(8)

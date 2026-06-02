@@ -138,7 +138,8 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 
 	# ── Carte principale via le template commun (nom | palier | XP) ──
 	var built := UIHelpers.entity_xp_card(
-			(biome.get("nom_affichage_fr", biome_id) as String).to_upper(), btier, xp_cur, xp_max)
+			(biome.get("nom_affichage_fr", biome_id) as String).to_upper(), btier, xp_cur, xp_max,
+			"", "biome")
 	var panel := built["card"] as XPCard
 	var header := built["header"] as HBoxContainer
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -171,20 +172,21 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	indent.add_child(cat_vb)
 
 	# Filtrage par zone débloquée : seuls les éléments des zones actives comptent et s'affichent.
-	_adv_category_card(host, cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE)
-	_adv_category_card(host, cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP)
-	_adv_category_card(host, cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION)
+	# Chaque catégorie porte son propre motif de barre d'XP (cf. XPCard.Motif).
+	_adv_category_card(host, cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE,    XPCard.Motif.PAWS)
+	_adv_category_card(host, cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP,        XPCard.Motif.LIGHTNING)
+	_adv_category_card(host, cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES)
 	_adv_ingredient_section(cat_vb, pools["ingredients"])
 
 	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
 
 # Carte catégorie cliquable (Créatures / Pièges / Bénédictions) avec compteur de découverte.
-# Panneau cliquable + liste d'entités repliée en dessous.
-static func _adv_category_card(host: Village, parent: VBoxContainer, label: String, pool: Array, color: Color) -> void:
+# Panneau cliquable + liste d'entités repliée en dessous. `motif` = motif de barre d'XP.
+static func _adv_category_card(host: Village, parent: VBoxContainer, label: String, pool: Array, color: Color, motif: int = XPCard.Motif.BUBBLES) -> void:
 	if pool.is_empty():
 		return
 	var body := _accordion(parent, label, "%d / %d" % [MasteryRegistry.count_discovered(pool), pool.size()])
-	_adv_entity_rows(host, body, pool, color)
+	_adv_entity_rows(host, body, pool, color, motif)
 
 # Construit un « accordéon » repliable : panneau neutre cliquable
 # [label | (compteur) | ▶] + section repliée dessous. Retourne le VBox interne
@@ -253,7 +255,8 @@ static func _accordion(parent: VBoxContainer, label: String, count_text: String)
 
 # Remplit parent avec une carte par entité du pool, même format pour tous les types.
 # Entité non découverte → nom "?", palier Commun, XP 0 / seuil (placeholder homogène).
-static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, _color: Color) -> void:
+# `motif` = motif de particules de la barre d'XP (commun à toute la catégorie).
+static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, _color: Color, motif: int = XPCard.Motif.BUBBLES) -> void:
 	for entry: Dictionary in pool:
 		var entry_id := entry.get("id", "") as String
 		var is_known := MasteryRegistry.is_discovered(entry_id)
@@ -290,7 +293,7 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 			if xp_need > 0:
 				xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
 
-		var panel := UIHelpers.xp_panel(ec, xp_fill, 0.06, 0.38, 1, 3)
+		var panel := UIHelpers.xp_panel(ec, xp_fill, 0.06, 0.38, 1, 3, motif)
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		parent.add_child(panel)
 

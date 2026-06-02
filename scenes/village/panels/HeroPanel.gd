@@ -25,7 +25,8 @@ static func build(host: Village) -> void:
 	if tier >= GameData.MAX_TIER:
 		hero_xp_max = 0.0
 	var id_card := UIHelpers.entity_xp_card(
-			c.get("nom_affichage_fr", c.get("name", "Héros")) as String, tier, xp, hero_xp_max)
+			c.get("nom_affichage_fr", c.get("name", "Héros")) as String, tier, xp, hero_xp_max,
+			"", c.get("entity_type", "hero") as String)
 	host._rp_content.add_child(id_card["card"] as Control)
 
 	# ── Sous-section STATISTIQUES ─────────────────────────────
@@ -157,7 +158,8 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ── Carte principale via le template commun (nom | palier | XP) ──
-	var built := UIHelpers.entity_xp_card(name_txt, rarity, xp_cur, xp_max)
+	var built := UIHelpers.entity_xp_card(name_txt, rarity, xp_cur, xp_max,
+			"", pdata.get("entity_type", "passive") as String)
 	var panel := built["card"] as XPCard
 	var header := built["header"] as HBoxContainer
 	wrapper.add_child(panel)
