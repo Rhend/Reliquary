@@ -141,21 +141,35 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	_center(_ring, Vector2.ZERO, Vector2(diam, diam))
 	_hub_root.add_child(_ring)
 
+	# ── Lecture centrale : nom + palier + Tier Village + conditions ──
+	# Regroupés dans un VBox centré sur le centre exact de l'anneau (grandit
+	# symétriquement dans les deux sens) → reste verticalement centré quel que
+	# soit le nombre de lignes de conditions affichées.
+	var center_box := VBoxContainer.new()
+	center_box.add_theme_constant_override("separation", 2)
+	center_box.anchor_left   = 0.5; center_box.anchor_right  = 0.5
+	center_box.anchor_top    = 0.5; center_box.anchor_bottom = 0.5
+	center_box.offset_left   = 0.0; center_box.offset_right  = 0.0
+	center_box.offset_top    = 0.0; center_box.offset_bottom = 0.0
+	center_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	center_box.grow_vertical   = Control.GROW_DIRECTION_BOTH
+	_hub_root.add_child(center_box)
+
 	var lname := Label.new()
 	lname.text = "Village"
 	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lname.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lname.add_theme_font_size_override("font_size", 24)
 	lname.add_theme_color_override("font_color", tcolor)
-	_center(lname, Vector2(0.0, -17.0), Vector2(180.0, 32.0))
-	_hub_root.add_child(lname)
+	center_box.add_child(lname)
 
 	var ltier := Label.new()
 	ltier.text = GameData.get_tier_name(tier)
 	ltier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ltier.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ltier.add_theme_font_size_override("font_size", 15)
 	ltier.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.40))
-	_center(ltier, Vector2(0.0, 16.0), Vector2(150.0, 24.0))
-	_hub_root.add_child(ltier)
+	center_box.add_child(ltier)
 
 	# ── Info Village + conditions d'évolution ─────────────────
 	var vtier := GameData.village.get("tier_actuel", 0) as int
@@ -164,13 +178,13 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	var vlabel := Label.new()
 	vlabel.text = "Village T%d" % vtier
 	vlabel.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vlabel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vlabel.add_theme_font_size_override("font_size", 12)
 	vlabel.add_theme_color_override("font_color", vcolor)
-	_center(vlabel, Vector2(0.0, 40.0), Vector2(150.0, 18.0))
-	_hub_root.add_child(vlabel)
+	center_box.add_child(vlabel)
 
 	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
-		_build_village_conditions(vtier, vcolor)
+		_build_village_conditions(center_box, vtier, vcolor)
 
 	# ── Hex items (forge débloquée par village tier, reste par hero tier) ──
 	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
@@ -187,23 +201,22 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 		_make_hex(d[0], d[1], tcolor, pos, Callable(self, d[3]), d[4])
 
 # ─── Conditions d'évolution du Village ────────────────────────
-# Affiche, sous le cercle, chaque condition « actuel / requis » (verte si
-# remplie), puis le bouton « Faire évoluer » lorsque toutes le sont.
-func _build_village_conditions(vtier: int, vcolor: Color) -> void:
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	box.anchor_left   = 0.5; box.anchor_right  = 0.5
-	box.anchor_top    = 0.5; box.anchor_bottom = 0.5
-	box.offset_left   = -130.0; box.offset_right  = 130.0
-	box.offset_top    = 52.0;   box.offset_bottom = 168.0
+# Ajoute dans `container` (le VBox central) un petit espace, chaque condition
+# « actuel / requis » (verte si remplie), puis le bouton « Faire évoluer »
+# lorsque toutes le sont. Le tout reste centré via le VBox central.
+func _build_village_conditions(container: VBoxContainer, vtier: int, vcolor: Color) -> void:
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0.0, 6.0)
+	container.add_child(spacer)
 
 	for cond: Dictionary in _village_upgrade_conditions(vtier):
 		var row := Label.new()
 		row.text = "%s%s  %s" % ["✓ " if cond["met"] else "• ", cond["label"], cond["value"]]
 		row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_theme_font_size_override("font_size", 11)
 		row.add_theme_color_override("font_color", UIColors.LOG_VICTORY if cond["met"] else UIColors.TEXT_MUTED)
-		box.add_child(row)
+		container.add_child(row)
 
 	if GameData.can_upgrade_village():
 		var ubtn := Button.new()
@@ -219,9 +232,7 @@ func _build_village_conditions(vtier: int, vcolor: Color) -> void:
 			if GameData.upgrade_village():
 				_rebuild_hub()
 		)
-		box.add_child(ubtn)
-
-	_hub_root.add_child(box)
+		container.add_child(ubtn)
 
 # Conditions de passage T(vtier)→T(vtier+1), formatées « actuel / requis ».
 # Chaque entrée : { label, value, met }.
