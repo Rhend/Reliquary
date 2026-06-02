@@ -799,6 +799,7 @@ func _update_badges() -> void:
 func _on_resources_changed_refresh() -> void:
 	if _active_panel_id == "forge" or _active_panel_id == "hero":
 		_open_panel(_active_panel_id)
+	_update_badges()
 
 # ─── Utils ────────────────────────────────────────────────────
 # Positionne ctrl centré sur pos avec la taille sz, en mode ancre centre.
