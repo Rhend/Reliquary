@@ -252,16 +252,24 @@ func _build_bottom_bar() -> Control:
 
 # Ajoute un pill d'état (infrastructure — aucun état actif pour l'instant).
 # title : nom de l'état ; tooltip : description (valeur dynamique à calculer plus tard).
+func _benediction_desc(effet: String, valeur: int) -> String:
+	match effet:
+		"heal":          return "+%d PV" % valeur
+		"atk_boost":     return "+%d ATK (temporaire)" % valeur
+		"def_boost":     return "+%d DEF (temporaire)" % valeur
+		"xp_boost":      return "+%d%% XP ce cycle" % valeur
+		_:               return effet if effet != "" else "Effet inconnu"
+
 func _add_state_pill(states_box: HBoxContainer, title: String, tooltip: String, color: Color) -> void:
 	var box := PanelContainer.new()
 	box.add_theme_stylebox_override("panel", UIHelpers.card_style(color, 0.18, 0.70, 1, 6))
-	box.tooltip_text = tooltip
 	var lbl := Label.new()
 	lbl.text = title
 	lbl.add_theme_font_size_override("font_size", 11)
 	lbl.add_theme_color_override("font_color", color)
 	box.add_child(lbl)
 	states_box.add_child(box)
+	UIHelpers.register_tooltip(box, title, tooltip, color)
 
 # ═══════════════════════════════════════════════════════════
 #  Signaux
@@ -293,10 +301,21 @@ func _on_adventure_started(_biome_id: String) -> void:
 	var cid    := GameData.player.get("active_creature_id", "") as String
 	var c      := GameData.get_entity(cid)
 	var htier  := int(c.get("maitrise_actuelle", 0))
-	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héros")) as String).to_upper()
+	var hname  := (c.get("nom_affichage_fr", c.get("name", "Héros")) as String)
+	_hero_name.text = hname.to_upper()
 	_hero_ring.setup(UIColors.tier_color(htier))
 	_hero_ring.set_hp(AdventureSystem.current_hp, AdventureSystem.current_hp)
 	_hide_action(_hero_action)
+
+	# Tooltip JRPG sur le héros (stats effectives avec équipement)
+	var hstats := GameData.get_effective_stats(cid)
+	var heqp   := GameData.get_equipment_bonuses()
+	var htt    := "Rang : %s\nPV : %d  ·  ATK : %d  ·  DEF : %d" % [
+		GameData.get_tier_name(htier),
+		int(AdventureSystem.current_hp),
+		int(hstats.get("atk", 0)) + int(heqp.get("atk", 0)),
+		int(hstats.get("def", 0)) + int(heqp.get("def", 0))]
+	UIHelpers.register_tooltip(_hero_name, hname, htt, UIColors.tier_color(htier))
 
 	# Colonne ennemi en attente (vide) jusqu'au premier événement.
 	_enemy_name.text = "—"
@@ -317,12 +336,15 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_enemy_ring.setup(UIColors.TYPE_TRAP)
 			_enemy_ring.set_hp(1, 1)
 			_hide_action(_enemy_action)
+			var tdmg := int(trap.get("damage", 0))
+			UIHelpers.register_tooltip(_enemy_name, tname,
+				"Piège  ·  Dégâts : %d%s" % [tdmg, "\n(Ignoré — zone sans créature)" if event_data.get("ignored", false) else ""],
+				UIColors.TYPE_TRAP)
 			if not event_data.get("ignored", false):
-				var dmg := int(trap.get("damage", 0))
 				_hero_ring.update_hp(AdventureSystem.current_hp)
-				_hero_ring.damage(dmg, false)
+				_hero_ring.damage(tdmg, false)
 				_add_log("[color=%s]%s[/color] inflige [color=%s]-%d[/color]"
-						% [_hex(UIColors.TIER_EPIQUE), tname, _hex(UIColors.LOG_DEFEAT), dmg],
+						% [_hex(UIColors.TIER_EPIQUE), tname, _hex(UIColors.LOG_DEFEAT), tdmg],
 						["Monstre", "Attaque", "État"])
 		"benediction":
 			var bene := event_data.get("effect", {}) as Dictionary
@@ -331,6 +353,12 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_enemy_ring.setup(UIColors.TYPE_BENEDICTION)
 			_enemy_ring.set_hp(1, 1)
 			_hide_action(_enemy_action)
+			var beff   := bene.get("effet", "") as String
+			var bval   := int(bene.get("valeur", 0))
+			var bdesc  := _benediction_desc(beff, bval)
+			UIHelpers.register_tooltip(_enemy_name, bname,
+				"Bénédiction\n%s" % bdesc,
+				UIColors.TYPE_BENEDICTION)
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TYPE_BENEDICTION), bname], ["État"])
 
 func _on_combat_started(creature_id: String, enemy: Dictionary,
@@ -342,10 +370,20 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_hero_ring.setup(UIColors.tier_color(htier))
 	_hero_ring.set_hp(hero_hp, hero_max)
 
-	var ename := enemy.get("name", "Ennemi") as String
+	var ename      := enemy.get("name", "Ennemi") as String
+	var etier      := int(enemy.get("tier", 0))
+	var etier_name := GameData.get_tier_name(etier)
 	_enemy_name.text = ename.to_upper()
-	_enemy_ring.setup(UIColors.tier_color(int(enemy.get("tier", 0))))
+	_enemy_ring.setup(UIColors.tier_color(etier))
 	_enemy_ring.set_hp(enemy_hp, enemy_hp)
+
+	# Tooltip JRPG sur le nom de l'ennemi : rang + stats
+	var ett := "Rang : %s\nPV : %d  ·  ATK : %d  ·  DEF : %d" % [
+		etier_name,
+		int(enemy_hp),
+		int(enemy.get("atk", 0)),
+		int(enemy.get("def", 0))]
+	UIHelpers.register_tooltip(_enemy_name, ename, ett, UIColors.tier_color(etier))
 
 	_hero_ring.set_cooldown(0.0)
 	_enemy_ring.set_cooldown(0.0)

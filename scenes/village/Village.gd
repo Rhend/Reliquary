@@ -735,6 +735,17 @@ func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Calla
 	item.pivot_offset = HEX_SIZE * 0.5
 	_hub_root.add_child(item)
 	_hex_items[panel_id] = item
+	UIHelpers.register_tooltip(item, lbl, _hex_tooltip(panel_id), tcolor)
+
+# Retourne la description JRPG d'un hexagone selon son panel_id.
+func _hex_tooltip(panel_id: String) -> String:
+	match panel_id:
+		"hero":      return "Votre héros et ses passifs.\nConsultez ses équipements et sa progression."
+		"adventure": return "Partez en expédition.\nChoisissez un biome et affrontez ses créatures."
+		"forge":     return "Le Forgeron.\nAméliorez vos équipements avec les ingrédients récoltés."
+		"sanctuary": return "Sanctuaire des Évolutions.\nFaites évoluer vos entités au rang supérieur."
+		"relic":     return "Reliques anciennes.\nDébloquez des pouvoirs permanents rares."
+		_:           return "Mystère à venir..."
 
 # ─── Navigation → panneaux ────────────────────────────────────
 func _go_hero()       -> void: _open_panel("hero")

@@ -5,11 +5,11 @@
 [resource]
 script = ExtResource("1")
 id = "equipment_arme"
-nom_affichage_fr = "Épée en Bois"
-nom_affichage_en = "Wooden Sword"
+nom_affichage_fr = "Lame de Forêt"
+nom_affichage_en = "Forest Blade"
 slot = 0
-biome_source_id = ""
+biome_source_id = "biome_foret"
 maitrise_actuelle = 0
 est_debloque = true
-stats_par_palier = {0: {"atk": 2}}
-recettes_evolution = {1: [{"ingredient_id": "res_pierre_montagne", "quantite": 2}], 2: [{"ingredient_id": "res_pierre_montagne", "quantite": 2}, {"ingredient_id": "res_fourrure", "quantite": 1}]}
+stats_par_palier = {0: {"atk": 3}, 1: {"atk": 7, "def": 1}, 2: {"atk": 14, "def": 2}}
+recettes_evolution = {1: [{"ingredient_id": "res_fourrure", "quantite": 2}], 2: [{"ingredient_id": "res_fourrure", "quantite": 3}, {"ingredient_id": "res_mineral_fer", "quantite": 1}]}

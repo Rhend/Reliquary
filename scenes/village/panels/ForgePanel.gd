@@ -65,17 +65,27 @@ static func build(host: Village) -> void:
 	if not has_ingr:
 		host._rp_content.add_child(UIHelpers.none_label(12))
 
-	# ── Équipements ────────────────────────────────────────
-	host._rp_content.add_child(UIHelpers.section_header("◆  ÉQUIPEMENTS", tcolor))
-
-	var equip_ids: Array = ["equipment_arme", "equipment_anneau", "equipment_armure",
-		"equipment_ceinture", "equipment_bouclier", "equipment_talisman"]
-
-	for equip_id in equip_ids:
+	# ── Équipements (1 par biome, dans l'ordre Forêt → Marécage → Montagne) ──
+	for entry in BIOME_EQUIP:
+		var biome_id: String  = entry[0]
+		var equip_id: String  = entry[1]
+		var section:  String  = entry[2]
+		var biome := GameData.get_entity(biome_id)
+		if biome.is_empty() or not biome.get("est_decouvert", false):
+			continue
 		var equip := GameData.get_entity(equip_id)
 		if equip.is_empty():
 			continue
-		host._rp_content.add_child(_forge_equip_card(host, equip_id, equip, tcolor))
+		var biome_color := UIColors.tier_color(int(biome.get("maitrise_actuelle", 0)))
+		host._rp_content.add_child(UIHelpers.section_header(section, biome_color))
+		host._rp_content.add_child(_forge_equip_card(host, equip_id, equip, biome_color))
+
+# Équipement lié à chaque biome (dans l'ordre d'affichage).
+const BIOME_EQUIP: Array = [
+	["biome_foret",    "equipment_arme",   "⚔  FORÊT SOMBRE"],
+	["biome_marecage", "equipment_armure",  "💧  MARÉCAGE PUTRIDE"],
+	["biome_montagne", "equipment_anneau",  "⛰  MONTAGNE"],
+]
 
 # Noms d'affichage des slots (index = Enums.SlotEquipement).
 const SLOT_NAMES: Array = ["Arme", "Anneau", "Armure", "Ceinture", "Bouclier", "Talisman"]
@@ -145,7 +155,7 @@ static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary
 
 	# ── Stats au palier actuel ──────────────────────────────
 	var stats_dict := equip.get("stats_par_palier", {}) as Dictionary
-	var stats_at_tier := stats_dict.get(str(equip_tier), {}) as Dictionary
+	var stats_at_tier := stats_dict.get(equip_tier, stats_dict.get(0, {})) as Dictionary
 	if not stats_at_tier.is_empty():
 		var parts: Array[String] = []
 		if stats_at_tier.get("atk", 0) != 0:
@@ -226,12 +236,17 @@ static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary
 	)
 	vb.add_child(btn)
 
-	# Tooltip de l'équipement.
-	var tt_body := "Slot : %s  ·  Maîtrise : %s" % [slot_name, tier_name]
+	# Tooltip de l'équipement — stats actuelles + aperçu palier suivant.
+	var tt_body := "Slot : %s  ·  Rang : %s" % [slot_name, tier_name]
 	if not stats_at_tier.is_empty():
 		var sl := _stats_line(stats_at_tier)
 		if sl != "":
 			tt_body += "\n" + sl
+	if not at_max and not recipe.is_empty():
+		var next_stats := (equip.get("stats_par_palier", {}) as Dictionary).get(next_tier, {}) as Dictionary
+		var next_sl := _stats_line(next_stats)
+		if next_sl != "":
+			tt_body += "\n→ %s : %s" % [GameData.get_tier_name(next_tier), next_sl]
 	UIHelpers.register_tooltip(card, nom, tt_body, ec)
 
 	return card

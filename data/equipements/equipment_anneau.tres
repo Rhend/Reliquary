@@ -5,11 +5,11 @@
 [resource]
 script = ExtResource("1")
 id = "equipment_anneau"
-nom_affichage_fr = ""
-nom_affichage_en = ""
+nom_affichage_fr = "Rune de Pierre"
+nom_affichage_en = "Stone Rune"
 slot = 1
-biome_source_id = ""
+biome_source_id = "biome_montagne"
 maitrise_actuelle = 0
-est_debloque = false
-stats_par_palier = {}
-recettes_evolution = {1: [{"ingredient_id": "res_fourrure", "quantite": 2}], 2: [{"ingredient_id": "res_fourrure", "quantite": 2}, {"ingredient_id": "res_venin", "quantite": 1}]}
+est_debloque = true
+stats_par_palier = {0: {"attack_speed_pct": 10}, 1: {"attack_speed_pct": 20, "atk": 2}, 2: {"attack_speed_pct": 35, "atk": 5}}
+recettes_evolution = {1: [{"ingredient_id": "res_pierre_montagne", "quantite": 2}], 2: [{"ingredient_id": "res_pierre_montagne", "quantite": 3}, {"ingredient_id": "res_ecaille", "quantite": 1}]}
