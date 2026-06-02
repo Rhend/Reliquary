@@ -132,7 +132,8 @@ const ENTITY_XP_COEF: Dictionary = {
 
 const DEFAULT_MAX_TIER: int = 5
 const ENTITY_MAX_TIER: Dictionary = {
-	"creature": 4,
+	"creature":  4,
+	"equipment": 2,
 }
 
 # ═══════════════════════════════════════════════════════════

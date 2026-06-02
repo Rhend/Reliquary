@@ -309,13 +309,14 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	return margin
 
 # Carte d'équipement pour un slot (arme / anneau / armure).
-static func _equip_slot_card(host: Village, slot_key: String, slot_icon: String,
-		slot_name: String, equip_id: String, equip: Dictionary, tcolor: Color) -> Control:
-	var equipped_id := GameData.player.get("equipped", {}).get(slot_key, "") as String
-	var is_equipped := equipped_id == equip_id
-	var etier       := int(equip.get("maitrise_actuelle", 0))
-	var enom        := equip.get("nom_affichage_fr", equip_id) as String
-	var ec          := UIColors.tier_color(etier)
+# Toujours équipé — pas de bouton équiper/déséquiper.
+# Montre la barre XP et l'état forge (Requise / Ingrédients) quand la barre est pleine.
+static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: String,
+		slot_name: String, equip_id: String, equip: Dictionary, _tcolor: Color) -> Control:
+	var etier    := int(equip.get("maitrise_actuelle", 0))
+	var enom     := equip.get("nom_affichage_fr", equip_id) as String
+	var ec       := UIColors.tier_color(etier)
+	var at_max   := etier >= GameData.get_max_tier_for_type("equipment")
 
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.06, 0.35, 1, 4))
@@ -325,7 +326,7 @@ static func _equip_slot_card(host: Village, slot_key: String, slot_icon: String,
 	vb.add_theme_constant_override("separation", 4)
 	m.add_child(vb)
 
-	# Ligne 1 : icône slot + nom item + badge équipé
+	# ── Ligne 1 : icône slot · nom · rang ──────────────────────
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 6)
 	vb.add_child(header)
@@ -349,57 +350,97 @@ static func _equip_slot_card(host: Village, slot_key: String, slot_icon: String,
 	tier_lbl.add_theme_color_override("font_color", ec)
 	header.add_child(tier_lbl)
 
-	# Ligne 2 : stats actuelles
+	# ── Ligne 2 : stats actuelles ──────────────────────────────
 	var stats_dict := equip.get("stats_par_palier", {}) as Dictionary
 	var stats_at   := stats_dict.get(etier, stats_dict.get(0, {})) as Dictionary
-	if not stats_at.is_empty():
-		var parts: PackedStringArray = []
-		if int(stats_at.get("atk", 0)) != 0:
-			parts.append("ATK +%d" % int(stats_at["atk"]))
-		if int(stats_at.get("def", 0)) != 0:
-			parts.append("DEF +%d" % int(stats_at["def"]))
-		if int(stats_at.get("hp", 0)) != 0:
-			parts.append("PV +%d" % int(stats_at["hp"]))
-		if int(stats_at.get("attack_speed_pct", 0)) != 0:
-			parts.append("VIT +%d%%" % int(stats_at["attack_speed_pct"]))
-		if parts.size() > 0:
-			var sl := Label.new()
-			sl.text = "  ".join(parts)
-			sl.add_theme_font_size_override("font_size", 11)
-			sl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-			vb.add_child(sl)
+	var stat_parts: PackedStringArray = []
+	if int(stats_at.get("atk", 0)) != 0:              stat_parts.append("ATK +%d" % int(stats_at["atk"]))
+	if int(stats_at.get("def", 0)) != 0:              stat_parts.append("DEF +%d" % int(stats_at["def"]))
+	if int(stats_at.get("hp", 0)) != 0:               stat_parts.append("PV +%d" % int(stats_at["hp"]))
+	if int(stats_at.get("attack_speed_pct", 0)) != 0: stat_parts.append("VIT +%d%%" % int(stats_at["attack_speed_pct"]))
+	if stat_parts.size() > 0:
+		var sl := Label.new()
+		sl.text = "  ".join(stat_parts)
+		sl.add_theme_font_size_override("font_size", 11)
+		sl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		vb.add_child(sl)
 
-	# Bouton équiper / badge équipé
-	if is_equipped:
-		var badge := Label.new()
-		badge.text = "✓  Équipé"
-		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		badge.add_theme_font_size_override("font_size", 11)
-		badge.add_theme_color_override("font_color", UIColors.LOG_VICTORY)
-		vb.add_child(badge)
+	# ── Barre XP (masquée si rang max) ─────────────────────────
+	if not at_max:
+		var xp_cur   := float(equip.get("xp_maitrise_actuelle", 0.0))
+		var next_idx := etier + 1
+		var xp_max   := float(GameData.xp_thresholds[next_idx]) if next_idx < GameData.xp_thresholds.size() else 1.0
+		var fill     := clampf(xp_cur / xp_max, 0.0, 1.0)
+		var xp_ready := fill >= 1.0
+
+		var bar_color := UIColors.LOG_VICTORY if xp_ready else ec
+		var xp_bar := UIHelpers.xp_panel(bar_color, fill, 0.08, 0.40, 1, 3,
+				XPCard.motif_for_type("equipment"))
+		xp_bar.custom_minimum_size = Vector2(0, 12)
+		xp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		vb.add_child(xp_bar)
+
+		var xp_lbl := Label.new()
+		xp_lbl.text = "%s / %s XP" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(int(xp_max))]
+		xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		xp_lbl.add_theme_font_size_override("font_size", 9)
+		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		vb.add_child(xp_lbl)
+
+		# ── Indicateur forge quand barre pleine ─────────────────
+		if xp_ready:
+			var village_tier := int(GameData.village.get("tier_actuel", 0))
+			if village_tier < 1:
+				# Forge pas encore débloquée
+				var req_lbl := Label.new()
+				req_lbl.text = "🔨  Forge Requise"
+				req_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				req_lbl.add_theme_font_size_override("font_size", 12)
+				req_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+				vb.add_child(req_lbl)
+			else:
+				# Forge disponible — affiche les ingrédients requis
+				var recipe := GameData.get_forge_recipe(equip_id, etier + 1)
+				if not recipe.is_empty():
+					var forge_hdr := Label.new()
+					forge_hdr.text = "🔨  Prêt à forger :"
+					forge_hdr.add_theme_font_size_override("font_size", 11)
+					forge_hdr.add_theme_color_override("font_color", UIColors.LOG_VICTORY)
+					vb.add_child(forge_hdr)
+					for req in recipe:
+						var ingr_id  := req.get("ingredient_id", "") as String
+						var needed   := int(req.get("quantite", 1))
+						var ingr     := GameData.get_entity(ingr_id)
+						var have     := int(ingr.get("quantite_en_stock", 0))
+						var ingr_nom := ingr.get("nom_affichage_fr", ingr_id) as String
+						var ok       := have >= needed
+						var ic       := UIColors.INGREDIENT_OK if ok else UIColors.INGREDIENT_MISSING
+						var row      := HBoxContainer.new()
+						row.add_theme_constant_override("separation", 4)
+						vb.add_child(row)
+						var il := Label.new()
+						il.text = "  %s" % ingr_nom
+						il.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+						il.add_theme_font_size_override("font_size", 11)
+						il.add_theme_color_override("font_color", ic)
+						row.add_child(il)
+						var ql := Label.new()
+						ql.text = "%d / %d" % [have, needed]
+						ql.add_theme_font_size_override("font_size", 11)
+						ql.add_theme_color_override("font_color", ic)
+						row.add_child(ql)
 	else:
-		var btn := Button.new()
-		btn.text = "Équiper"
-		btn.add_theme_font_size_override("font_size", 12)
-		btn.add_theme_color_override("font_color", ec)
-		btn.add_theme_stylebox_override("normal", UIHelpers.card_style(ec, 0.12, 1.0, 1, 4))
-		btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(ec, 0.28, 1.0, 1, 4))
-		btn.pressed.connect(func() -> void:
-			GameData.equip_item(equip_id)
-			host._open_panel("hero")
-		)
-		vb.add_child(btn)
+		var max_lbl := Label.new()
+		max_lbl.text = "▲ RANG MAX"
+		max_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		max_lbl.add_theme_font_size_override("font_size", 11)
+		max_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
+		vb.add_child(max_lbl)
 
-	# Tooltip JRPG
+	# ── Tooltip JRPG ───────────────────────────────────────────
 	var tt := "Slot : %s  ·  Rang : %s" % [slot_name, GameData.get_tier_name(etier)]
-	if not stats_at.is_empty():
-		var sl2: PackedStringArray = []
-		if int(stats_at.get("atk", 0)) != 0: sl2.append("ATK +%d" % int(stats_at["atk"]))
-		if int(stats_at.get("def", 0)) != 0: sl2.append("DEF +%d" % int(stats_at["def"]))
-		if int(stats_at.get("hp", 0)) != 0: sl2.append("PV +%d" % int(stats_at["hp"]))
-		if int(stats_at.get("attack_speed_pct", 0)) != 0: sl2.append("VIT +%d%%" % int(stats_at["attack_speed_pct"]))
-		if sl2.size() > 0:
-			tt += "\n" + "  ".join(sl2)
+	if stat_parts.size() > 0:
+		tt += "\n" + "  ".join(stat_parts)
 	UIHelpers.register_tooltip(card, enom, tt, ec)
 
 	return card

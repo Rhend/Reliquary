@@ -49,6 +49,7 @@ static func motif_for_type(entity_type: String) -> int:
 	match entity_type:
 		"trap":                     return Motif.LIGHTNING
 		"biome":                    return Motif.DIAMONDS
+		"equipment":                return Motif.DIAMONDS
 		"benediction":              return Motif.CROSSES
 		"creature":                 return Motif.PAWS
 		"hero":                     return Motif.STARS
