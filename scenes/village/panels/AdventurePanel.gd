@@ -457,7 +457,7 @@ static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary) -> Strin
 		"creature":
 			const ZONE_NAMES := ["Surface", "Profondeur", "Abysse"]
 			var z    := int(entry.get("zone_associee", 0))
-			var zname := ZONE_NAMES[clampi(z, 0, 2)]
+			var zname := ZONE_NAMES[clampi(z, 0, 2)] as String
 			return "Zone : %s\nMaîtrise : %s" % [zname, GameData.get_tier_name(tier)]
 		"trap":
 			return "Dégâts : 8 % PV (Surface)  ·  15 % (Profondeur)  ·  30 % (Abysse)\nMaîtrise réduit les dégâts subis."

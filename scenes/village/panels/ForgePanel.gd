@@ -109,7 +109,7 @@ static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary
 	var equip_tier := int(equip.get("maitrise_actuelle", 0))
 	var nom        := equip.get("nom_affichage_fr", equip_id) as String
 	var slot_idx   := int(equip.get("slot", 0))
-	var slot_name  := SLOT_NAMES[slot_idx] if slot_idx < SLOT_NAMES.size() else ""
+	var slot_name  := (SLOT_NAMES[slot_idx] if slot_idx < SLOT_NAMES.size() else "") as String
 	var tier_name  := GameData.get_tier_name(equip_tier)
 	var at_max     := equip_tier >= GameData.MAX_TIER
 	var next_tier  := equip_tier + 1
