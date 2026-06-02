@@ -105,7 +105,6 @@ func _build_ui() -> void:
 	else:
 		_build_hub(creature, tier)
 
-	_build_debug_buttons()
 	_build_fullscreen_btn()
 
 # ─── Phase d'éclosion : naissance du Village (pré-T0) ─────────
@@ -519,50 +518,6 @@ func _show_banner(text: String, accent: Color, bg: Color, hold: float, fade: flo
 	tw.tween_property(banner, "modulate:a", 0.0, fade)
 	tw.tween_callback(banner.queue_free)
 
-# ─── Debug : boutons tier ─────────────────────────────────────
-# Ajoute les boutons "Tier +/-" pour tester visuellement les tiers sans sauvegarder.
-func _build_debug_buttons() -> void:
-	var vb := VBoxContainer.new()
-	vb.anchor_left   = 0.0; vb.anchor_top    = 0.0
-	vb.anchor_right  = 0.0; vb.anchor_bottom = 0.0
-	vb.offset_left   = 10;  vb.offset_top    = 10
-	vb.offset_right  = 10;  vb.offset_bottom = 10
-	vb.add_theme_constant_override("separation", 4)
-	add_child(vb)
-
-	var row1 := HBoxContainer.new()
-	row1.add_theme_constant_override("separation", 6)
-	vb.add_child(row1)
-
-	var up := Button.new()
-	up.text = "Tier +"
-	up.pressed.connect(_debug_tier_up)
-	row1.add_child(up)
-
-	var dn := Button.new()
-	dn.text = "Tier −"
-	dn.pressed.connect(_debug_tier_down)
-	row1.add_child(dn)
-
-# Incrémente le tier du héros, réinitialise son XP et recharge la scène.
-func _debug_tier_up() -> void:
-	var hero := GameData.get_entity("hero")
-	var tier := hero.get("maitrise_actuelle", 0) as int
-	if tier < GameData.MAX_TIER:
-		hero["maitrise_actuelle"] = tier + 1
-		hero["xp_maitrise_actuelle"]   = 0.0
-		SaveManager.save()
-		_launch_evolution_ritual("village", "hero", "Village", tier, tier + 1)
-
-# Décrémente le tier du héros, réinitialise son XP et recharge la scène.
-func _debug_tier_down() -> void:
-	var hero := GameData.get_entity("hero")
-	var tier := hero.get("maitrise_actuelle", 0) as int
-	if tier > 0:
-		hero["maitrise_actuelle"] = tier - 1
-		hero["xp_maitrise_actuelle"]   = 0.0
-		SaveManager.save()
-		_launch_evolution_ritual("village", "hero", "Village", tier, tier - 1)
 
 # Ajoute le bouton ⛶ en haut à droite pour basculer le plein écran.
 func _build_fullscreen_btn() -> void:
