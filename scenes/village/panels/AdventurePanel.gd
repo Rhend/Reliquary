@@ -18,14 +18,44 @@ static func build(host: Village) -> void:
 	if not host._adv_selected_biome_id.is_empty() and GameData.get_entity(host._adv_selected_biome_id).is_empty():
 		host._adv_selected_biome_id = ""
 
+	# ── Expédition en cours ───────────────────────────────────
+	if AdventureSystem.is_running:
+		var running_biome := GameData.get_entity(AdventureSystem.current_biome_id)
+		var rname := running_biome.get("nom_affichage_fr", "Biome") as String
+		var zone_names := ["Surface", "Profondeur", "Abysse"]
+		var zone_str   := zone_names[clampi(int(AdventureSystem.zone_courante), 0, 2)]
+		var info := PanelContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_stylebox_override("panel", UIHelpers.card_style(tcolor, 0.10, 0.60, 2, 6))
+		var m := UIHelpers.margin_of(10)
+		info.add_child(m)
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 3)
+		m.add_child(vb)
+		var lbl1 := Label.new()
+		lbl1.text = "⚔  Expédition en cours"
+		lbl1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl1.add_theme_font_size_override("font_size", 14)
+		lbl1.add_theme_color_override("font_color", tcolor)
+		vb.add_child(lbl1)
+		var lbl2 := Label.new()
+		lbl2.text = "%s  —  %s" % [rname, zone_str]
+		lbl2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl2.add_theme_font_size_override("font_size", 11)
+		lbl2.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		vb.add_child(lbl2)
+		host._rp_content.add_child(info)
+		# Pas de bouton de départ quand une expédition tourne déjà
+		host._rp_content.add_child(HSeparator.new())
+
 	# ── Slot supérieur : placeholder OU bouton ────────────────
 	var no_biome_selected := host._adv_selected_biome_id.is_empty()
 
-	# Encadré neutre (aucun biome choisi)
+	# Encadré neutre (aucun biome choisi) — masqué si expédition en cours
 	var placeholder := PanelContainer.new()
 	placeholder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	placeholder.custom_minimum_size   = Vector2(0, 52)
-	placeholder.visible = no_biome_selected
+	placeholder.visible = no_biome_selected and not AdventureSystem.is_running
 	placeholder.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.25, 1, 6))
 	var ph_lbl := Label.new()
 	ph_lbl.text = "Choisir un biome pour partir en expédition"
@@ -38,13 +68,13 @@ static func build(host: Village) -> void:
 	placeholder.add_child(ph_lbl)
 	host._rp_content.add_child(placeholder)
 
-	# Bouton actif (biome sélectionné)
+	# Bouton actif (biome sélectionné) — masqué si expédition en cours
 	var btn := Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size   = Vector2(0, 52)
 	btn.add_theme_font_size_override("font_size", 17)
 	btn.add_theme_color_override("font_color", tcolor)
-	btn.visible = not no_biome_selected
+	btn.visible = not no_biome_selected and not AdventureSystem.is_running
 	if not no_biome_selected:
 		var bname: String = str(GameData.get_entity(host._adv_selected_biome_id).get("nom_affichage_fr", host._adv_selected_biome_id)).to_upper()
 		btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname

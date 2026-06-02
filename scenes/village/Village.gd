@@ -111,6 +111,7 @@ func _build_ui() -> void:
 		_build_hub(creature, tier)
 
 	_build_fullscreen_btn()
+	_build_game_title()
 
 # ─── Phase d'éclosion : naissance du Village (pré-T0) ─────────
 # Le Village n'existe pas encore : on clique Balance.ECLOSION_CLICS fois pour
@@ -540,6 +541,18 @@ func _build_fullscreen_btn() -> void:
 	btn.tooltip_text = "Plein écran  (F11)"
 	btn.pressed.connect(func() -> void: GameSettings.set_fullscreen(not GameSettings.fullscreen))
 	add_child(btn)
+
+func _build_game_title() -> void:
+	var lbl := Label.new()
+	lbl.text = "Artefact: Puppet Tale"
+	lbl.anchor_left   = 0.0; lbl.anchor_right  = 1.0
+	lbl.anchor_top    = 0.0; lbl.anchor_bottom = 0.0
+	lbl.offset_top    = 6;   lbl.offset_bottom = 26
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.18))
+	add_child(lbl)
 
 # ─── Phase d'éclosion : clic ─────────────────────────────────
 # Incrémente le compteur de clics ; au dernier, déclenche l'éclosion en T0.
