@@ -323,20 +323,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	wrapper.add_theme_constant_override("separation", 2)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# ── Carte XP unifiée (DA commune — même template que passifs/biomes) ──
-	var built  := UIHelpers.entity_xp_card(enom, etier, xp_cur, xp_max, slot_icon, "equipment")
-	var xpcard := built["card"] as XPCard
-	var hdr    := built["header"] as HBoxContainer
-	wrapper.add_child(xpcard)
-
-	# Étiquette de slot ajoutée à droite de l'en-tête (discret, taille 10)
-	var slot_lbl := Label.new()
-	slot_lbl.text = slot_name
-	slot_lbl.add_theme_font_size_override("font_size", 10)
-	slot_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	hdr.add_child(slot_lbl)
-
-	# ── Stats actuelles (corps, sous la carte) ────────────────
+	# ── Stats actuelles ───────────────────────────────────────
 	var stats_dict := equip.get("stats_par_palier", {}) as Dictionary
 	var stats_at   := stats_dict.get(etier, stats_dict.get(0, {})) as Dictionary
 	var stat_parts: PackedStringArray = []
@@ -344,12 +331,34 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	if int(stats_at.get("def", 0)) != 0:              stat_parts.append("DEF +%d" % int(stats_at["def"]))
 	if int(stats_at.get("hp", 0)) != 0:               stat_parts.append("PV +%d" % int(stats_at["hp"]))
 	if int(stats_at.get("attack_speed_pct", 0)) != 0: stat_parts.append("VIT +%d%%" % int(stats_at["attack_speed_pct"]))
+
+	# ── Carte XP unifiée (DA commune) ─────────────────────────
+	# Les stats sont injectées à l'intérieur de la carte, sous le header,
+	# en reparentant le header dans un VBox pour y ajouter une 2e ligne.
+	var built  := UIHelpers.entity_xp_card(enom, etier, xp_cur, xp_max, slot_icon, "equipment")
+	var xpcard := built["card"] as XPCard
+	var hdr    := built["header"] as HBoxContainer
+	wrapper.add_child(xpcard)
+
+	# Étiquette de slot ajoutée à droite du header
+	var slot_lbl := Label.new()
+	slot_lbl.text = slot_name
+	slot_lbl.add_theme_font_size_override("font_size", 10)
+	slot_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	hdr.add_child(slot_lbl)
+
+	# Injecter les stats dans la carte : reparenter le header dans un VBox
 	if stat_parts.size() > 0:
+		var mg  := hdr.get_parent()  # MarginContainer de entity_xp_card
+		var vb  := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 3)
+		hdr.reparent(vb)
 		var stats_lbl := Label.new()
 		stats_lbl.text = "  ".join(stat_parts)
 		stats_lbl.add_theme_font_size_override("font_size", 11)
 		stats_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		wrapper.add_child(stats_lbl)
+		vb.add_child(stats_lbl)
+		mg.add_child(vb)
 
 	# ── Indicateur forge (visible uniquement si barre pleine) ──
 	if not at_max and MasterySystem.can_evolve(equip_id):
