@@ -142,11 +142,11 @@ func _draw() -> void:
 		var cd_col := camp_color if cd_ready else UIColors.TEXT_MUTED
 		draw_arc(_center, COOLDOWN_RADIUS, top, top + TAU * cooldown, 96, cd_col, COOLDOWN_WIDTH, true)
 
-	# ── Anneau intérieur : PV ────────────────────────────────
+	# ── Anneau intérieur : PV (se vide dans le sens horaire) ────
 	draw_arc(_center, HP_RADIUS, 0.0, TAU, 96, Color(camp_color, 0.10), HP_WIDTH, true)
 	if hp_pct > 0.001:
 		var hp_col := UIColors.LOG_DEFEAT if hp_pct < LOW_HP_PCT else camp_color
-		draw_arc(_center, HP_RADIUS, top, top + TAU * hp_pct, 96, hp_col, HP_WIDTH, true)
+		draw_arc(_center, HP_RADIUS, top + TAU * (1.0 - hp_pct), top + TAU, 96, hp_col, HP_WIDTH, true)
 
 	# ── Flash (crit doré / soin vert) ────────────────────────
 	if _flash_alpha > 0.001:
