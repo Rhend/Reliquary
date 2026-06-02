@@ -111,7 +111,6 @@ func _build_ui() -> void:
 		_build_hub(creature, tier)
 
 	_build_fullscreen_btn()
-	_build_game_title()
 
 # ─── Phase d'éclosion : naissance du Village (pré-T0) ─────────
 # Le Village n'existe pas encore : on clique Balance.ECLOSION_CLICS fois pour
@@ -252,15 +251,15 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 func _current_hint(vtier: int, hero_tier: int) -> String:
 	var frags := (GameData.village.get("fragments_collectes", []) as Array).size()
 	if vtier == 0 and hero_tier == 0 and frags == 0:
-		return "Partez en expédition pour gagner de l'XP et récolter des ressources"
+		return "Partez en expédition pour gagner de l'XP et faire progresser vos entités"
 	if vtier == 0 and frags == 0:
-		return "Faites progresser votre héros jusqu'à Rare pour libérer un Fragment"
+		return "Faites atteindre Rare à un biome pour libérer un Fragment de Mémoire"
 	if vtier == 0 and frags >= 1:
 		return "Fragment collecté — continuez à progresser pour faire évoluer le Village"
 	if vtier == 1 and not GameData.can_forge("equipment_arme") \
 			and not GameData.can_forge("equipment_anneau") \
 			and not GameData.can_forge("equipment_armure"):
-		return "La Forge est disponible — remplissez les barres XP des équipements"
+		return "La Forge est disponible — partez en expédition pour remplir les barres XP de vos équipements"
 	return ""
 
 # ─── Conditions d'évolution du Village ────────────────────────
@@ -571,17 +570,6 @@ func _build_fullscreen_btn() -> void:
 	btn.pressed.connect(func() -> void: GameSettings.set_fullscreen(not GameSettings.fullscreen))
 	add_child(btn)
 
-func _build_game_title() -> void:
-	var lbl := Label.new()
-	lbl.text = "Artefact: Puppet Tale"
-	lbl.anchor_left   = 0.0; lbl.anchor_right  = 1.0
-	lbl.anchor_top    = 0.0; lbl.anchor_bottom = 0.0
-	lbl.offset_top    = 6;   lbl.offset_bottom = 26
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.18))
-	add_child(lbl)
 
 # ─── Phase d'éclosion : clic ─────────────────────────────────
 # Incrémente le compteur de clics ; au dernier, déclenche l'éclosion en T0.

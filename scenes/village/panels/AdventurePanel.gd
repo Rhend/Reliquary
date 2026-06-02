@@ -217,20 +217,20 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 
 	# Filtrage par zone débloquée : seuls les éléments des zones actives comptent et s'affichent.
 	# Chaque catégorie porte son propre motif de barre d'XP (cf. XPCard.Motif).
-	_adv_category_card(host, cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE,    XPCard.Motif.PAWS)
-	_adv_category_card(host, cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP,        XPCard.Motif.LIGHTNING)
-	_adv_category_card(host, cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES)
+	_adv_category_card(host, cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE,    XPCard.Motif.PAWS,      btier)
+	_adv_category_card(host, cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP,        XPCard.Motif.LIGHTNING, btier)
+	_adv_category_card(host, cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES,   btier)
 	_adv_ingredient_section(cat_vb, pools["ingredients"])
 
 	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
 
 # Carte catégorie cliquable (Créatures / Pièges / Bénédictions) avec compteur de découverte.
 # Panneau cliquable + liste d'entités repliée en dessous. `motif` = motif de barre d'XP.
-static func _adv_category_card(host: Village, parent: VBoxContainer, label: String, pool: Array, color: Color, motif: int = XPCard.Motif.BUBBLES) -> void:
+static func _adv_category_card(host: Village, parent: VBoxContainer, label: String, pool: Array, color: Color, motif: int = XPCard.Motif.BUBBLES, btier: int = 0) -> void:
 	if pool.is_empty():
 		return
 	var body := _accordion(parent, label, "%d / %d" % [MasteryRegistry.count_discovered(pool), pool.size()])
-	_adv_entity_rows(host, body, pool, color, motif)
+	_adv_entity_rows(host, body, pool, color, motif, btier)
 
 # Construit un « accordéon » repliable : panneau neutre cliquable
 # [label | (compteur) | ▶] + section repliée dessous. Retourne le VBox interne
@@ -300,7 +300,7 @@ static func _accordion(parent: VBoxContainer, label: String, count_text: String)
 # Remplit parent avec une carte par entité du pool, même format pour tous les types.
 # Entité non découverte → nom "?", palier Commun, XP 0 / seuil (placeholder homogène).
 # `motif` = motif de particules de la barre d'XP (commun à toute la catégorie).
-static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, _color: Color, motif: int = XPCard.Motif.BUBBLES) -> void:
+static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, _color: Color, motif: int = XPCard.Motif.BUBBLES, btier: int = 0) -> void:
 	for entry: Dictionary in pool:
 		var entry_id := entry.get("id", "") as String
 		var is_known := MasteryRegistry.is_discovered(entry_id)
@@ -344,7 +344,7 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		# Tooltip de l'entité.
 		if is_known:
 			var tt_title := disp_name
-			var tt_body  := _tooltip_entity_body(entry, entity)
+			var tt_body  := _tooltip_entity_body(entry, entity, btier)
 			UIHelpers.register_tooltip(panel, tt_title, tt_body, ec)
 
 		var pm := UIHelpers.margin_of(4)
@@ -482,9 +482,10 @@ static func _tooltip_zone_line(btier: int) -> String:
 	return "Zone max : %s" % ZONES[clampi(zone_max, 0, 2)]
 
 # Corps de tooltip pour une entité (créature, piège, bénédiction, ingrédient).
-static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary) -> String:
-	var etype := entity.get("entity_type", "") as String
-	var tier  := int(entity.get("maitrise_actuelle", 0))
+static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary, btier: int = 0) -> String:
+	var etype    := entity.get("entity_type", "") as String
+	var tier     := int(entity.get("maitrise_actuelle", 0))
+	var zone_max := Balance.max_unlocked_zone(btier)
 	match etype:
 		"creature":
 			const ZONE_NAMES := ["Surface", "Profondeur", "Abysse"]
@@ -492,7 +493,12 @@ static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary) -> Strin
 			var zname := ZONE_NAMES[clampi(z, 0, 2)] as String
 			return "Zone : %s\nMaîtrise : %s" % [zname, GameData.get_tier_name(tier)]
 		"trap":
-			return "Dégâts : 8 % PV (Surface)  ·  15 % (Profondeur)  ·  30 % (Abysse)\nMaîtrise réduit les dégâts subis."
+			# N'affiche que les zones accessibles
+			const DMG_ZONES := [["Surface", "8 % PV"], ["Profondeur", "15 % PV"], ["Abysse", "30 % PV"]]
+			var parts: PackedStringArray = []
+			for i in mini(zone_max + 1, DMG_ZONES.size()):
+				parts.append("%s : %s" % [DMG_ZONES[i][0], DMG_ZONES[i][1]])
+			return "  ·  ".join(parts) + "\nMaîtrise réduit les dégâts subis."
 		"benediction":
 			return "Bonus XP et soins selon la zone.\nMaîtrise augmente l'effet reçu."
 		"ingredient":
