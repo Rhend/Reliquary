@@ -20,6 +20,8 @@ const LOG_TABS := ["Tout", "Héros", "Monstre", "Attaque", "Défense", "Soin", "
 
 # ─── Nœuds racine ────────────────────────────────────────────
 var _shaker: Control          # conteneur décalé pour le shake d'écran
+var _hero_bg:     BiomeBackground   # fond ambiance Ville (côté héros, gauche)
+var _creature_bg: BiomeBackground   # fond ambiance biome (côté créature, droite)
 
 # ─── Colonnes combattants ────────────────────────────────────
 var _hero_ring:   CombatRing
@@ -87,19 +89,46 @@ func _build_ui() -> void:
 
 	_build_zone_label()
 
-# ── Zone de combat : 2 colonnes + séparateur diagonal ──────
+# ── Zone de combat : fonds animés + 2 colonnes + séparateur diagonal ──
+# Les fonds (Ville côté héros, biome côté créature) sont CONFINÉS à cette zone
+# (pas derrière le journal). clip_contents borne le rendu ; la diagonale du
+# shader s'aligne donc sur le séparateur VS de cette même zone.
 func _build_combat_area() -> Control:
-	# Héros (moitié gauche) | séparateur centré 80px | Ennemi (moitié droite).
-	# La diagonale est tracée dans le band central et ne déborde pas sur les colonnes.
+	var area := Control.new()
+	area.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	area.custom_minimum_size   = Vector2(0, 320)
+	area.clip_contents = true
+
+	var zone := int(AdventureSystem.zone_courante)
+
+	# Côté héros (gauche) : ambiance Ville. add_child d'abord (→ _ready crée le
+	# material), puis configuration.
+	_hero_bg = BiomeBackground.new()
+	area.add_child(_hero_bg)
+	_hero_bg.apply_preset("city")
+	_hero_bg.set_split(1)
+	_hero_bg.set_zone(zone)
+
+	# Côté créature (droite) : ambiance du biome de l'expédition.
+	var biome_id := AdventureSystem.current_biome_id
+	if biome_id == "":
+		biome_id = GameData.player.get("active_biome_id", "") as String
+	_creature_bg = BiomeBackground.new()
+	area.add_child(_creature_bg)
+	_creature_bg.apply_preset(BiomeBackground.preset_for_biome(biome_id))
+	_creature_bg.set_split(2)
+	_creature_bg.set_zone(zone)
+
+	# Colonnes par-dessus les fonds. Héros (gauche) | séparateur 80px | Ennemi (droite).
 	var hbox := HBoxContainer.new()
-	hbox.size_flags_vertical   = Control.SIZE_EXPAND_FILL
-	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hbox.custom_minimum_size   = Vector2(0, 320)
+	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_child(_build_column(true))
 	hbox.add_child(CombatVS.new())
 	hbox.add_child(_build_column(false))
-	return hbox
+	area.add_child(hbox)
+	return area
 
 # Construit une colonne combattant ; renseigne les références membres.
 func _build_column(is_hero: bool) -> Control:
@@ -525,6 +554,8 @@ func _build_zone_label() -> void:
 
 func _on_zone_changee(nouvelle_zone: int) -> void:
 	_update_zone_label(nouvelle_zone as Enums.Zone)
+	if _hero_bg:     _hero_bg.set_zone(nouvelle_zone)
+	if _creature_bg: _creature_bg.set_zone(nouvelle_zone)
 	if nouvelle_zone == Enums.Zone.ABYSSE:
 		_show_unique_indicator()
 	else:

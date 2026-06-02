@@ -1,0 +1,145 @@
+# ============================================================
+# BiomeBackground — Fond animé de biome, piloté par shader.
+#
+# ColorRect plein écran portant biome_background.gdshader. À placer DERRIÈRE
+# le contenu (premier enfant) dans le hub, la CombatScene, etc.
+#
+# Usage :
+#   var bg := BiomeBackground.new()
+#   bg.apply_preset("forest")   # ou "city"
+#   bg.set_zone(Enums.Zone.ABYSSE)
+#   add_child(bg)               # en premier → derrière le reste
+#
+# Les presets sont des palettes ; la zone module l'obscurité/brouillard pour
+# rendre la descente Surface → Profondeur → Abysse de plus en plus hostile.
+# ============================================================
+class_name BiomeBackground
+extends ColorRect
+
+const SHADER_PATH := "res://scenes/ui/backgrounds/biome_background.gdshader"
+
+# Palettes par biome (mode + couleurs + densité). Étendre ici pour de nouveaux biomes.
+const PRESETS := {
+	"forest": {   # Forêt Sombre — arbres tordus, lucioles vertes
+		"u_mode":         0,
+		"sky_top":        Color(0.04, 0.06, 0.10),
+		"sky_bottom":     Color(0.06, 0.13, 0.10),
+		"layer_far":      Color(0.06, 0.12, 0.10),
+		"layer_mid":      Color(0.04, 0.08, 0.07),
+		"layer_near":     Color(0.01, 0.03, 0.025),
+		"fog_color":      Color(0.30, 0.45, 0.40),
+		"accent":         Color(0.70, 0.95, 0.50),   # lucioles
+		"fog_density":    0.45,
+		"detail_density": 1.0,
+		"anim_speed":     1.0,
+		"glow_amount":    1.0,
+	},
+	"marsh": {    # Marécage Putride — palette olive/brun, brouillard épais, feux follets toxiques
+		"u_mode":         0,
+		"sky_top":        Color(0.05, 0.08, 0.06),
+		"sky_bottom":     Color(0.10, 0.13, 0.07),
+		"layer_far":      Color(0.08, 0.11, 0.07),
+		"layer_mid":      Color(0.05, 0.07, 0.04),
+		"layer_near":     Color(0.02, 0.03, 0.015),
+		"fog_color":      Color(0.35, 0.45, 0.25),
+		"accent":         Color(0.60, 0.95, 0.40),   # feux follets
+		"fog_density":    0.60,
+		"detail_density": 1.1,
+		"anim_speed":     0.8,
+		"glow_amount":    1.0,
+	},
+	"mountain": { # Montagne — pics rocheux bleu-gris, peu de brouillard, pas de lueurs
+		"u_mode":         0,
+		"sky_top":        Color(0.05, 0.07, 0.12),
+		"sky_bottom":     Color(0.10, 0.12, 0.16),
+		"layer_far":      Color(0.12, 0.14, 0.20),
+		"layer_mid":      Color(0.07, 0.08, 0.12),
+		"layer_near":     Color(0.02, 0.03, 0.05),
+		"fog_color":      Color(0.50, 0.55, 0.65),
+		"accent":         Color(0.80, 0.90, 1.00),
+		"fog_density":    0.30,
+		"detail_density": 0.40,                      # pics larges et espacés
+		"anim_speed":     0.7,
+		"glow_amount":    0.0,                        # ni lucioles ni fenêtres
+	},
+	"city": {     # Rue médiévale pavée — bâtiments bas, torches tamisées (côté Héros)
+		"u_mode":         1,
+		"sky_top":        Color(0.06, 0.05, 0.07),
+		"sky_bottom":     Color(0.13, 0.10, 0.09),
+		"layer_far":      Color(0.11, 0.09, 0.08),
+		"layer_mid":      Color(0.07, 0.05, 0.05),
+		"layer_near":     Color(0.03, 0.02, 0.02),
+		"fog_color":      Color(0.32, 0.26, 0.22),
+		"accent":         Color(1.00, 0.60, 0.25),   # torches / bougies (chaud)
+		"fog_density":    0.42,
+		"detail_density": 0.70,                      # bâtiments bas et larges
+		"anim_speed":     0.80,
+		"glow_amount":    0.40,                       # lueurs tamisées (pas shiny)
+	},
+}
+
+# Mapping id de biome (.tres) → preset. Inconnu → "forest".
+static func preset_for_biome(biome_id: String) -> String:
+	match biome_id:
+		"biome_foret":    return "forest"
+		"biome_marecage": return "marsh"
+		"biome_montagne": return "mountain"
+		_:                return "forest"
+
+# État désiré, mémorisé même si le material n'existe pas encore (appels avant
+# _ready, ex. quand le nœud n'est pas encore dans l'arbre). _ready() réapplique tout.
+var _preset_id  := "forest"
+var _split_side := 0
+var _zone       := 0   # valeur Enums.Zone
+
+func _ready() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mat := ShaderMaterial.new()
+	mat.shader = load(SHADER_PATH)
+	material = mat
+	_apply_preset_params()
+	_apply_split()
+	_apply_zone()
+
+# Applique une palette de biome (clé de PRESETS). Inconnu → fallback "forest".
+func apply_preset(preset_id: String) -> void:
+	_preset_id = preset_id if PRESETS.has(preset_id) else "forest"
+	_apply_preset_params()
+
+func _apply_preset_params() -> void:
+	if material == null:
+		return
+	for key in PRESETS[_preset_id]:
+		material.set_shader_parameter(key, PRESETS[_preset_id][key])
+
+# Restreint le rendu à un côté de la diagonale VS.
+#   0 = plein écran ; 1 = côté héros (gauche) ; 2 = côté créature (droite).
+func set_split(side: int) -> void:
+	_split_side = side
+	_apply_split()
+
+func _apply_split() -> void:
+	if material:
+		material.set_shader_parameter("split_side", _split_side)
+
+# Règle l'intensité d'obscurité/brouillard selon la zone (Enums.Zone).
+# Surface → clair ; Profondeur → assombri ; Abysse → très sombre + brouillard dense.
+func set_zone(zone: int) -> void:
+	_zone = zone
+	_apply_zone()
+
+func _apply_zone() -> void:
+	if material == null:
+		return
+	var darken := 0.0
+	match _zone:
+		Enums.Zone.PROFONDEUR: darken = 0.45
+		Enums.Zone.ABYSSE:     darken = 0.85
+		_:                     darken = 0.0
+	material.set_shader_parameter("zone_darken", darken)
+
+# Surcharge ponctuelle d'un uniforme (réglage fin depuis l'appelant).
+func set_param(name: String, value: Variant) -> void:
+	if material:
+		material.set_shader_parameter(name, value)
