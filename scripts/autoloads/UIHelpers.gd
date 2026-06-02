@@ -234,6 +234,11 @@ static func add_hover_feedback(node: Control) -> void:
 # Retourne la barre de navigation commune aux scènes secondaires :
 #   [← Village]  TITRE CENTRÉ
 # on_back est connecté au pressed du bouton retour.
+# Branche un tooltip JRPG sur node : hover → TooltipOverlay.show_for, exit → hide.
+static func register_tooltip(node: Control, title: String, body: String, color: Color = Color.WHITE) -> void:
+	node.mouse_entered.connect(func() -> void: TooltipOverlay.show_for(title, body, color))
+	node.mouse_exited.connect(TooltipOverlay.hide_tooltip)
+
 static func scene_header_bar(title: String, color: Color, on_back: Callable) -> Control:
 	var bar  := PanelContainer.new()
 	var m    := margin_of(14)

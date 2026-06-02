@@ -213,6 +213,13 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 		arrow.text = "  ▶"
 		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		UIHelpers.add_hover_feedback(panel)
+		# Tooltip passif.
+		var eff_list := pdata.get("effets_par_palier", pdata.get("effet_par_palier", {})) as Dictionary
+		var cur_eff  := str(eff_list.get(str(rarity), "")) as String
+		var tt_body  := "Maîtrise : %s" % GameData.get_tier_name(rarity)
+		if cur_eff != "":
+			tt_body += "\nEffet : %s" % cur_eff
+		UIHelpers.register_tooltip(panel, name_txt, tt_body, UIColors.tier_color(rarity))
 		panel.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton \
 					and event.button_index == MOUSE_BUTTON_LEFT \

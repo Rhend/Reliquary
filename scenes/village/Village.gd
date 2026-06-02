@@ -73,6 +73,8 @@ func _ready() -> void:
 	EventBus.fragment_libere.connect(_on_fragment_libere)
 	EventBus.village_tier_change.connect(_on_village_tier_change)
 	EventBus.biome_revele.connect(_on_biome_revele)
+	EventBus.resources_changed.connect(_on_resources_changed_refresh)
+	EventBus.equipement_evolue.connect(func(_id, _tier): _on_resources_changed_refresh())
 
 # Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
 func _active_creature() -> Dictionary:
@@ -741,6 +743,11 @@ func _go_forge()     -> void: _open_panel("forge")
 func _go_sanctuary() -> void: _open_panel("sanctuary")
 func _go_relic()     -> void: _open_panel("relic")
 func _go_tbd()       -> void: _open_panel("tbd")
+
+# Refresh du panneau forge ou héro si ouvert, après un drop de ressources ou une forge.
+func _on_resources_changed_refresh() -> void:
+	if _active_panel_id == "forge" or _active_panel_id == "hero":
+		_open_panel(_active_panel_id)
 
 # ─── Utils ────────────────────────────────────────────────────
 # Positionne ctrl centré sur pos avec la taille sz, en mode ancre centre.

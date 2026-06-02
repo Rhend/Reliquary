@@ -34,6 +34,7 @@ AdventureSystem="*res://scripts/systems/AdventureSystem.gd"
 PassiveSystem="*res://scripts/systems/PassiveSystem.gd"
 MasteryRegistry="*res://scripts/autoloads/MasteryRegistry.gd"
 BiomeMechanics="*res://scripts/autoloads/BiomeMechanics.gd"
+TooltipOverlay="*res://scripts/autoloads/TooltipOverlay.gd"
 
 [display]
 

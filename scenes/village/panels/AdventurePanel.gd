@@ -146,6 +146,15 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	UIHelpers.add_hover_feedback(panel)
 	wrapper.add_child(panel)
 
+	# Tooltip du biome.
+	var btooltip_body := _tooltip_zone_line(btier)
+	var mech_id := biome.get("mecanique_forte_id", "") as String
+	if mech_id != "":
+		btooltip_body += "\nMécanique : " + _mech_name(mech_id)
+	UIHelpers.register_tooltip(panel,
+			biome.get("nom_affichage_fr", biome_id) as String,
+			btooltip_body, UIColors.tier_color(btier))
+
 	# Flèche d'accordéon, à droite de l'en-tête du template.
 	var arrow := Label.new()
 	arrow.text = "  ▶"
@@ -170,6 +179,9 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	var cat_vb := VBoxContainer.new()
 	cat_vb.add_theme_constant_override("separation", 3)
 	indent.add_child(cat_vb)
+
+	# Mécanique forte du biome (pill toujours visible dans l'accordéon).
+	_adv_mechanic_row(cat_vb, biome)
 
 	# Filtrage par zone débloquée : seuls les éléments des zones actives comptent et s'affichent.
 	# Chaque catégorie porte son propre motif de barre d'XP (cf. XPCard.Motif).
@@ -297,6 +309,12 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		parent.add_child(panel)
 
+		# Tooltip de l'entité.
+		if is_known:
+			var tt_title := disp_name
+			var tt_body  := _tooltip_entity_body(entry, entity)
+			UIHelpers.register_tooltip(panel, tt_title, tt_body, ec)
+
 		var pm := UIHelpers.margin_of(4)
 		panel.add_child(pm)
 
@@ -369,6 +387,90 @@ static func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 		chance_lbl.add_theme_font_size_override("font_size", 10)
 		chance_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		row.add_child(chance_lbl)
+
+# Affiche la mécanique forte du biome : pill colorée (active) ou verrouillée (tier < Rare).
+# Rien si le biome n'a pas de mécanique définie.
+static func _adv_mechanic_row(parent: VBoxContainer, biome: Dictionary) -> void:
+	const MECHS: Dictionary = {
+		"ambush":       ["Embuscade",      "La créature attaque en premier.",                    Color(0.90, 0.35, 0.35)],
+		"poison":       ["Empoisonnement", "Chaque frappe du héros empoisonne l'ennemi (3 max).", Color(0.40, 0.80, 0.30)],
+		"bonne_etoile": ["Bonne Étoile",   "-5 % de combats, +5 % de bénédictions.",             Color(1.00, 0.85, 0.30)],
+	}
+	var mech_id := biome.get("mecanique_forte_id", "") as String
+	if mech_id == "" or not MECHS.has(mech_id):
+		return
+
+	var info    := MECHS[mech_id] as Array
+	var mname   := info[0] as String
+	var mdesc   := info[1] as String
+	var mcolor  := info[2] as Color
+	var btier   := int(biome.get("maitrise_actuelle", 0))
+	var active  := btier >= BiomeMechanics.UNLOCK_TIER
+
+	var pill := PanelContainer.new()
+	pill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var pill_color := mcolor if active else UIColors.TEXT_MUTED
+	pill.add_theme_stylebox_override("panel",
+			UIHelpers.card_style(pill_color, 0.08, 0.50, 1, 3))
+	parent.add_child(pill)
+
+	var m := UIHelpers.margin_of(5)
+	pill.add_child(m)
+
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 6)
+	m.add_child(hb)
+
+	var icon_lbl := Label.new()
+	icon_lbl.text = "⚡" if active else "🔒"
+	icon_lbl.add_theme_font_size_override("font_size", 11)
+	hb.add_child(icon_lbl)
+
+	var text_lbl := Label.new()
+	text_lbl.text = ("%s  —  %s" % [mname, mdesc]) if active \
+			else ("%s  —  Débloquée à Rare" % mname)
+	text_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_lbl.add_theme_font_size_override("font_size", 11)
+	text_lbl.add_theme_color_override("font_color", pill_color)
+	hb.add_child(text_lbl)
+
+	var mtooltip := mdesc if active else "Atteins Rare pour débloquer cette mécanique."
+	UIHelpers.register_tooltip(pill, "Mécanique — %s" % mname, mtooltip, pill_color)
+
+# ─── Helpers tooltip ──────────────────────────────────────────
+
+static func _mech_name(mech_id: String) -> String:
+	const N: Dictionary = {"ambush": "Embuscade", "poison": "Empoisonnement", "bonne_etoile": "Bonne Étoile"}
+	return N.get(mech_id, mech_id)
+
+# Ligne "Zone max : Surface / Profondeur / Abysse" selon le tier du biome.
+static func _tooltip_zone_line(btier: int) -> String:
+	var zone_max := Balance.max_unlocked_zone(btier)
+	const ZONES := ["Surface", "Profondeur", "Abysse"]
+	return "Zone max : %s" % ZONES[clampi(zone_max, 0, 2)]
+
+# Corps de tooltip pour une entité (créature, piège, bénédiction, ingrédient).
+static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary) -> String:
+	var etype := entity.get("entity_type", "") as String
+	var tier  := int(entity.get("maitrise_actuelle", 0))
+	match etype:
+		"creature":
+			const ZONE_NAMES := ["Surface", "Profondeur", "Abysse"]
+			var z    := int(entry.get("zone_associee", 0))
+			var zname := ZONE_NAMES[clampi(z, 0, 2)]
+			return "Zone : %s\nMaîtrise : %s" % [zname, GameData.get_tier_name(tier)]
+		"trap":
+			return "Dégâts : 8 % PV (Surface)  ·  15 % (Profondeur)  ·  30 % (Abysse)\nMaîtrise réduit les dégâts subis."
+		"benediction":
+			return "Bonus XP et soins selon la zone.\nMaîtrise augmente l'effet reçu."
+		"ingredient":
+			var biome_id := entity.get("biome_source_id", "") as String
+			var biome_e  := GameData.get_entity(biome_id)
+			var bname    := biome_e.get("nom_affichage_fr", biome_id) as String
+			var qty      := int(entity.get("quantite_en_stock", 0))
+			return "Biome : %s\nEn stock : %d" % [bname, qty]
+		_:
+			return "Maîtrise : %s" % GameData.get_tier_name(tier)
 
 # Garde uniquement les entrées dont la zone est débloquée pour ce tier de biome.
 # Les entrées sans champ de zone (pièges, bénédictions — transversaux) sont conservées.
