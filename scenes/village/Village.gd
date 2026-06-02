@@ -220,6 +220,20 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
 		_build_village_conditions(center_box, vtier, vcolor)
 
+	# ── Hint contextuel (objectif courant) ───────────────────────
+	var hint := _current_hint(vtier, tier)
+	if hint != "":
+		var hint_lbl := Label.new()
+		hint_lbl.text = hint
+		hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint_lbl.anchor_left   = 0.0; hint_lbl.anchor_right  = 1.0
+		hint_lbl.anchor_top    = 1.0; hint_lbl.anchor_bottom = 1.0
+		hint_lbl.offset_top    = -36; hint_lbl.offset_bottom = -8
+		hint_lbl.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+		hint_lbl.add_theme_font_size_override("font_size", 11)
+		hint_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.35))
+		_hub_root.add_child(hint_lbl)
+
 	# ── Hex items (forge débloquée par village tier, reste par hero tier) ──
 	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
 		var pid := d[4] as String
@@ -233,6 +247,21 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 		var pos := Vector2(cos(ang), sin(ang)) * RING_RADIUS
 		var d: Array = unlocked[i]
 		_make_hex(d[0], d[1], tcolor, pos, Callable(self, d[3]), d[4])
+
+# Retourne le texte du hint contextuel selon la progression actuelle.
+func _current_hint(vtier: int, hero_tier: int) -> String:
+	var frags := int(GameData.village.get("fragments_collectes", 0))
+	if vtier == 0 and hero_tier == 0 and frags == 0:
+		return "Partez en expédition pour gagner de l'XP et récolter des ressources"
+	if vtier == 0 and frags == 0:
+		return "Faites progresser votre héros jusqu'à Rare pour libérer un Fragment"
+	if vtier == 0 and frags >= 1:
+		return "Fragment collecté — continuez à progresser pour faire évoluer le Village"
+	if vtier == 1 and not GameData.can_forge("equipment_arme") \
+			and not GameData.can_forge("equipment_anneau") \
+			and not GameData.can_forge("equipment_armure"):
+		return "La Forge est disponible — remplissez les barres XP des équipements"
+	return ""
 
 # ─── Conditions d'évolution du Village ────────────────────────
 # Ajoute dans `container` (le VBox central) un petit espace, chaque condition
