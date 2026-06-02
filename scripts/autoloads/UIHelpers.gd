@@ -109,15 +109,11 @@ static func collapsible_section(title: String, color: Color, start_open: bool = 
 	body.visible = start_open
 	wrapper.add_child(body)
 
-	var _open := start_open
-	var arrow_open   := "  ▼  "
-	var arrow_closed := "  ▶  "
-	btn.text = title + (arrow_open if _open else arrow_closed)
+	btn.text = title + ("  ▼  " if start_open else "  ▶  ")
 
 	btn.pressed.connect(func() -> void:
-		_open = not _open
-		body.visible = _open
-		btn.text = title + (arrow_open if _open else arrow_closed)
+		body.visible = not body.visible
+		btn.text = title + ("  ▼  " if body.visible else "  ▶  ")
 	)
 	return {"wrapper": wrapper, "body": body}
 
