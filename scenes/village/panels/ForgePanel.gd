@@ -20,11 +20,9 @@ static func build(host: Village) -> void:
 	var tcolor := UIColors.tier_color(int(host._active_creature().get("maitrise_actuelle", 0)))
 
 	# ── Inventaire ingrédients ──────────────────────────────
-	host._rp_content.add_child(UIHelpers.section_header("◆  INGRÉDIENTS", tcolor))
-
-	var ingr_vb := VBoxContainer.new()
-	ingr_vb.add_theme_constant_override("separation", 3)
-	host._rp_content.add_child(ingr_vb)
+	var ingr_sec := UIHelpers.collapsible_section("◆  INGRÉDIENTS", tcolor)
+	host._rp_content.add_child(ingr_sec["wrapper"])
+	var ingr_body := ingr_sec["body"] as VBoxContainer
 
 	var has_ingr := false
 	for eid in GameData.entities:
@@ -37,7 +35,7 @@ static func build(host: Village) -> void:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		row.mouse_filter = Control.MOUSE_FILTER_PASS
-		ingr_vb.add_child(row)
+		ingr_body.add_child(row)
 
 		var is_unique := e.get("est_unique", false) as bool
 		var nl := Label.new()
@@ -53,7 +51,6 @@ static func build(host: Village) -> void:
 		ql.add_theme_color_override("font_color", UIColors.FILTER_ON if qty > 0 else UIColors.TEXT_MUTED)
 		row.add_child(ql)
 
-		# Tooltip ingrédient.
 		var biome_src := e.get("biome_source_id", "") as String
 		var biome_e   := GameData.get_entity(biome_src)
 		var bname     := biome_e.get("nom_affichage_fr", biome_src) as String if not biome_e.is_empty() else biome_src
@@ -63,9 +60,9 @@ static func build(host: Village) -> void:
 		UIHelpers.register_tooltip(row, nom, tt_ingr, UIColors.FILTER_ON if qty > 0 else UIColors.TEXT_MUTED)
 
 	if not has_ingr:
-		host._rp_content.add_child(UIHelpers.none_label(12))
+		ingr_body.add_child(UIHelpers.none_label(12))
 
-	# ── Équipements (1 par biome, dans l'ordre Forêt → Marécage → Montagne) ──
+	# ── Équipements (1 par biome, dans l'ordre Montagne → Forêt → Marécage) ──
 	for entry in BIOME_EQUIP:
 		var biome_id: String  = entry[0]
 		var equip_id: String  = entry[1]
@@ -77,8 +74,9 @@ static func build(host: Village) -> void:
 		if equip.is_empty():
 			continue
 		var biome_color := UIColors.tier_color(int(biome.get("maitrise_actuelle", 0)))
-		host._rp_content.add_child(UIHelpers.section_header(section, biome_color))
-		host._rp_content.add_child(_forge_equip_card(host, equip_id, equip, biome_color))
+		var biome_sec := UIHelpers.collapsible_section(section, biome_color)
+		host._rp_content.add_child(biome_sec["wrapper"])
+		(biome_sec["body"] as VBoxContainer).add_child(_forge_equip_card(host, equip_id, equip, biome_color))
 
 # Équipement lié à chaque biome (dans l'ordre d'affichage).
 const BIOME_EQUIP: Array = [

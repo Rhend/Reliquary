@@ -71,6 +71,56 @@ static func card_style(color: Color, bg_alpha: float = 0.07,
 
 # Retourne un VBoxContainer contenant un Label titre coloré + un ColorRect séparateur.
 # Utilisé comme en-tête de sous-section dans Village.gd, CombatScene.gd, etc.
+# Section repliable : retourne {wrapper, body}.
+# Ajouter wrapper au parent, peupler body avec le contenu.
+# Cliquer sur l'en-tête bascule la visibilité du body.
+static func collapsible_section(title: String, color: Color, start_open: bool = true) -> Dictionary:
+	var wrapper := VBoxContainer.new()
+	wrapper.add_theme_constant_override("separation", 0)
+	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	# Bouton d'en-tête (remplace section_header)
+	var btn := Button.new()
+	btn.flat                = true
+	btn.alignment           = HORIZONTAL_ALIGNMENT_LEFT
+	btn.focus_mode          = Control.FOCUS_NONE
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.add_theme_font_size_override("font_size", 11)
+	btn.add_theme_color_override("font_color", color)
+	btn.add_theme_color_override("font_pressed_color", color)
+	btn.add_theme_color_override("font_hover_color", Color(color.r, color.g, color.b, 0.75))
+	btn.add_theme_stylebox_override("normal",  StyleBoxEmpty.new())
+	btn.add_theme_stylebox_override("hover",   StyleBoxEmpty.new())
+	btn.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+
+	var line := ColorRect.new()
+	line.color                 = Color(color.r, color.g, color.b, 0.38)
+	line.custom_minimum_size   = Vector2(0.0, 1.0)
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var hdr_vb := VBoxContainer.new()
+	hdr_vb.add_theme_constant_override("separation", 4)
+	hdr_vb.add_child(btn)
+	hdr_vb.add_child(line)
+	wrapper.add_child(hdr_vb)
+
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 4)
+	body.visible = start_open
+	wrapper.add_child(body)
+
+	var _open := start_open
+	var arrow_open   := "  ▼  "
+	var arrow_closed := "  ▶  "
+	btn.text = title + (arrow_open if _open else arrow_closed)
+
+	btn.pressed.connect(func() -> void:
+		_open = not _open
+		body.visible = _open
+		btn.text = title + (arrow_open if _open else arrow_closed)
+	)
+	return {"wrapper": wrapper, "body": body}
+
 static func section_header(title: String, color: Color) -> Control:
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 4)

@@ -35,8 +35,10 @@ static func build(host: Village) -> void:
 			"", c.get("entity_type", "hero") as String)
 	host._rp_content.add_child(id_card["card"] as Control)
 
-	# ── Sous-section STATISTIQUES ─────────────────────────────
-	host._rp_content.add_child(UIHelpers.section_header("◆  STATISTIQUES", tcolor))
+	# ── STATISTIQUES ──────────────────────────────────────────
+	var stats_sec := UIHelpers.collapsible_section("◆  STATISTIQUES", tcolor)
+	host._rp_content.add_child(stats_sec["wrapper"])
+	var stats_body := stats_sec["body"] as VBoxContainer
 
 	var eq  := GameData.get_equipment_bonuses()
 	var eff := GameData.get_effective_stats(cid)
@@ -49,11 +51,10 @@ static func build(host: Village) -> void:
 	var hp_base   := int(eff.get("hp", 0))
 	var hp_bonus  := int(eq.get("hp", 0)) + int(pas.get("hp_bonus", 0))
 
-	# Les trois stats sur une seule ligne horizontale, espacées pour lisibilité.
 	var stats_row := HBoxContainer.new()
 	stats_row.add_theme_constant_override("separation", 24)
 	stats_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	host._rp_content.add_child(stats_row)
+	stats_body.add_child(stats_row)
 
 	for row: Array in [
 		["ATK", atk_base + atk_bonus, atk_base, atk_bonus, UIColors.STAT_ATK],
@@ -80,7 +81,7 @@ static func build(host: Village) -> void:
 
 	if tier < GameData.MAX_TIER:
 		if can_ev:
-			host._rp_content.add_child(host._make_evolve_btn(
+			stats_body.add_child(host._make_evolve_btn(
 				cid, c.get("nom_affichage_fr", c.get("name", cid)) as String,
 				c.get("entity_type", "creature") as String, tier))
 	else:
@@ -89,10 +90,12 @@ static func build(host: Village) -> void:
 		ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		ml.add_theme_font_size_override("font_size", 11)
 		ml.add_theme_color_override("font_color", UIColors.FILTER_ON)
-		host._rp_content.add_child(ml)
+		stats_body.add_child(ml)
 
-	# ── Sous-section ÉQUIPEMENT (slots des 3 biomes) ──────────────
-	host._rp_content.add_child(UIHelpers.section_header("◆  ÉQUIPEMENT", tcolor))
+	# ── ÉQUIPEMENT ────────────────────────────────────────────
+	var equip_sec := UIHelpers.collapsible_section("◆  ÉQUIPEMENT", tcolor)
+	host._rp_content.add_child(equip_sec["wrapper"])
+	var equip_body := equip_sec["body"] as VBoxContainer
 	for entry in EQUIP_SLOTS:
 		var slot_key:  String = entry[0]
 		var slot_icon: String = entry[1]
@@ -101,12 +104,13 @@ static func build(host: Village) -> void:
 		var equip := GameData.get_entity(equip_id)
 		if equip.is_empty() or not equip.get("est_debloque", false):
 			continue
-		host._rp_content.add_child(_equip_slot_card(host, slot_key, slot_icon, slot_name, equip_id, equip, tcolor))
+		equip_body.add_child(_equip_slot_card(host, slot_key, slot_icon, slot_name, equip_id, equip, tcolor))
 
-	# ── Sous-section PASSIFS (standard + uniques débloqués, même carte) ──
-	host._rp_content.add_child(UIHelpers.section_header("◆  PASSIFS", tcolor))
+	# ── PASSIFS ───────────────────────────────────────────────
+	var passif_sec := UIHelpers.collapsible_section("◆  PASSIFS", tcolor)
+	host._rp_content.add_child(passif_sec["wrapper"])
+	var passif_body := passif_sec["body"] as VBoxContainer
 
-	# Seuls les passifs débloqués apparaissent — aucune carte verrouillée.
 	var cards: Array[Control] = []
 	var seen: Array           = []
 	for pid in (c.get("unlocked_passives", []) as Array) + (GameData.player.get("active_passives", []) as Array):
@@ -131,19 +135,16 @@ static func build(host: Village) -> void:
 		none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		none_lbl.add_theme_font_size_override("font_size", 11)
 		none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		host._rp_content.add_child(none_lbl)
+		passif_body.add_child(none_lbl)
 	else:
 		for card in cards:
-			host._rp_content.add_child(card)
+			passif_body.add_child(card)
 
-	# ── Sous-section INGRÉDIENTS (placeholder, masquée si Village < T2) ──
-	var ingredients_section := VBoxContainer.new()
-	ingredients_section.name = "IngredientsSection"
-	ingredients_section.add_theme_constant_override("separation", 5)
-	ingredients_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ingredients_section.visible = (GameData.village.get("tier_actuel", 0) as int) >= 1
-	ingredients_section.add_child(UIHelpers.section_header("◆  INGRÉDIENTS", tcolor))
-	host._rp_content.add_child(ingredients_section)
+	# ── INGRÉDIENTS (masqué si Village < T1) ─────────────────
+	if (GameData.village.get("tier_actuel", 0) as int) >= 1:
+		var ingr_sec := UIHelpers.collapsible_section("◆  INGRÉDIENTS", tcolor)
+		ingr_sec["wrapper"].name = "IngredientsSection"
+		host._rp_content.add_child(ingr_sec["wrapper"])
 
 
 # Convertit un passif unique vers la forme attendue par _passive_card

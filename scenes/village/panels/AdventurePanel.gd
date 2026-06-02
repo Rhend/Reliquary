@@ -61,7 +61,9 @@ static func build(host: Village) -> void:
 	host._rp_content.add_child(HSeparator.new())
 
 	# ── Liste des biomes (accordéon) ──────────────────────────
-	host._rp_content.add_child(UIHelpers.section_header("◆  BIOMES DISPONIBLES", tcolor))
+	var biomes_sec  := UIHelpers.collapsible_section("◆  BIOMES DISPONIBLES", tcolor)
+	host._rp_content.add_child(biomes_sec["wrapper"])
+	var biomes_body := biomes_sec["body"] as VBoxContainer
 
 	# Références partagées entre les closures pour l'accordéon
 	var contents:     Dictionary = {}   # biome_id → VBoxContainer (détail)
@@ -116,7 +118,7 @@ static func build(host: Village) -> void:
 				placeholder.visible = false
 				btn.visible = true
 		)
-		host._rp_content.add_child(wrapper)
+		biomes_body.add_child(wrapper)
 
 # Construit la carte accordéon d'un biome avec ses catégories (créatures, pièges, etc.).
 # Retourne { wrapper, panel, section, arrow } pour que build() connecte le gui_input.
