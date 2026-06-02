@@ -10,8 +10,8 @@ class_name HeroPanel
 
 const EQUIP_SLOTS: Array = [
 	["arme",   "⚔",  "equipment_arme",   "Arme"  ],
-	["anneau", "💍", "equipment_anneau", "Anneau"],
-	["armure", "🛡", "equipment_armure",  "Armure"],
+	["anneau", "💍",  "equipment_anneau", "Anneau"],
+	["armure", "🛡",  "equipment_armure", "Armure"],
 ]
 
 # Point d'entrée : peuple host._rp_content avec la fiche du héros actif.

@@ -82,9 +82,9 @@ static func build(host: Village) -> void:
 
 # Équipement lié à chaque biome (dans l'ordre d'affichage).
 const BIOME_EQUIP: Array = [
-	["biome_foret",    "equipment_arme",   "⚔  FORÊT SOMBRE"],
-	["biome_marecage", "equipment_armure",  "💧  MARÉCAGE PUTRIDE"],
-	["biome_montagne", "equipment_anneau",  "⛰  MONTAGNE"],
+	["biome_montagne", "equipment_arme",   "⛰  MONTAGNE"],
+	["biome_foret",    "equipment_anneau", "🌲  FORÊT SOMBRE"],
+	["biome_marecage", "equipment_armure", "💧  MARÉCAGE PUTRIDE"],
 ]
 
 # Noms d'affichage des slots (index = Enums.SlotEquipement).

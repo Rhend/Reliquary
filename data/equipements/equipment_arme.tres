@@ -5,13 +5,13 @@
 [resource]
 script = ExtResource("1")
 id = "equipment_arme"
-nom_affichage_fr = "Lame de Forêt"
-nom_affichage_en = "Forest Blade"
+nom_affichage_fr = "Lame de Pierre"
+nom_affichage_en = "Stone Blade"
 slot = 0
-biome_source_id = "biome_foret"
+biome_source_id = "biome_montagne"
 maitrise_actuelle = 0
 est_debloque = true
 stats_par_palier = {0: {"atk": 3}, 1: {"atk": 7, "def": 1}, 2: {"atk": 14, "def": 2}}
-recettes_evolution = {1: [{"ingredient_id": "res_fourrure", "quantite": 2}], 2: [{"ingredient_id": "res_fourrure", "quantite": 3}, {"ingredient_id": "res_mineral_fer", "quantite": 1}]}
+recettes_evolution = {1: [{"ingredient_id": "res_pierre_montagne", "quantite": 2}], 2: [{"ingredient_id": "res_pierre_montagne", "quantite": 3}, {"ingredient_id": "res_ecaille", "quantite": 1}]}
 xp_maitrise_actuelle = 0.0
 xp_maitrise_palier_suivant = 6000.0
