@@ -70,12 +70,17 @@ var _birth_hatching       := false             # vrai pendant le battement final
 func _ready() -> void:
 	SaveManager.load_save()
 	_build_ui()
+	_update_badges()
 	EventBus.fragment_libere.connect(_on_fragment_libere)
 	EventBus.village_tier_change.connect(_on_village_tier_change)
 	EventBus.biome_revele.connect(_on_biome_revele)
 	EventBus.resources_changed.connect(_on_resources_changed_refresh)
 	EventBus.equipement_evolue.connect(func(_id, _tier): _on_resources_changed_refresh())
 	EventBus.equipment_changed.connect(_on_resources_changed_refresh)
+	EventBus.entity_ready_to_evolve.connect(func(_id): _update_badges())
+	EventBus.entity_evolved.connect(func(_id, _t): _update_badges())
+	EventBus.adventure_cycle_ended.connect(func(_s): _update_badges())
+	EventBus.adventure_stopped.connect(_update_badges)
 
 # Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
 func _active_creature() -> Dictionary:
@@ -710,6 +715,43 @@ func _go_forge()     -> void: _open_panel("forge")
 func _go_sanctuary() -> void: _open_panel("sanctuary")
 func _go_relic()     -> void: _open_panel("relic")
 func _go_tbd()       -> void: _open_panel("tbd")
+
+# Met à jour les pastilles de notification sur les HexItems.
+func _update_badges() -> void:
+	# hero : entité active prête à évoluer OU passif prêt
+	var hero_alert := false
+	var cid := GameData.player.get("active_creature_id", "") as String
+	if MasterySystem.can_evolve(cid):
+		hero_alert = true
+	if not hero_alert:
+		for pid in (GameData.get_entity(cid).get("unlocked_passives", []) as Array) + \
+				(GameData.player.get("active_passives", []) as Array):
+			if MasterySystem.can_evolve(pid as String):
+				hero_alert = true
+				break
+
+	# forge : un équipement avec XP pleine
+	var forge_alert := false
+	for entry in ForgePanel.BIOME_EQUIP:
+		if GameData.equipment_xp_full(entry[1] as String):
+			forge_alert = true
+			break
+
+	# adventure : un biome ou une créature prêt à évoluer
+	var adv_alert := false
+	for eid in GameData.entities:
+		var e := GameData.entities[eid] as Dictionary
+		if e.get("entity_type", "") in ["biome", "creature"] and MasterySystem.can_evolve(eid):
+			adv_alert = true
+			break
+
+	for pid in _hex_items:
+		var item := _hex_items[pid] as HexItem
+		match pid:
+			"hero":      item.has_notification = hero_alert
+			"forge":     item.has_notification = forge_alert
+			"adventure": item.has_notification = adv_alert
+		item.queue_redraw()
 
 # Refresh du panneau forge ou héro si ouvert, après un drop de ressources ou une forge.
 func _on_resources_changed_refresh() -> void:

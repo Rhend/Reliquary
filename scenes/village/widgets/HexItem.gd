@@ -1,17 +1,18 @@
 class_name HexItem
 extends Control
 
-var icon_text    := ""
-var label_text   := ""
-var tier_color   := Color.WHITE
-var tier         := 1
-var callback     : Callable
-var hex_radius   := 58.0
-var outward_dir  := Vector2.RIGHT
-var is_hovered   := false
-var is_selected  := false
-var _htween      : Tween
-var _t           := 0.0
+var icon_text       := ""
+var label_text      := ""
+var tier_color      := Color.WHITE
+var tier            := 1
+var callback        : Callable
+var hex_radius      := 58.0
+var outward_dir     := Vector2.RIGHT
+var is_hovered      := false
+var is_selected     := false
+var has_notification := false   # pastille rouge = action disponible
+var _htween         : Tween
+var _t              := 0.0
 
 func _ready() -> void:
 	pivot_offset = size * 0.5
@@ -64,6 +65,19 @@ func _draw() -> void:
 		5: _hexa(c, true,  true)
 		_: _round(c, false)
 	_callout(c)
+	if has_notification:
+		_draw_badge(c)
+
+# Pastille rouge pulsée en haut à droite de l'hexagone.
+func _draw_badge(c: Vector2) -> void:
+	var r      := hex_radius * 0.78
+	var bpos   := c + Vector2(r * 0.68, -r * 0.68)
+	var brad   := 7.0 + 0.8 * sin(_t * 3.5)
+	var glow_a := 0.35 + 0.20 * sin(_t * 3.5)
+	draw_circle(bpos, brad + 5.0, Color(1.0, 0.22, 0.22, glow_a))
+	draw_circle(bpos, brad,       Color(0.0, 0.0, 0.0, 0.60))
+	draw_circle(bpos, brad - 1.5, Color(1.0, 0.28, 0.28, 1.0))
+	draw_circle(bpos, brad - 3.0, Color(1.0, 0.55, 0.55, 0.70))
 
 func _callout(c: Vector2) -> void:
 	var font := ThemeDB.fallback_font
