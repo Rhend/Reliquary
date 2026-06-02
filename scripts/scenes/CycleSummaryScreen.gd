@@ -528,4 +528,4 @@ func _xp_card(icon: String, label: String, tier: int,
 # ═══════════════════════════════════════════════════════════
 
 func _go_to_village() -> void:
-	get_tree().change_scene_to_file("res://scenes/village/village.tscn")
+	UIHelpers.fade_to_scene(self, "res://scenes/village/village.tscn")

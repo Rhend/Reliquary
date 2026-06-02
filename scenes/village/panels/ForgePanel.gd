@@ -274,6 +274,10 @@ static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary
 	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(bc, 0.28, 1.0, 1, 4))
 	btn.pressed.connect(func() -> void:
 		if GameData.forge(equip_id):
+			var nom_forge := GameData.get_entity(equip_id).get("nom_affichage_fr", equip_id) as String
+			var new_tier  := int(GameData.get_entity(equip_id).get("maitrise_actuelle", 0))
+			host._show_banner("🔨  %s → %s" % [nom_forge, GameData.get_tier_name(new_tier)],
+					UIColors.LOG_VICTORY, Color(0.02, 0.12, 0.05, 0.92), 1.5, 0.5)
 			host._open_panel("forge")
 	)
 	vb.add_child(btn)

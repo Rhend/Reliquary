@@ -198,7 +198,17 @@ func _build_log() -> Control:
 		b.text = tab
 		b.toggle_mode = true
 		b.button_pressed = (tab == _log_filter)
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
 		b.add_theme_font_size_override("font_size", 11)
+		var is_active := (tab == _log_filter)
+		var tc := UIColors.FILTER_ON if is_active else UIColors.TEXT_MUTED
+		b.add_theme_color_override("font_color",         tc)
+		b.add_theme_color_override("font_pressed_color", UIColors.FILTER_ON)
+		b.add_theme_color_override("font_hover_color",   Color(1, 1, 1, 0.75))
+		b.add_theme_stylebox_override("normal",   UIHelpers.card_style(tc, 0.0 if not is_active else 0.12, 0.0 if not is_active else 0.50, 1 if is_active else 0, 4))
+		b.add_theme_stylebox_override("pressed",  UIHelpers.card_style(UIColors.FILTER_ON, 0.12, 0.50, 1, 4))
+		b.add_theme_stylebox_override("hover",    UIHelpers.card_style(UIColors.TEXT_MUTED, 0.08, 0.30, 0, 4))
 		b.pressed.connect(_set_filter.bind(tab))
 		tabs.add_child(b)
 		_tab_buttons[tab] = b
@@ -603,7 +613,12 @@ func _log_attack(attacker_name: String, dmg: int, is_crit: bool, tags: Array) ->
 func _set_filter(tab: String) -> void:
 	_log_filter = tab
 	for tab_name: String in _tab_buttons:
-		_tab_buttons[tab_name].button_pressed = (tab_name == tab)
+		var b: Button = _tab_buttons[tab_name]
+		var active := (tab_name == tab)
+		b.button_pressed = active
+		var tc := UIColors.FILTER_ON if active else UIColors.TEXT_MUTED
+		b.add_theme_color_override("font_color", tc)
+		b.add_theme_stylebox_override("normal", UIHelpers.card_style(tc, 0.12 if active else 0.0, 0.50 if active else 0.0, 1 if active else 0, 4))
 	for entry: Dictionary in _log_entries:
 		entry["node"].visible = _matches_filter(entry["tags"])
 
@@ -716,4 +731,4 @@ func _navigate_to_summary() -> void:
 	if _navigating:
 		return
 	_navigating = true
-	get_tree().change_scene_to_file("res://scenes/cycle/CycleSummaryScreen.tscn")
+	UIHelpers.fade_to_scene(self, "res://scenes/cycle/CycleSummaryScreen.tscn")

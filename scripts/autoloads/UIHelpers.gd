@@ -294,6 +294,7 @@ static func scene_header_bar(title: String, color: Color, on_back: Callable) -> 
 	var back := Button.new()
 	back.text = "← Village"
 	back.pressed.connect(on_back)
+	register_tooltip(back, "Retour au Village", "Revenir au hub principal.", Color.WHITE)
 	hbox.add_child(back)
 	var lbl := Label.new()
 	lbl.text                 = title
@@ -303,3 +304,21 @@ static func scene_header_bar(title: String, color: Color, on_back: Callable) -> 
 	lbl.add_theme_color_override("font_color", color)
 	hbox.add_child(lbl)
 	return bar
+
+# Fondu noir → changement de scène.
+# Ajoute un ColorRect noir en overlay sur `root_node`, l'anime en fondu,
+# puis change la scène. Durée du fade : 0.25s.
+static func fade_to_scene(root_node: Node, scene_path: String) -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if root_node is Control:
+		overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	else:
+		overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root_node.add_child(overlay)
+	var tw := root_node.create_tween()
+	tw.tween_property(overlay, "color:a", 1.0, 0.22)
+	tw.tween_callback(func() -> void:
+		root_node.get_tree().change_scene_to_file(scene_path)
+	)
