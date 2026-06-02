@@ -250,7 +250,7 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 
 # Retourne le texte du hint contextuel selon la progression actuelle.
 func _current_hint(vtier: int, hero_tier: int) -> String:
-	var frags := int(GameData.village.get("fragments_collectes", 0))
+	var frags := (GameData.village.get("fragments_collectes", []) as Array).size()
 	if vtier == 0 and hero_tier == 0 and frags == 0:
 		return "Partez en expédition pour gagner de l'XP et récolter des ressources"
 	if vtier == 0 and frags == 0:

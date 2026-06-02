@@ -238,17 +238,17 @@ static func _adv_category_card(host: Village, parent: VBoxContainer, label: Stri
 static func _accordion(parent: VBoxContainer, label: String, count_text: String) -> VBoxContainer:
 	var nc := UIColors.CARD_NEUTRAL
 
-	var wrap := VBoxContainer.new()
-	wrap.add_theme_constant_override("separation", 2)
-	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(wrap)
+	var acc_wrap := VBoxContainer.new()
+	acc_wrap.add_theme_constant_override("separation", 2)
+	acc_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(acc_wrap)
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(panel)
 	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
-	wrap.add_child(panel)
+	acc_wrap.add_child(panel)
 
 	var m := UIHelpers.margin_of(6)
 	panel.add_child(m)
@@ -279,7 +279,7 @@ static func _accordion(parent: VBoxContainer, label: String, count_text: String)
 	var section := VBoxContainer.new()
 	section.add_theme_constant_override("separation", 3)
 	section.visible = false
-	wrap.add_child(section)
+	acc_wrap.add_child(section)
 
 	var indent := MarginContainer.new()
 	indent.add_theme_constant_override("margin_left", 10)

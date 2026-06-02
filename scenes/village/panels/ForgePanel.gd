@@ -124,7 +124,7 @@ const BIOME_EQUIP: Array = [
 const SLOT_NAMES: Array = ["Arme", "Anneau", "Armure", "Ceinture", "Bouclier", "Talisman"]
 
 # Construit la carte d'un équipement (verrouillé, max, ou forgeable).
-static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary, tcolor: Color) -> Control:
+static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary, _tcolor: Color) -> Control:
 	if not equip.get("est_debloque", false):
 		var locked := PanelContainer.new()
 		locked.add_theme_stylebox_override("panel",
