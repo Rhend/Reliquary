@@ -23,7 +23,7 @@ static func build(host: Village) -> void:
 		var running_biome := GameData.get_entity(AdventureSystem.current_biome_id)
 		var rname := running_biome.get("nom_affichage_fr", "Biome") as String
 		var zone_names := ["Surface", "Profondeur", "Abysse"]
-		var zone_str   := zone_names[clampi(int(AdventureSystem.zone_courante), 0, 2)]
+		var zone_str   := zone_names[clampi(int(AdventureSystem.zone_courante), 0, 2)] as String
 		var info := PanelContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.add_theme_stylebox_override("panel", UIHelpers.card_style(tcolor, 0.10, 0.60, 2, 6))
