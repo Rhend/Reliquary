@@ -469,11 +469,40 @@ func _on_combat_ended(result: Dictionary) -> void:
 		_enemy_ring.fade_defeated()
 		_cycle_xp = AdventureSystem.get_cycle_xp()
 		_update_xp_label()
-		_add_log("[color=%s]Victoire[/color]" % _hex(UIColors.LOG_VICTORY), ["Héros"])
+		_add_log("[color=%s]— Victoire —[/color]" % _hex(UIColors.LOG_VICTORY), ["Héros"])
+		_show_combat_result_banner("VICTOIRE", UIColors.LOG_VICTORY)
 	else:
 		_enemy_ring.celebrate()
 		_hero_ring.fade_defeated()
-		_add_log("[color=%s]Défaite[/color]" % _hex(Color(1.0, 0.8, 0.2)), ["Monstre"])
+		_add_log("[color=%s]— Défaite —[/color]" % _hex(Color(1.0, 0.5, 0.2)), ["Monstre"])
+		_show_combat_result_banner("DÉFAITE", Color(1.0, 0.5, 0.2))
+
+func _show_combat_result_banner(text: String, color: Color) -> void:
+	var banner := PanelContainer.new()
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.anchor_left   = 0.5; banner.anchor_right  = 0.5
+	banner.anchor_top    = 0.5; banner.anchor_bottom = 0.5
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(UIColors.BG_DARK.r, UIColors.BG_DARK.g, UIColors.BG_DARK.b, 0.88)
+	s.border_color = color; s.set_border_width_all(2); s.set_corner_radius_all(8)
+	s.shadow_color = Color(color.r, color.g, color.b, 0.40); s.shadow_size = 18
+	banner.add_theme_stylebox_override("panel", s)
+	var m := UIHelpers.margin_of(18)
+	banner.add_child(m)
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 36)
+	lbl.add_theme_color_override("font_color", color)
+	m.add_child(lbl)
+	banner.modulate = Color(1, 1, 1, 0)
+	banner.offset_left  = -90; banner.offset_right  = 90
+	banner.offset_top   = -34; banner.offset_bottom = 34
+	add_child(banner)
+	var tw := create_tween()
+	tw.tween_property(banner, "modulate:a", 1.0, 0.18)
+	tw.tween_interval(0.85)
+	tw.tween_property(banner, "modulate:a", 0.0, 0.35)
+	tw.tween_callback(banner.queue_free)
 
 func _on_heal_applied(amount: float, new_hp: float) -> void:
 	_hero_ring.update_hp(new_hp)
@@ -558,13 +587,18 @@ func _add_log(bbcode: String, tags: Array) -> void:
 	rt.visible = _matches_filter(tags)
 
 func _log_attack(attacker_name: String, dmg: int, is_crit: bool, tags: Array) -> void:
+	var is_hero_attacker := "Héros" in tags
+	var prefix   := "[color=%s]%s[/color] " % [
+		_hex(Color(0.55, 0.36, 0.97) if is_hero_attacker else Color(0.86, 0.15, 0.15)),
+		"⚔" if is_hero_attacker else "🗡"
+	]
 	var name_part := "[color=%s]%s[/color]" % [_hex(UIColors.LOG_IGNORED), attacker_name]
 	var dmg_part: String
 	if is_crit:
 		dmg_part = "[b][color=%s]★ %d[/color][/b]" % [_hex(UIColors.FILTER_ON), dmg]
 	else:
 		dmg_part = "[color=%s]-%d[/color]" % [_hex(UIColors.LOG_DEFEAT), dmg]
-	_add_log("%s inflige %s" % [name_part, dmg_part], tags)
+	_add_log("%s%s → %s" % [prefix, name_part, dmg_part], tags)
 
 func _set_filter(tab: String) -> void:
 	_log_filter = tab
