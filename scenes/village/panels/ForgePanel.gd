@@ -190,6 +190,15 @@ static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary
 		vb.add_child(no_recipe)
 		return card
 
+	# Indicateur XP si la barre n'est pas encore pleine
+	var xp_ready := GameData.equipment_xp_full(equip_id)
+	if not xp_ready:
+		var xp_lbl := Label.new()
+		xp_lbl.text = "⧖  XP insuffisante — continuez l'aventure"
+		xp_lbl.add_theme_font_size_override("font_size", 11)
+		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		vb.add_child(xp_lbl)
+
 	var target_lbl := Label.new()
 	target_lbl.text = "→ %s" % GameData.get_tier_name(next_tier)
 	target_lbl.add_theme_font_size_override("font_size", 11)

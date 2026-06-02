@@ -65,7 +65,7 @@ var player: Dictionary = {
 		"anneau":   "",
 		"armure":   "",
 		"ceinture": "",
-		"bouclier": "equipment_bouclier",
+		"bouclier": "",
 		"talisman": ""
 	},
 	"equipment_inventory": [],

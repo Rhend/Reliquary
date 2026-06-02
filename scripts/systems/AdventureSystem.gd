@@ -307,9 +307,11 @@ func _distribute_mastery_xp(event_id: String, event_base: float) -> void:
 	MasterySystem.add_xp_to_entity(current_biome_id, base, event_tier)                               # biome
 	MasterySystem.add_xp_to_all_active(base, event_tier)                                             # passifs actifs
 	GameData.add_village_mastery_xp(base, event_tier)                                                # village
-	for item_id in GameData.player.get("equipped", {}).values():                                     # équipements équipés
+	for item_id in GameData.player.get("equipped", {}).values():                                     # équipements biome
 		if item_id != "":
-			MasterySystem.add_xp_to_entity(item_id, base, event_tier)
+			var item := GameData.get_entity(item_id)
+			if item.get("biome_source_id", "") != "":
+				MasterySystem.add_xp_to_entity(item_id, base, event_tier)
 
 	_cycle_xp += base
 
