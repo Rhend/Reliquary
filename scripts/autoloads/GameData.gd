@@ -96,16 +96,16 @@ func _load_all_entities() -> void:
 	# Pièges et bénédictions : entités de maîtrise (XP + évolution manuelle)
 	_load_tres_entities_from_folder("res://data/pieges/",          "trap")
 	_load_tres_entities_from_folder("res://data/benedictions/",    "benediction")
-	# Données statiques VS
+	# Données statiques JSON — chargées EN PREMIER pour que les .tres les écrasent si même ID
+	_load_data_from_folder("res://data/resources/", "resource")
+	_load_data_from_folder("res://data/forge/",     "recipe")
+	# Données statiques VS — écrasent les resources/ si ID partagé (ex: res_fourrure)
 	_load_tres_data_from_folder("res://data/ingredients/", "ingredient")
 	_load_tres_data_from_folder("res://data/fragments/",   "fragment")
 	# Héros : chargé depuis .tres (source de vérité)
 	_load_tres_entities_from_folder("res://data/hero/", "hero")
 	_load_tres_entities_from_folder("res://data/passives/", "passive")
 	_load_tres_entities_from_folder("res://data/equipements/", "equipment")
-	# Données statiques JSON
-	_load_data_from_folder("res://data/resources/", "resource")
-	_load_data_from_folder("res://data/forge/",     "recipe")
 
 # Charge les .tres d'un dossier et initialise les champs de maîtrise.
 func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:

@@ -175,14 +175,14 @@ func _build_column(is_hero: bool) -> Control:
 
 # ── Feed passifs ───────────────────────────────────────────
 func _build_feed() -> Control:
-	var wrap := CenterContainer.new()
-	wrap.custom_minimum_size = Vector2(0, 28)
+	var feed_wrap := CenterContainer.new()
+	feed_wrap.custom_minimum_size = Vector2(0, 28)
 	_feed_box = HBoxContainer.new()
 	_feed_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_feed_box.add_theme_constant_override("separation", 6)
 	_feed_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wrap.add_child(_feed_box)
-	return wrap
+	feed_wrap.add_child(_feed_box)
+	return feed_wrap
 
 # ── Journal à onglets ──────────────────────────────────────
 func _build_log() -> Control:

@@ -138,8 +138,8 @@ func _draw() -> void:
 	# ── Anneau extérieur : cooldown ──────────────────────────
 	draw_arc(_center, COOLDOWN_RADIUS, 0.0, TAU, 96, Color(camp_color, 0.12), COOLDOWN_WIDTH, true)
 	if cooldown > 0.001:
-		var ready := cooldown >= 0.999
-		var cd_col := camp_color if ready else UIColors.TEXT_MUTED
+		var cd_ready := cooldown >= 0.999
+		var cd_col := camp_color if cd_ready else UIColors.TEXT_MUTED
 		draw_arc(_center, COOLDOWN_RADIUS, top, top + TAU * cooldown, 96, cd_col, COOLDOWN_WIDTH, true)
 
 	# ── Anneau intérieur : PV ────────────────────────────────
