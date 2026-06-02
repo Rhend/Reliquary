@@ -233,34 +233,36 @@ func _build_log() -> Control:
 
 # ── Barre de bas ───────────────────────────────────────────
 func _build_bottom_bar() -> Control:
-	var m := UIHelpers.margin_of(6)
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 8)
-	m.add_child(hbox)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
 
 	_xp_label = Label.new()
 	_xp_label.text = "XP ce cycle — 0"
+	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_xp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_xp_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_xp_label.add_theme_font_size_override("font_size", 15)
 	_xp_label.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	hbox.add_child(_xp_label)
+	vbox.add_child(_xp_label)
 
 	var tcolor := _hero_tier_color()
 	_flee_btn = Button.new()
 	_flee_btn.text = "Mettre fin à l'expédition"
 	_flee_btn.custom_minimum_size = Vector2(0, 42)
+	_flee_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_flee_btn.add_theme_font_size_override("font_size", 15)
 	_flee_btn.add_theme_color_override("font_color", tcolor)
 	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	_flee_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	_flee_btn.pressed.connect(_on_flee_pressed)
+
 	var flee_margin := MarginContainer.new()
-	flee_margin.add_theme_constant_override("margin_left", 5)
+	flee_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	flee_margin.add_theme_constant_override("margin_left",  5)
 	flee_margin.add_theme_constant_override("margin_right", 5)
+	flee_margin.add_theme_constant_override("margin_bottom", 4)
 	flee_margin.add_child(_flee_btn)
-	hbox.add_child(flee_margin)
-	return m
+	vbox.add_child(flee_margin)
+	return vbox
 
 # ── Helpers UI ─────────────────────────────────────────────
 
