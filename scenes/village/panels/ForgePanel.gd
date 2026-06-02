@@ -24,22 +24,58 @@ static func build(host: Village) -> void:
 	host._rp_content.add_child(ingr_sec["wrapper"])
 	var ingr_body := ingr_sec["body"] as VBoxContainer
 
-	var has_ingr := false
+	# Collecte et trie les ingrédients par biome (ordre BIOME_EQUIP)
+	var biome_order: Array = []
+	for entry in BIOME_EQUIP:
+		biome_order.append(entry[0] as String)
+
+	var ingr_list: Array = []
 	for eid in GameData.entities:
 		var e: Dictionary = GameData.entities[eid]
 		if e.get("entity_type", "") != "ingredient":
 			continue
-		var qty := int(e.get("quantite_en_stock", 0))
-		var nom := e.get("nom_affichage_fr", eid) as String
+		ingr_list.append({"id": eid, "e": e})
+
+	ingr_list.sort_custom(func(a, b):
+		var ia := biome_order.find(a["e"].get("biome_source_id", ""))
+		var ib := biome_order.find(b["e"].get("biome_source_id", ""))
+		if ia != ib: return ia < ib
+		# Ingrédients communs avant uniques au sein d'un même biome
+		var ua := a["e"].get("est_unique", false) as bool
+		var ub := b["e"].get("est_unique", false) as bool
+		return int(ua) < int(ub)
+	)
+
+	var has_ingr := false
+	var last_biome := ""
+	for item in ingr_list:
+		var eid: String   = item["id"]
+		var e: Dictionary = item["e"]
+		var qty       := int(e.get("quantite_en_stock", 0))
+		var nom       := e.get("nom_affichage_fr", eid) as String
+		var biome_src := e.get("biome_source_id", "") as String
+		var is_unique := e.get("est_unique", false) as bool
 		has_ingr = true
+
+		# Séparateur de biome
+		if biome_src != last_biome:
+			last_biome = biome_src
+			var biome_e  := GameData.get_entity(biome_src)
+			var bname    := biome_e.get("nom_affichage_fr", biome_src) as String if not biome_e.is_empty() else biome_src
+			var btier    := int(biome_e.get("maitrise_actuelle", 0)) if not biome_e.is_empty() else 0
+			var sep_lbl  := Label.new()
+			sep_lbl.text = bname.to_upper()
+			sep_lbl.add_theme_font_size_override("font_size", 10)
+			sep_lbl.add_theme_color_override("font_color", UIColors.tier_color(btier))
+			ingr_body.add_child(sep_lbl)
+
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		row.mouse_filter = Control.MOUSE_FILTER_PASS
 		ingr_body.add_child(row)
 
-		var is_unique := e.get("est_unique", false) as bool
 		var nl := Label.new()
-		nl.text = ("%s ✦" % nom) if is_unique else nom
+		nl.text = ("  %s ✦" % nom) if is_unique else ("  %s" % nom)
 		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nl.add_theme_font_size_override("font_size", 12)
 		nl.add_theme_color_override("font_color", UIColors.TEXT_HEADER if qty > 0 else UIColors.TEXT_MUTED)
@@ -51,10 +87,9 @@ static func build(host: Village) -> void:
 		ql.add_theme_color_override("font_color", UIColors.FILTER_ON if qty > 0 else UIColors.TEXT_MUTED)
 		row.add_child(ql)
 
-		var biome_src := e.get("biome_source_id", "") as String
-		var biome_e   := GameData.get_entity(biome_src)
-		var bname     := biome_e.get("nom_affichage_fr", biome_src) as String if not biome_e.is_empty() else biome_src
-		var tt_ingr   := "Biome : %s\nEn stock : %d" % [bname, qty]
+		var biome_e2 := GameData.get_entity(biome_src)
+		var bname2   := biome_e2.get("nom_affichage_fr", biome_src) as String if not biome_e2.is_empty() else biome_src
+		var tt_ingr  := "Biome : %s\nEn stock : %d" % [bname2, qty]
 		if is_unique:
 			tt_ingr += "\nIngrédient unique — une seule obtention."
 		UIHelpers.register_tooltip(row, nom, tt_ingr, UIColors.FILTER_ON if qty > 0 else UIColors.TEXT_MUTED)
