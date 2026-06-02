@@ -19,6 +19,17 @@ const RING_RADIUS  := 165.0
 const HEX_SIZE     := Vector2(152.0, 152.0)
 const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
 
+# ─── Éveil (phase d'éclosion) ─────────────────────────────────
+# L'orbe se réchauffe vers cette couleur à mesure que l'âme s'éveille.
+const ECLOSION_AWAKEN_COLOR := Color(1.0, 0.86, 0.55)
+# Phrases d'éveil affichées au franchissement des paliers (fraction de progression).
+const BIRTH_PHRASES: Array = [
+	[0.25, "Un battement…  puis un autre.  Quelque chose remue dans le noir."],
+	[0.50, "Le long sommeil se déchire.  Mes souvenirs fuient comme l'eau entre mes doigts."],
+	[0.75, "Un village, tout proche…  et des fragments de rêve épars, alentour."],
+]
+const BIRTH_FINAL := "Je ne sais plus qui je suis…\nmais je m'éveille."
+
 # [label, icon, tier_min, callback_name, panel_id]
 # tier_min = palier du héros requis ; exception : FORGE est gated par le Tier du Village.
 # Gates décalés d'un rang : le Village éclot en T0 et débloque déjà les expéditions.
@@ -50,6 +61,10 @@ var _rp_title        : Label              # label titre dans la barre du panneau
 var _active_panel_id      := ""           # id du panneau ouvert ("hero", "adventure", …)
 var _adv_selected_biome_id := ""          # biome sélectionné dans le panneau Expéditions
 var _hex_items            : Dictionary = {}   # panel_id → HexItem, pour gérer l'état sélectionné
+var _birth_orb            : ClickOrb           # orbe d'éclosion (juice d'éveil)
+var _birth_phrase         : Label              # phrase d'éveil affichée actuellement
+var _birth_phrase_idx     := 0                 # index de la prochaine phrase d'éveil à montrer
+var _birth_hatching       := false             # vrai pendant le battement final avant l'éclosion
 
 # ─── Init ─────────────────────────────────────────────────────
 func _ready() -> void:
@@ -95,15 +110,17 @@ func _build_ui() -> void:
 # faire éclore l'incarnation. Au dernier clic → éclosion en T0 + cinématique.
 # UI minimale : orbe cliquable + compteur + message (pas d'anneau).
 func _build_birth(_creature: Dictionary) -> void:
-	var clics  := int(GameData.village.get("clics_eclosion", 0))
-	var needed := Balance.ECLOSION_CLICS
+	var clics    := int(GameData.village.get("clics_eclosion", 0))
+	var needed   := Balance.ECLOSION_CLICS
+	var progress := clampf(float(clics) / float(needed), 0.0, 1.0)
 
 	var orb := ClickOrb.new()
-	orb.tier_color   = TIER_0_COLOR
+	orb.tier_color   = TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, progress)
 	orb.callback     = Callable(self, "_on_birth_click")
 	_center(orb, Vector2(0.0, -10.0), Vector2(96.0, 96.0))
 	orb.pivot_offset = Vector2(48.0, 48.0)
 	add_child(orb)
+	_birth_orb = orb
 
 	_xp_label = Label.new()
 	_xp_label.text = "%d / %d" % [clics, needed]
@@ -114,13 +131,22 @@ func _build_birth(_creature: Dictionary) -> void:
 	add_child(_xp_label)
 
 	var flavor := Label.new()
-	flavor.text = "Frappez l'étincelle pour faire éclore le Village…"
+	flavor.text = "Ranimez l'étincelle…  réveillez l'âme endormie."
 	flavor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	flavor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	flavor.add_theme_font_size_override("font_size", 12)
 	flavor.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	_center(flavor, Vector2(0.0, 92.0), Vector2(320.0, 44.0))
 	add_child(flavor)
+
+	# Reprend la séquence d'éveil là où elle en est : on saute les paliers déjà
+	# franchis pour ne pas les rejouer après un rechargement de scène.
+	_birth_phrase = null
+	_birth_phrase_idx = 0
+	_birth_hatching = false
+	while _birth_phrase_idx < BIRTH_PHRASES.size() \
+			and progress + 0.0001 >= float(BIRTH_PHRASES[_birth_phrase_idx][0]):
+		_birth_phrase_idx += 1
 
 # ─── Tier 1+ : hub hexagonal ──────────────────────────────────
 # Construit le hub circulaire avec les hexagones débloqués par le tier.
@@ -555,15 +581,84 @@ func _build_fullscreen_btn() -> void:
 # ─── Phase d'éclosion : clic ─────────────────────────────────
 # Incrémente le compteur de clics ; au dernier, déclenche l'éclosion en T0.
 func _on_birth_click() -> void:
-	if GameData.village.get("eclos", false):
+	if GameData.village.get("eclos", false) or _birth_hatching:
 		return
-	var needed := Balance.ECLOSION_CLICS
-	var clics  := int(GameData.village.get("clics_eclosion", 0)) + Balance.ECLOSION_CLIC_VALUE
+	var needed   := Balance.ECLOSION_CLICS
+	var clics    := int(GameData.village.get("clics_eclosion", 0)) + Balance.ECLOSION_CLIC_VALUE
 	GameData.village["clics_eclosion"] = clics
+	var progress := clampf(float(clics) / float(needed), 0.0, 1.0)
+
 	if is_instance_valid(_xp_label):
 		_xp_label.text = "%d / %d" % [mini(clics, needed), needed]
+		_xp_label.add_theme_color_override("font_color",
+				TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, progress).lightened(0.2))
+
+	# L'étincelle se réchauffe à mesure que l'âme s'éveille.
+	if is_instance_valid(_birth_orb):
+		_birth_orb.tier_color = TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, progress)
+
+	# Phrases d'éveil au franchissement des paliers (25 / 50 / 75 %).
+	while _birth_phrase_idx < BIRTH_PHRASES.size() \
+			and progress + 0.0001 >= float(BIRTH_PHRASES[_birth_phrase_idx][0]):
+		_show_birth_phrase(BIRTH_PHRASES[_birth_phrase_idx][1], false)
+		_birth_phrase_idx += 1
+
 	if clics >= needed:
-		_hatch_village()
+		# Éveil final : phrase forte + voile chaud, puis éclosion après un battement.
+		_birth_hatching = true
+		_show_birth_phrase(BIRTH_FINAL, true)
+		_birth_awaken_flash()
+		var tw := create_tween()
+		tw.tween_interval(1.8)
+		tw.tween_callback(_hatch_village)
+
+# Affiche une phrase d'éveil au-dessus de l'orbe : fondu entrant + léger « pop ».
+# La phrase précédente s'efface en douceur. Une phrase `final` reste affichée
+# (l'éclosion enchaîne par-dessus). Le reste se fond après quelques secondes.
+func _show_birth_phrase(text: String, final: bool) -> void:
+	if is_instance_valid(_birth_phrase):
+		var old := _birth_phrase
+		var ot := old.create_tween()   # lié à `old` → auto-tué si `old` est libéré
+		ot.tween_property(old, "modulate:a", 0.0, 0.3)
+		ot.tween_callback(old.queue_free)
+
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.add_theme_font_size_override("font_size", 19 if final else 15)
+	lbl.add_theme_color_override("font_color",
+			ECLOSION_AWAKEN_COLOR if final else TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, 0.7))
+	lbl.modulate.a = 0.0
+	lbl.scale = Vector2(0.96, 0.96)
+	lbl.resized.connect(func() -> void: lbl.pivot_offset = lbl.size * 0.5)
+	_center(lbl, Vector2(0.0, -150.0), Vector2(480.0, 90.0))
+	add_child(lbl)
+	_birth_phrase = lbl
+
+	var t_in := lbl.create_tween().set_parallel(true)
+	t_in.tween_property(lbl, "modulate:a", 1.0, 0.7).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	t_in.tween_property(lbl, "scale", Vector2.ONE, 0.9).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+
+	if not final:
+		var t_out := lbl.create_tween()
+		t_out.tween_interval(2.9)
+		t_out.tween_property(lbl, "modulate:a", 0.0, 0.9)
+		t_out.tween_callback(lbl.queue_free)
+
+# Bref voile chaud sur tout l'écran au moment de l'éveil final.
+func _birth_awaken_flash() -> void:
+	var flash := ColorRect.new()
+	flash.color = Color(ECLOSION_AWAKEN_COLOR.r, ECLOSION_AWAKEN_COLOR.g, ECLOSION_AWAKEN_COLOR.b, 0.0)
+	flash.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.z_index = 400
+	add_child(flash)
+	var tw := flash.create_tween()
+	tw.tween_property(flash, "color:a", 0.22, 0.30).set_ease(Tween.EASE_OUT)
+	tw.tween_property(flash, "color:a", 0.0, 1.30).set_ease(Tween.EASE_IN)
+	tw.tween_callback(flash.queue_free)
 
 # Fait éclore le Village en T0, sauvegarde, puis lance la cinématique d'éclosion.
 func _hatch_village() -> void:

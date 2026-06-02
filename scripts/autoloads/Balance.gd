@@ -165,8 +165,8 @@ const VILLAGE_FORGE_XP: float = 19200.0
 # les expéditions (remplace l'ancien clicker d'XP menant à T1).
 const ECLOSION_CLICS: int = 100
 # Progression ajoutée par clic. Valeur normale : 1 (≈ 100 clics).
-# Réglée à 20 pour accélérer les tests (≈ 5 clics suffisent).
-const ECLOSION_CLIC_VALUE: int = 20
+# Réglée à 25 pour accélérer les tests (4 clics → paliers d'éveil 25/50/75/100).
+const ECLOSION_CLIC_VALUE: int = 25
 
 # ═══════════════════════════════════════════════════════════
 #  Combo
