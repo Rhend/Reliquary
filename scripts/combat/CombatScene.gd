@@ -255,7 +255,11 @@ func _build_bottom_bar() -> Control:
 	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	_flee_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	_flee_btn.pressed.connect(_on_flee_pressed)
-	hbox.add_child(_flee_btn)
+	var flee_margin := MarginContainer.new()
+	flee_margin.add_theme_constant_override("margin_left", 5)
+	flee_margin.add_theme_constant_override("margin_right", 5)
+	flee_margin.add_child(_flee_btn)
+	hbox.add_child(flee_margin)
 	return m
 
 # ── Helpers UI ─────────────────────────────────────────────
