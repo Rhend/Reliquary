@@ -132,13 +132,17 @@ func load_save() -> void:
 
 	var data: Dictionary = json.get_data()
 	var saved_ver: int   = int(data.get("version", 0))
-	if saved_ver != SAVE_VER:
-		push_warning("SaveManager: version %d trouvée, %d attendue — sauvegarde ignorée (supprimer le fichier pour repartir proprement)" \
+	# Versions supportées : 11 (format entities plat) et 12+ (hiérarchique).
+	if saved_ver < 11 or saved_ver > SAVE_VER:
+		push_warning("SaveManager: version %d non supportée (attendu 11–%d) — sauvegarde ignorée" \
 			% [saved_ver, SAVE_VER])
 		return
 
 	_load_player(data)
-	_load_entities(data)
+	if saved_ver < 12:
+		_load_entities_v11(data)
+	else:
+		_load_entities(data)
 	_load_systems(data)
 	if data.has("village"):
 		GameData.village.merge(data["village"], true)
@@ -148,6 +152,25 @@ func _load_player(data: Dictionary) -> void:
 	if not data.has("player"):
 		return
 	GameData.player.merge(data["player"], true)
+
+# Charge le format v11 : entities est un dict plat { entity_id → entry }.
+func _load_entities_v11(data: Dictionary) -> void:
+	if not data.has("entities"):
+		return
+	for entity_id in data["entities"]:
+		if not GameData.entities.has(entity_id):
+			continue
+		var saved: Dictionary = data["entities"][entity_id]
+		var e: Dictionary     = GameData.entities[entity_id]
+		if e.has("maitrise_actuelle"):
+			e["maitrise_actuelle"]    = saved.get("maitrise_actuelle",    0)
+			e["xp_maitrise_actuelle"] = saved.get("xp_maitrise_actuelle", 0.0)
+			e["unlocked_passives"]    = saved.get("unlocked_passives",    [])
+			e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
+		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
+				"est_collecte", "est_debloque"]:
+			if e.has(field) and saved.has(field):
+				e[field] = saved[field]
 
 func _load_entities(data: Dictionary) -> void:
 	if not data.has("entities"):
