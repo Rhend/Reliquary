@@ -9,7 +9,6 @@ nom_affichage_fr = "Essence d'Oscar"
 nom_affichage_en = "Oscar's Essence"
 biome_source_id = "biome_foret"
 est_unique = true
-quantite_en_stock = 0
 chance = 0.0
 qty_min = 1
 qty_max = 1

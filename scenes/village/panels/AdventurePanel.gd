@@ -505,7 +505,7 @@ static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary, btier: i
 			var biome_id := entity.get("biome_source_id", "") as String
 			var biome_e  := GameData.get_entity(biome_id)
 			var bname    := biome_e.get("nom_affichage_fr", biome_id) as String
-			var qty      := int(entity.get("quantite_en_stock", 0))
+			var qty      := int(GameData.player["resources"].get(entity.get("id", ""), 0))
 			return "Biome : %s\nEn stock : %d" % [bname, qty]
 		_:
 			return "Maîtrise : %s" % GameData.get_tier_name(tier)

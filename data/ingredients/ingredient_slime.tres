@@ -9,7 +9,6 @@ nom_affichage_fr = "Slime Visqueux"
 nom_affichage_en = "Viscous Slime"
 biome_source_id = "biome_marecage"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.3
 qty_min = 1
 qty_max = 4

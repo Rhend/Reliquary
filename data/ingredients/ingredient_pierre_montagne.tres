@@ -9,7 +9,6 @@ nom_affichage_fr = "Pierre de Montagne"
 nom_affichage_en = "Mountain Stone"
 biome_source_id = "biome_montagne"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.15
 qty_min = 1
 qty_max = 2

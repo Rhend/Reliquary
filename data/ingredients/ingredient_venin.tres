@@ -9,7 +9,6 @@ nom_affichage_fr = "Venin"
 nom_affichage_en = "Venom"
 biome_source_id = "biome_marecage"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.2
 qty_min = 1
 qty_max = 2

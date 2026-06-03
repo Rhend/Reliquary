@@ -154,7 +154,7 @@ static func build(host: Village) -> void:
 			var e := GameData.entities[eid] as Dictionary
 			if e.get("entity_type", "") != "ingredient":
 				continue
-			if int(e.get("quantite_en_stock", 0)) <= 0:
+			if int(GameData.player["resources"].get(eid, 0)) <= 0:
 				continue
 			ingr_list.append(e)
 		ingr_list.sort_custom(func(a, b):
@@ -185,7 +185,8 @@ static func build(host: Village) -> void:
 					sep.add_theme_color_override("font_color", UIColors.tier_color(btier))
 					ingr_body.add_child(sep)
 				var nom := e.get("nom_affichage_fr", e.get("name", e.get("id", "?"))) as String
-				var qty := int(e.get("quantite_en_stock", 0))
+				var eid_key := e.get("id", "") as String
+				var qty := int(GameData.player["resources"].get(eid_key, 0))
 				var is_unique := e.get("est_unique", false) as bool
 				var ic := UIColors.TIER_LEGENDAIRE if is_unique else UIColors.TEXT_HEADER
 				var row := HBoxContainer.new()
@@ -460,7 +461,7 @@ static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Contr
 			var ingr_id  := req.get("ingredient_id", "") as String
 			var needed   := int(req.get("quantite", 1))
 			var ingr     := GameData.get_entity(ingr_id)
-			var have     := int(ingr.get("quantite_en_stock", 0))
+			var have     := int(GameData.player["resources"].get(ingr_id, 0))
 			var ingr_nom := ingr.get("nom_affichage_fr", ingr_id) as String
 			var ok       := have >= needed
 			var ic       := UIColors.INGREDIENT_OK if ok else UIColors.INGREDIENT_MISSING

@@ -9,7 +9,6 @@ nom_affichage_fr = "Fourrure"
 nom_affichage_en = "Fur"
 biome_source_id = "biome_foret"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.25
 qty_min = 1
 qty_max = 3

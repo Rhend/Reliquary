@@ -193,9 +193,9 @@ func get_modifier_bonuses() -> Dictionary:
 func get_cycle_xp() -> float:
 	return _cycle_xp
 
-# Luck effective = luck permanente du joueur + luck temporaire du cycle.
+# Luck effective = luck temporaire du cycle (bénédictions de type "luck").
 func _get_effective_luck() -> int:
-	return int(GameData.player.get("luck", 0)) + _cycle_luck
+	return _cycle_luck
 
 # ═══════════════════════════════════════════════════════════
 #  Boucle de rencontres
@@ -582,7 +582,7 @@ func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
 	var ingr := GameData.get_entity(ingredient_id)
 	if ingr.is_empty():
 		return
-	ingr["quantite_en_stock"] = int(ingr.get("quantite_en_stock", 0)) + 1
+	GameData.add_resource(ingredient_id, 1)
 	_cycle_loot_detail[ingredient_id] = _cycle_loot_detail.get(ingredient_id, 0) + 1
 	_cycle_loot += 1
 	EventBus.loot_dropped.emit(
@@ -768,12 +768,10 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 	var biome := GameData.get_entity(current_biome_id)
 	biome["creature_unique_vaincue"] = true
 
-	# Ingrédient unique → quantite_en_stock = 1
+	# Ingrédient unique → 1 exemplaire dans player.resources
 	var ingr_id: String = (biome.get("ingredient_unique", {}) as Dictionary).get("id", "")
-	if ingr_id != "":
-		var ingr := GameData.get_entity(ingr_id)
-		if not ingr.is_empty():
-			ingr["quantite_en_stock"] = 1
+	if ingr_id != "" and int(GameData.player["resources"].get(ingr_id, 0)) == 0:
+		GameData.add_resource(ingr_id, 1)
 
 	# Passif unique → est_debloque = true
 	var passif_id: String = (biome.get("creature_unique", {}) as Dictionary).get("passif_debloque_id", "")

@@ -51,7 +51,7 @@ static func build(host: Village) -> void:
 	for item in ingr_list:
 		var eid: String   = item["id"]
 		var e: Dictionary = item["e"]
-		var qty       := int(e.get("quantite_en_stock", 0))
+		var qty       := int(GameData.player["resources"].get(eid, 0))
 		var nom       := e.get("nom_affichage_fr", eid) as String
 		var biome_src := e.get("biome_source_id", "") as String
 		var is_unique := e.get("est_unique", false) as bool
@@ -242,7 +242,7 @@ static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary
 		var ingr_id  := req.get("ingredient_id", "") as String
 		var needed   := int(req.get("quantite", 1))
 		var ingr     := GameData.get_entity(ingr_id)
-		var have     := int(ingr.get("quantite_en_stock", 0))
+		var have     := int(GameData.player["resources"].get(ingr_id, 0))
 		var ingr_nom := ingr.get("nom_affichage_fr", ingr_id) as String
 		var ok       := have >= needed
 		var ingr_c   := UIColors.INGREDIENT_OK if ok else UIColors.INGREDIENT_MISSING

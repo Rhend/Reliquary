@@ -55,7 +55,6 @@ var village: Dictionary = {
 }
 
 var player: Dictionary = {
-	"luck":               0,
 	"resources":          {},          # item_id → quantité possédée
 	"active_creature_id": "hero",
 	"active_biome_id":    "",
@@ -402,8 +401,8 @@ func can_forge(equipment_id: String) -> bool:
 	if recipe.is_empty():
 		return false
 	for req in recipe:
-		var ingr := get_entity(req.get("ingredient_id", ""))
-		if ingr.is_empty() or int(ingr.get("quantite_en_stock", 0)) < int(req.get("quantite", 1)):
+		var ingr_id := req.get("ingredient_id", "") as String
+		if ingr_id.is_empty() or int(player["resources"].get(ingr_id, 0)) < int(req.get("quantite", 1)):
 			return false
 	return true
 
@@ -421,9 +420,7 @@ func forge(equipment_id: String) -> bool:
 	var recipe  := get_forge_recipe(equipment_id, current + 1)
 	for req in recipe:
 		var ingr_id := req.get("ingredient_id", "") as String
-		var ingr    := get_entity(ingr_id)
 		var consume := int(req.get("quantite", 1))
-		ingr["quantite_en_stock"] = int(ingr.get("quantite_en_stock", 0)) - consume
 		player["resources"][ingr_id] = maxi(0, int(player["resources"].get(ingr_id, 0)) - consume)
 	equip["maitrise_actuelle"]           = current + 1
 	equip["xp_maitrise_actuelle"]        = 0.0
@@ -550,10 +547,6 @@ func unequip_item(slot: String) -> void:
 # Ajoute qty unités d'une ressource à l'inventaire du joueur.
 func add_resource(item_id: String, qty: int) -> void:
 	player["resources"][item_id] = int(player["resources"].get(item_id, 0)) + qty
-	# Sync avec quantite_en_stock sur l'entité si elle existe (ingrédients)
-	var entity := get_entity(item_id)
-	if not entity.is_empty() and entity.has("quantite_en_stock"):
-		entity["quantite_en_stock"] = int(entity.get("quantite_en_stock", 0)) + qty
 	EventBus.resources_changed.emit()
 
 # ═══════════════════════════════════════════════════════════
