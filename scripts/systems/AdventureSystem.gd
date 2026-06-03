@@ -177,6 +177,7 @@ func stop_adventure() -> void:
 		CombatPlayer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
 	PassiveSystem.decrement_cooldowns()
+	GameData.player["active_biome_id"] = ""
 	CycleData.last_cycle_summary = _build_summary(false, true)
 	EventBus.adventure_stopped.emit()
 
@@ -696,6 +697,7 @@ func _end_adventure(victory: bool) -> void:
 	_encounter_timer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
 	PassiveSystem.decrement_cooldowns()
+	GameData.player["active_biome_id"] = ""
 	var summary := _build_summary(victory)
 	CycleData.last_cycle_summary = summary
 	EventBus.adventure_cycle_ended.emit(summary)

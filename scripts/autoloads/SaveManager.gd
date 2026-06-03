@@ -1,10 +1,11 @@
 # ============================================================
 # SaveManager.gd — Sauvegarde automatique sur progression.
 #
-# Format JSON à trois sections :
-#   "player"   — dict complet GameData.player
-#   "entities" — tier / xp / unlocked_passives par entité à progression
+# Format JSON à quatre sections :
+#   "player"   — dict complet GameData.player (resources, equipped, bestiary…)
+#   "entities" — état par entity_type → { id → champs } (tier, xp, flags d'état)
 #   "systems"  — état runtime des autoloads (cooldowns, etc.)
+#   "village"  — dict complet GameData.village (tier, fragments, xp, eclos…)
 #
 # Étendre la sauvegarde :
 #   • Nouvelle donnée joueur  → l'ajouter dans GameData.player (sauvegardé automatiquement).
@@ -43,6 +44,8 @@ func _ready() -> void:
 	EventBus.entity_evolved.connect(_on_progress)
 	EventBus.passive_unlocked.connect(_on_progress)
 	EventBus.equipment_changed.connect(_on_progress)
+	EventBus.equipement_evolue.connect(_on_progress)
+	EventBus.village_tier_change.connect(_on_progress)
 
 func _on_progress(_a = null, _b = null) -> void:
 	_save_dirty = true

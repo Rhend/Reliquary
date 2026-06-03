@@ -426,6 +426,7 @@ func forge(equipment_id: String) -> bool:
 	equip["xp_maitrise_actuelle"]        = 0.0
 	equip["xp_maitrise_palier_suivant"]  = palier_suivant_cost("equipment", current + 1)
 	EventBus.equipement_evolue.emit(equipment_id, current + 1)
+	EventBus.resources_changed.emit()
 	return true
 
 # ═══════════════════════════════════════════════════════════
@@ -493,52 +494,6 @@ func get_forge_recipes() -> Array:
 			result.append(entities[id])
 	return result
 
-# Vérifie si le joueur possède tous les ingrédients d'une recette.
-func can_craft(recipe: Dictionary) -> bool:
-	for ing in recipe.get("ingredients", []):
-		var needed = int(ing.get("qty", 0))
-		var have   = int(player.get("resources", {}).get(ing.get("item_id", ""), 0))
-		if have < needed:
-			return false
-	return true
-
-# Consomme les ingrédients et équipe le résultat dans le slot approprié.
-# Retourne false si les ressources sont insuffisantes.
-func craft(recipe: Dictionary) -> bool:
-	if not can_craft(recipe):
-		return false
-	for ing in recipe.get("ingredients", []):
-		var item_id = ing.get("item_id", "")
-		var qty     = int(ing.get("qty", 0))
-		player["resources"][item_id] = int(player["resources"].get(item_id, 0)) - qty
-	var result_id = recipe.get("result_id", "")
-	if result_id != "":
-		player["equipment_inventory"].append(result_id)
-	EventBus.resources_changed.emit()
-	return true
-
-func equip_item(item_id: String) -> void:
-	var item = get_entity(item_id)
-	var slot_idx: int = int(item.get("slot", -1))
-	if slot_idx < 0 or slot_idx >= Enums.SlotEquipement.size():
-		return
-	var slot: String = Enums.SlotEquipement.keys()[slot_idx].to_lower()
-	if not player["equipped"].has(slot):
-		return
-	var old_id = player["equipped"].get(slot, "")
-	if old_id != "":
-		player["equipment_inventory"].append(old_id)
-	player["equipment_inventory"].erase(item_id)
-	player["equipped"][slot] = item_id
-	EventBus.equipment_changed.emit()
-
-func unequip_item(slot: String) -> void:
-	var item_id = player["equipped"].get(slot, "")
-	if item_id == "":
-		return
-	player["equipment_inventory"].append(item_id)
-	player["equipped"][slot] = ""
-	EventBus.equipment_changed.emit()
 
 # ═══════════════════════════════════════════════════════════
 #  Ressources
