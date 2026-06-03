@@ -1,4 +1,4 @@
-﻿[gd_resource type="Resource" script_class="BiomeData" load_steps=12 format=3]
+[gd_resource type="Resource" script_class="BiomeData" load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
 [ext_resource type="CreatureData" path="res://data/creatures/creature_montagne_surface.tres" id="2"]
