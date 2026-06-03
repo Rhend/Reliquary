@@ -534,6 +534,7 @@ func _pick_modifier() -> void:
 func _drop_pool(pool: Array, source_name: String) -> void:
 	if pool.is_empty():
 		return
+	var has_forge := int(GameData.village.get("tier_actuel", 0)) >= 1
 	var drops:      Array = []
 	var luck_bonus: float = float(_get_effective_luck()) * Balance.LUCK_DROP_BONUS_PER_POINT
 	for entry in pool:
@@ -542,6 +543,8 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 			continue
 		var item_id: String = entry.get("item_id", "")
 		if item_id == "":
+			continue
+		if not has_forge and GameData.get_entity(item_id).get("entity_type", "") == "ingredient":
 			continue
 		var qty_min: int = int(entry.get("qty_min", 1))
 		var qty_max: int = int(entry.get("qty_max", qty_min))
@@ -565,7 +568,10 @@ func _drop_loot(enemy: Dictionary) -> void:
 	_drop_pool(enemy.get("loot_table", []), enemy.get("name", "?"))
 
 # Drop un ingrédient standard depuis une créature évolutive (50% de chance).
+# Bloqué tant que la Forge n'est pas débloquée (Village T1).
 func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
+	if int(GameData.village.get("tier_actuel", 0)) < 1:
+		return
 	var creature := GameData.get_entity(enemy.get("id", ""))
 	if creature.is_empty() or creature.get("est_unique", false):
 		return
@@ -585,7 +591,7 @@ func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
 	)
 
 # Drop des ingrédients depuis ingredients_drop du biome.
-# Disponible uniquement si Village Tier ≥ 2 (appelé depuis _resolve_victory).
+# Disponible uniquement si Village Tier ≥ 1 (appelé depuis _resolve_victory).
 func _drop_ingredients() -> void:
 	var biome       := GameData.get_entity(current_biome_id)
 	var ingredients := biome.get("ingredients_drop", []) as Array
