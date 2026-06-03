@@ -591,14 +591,18 @@ func _open_settings_overlay() -> void:
 	add_child(overlay)
 	_settings_overlay = overlay
 
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_PASS
+	overlay.add_child(center)
+
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(380, 0)
 	card.add_theme_stylebox_override("panel",
 			UIHelpers.card_style(UIColors.TEXT_HEADER, 0.08, 0.35, 1, 6))
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	card.gui_input.connect(func(_ev: InputEvent) -> void: pass)
-	card.set_anchors_preset(PRESET_CENTER)
-	overlay.add_child(card)
+	center.add_child(card)
 
 	var mg := UIHelpers.margin_of(16)
 	card.add_child(mg)
