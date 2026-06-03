@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="PiegeData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="PiegeData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/PiegeData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "spike_trap"
 nom_affichage_fr = "Pièges à pointes"
+lore_fr = "Disposes intentionnellement par quelque chose - ou quelqu'un. Ils rouillent mais restent efficaces."
 nom_affichage_en = "Spike Trap"
 biome_source_id = "biome_foret"
 degats = 15

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="IngredientData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="IngredientData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/IngredientData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "ingredient_oscar"
 nom_affichage_fr = "Essence d'Oscar"
+lore_fr = "Ce qu'il reste d'Oscar une fois la malediction levee. Une lumiere doree, chaude, qui pese etrangement lourd dans la main."
 nom_affichage_en = "Oscar's Essence"
 biome_source_id = "biome_foret"
 est_unique = true

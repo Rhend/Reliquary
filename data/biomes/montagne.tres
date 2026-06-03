@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BiomeData" load_steps=12 format=3]
+﻿[gd_resource type="Resource" script_class="BiomeData" load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
 [ext_resource type="CreatureData" path="res://data/creatures/creature_montagne_surface.tres" id="2"]
@@ -16,6 +16,7 @@
 script = ExtResource("1")
 id = "biome_montagne"
 nom_affichage_fr = "Montagne"
+lore_fr = "La montagne est silencieuse, mais ce silence est trompeur. Les pierres elles-memes gardent la memoire de batailles que nul n'a encore ose raconter."
 nom_affichage_en = "Mountain"
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="PassifData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="PassifData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/PassifData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "passive_regeneration"
 name = "Régénération"
+lore_fr = "Le corps sait comment se reparer - il faut juste lui en laisser le temps. Ce passif donne ce temps."
 base_stats = {"effects": [{"id": "hp_regen_bonus", "value": 0.05, "description": "+5% régénération supplémentaire entre événements"}]}
 tier_effects = [{"effects": [{"id": "hp_regen_bonus", "value": 0.05, "description": "+5% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.09, "description": "+9% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.14, "description": "+14% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.20, "description": "+20% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.28, "description": "+28% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.40, "description": "+40% régénération supplémentaire entre événements"}]}]
 passive_slots = []

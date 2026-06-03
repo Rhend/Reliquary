@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/CreatureData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "creature_foret_surface"
 nom_affichage_fr = "Rat des Égouts"
+lore_fr = "Mute au contact des eaux corrompues, le rat des egouts ne ressent ni peur ni douleur. Il attaque avec une brutalite aveugle."
 nom_affichage_en = "Sewer Rat"
 est_unique = false
 zone_associee = 0

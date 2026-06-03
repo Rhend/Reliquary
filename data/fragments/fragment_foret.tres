@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="FragmentData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="FragmentData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/FragmentData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "fragment_foret"
 nom_affichage_fr = "Fragment de Forêt"
+lore_fr = "Un eclat de memoire cristallisee, chaud comme une braise. Il contient quelque chose de la foret - ses peurs, peut-etre, ou ses regrets."
 nom_affichage_en = "Forest Fragment"
 biome_source_id = "biome_foret"
 est_collecte = false

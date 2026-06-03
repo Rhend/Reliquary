@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/CreatureData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "creature_montagne_surface"
 nom_affichage_fr = "Loup des Cimes"
+lore_fr = "Les loups des cimes chassent en meutes silencieuses. Celui-ci s'est separe du groupe - peut-etre rejete, peut-etre simplement solitaire."
 nom_affichage_en = "Ridge Wolf"
 est_unique = false
 zone_associee = 0

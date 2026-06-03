@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="HeroData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="HeroData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/HeroData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "hero"
 nom_affichage_fr = "Héros"
+lore_fr = "Tu t'eveilles sans nom et sans souvenir, mais avec la certitude que quelque chose t'a attendu ici. Le village te reconnait - meme si toi, tu ne te reconnais pas encore."
 nom_affichage_en = "Hero"
 passifs_par_palier = {}
 

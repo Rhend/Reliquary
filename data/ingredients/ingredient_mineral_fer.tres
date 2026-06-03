@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="IngredientData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="IngredientData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/IngredientData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "res_mineral_fer"
 nom_affichage_fr = "Minerai de Fer"
+lore_fr = "La montagne en regorge, mais l'extraire demande du courage. On dit que les veines suivent les cicatrices d'anciennes batailles souterraines."
 nom_affichage_en = "Iron Ore"
 biome_source_id = "biome_foret"
 est_unique = false

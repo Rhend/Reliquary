@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BenedictionData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="BenedictionData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BenedictionData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "tide_pool"
 nom_affichage_fr = "Mare Régénératrice"
+lore_fr = "L'eau y est froide et cristalline dans un endroit qui devrait etre opaque. Y plonger les mains suffit a sentir la fatigue s'evaporer."
 nom_affichage_en = "Regenerating Pool"
 biome_source_id = "biome_montagne"
 effet = "heal"

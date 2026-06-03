@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="IngredientData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="IngredientData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/IngredientData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "ingredient_cavalier_sans_tete"
 nom_affichage_fr = "Tête du Cavalier"
+lore_fr = "La tete du Cavalier Sans Tete est froide comme la mort mais ne se decompose jamais. On ne sait toujours pas pourquoi."
 nom_affichage_en = "Rider's Head"
 biome_source_id = "biome_marecage"
 est_unique = true

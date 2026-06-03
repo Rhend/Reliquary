@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="EquipmentData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="EquipmentData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/EquipmentData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "equipment_anneau"
 nom_affichage_fr = "Anneau de Forêt"
+lore_fr = "Forge avec des racines tressees et de la resine des arbres anciens. Il murmure parfois a l'oreille de celui qui le porte."
 nom_affichage_en = "Forest Ring"
 slot = 1
 biome_source_id = "biome_foret"

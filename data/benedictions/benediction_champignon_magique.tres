@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BenedictionData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="BenedictionData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BenedictionData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "champignon_magique"
 nom_affichage_fr = "Champignon Magique"
+lore_fr = "Il pousse dans l'obscurite totale et brille faiblement. Le consommer procure une clarte inattendue, comme si le monde s'etait mis en pause."
 nom_affichage_en = "Magic Mushroom"
 biome_source_id = "biome_marecage"
 effet = "luck"

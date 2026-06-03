@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BenedictionData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="BenedictionData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BenedictionData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "boue_curative"
 nom_affichage_fr = "Boue Curative"
+lore_fr = "Certaines boues du marecage ont des proprietes medicinales insoupconnees. Les creatures locales s'y roulent instinctivement apres un combat."
 nom_affichage_en = "Healing Mud"
 biome_source_id = "biome_marecage"
 effet = "heal"

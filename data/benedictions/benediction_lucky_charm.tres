@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BenedictionData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="BenedictionData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/BenedictionData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "lucky_charm"
 nom_affichage_fr = "Breloque porte-bonheur"
+lore_fr = "Quelqu'un l'a perdu ici. Quelqu'un d'autre l'a trouve. La chance change de main, mais elle ne disparait jamais."
 nom_affichage_en = "Lucky Charm"
 biome_source_id = "biome_foret"
 effet = "xp_bonus"

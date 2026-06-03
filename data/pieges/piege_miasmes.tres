@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="PiegeData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="PiegeData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/PiegeData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "miasmes"
 nom_affichage_fr = "Miasmes Toxiques"
+lore_fr = "Les gaz qui s'elevent des eaux putrides brulent les poumons et troublent l'esprit. S'y attarder est une erreur."
 nom_affichage_en = "Toxic Miasma"
 biome_source_id = "biome_marecage"
 degats = 30

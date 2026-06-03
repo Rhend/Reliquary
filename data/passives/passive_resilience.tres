@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="PassifData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="PassifData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/PassifData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "passive_resilience"
 name = "Résilience"
+lore_fr = "Prendre un coup, l'absorber, continuer. La resilience n'evite pas la douleur, elle la transforme."
 type = "conditional"
 base_stats = {"effects": [{"id": "hp_bonus", "value": 10, "description": "+10 PV maximum"}]}
 tier_effects = [{"effects": [{"id": "hp_bonus", "value": 10, "description": "+10 PV maximum"}], "conditional_effects": []}, {"effects": [{"id": "hp_bonus", "value": 25, "description": "+25 PV maximum"}], "conditional_effects": []}, {"effects": [{"id": "hp_bonus", "value": 40, "description": "+40 PV maximum | Bouclier d'urgence 15% PV max"}], "conditional_effects": [{"trigger": "hp_below_percent", "threshold": 0.30, "effect": "shield", "value": 0.15, "cooldown_cycles": 1}]}, {"effects": [{"id": "hp_bonus", "value": 60, "description": "+60 PV maximum | Bouclier d'urgence 20% PV max"}], "conditional_effects": [{"trigger": "hp_below_percent", "threshold": 0.30, "effect": "shield", "value": 0.20, "cooldown_cycles": 1}]}, {"effects": [{"id": "hp_bonus", "value": 85, "description": "+85 PV maximum | Bouclier d'urgence 25% PV max"}], "conditional_effects": [{"trigger": "hp_below_percent", "threshold": 0.30, "effect": "shield", "value": 0.25, "cooldown_cycles": 1}]}, {"effects": [{"id": "hp_bonus", "value": 120, "description": "+120 PV maximum | Bouclier d'urgence 30% PV max"}], "conditional_effects": [{"trigger": "hp_below_percent", "threshold": 0.30, "effect": "shield", "value": 0.30, "cooldown_cycles": 1}]}]

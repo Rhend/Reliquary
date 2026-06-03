@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/CreatureData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "creature_oscar"
 nom_affichage_fr = "Oscar"
+lore_fr = "Oscar etait un cochon domestique avant que la corruption de la foret ne le transforme en quelque chose d'innommable. Cette memoire le rend plus dangereux que n'importe quelle bete."
 nom_affichage_en = "Oscar"
 est_unique = true
 zone_associee = 2

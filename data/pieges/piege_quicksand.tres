@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="PiegeData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="PiegeData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/PiegeData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "quicksand"
 nom_affichage_fr = "Sables Mouvants"
+lore_fr = "La montagne cache parfois des poches de sable instable la ou on attend de la roche solide. Tomber dedans est facile ; en sortir, beaucoup moins."
 nom_affichage_en = "Quicksand"
 biome_source_id = "biome_montagne"
 degats = 20

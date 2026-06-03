@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="FragmentData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="FragmentData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/FragmentData.gd" id="1"]
 
@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "fragment_marecage"
 nom_affichage_fr = "Fragment de Marécage"
+lore_fr = "Lourd et humide malgre son apparence solide. Il pese differemment selon les marees, comme s'il ecoutait quelque chose d'invisible."
 nom_affichage_en = "Swamp Fragment"
 biome_source_id = "biome_marecage"
 est_collecte = false
