@@ -92,7 +92,9 @@ static func build(host: Village) -> void:
 		var tt_ingr  := "Biome : %s\nEn stock : %d" % [bname2, qty]
 		if is_unique:
 			tt_ingr += "\nIngrédient unique — une seule obtention."
-		UIHelpers.register_tooltip(row, nom, tt_ingr, UIColors.FILTER_ON if qty > 0 else UIColors.TEXT_MUTED)
+		UIHelpers.register_tooltip(row, nom, tt_ingr,
+				UIColors.FILTER_ON if qty > 0 else UIColors.TEXT_MUTED,
+				e.get("lore_fr", "") as String)
 
 	if not has_ingr:
 		ingr_body.add_child(UIHelpers.none_label(12))
@@ -293,7 +295,7 @@ static func _forge_equip_card(host: Village, equip_id: String, equip: Dictionary
 		var next_sl := _stats_line(next_stats)
 		if next_sl != "":
 			tt_body += "\n→ %s : %s" % [GameData.get_tier_name(next_tier), next_sl]
-	UIHelpers.register_tooltip(card, nom, tt_body, ec)
+	UIHelpers.register_tooltip(card, nom, tt_body, ec, equip.get("lore_fr", "") as String)
 
 	return card
 

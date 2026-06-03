@@ -331,7 +331,8 @@ func _on_adventure_started(_biome_id: String) -> void:
 		int(AdventureSystem.current_hp),
 		int(hstats.get("atk", 0)) + int(heqp.get("atk", 0)),
 		int(hstats.get("def", 0)) + int(heqp.get("def", 0))]
-	UIHelpers.register_tooltip(_hero_name, hname, htt, UIColors.tier_color(htier))
+	UIHelpers.register_tooltip(_hero_name, hname, htt, UIColors.tier_color(htier),
+			c.get("lore_fr", "") as String)
 
 	# Colonne ennemi en attente (vide) jusqu'au premier événement.
 	_enemy_name.text = "—"
@@ -399,7 +400,9 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 		int(enemy_hp),
 		int(enemy.get("atk", 0)),
 		int(enemy.get("def", 0))]
-	UIHelpers.register_tooltip(_enemy_name, ename, ett, UIColors.tier_color(etier))
+	var enemy_entity := GameData.get_entity(enemy.get("id", ""))
+	UIHelpers.register_tooltip(_enemy_name, ename, ett, UIColors.tier_color(etier),
+			enemy_entity.get("lore_fr", "") as String)
 
 	_hero_ring.set_cooldown(0.0)
 	_enemy_ring.set_cooldown(0.0)

@@ -281,7 +281,8 @@ static func add_hover_feedback(node: Control) -> void:
 #   [← Village]  TITRE CENTRÉ
 # on_back est connecté au pressed du bouton retour.
 # Branche un tooltip JRPG sur node : hover → TooltipOverlay.show_for, exit → hide.
-static func register_tooltip(node: Control, title: String, body: String, color: Color = Color.WHITE) -> void:
+static func register_tooltip(node: Control, title: String, body: String,
+		color: Color = Color.WHITE, lore: String = "") -> void:
 	# Déconnecte le tooltip précédent s'il y en a un (même nœud, nouveau contenu).
 	if node.has_meta("_tt_cb"):
 		var old_cb: Callable = node.get_meta("_tt_cb")
@@ -289,7 +290,7 @@ static func register_tooltip(node: Control, title: String, body: String, color: 
 			node.mouse_entered.disconnect(old_cb)
 	if node.mouse_exited.is_connected(TooltipOverlay.hide_tooltip):
 		node.mouse_exited.disconnect(TooltipOverlay.hide_tooltip)
-	var cb := func() -> void: TooltipOverlay.show_for(title, body, color)
+	var cb := func() -> void: TooltipOverlay.show_for(title, body, color, lore)
 	node.set_meta("_tt_cb", cb)
 	node.mouse_entered.connect(cb)
 	node.mouse_exited.connect(TooltipOverlay.hide_tooltip)

@@ -13,6 +13,7 @@ const MARGIN_PAD: float = 8.0
 
 var _panel:     PanelContainer
 var _title_lbl: Label
+var _lore_lbl:  Label
 var _sep:       ColorRect
 var _body_lbl:  Label
 var _border_color: Color = UIColors.TEXT_MUTED
@@ -41,6 +42,13 @@ func _ready() -> void:
 	_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(_title_lbl)
 
+	_lore_lbl = Label.new()
+	_lore_lbl.add_theme_font_size_override("font_size", 11)
+	_lore_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lore_lbl.custom_minimum_size = Vector2(MAX_WIDTH, 0)
+	_lore_lbl.visible = false
+	vb.add_child(_lore_lbl)
+
 	_sep = ColorRect.new()
 	_sep.custom_minimum_size = Vector2(0, 1)
 	_sep.color = Color(1, 1, 1, 0.25)
@@ -66,14 +74,18 @@ func _process(_delta: float) -> void:
 	pos.y = clampf(pos.y, MARGIN_PAD, vp.y - ps.y - MARGIN_PAD)
 	_panel.global_position = pos
 
-# Affiche le tooltip avec titre, corps et couleur d'accent.
-func show_for(title: String, body: String, color: Color) -> void:
+# Affiche le tooltip avec titre, lore (optionnel), corps et couleur d'accent.
+func show_for(title: String, body: String, color: Color, lore: String = "") -> void:
 	_border_color = color
 	_title_lbl.text = title
 	_title_lbl.add_theme_color_override("font_color", color)
+	_lore_lbl.text    = lore
+	_lore_lbl.visible = not lore.is_empty()
+	_lore_lbl.add_theme_color_override("font_color", Color(color.r, color.g, color.b, 0.70))
 	_body_lbl.text  = body
 	_body_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	_sep.color = Color(color.r, color.g, color.b, 0.30)
+	_sep.visible = not (lore.is_empty() and body.is_empty())
+	_sep.color   = Color(color.r, color.g, color.b, 0.30)
 	_apply_style()
 	_panel.visible = true
 

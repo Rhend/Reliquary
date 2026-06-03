@@ -296,7 +296,8 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 		var tt_body  := "Maîtrise : %s" % GameData.get_tier_name(rarity)
 		if cur_eff != "":
 			tt_body += "\nEffet : %s" % cur_eff
-		UIHelpers.register_tooltip(panel, name_txt, tt_body, UIColors.tier_color(rarity))
+		UIHelpers.register_tooltip(panel, name_txt, tt_body, UIColors.tier_color(rarity),
+				pdata.get("lore_fr", "") as String)
 		panel.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton \
 					and event.button_index == MOUSE_BUTTON_LEFT \
@@ -427,7 +428,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	var tt := "Slot : %s  ·  Rang : %s" % [slot_name, GameData.get_tier_name(etier)]
 	if stat_parts.size() > 0:
 		tt += "\n" + "  ".join(stat_parts)
-	UIHelpers.register_tooltip(xpcard, enom, tt, ec)
+	UIHelpers.register_tooltip(xpcard, enom, tt, ec, equip.get("lore_fr", "") as String)
 
 	return wrapper
 

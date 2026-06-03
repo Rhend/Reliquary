@@ -6,6 +6,7 @@ extends Resource
 # id, name, type, base_stats, tier_effects, passive_slots.
 @export var id:                         String     = ""
 @export var name:                       String     = ""
+@export var lore_fr:                    String     = ""
 @export var type:                       String     = ""
 @export var base_stats:                 Dictionary = {}
 @export var tier_effects:               Array      = []

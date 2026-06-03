@@ -185,7 +185,8 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 		btooltip_body += "\nMécanique : " + _mech_name(mech_id)
 	UIHelpers.register_tooltip(panel,
 			biome.get("nom_affichage_fr", biome_id) as String,
-			btooltip_body, UIColors.tier_color(btier))
+			btooltip_body, UIColors.tier_color(btier),
+			biome.get("lore_fr", "") as String)
 
 	# Flèche d'accordéon, à droite de l'en-tête du template.
 	var arrow := Label.new()
@@ -345,7 +346,8 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		if is_known:
 			var tt_title := disp_name
 			var tt_body  := _tooltip_entity_body(entry, entity, btier)
-			UIHelpers.register_tooltip(panel, tt_title, tt_body, ec)
+			UIHelpers.register_tooltip(panel, tt_title, tt_body, ec,
+					entity.get("lore_fr", "") as String)
 
 		var pm := UIHelpers.margin_of(4)
 		panel.add_child(pm)

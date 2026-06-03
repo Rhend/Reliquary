@@ -4,6 +4,7 @@ extends Resource
 @export var id:                         String             = ""
 @export var nom_affichage_fr:           String             = ""
 @export var nom_affichage_en:           String             = ""
+@export var lore_fr:                    String             = ""
 @export var est_unique:                 bool               = false
 @export var zone_associee:              Enums.Zone         = Enums.Zone.SURFACE
 @export var biome_id:                   String             = ""
