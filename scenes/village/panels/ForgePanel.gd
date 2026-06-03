@@ -278,7 +278,7 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 	var equip_tier  := int(equip.get("maitrise_actuelle", 0))
 	var nom         := equip.get("nom_affichage_fr", equip_id) as String
 	var slot_idx    := int(equip.get("slot", 0))
-	var slot_name   := SLOT_NAMES[slot_idx] if slot_idx < SLOT_NAMES.size() else ""
+	var slot_name: String = SLOT_NAMES[slot_idx] if slot_idx < SLOT_NAMES.size() else ""
 	var ec          := UIColors.tier_color(equip_tier)
 	var next_tier   := equip_tier + 1
 	var recipe      := GameData.get_forge_recipe(equip_id, next_tier)
