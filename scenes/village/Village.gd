@@ -582,7 +582,7 @@ func _toggle_settings_overlay() -> void:
 func _open_settings_overlay() -> void:
 	var overlay := ColorRect.new()
 	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	overlay.color        = Color(0.0, 0.0, 0.0, 0.65)
+	overlay.color        = Color(0.0, 0.0, 0.0, 0.45)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
