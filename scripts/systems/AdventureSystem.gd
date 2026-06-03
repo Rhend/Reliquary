@@ -74,6 +74,10 @@ var _cycle_xp_passives_total:  float      = 0.0
 var _cycle_xp_passives_detail: Dictionary = {}
 # XP par entité rencontrée ce cycle (créatures, pièges, bénédictions).
 var _cycle_xp_entities_detail: Dictionary = {}
+# XP par équipement équipé ce cycle.
+var _cycle_xp_equip_detail:    Dictionary = {}
+# Ingrédients collectés ce cycle : item_id → qty total.
+var _cycle_loot_detail:        Dictionary = {}
 # Saignement : ticks restants et dégâts par tick (calculés à l'application).
 var _bleed_remaining: int   = 0
 # Bénédiction XP : multiplicateur d'XP de base appliqué UNE fois sur le prochain événement.
@@ -102,6 +106,9 @@ func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
 			_cycle_xp_passives_total               += amount
 			_cycle_xp_passives_detail[entity_id]    = \
 				_cycle_xp_passives_detail.get(entity_id, 0.0) + amount
+		"equipment":
+			_cycle_xp_equip_detail[entity_id] = \
+				_cycle_xp_equip_detail.get(entity_id, 0.0) + amount
 		"creature", "trap", "benediction":
 			_cycle_xp_entities_detail[entity_id]    = \
 				_cycle_xp_entities_detail.get(entity_id, 0.0) + amount
@@ -149,6 +156,8 @@ func start_adventure(biome_id: String) -> void:
 	_cycle_xp_passives_total  = 0.0
 	_cycle_xp_passives_detail = {}
 	_cycle_xp_entities_detail = {}
+	_cycle_xp_equip_detail    = {}
+	_cycle_loot_detail        = {}
 	_bleed_remaining          = 0
 	_bless_xp_mult            = 1.0
 
@@ -168,6 +177,7 @@ func stop_adventure() -> void:
 		CombatPlayer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
 	PassiveSystem.decrement_cooldowns()
+	GameData.player["active_biome_id"] = ""
 	CycleData.last_cycle_summary = _build_summary(false, true)
 	EventBus.adventure_stopped.emit()
 
@@ -184,9 +194,9 @@ func get_modifier_bonuses() -> Dictionary:
 func get_cycle_xp() -> float:
 	return _cycle_xp
 
-# Luck effective = luck permanente du joueur + luck temporaire du cycle.
+# Luck effective = luck temporaire du cycle (bénédictions de type "luck").
 func _get_effective_luck() -> int:
-	return int(GameData.player.get("luck", 0)) + _cycle_luck
+	return _cycle_luck
 
 # ═══════════════════════════════════════════════════════════
 #  Boucle de rencontres
@@ -525,6 +535,7 @@ func _pick_modifier() -> void:
 func _drop_pool(pool: Array, source_name: String) -> void:
 	if pool.is_empty():
 		return
+	var has_forge := int(GameData.village.get("tier_actuel", 0)) >= 1
 	var drops:      Array = []
 	var luck_bonus: float = float(_get_effective_luck()) * Balance.LUCK_DROP_BONUS_PER_POINT
 	for entry in pool:
@@ -533,6 +544,8 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 			continue
 		var item_id: String = entry.get("item_id", "")
 		if item_id == "":
+			continue
+		if not has_forge and GameData.get_entity(item_id).get("entity_type", "") == "ingredient":
 			continue
 		var qty_min: int = int(entry.get("qty_min", 1))
 		var qty_max: int = int(entry.get("qty_max", qty_min))
@@ -546,6 +559,9 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 		})
 	if not drops.is_empty():
 		_cycle_loot += drops.size()
+		for d in drops:
+			var did: String = d.get("item_id", "")
+			_cycle_loot_detail[did] = _cycle_loot_detail.get(did, 0) + int(d.get("qty", 1))
 		EventBus.loot_dropped.emit(drops, source_name)
 
 # Drop le loot spécifique à l'ennemi vaincu (loot_table de l'ennemi).
@@ -553,7 +569,10 @@ func _drop_loot(enemy: Dictionary) -> void:
 	_drop_pool(enemy.get("loot_table", []), enemy.get("name", "?"))
 
 # Drop un ingrédient standard depuis une créature évolutive (50% de chance).
+# Bloqué tant que la Forge n'est pas débloquée (Village T1).
 func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
+	if int(GameData.village.get("tier_actuel", 0)) < 1:
+		return
 	var creature := GameData.get_entity(enemy.get("id", ""))
 	if creature.is_empty() or creature.get("est_unique", false):
 		return
@@ -564,14 +583,16 @@ func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
 	var ingr := GameData.get_entity(ingredient_id)
 	if ingr.is_empty():
 		return
-	ingr["quantite_en_stock"] = int(ingr.get("quantite_en_stock", 0)) + 1
+	GameData.add_resource(ingredient_id, 1)
+	_cycle_loot_detail[ingredient_id] = _cycle_loot_detail.get(ingredient_id, 0) + 1
+	_cycle_loot += 1
 	EventBus.loot_dropped.emit(
 		[{"item_id": ingredient_id, "name": ingr.get("nom_affichage_fr", ingredient_id), "qty": 1}],
 		enemy.get("name", "?")
 	)
 
 # Drop des ingrédients depuis ingredients_drop du biome.
-# Disponible uniquement si Village Tier ≥ 2 (appelé depuis _resolve_victory).
+# Disponible uniquement si Village Tier ≥ 1 (appelé depuis _resolve_victory).
 func _drop_ingredients() -> void:
 	var biome       := GameData.get_entity(current_biome_id)
 	var ingredients := biome.get("ingredients_drop", []) as Array
@@ -592,6 +613,7 @@ func _drop_ingredients() -> void:
 		var qty:     int = randi_range(qty_min, qty_max)
 		GameData.add_resource(item_id, qty)
 		drops.append({"item_id": item_id, "name": ingr_dict.get("nom_affichage_fr", item_id), "qty": qty})
+		_cycle_loot_detail[item_id] = _cycle_loot_detail.get(item_id, 0) + qty
 	if not drops.is_empty():
 		_cycle_loot += drops.size()
 		EventBus.loot_dropped.emit(drops, "Biome")
@@ -675,6 +697,7 @@ func _end_adventure(victory: bool) -> void:
 	_encounter_timer.stop()
 	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
 	PassiveSystem.decrement_cooldowns()
+	GameData.player["active_biome_id"] = ""
 	var summary := _build_summary(victory)
 	CycleData.last_cycle_summary = summary
 	EventBus.adventure_cycle_ended.emit(summary)
@@ -693,6 +716,8 @@ func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 		"xp_passives_detail":   _cycle_xp_passives_detail,
 		"xp_entities_detail":   _cycle_xp_entities_detail,
 		"loot_total":           _cycle_loot,
+		"loot_detail":          _cycle_loot_detail.duplicate(),
+		"xp_equip_detail":      _cycle_xp_equip_detail.duplicate(),
 		"combo_max":            _cycle_combo_max,
 		"combats_won":          _cycle_combats_won,
 		"events":               _cycle_events,
@@ -745,12 +770,10 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 	var biome := GameData.get_entity(current_biome_id)
 	biome["creature_unique_vaincue"] = true
 
-	# Ingrédient unique → quantite_en_stock = 1
+	# Ingrédient unique → 1 exemplaire dans player.resources
 	var ingr_id: String = (biome.get("ingredient_unique", {}) as Dictionary).get("id", "")
-	if ingr_id != "":
-		var ingr := GameData.get_entity(ingr_id)
-		if not ingr.is_empty():
-			ingr["quantite_en_stock"] = 1
+	if ingr_id != "" and int(GameData.player["resources"].get(ingr_id, 0)) == 0:
+		GameData.add_resource(ingr_id, 1)
 
 	# Passif unique → est_debloque = true
 	var passif_id: String = (biome.get("creature_unique", {}) as Dictionary).get("passif_debloque_id", "")

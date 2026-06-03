@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "passif_unique_foret"
 nom_affichage_fr = "Essence de Forêt"
+lore_fr = "La foret sombre laisse une trace en ceux qui la traversent. Cette essence concentre sa memoire vivante - les racines, les murmures, la nuit entre les arbres."
 nom_affichage_en = "Forest Essence"
 biome_source_id = "biome_foret"
 est_debloque = false

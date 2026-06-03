@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "fragment_montagne"
 nom_affichage_fr = "Fragment de Montagne"
+lore_fr = "Tranchant sur les bords mais lisse au centre, poli par des siecles de vents. Il ne se rechauffe jamais, quelle que soit la chaleur ambiante."
 nom_affichage_en = "Mountain Fragment"
 biome_source_id = "biome_montagne"
 est_collecte = false

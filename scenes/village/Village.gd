@@ -65,17 +65,23 @@ var _birth_orb            : ClickOrb           # orbe d'éclosion (juice d'évei
 var _birth_phrase         : Label              # phrase d'éveil affichée actuellement
 var _birth_phrase_idx     := 0                 # index de la prochaine phrase d'éveil à montrer
 var _birth_hatching       := false             # vrai pendant le battement final avant l'éclosion
+var _settings_overlay     : Control = null     # overlay paramètres, null si fermé
 
 # ─── Init ─────────────────────────────────────────────────────
 func _ready() -> void:
 	SaveManager.load_save()
 	_build_ui()
+	_update_badges()
 	EventBus.fragment_libere.connect(_on_fragment_libere)
 	EventBus.village_tier_change.connect(_on_village_tier_change)
 	EventBus.biome_revele.connect(_on_biome_revele)
 	EventBus.resources_changed.connect(_on_resources_changed_refresh)
 	EventBus.equipement_evolue.connect(func(_id, _tier): _on_resources_changed_refresh())
 	EventBus.equipment_changed.connect(_on_resources_changed_refresh)
+	EventBus.entity_ready_to_evolve.connect(func(_id): _update_badges())
+	EventBus.entity_evolved.connect(func(_id, _t): _update_badges())
+	EventBus.adventure_cycle_ended.connect(func(_s): _update_badges())
+	EventBus.adventure_stopped.connect(_update_badges)
 
 # Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
 func _active_creature() -> Dictionary:
@@ -214,6 +220,20 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
 		_build_village_conditions(center_box, vtier, vcolor)
 
+	# ── Hint contextuel (objectif courant) ───────────────────────
+	var hint := _current_hint(vtier, tier)
+	if hint != "":
+		var hint_lbl := Label.new()
+		hint_lbl.text = hint
+		hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint_lbl.anchor_left   = 0.0; hint_lbl.anchor_right  = 1.0
+		hint_lbl.anchor_top    = 1.0; hint_lbl.anchor_bottom = 1.0
+		hint_lbl.offset_top    = -36; hint_lbl.offset_bottom = -8
+		hint_lbl.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+		hint_lbl.add_theme_font_size_override("font_size", 11)
+		hint_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.35))
+		_hub_root.add_child(hint_lbl)
+
 	# ── Hex items (forge débloquée par village tier, reste par hero tier) ──
 	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
 		var pid := d[4] as String
@@ -227,6 +247,21 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 		var pos := Vector2(cos(ang), sin(ang)) * RING_RADIUS
 		var d: Array = unlocked[i]
 		_make_hex(d[0], d[1], tcolor, pos, Callable(self, d[3]), d[4])
+
+# Retourne le texte du hint contextuel selon la progression actuelle.
+func _current_hint(vtier: int, hero_tier: int) -> String:
+	var frags := (GameData.village.get("fragments_collectes", []) as Array).size()
+	if vtier == 0 and hero_tier == 0 and frags == 0:
+		return "Partez en expédition pour gagner de l'XP et faire progresser vos entités"
+	if vtier == 0 and frags == 0:
+		return "Faites atteindre Rare à un biome pour libérer un Fragment de Mémoire"
+	if vtier == 0 and frags >= 1:
+		return "Fragment collecté — continuez à progresser pour faire évoluer le Village"
+	if vtier == 1 and not GameData.can_forge("equipment_arme") \
+			and not GameData.can_forge("equipment_anneau") \
+			and not GameData.can_forge("equipment_armure"):
+		return "La Forge est disponible — partez en expédition pour remplir les barres XP de vos équipements"
+	return ""
 
 # ─── Conditions d'évolution du Village ────────────────────────
 # Ajoute dans `container` (le VBox central) un petit espace, chaque condition
@@ -519,10 +554,10 @@ func _show_banner(text: String, accent: Color, bg: Color, hold: float, fade: flo
 	tw.tween_callback(banner.queue_free)
 
 
-# Ajoute le bouton ⛶ en haut à droite pour basculer le plein écran.
+# Ajoute le bouton ⚙ en haut à droite pour ouvrir le panneau Paramètres.
 func _build_fullscreen_btn() -> void:
 	var btn := Button.new()
-	btn.text = "⛶"
+	btn.text = "⚙"
 	btn.flat = true
 	btn.anchor_left   = 1.0; btn.anchor_right  = 1.0
 	btn.anchor_top    = 0.0; btn.anchor_bottom = 0.0
@@ -532,9 +567,207 @@ func _build_fullscreen_btn() -> void:
 	btn.add_theme_font_size_override("font_size", 16)
 	btn.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
-	btn.tooltip_text = "Plein écran  (F11)"
-	btn.pressed.connect(func() -> void: GameSettings.set_fullscreen(not GameSettings.fullscreen))
+	btn.pressed.connect(_toggle_settings_overlay)
 	add_child(btn)
+
+# ─── Panneau Paramètres ───────────────────────────────────────
+
+func _toggle_settings_overlay() -> void:
+	if _settings_overlay and is_instance_valid(_settings_overlay):
+		_settings_overlay.queue_free()
+		_settings_overlay = null
+		return
+	_open_settings_overlay()
+
+func _open_settings_overlay() -> void:
+	var overlay := ColorRect.new()
+	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	overlay.color        = Color(0.0, 0.0, 0.0, 0.45)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			_toggle_settings_overlay()
+	)
+	add_child(overlay)
+	_settings_overlay = overlay
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_PASS
+	overlay.add_child(center)
+
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(380, 0)
+	card.add_theme_stylebox_override("panel",
+			UIHelpers.card_style(UIColors.TEXT_HEADER, 0.08, 0.35, 1, 6))
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	card.gui_input.connect(func(_ev: InputEvent) -> void: pass)
+	center.add_child(card)
+
+	var mg := UIHelpers.margin_of(16)
+	card.add_child(mg)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 12)
+	mg.add_child(vb)
+
+	# ── En-tête ───────────────────────────────────────────────
+	var hdr := HBoxContainer.new()
+	vb.add_child(hdr)
+	var title_lbl := Label.new()
+	title_lbl.text = "⚙  PARAMÈTRES"
+	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_lbl.add_theme_font_size_override("font_size", 16)
+	title_lbl.add_theme_color_override("font_color", Color.WHITE)
+	hdr.add_child(title_lbl)
+	var close_btn := Button.new()
+	close_btn.text = "✕"
+	close_btn.flat = true
+	close_btn.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	close_btn.add_theme_color_override("font_hover_color", Color.WHITE)
+	close_btn.pressed.connect(_toggle_settings_overlay)
+	hdr.add_child(close_btn)
+
+	vb.add_child(_settings_sep())
+
+	# ── AUDIO ────────────────────────────────────────────────
+	vb.add_child(_settings_section("◆  AUDIO"))
+	vb.add_child(_settings_slider("Musique",   GameSettings.volume_music,
+			func(v: float) -> void: GameSettings.set_volume_music(v)))
+	vb.add_child(_settings_slider("Bruitage",  GameSettings.volume_sfx,
+			func(v: float) -> void: GameSettings.set_volume_sfx(v)))
+
+	vb.add_child(_settings_sep())
+
+	# ── AFFICHAGE ────────────────────────────────────────────
+	vb.add_child(_settings_section("◆  AFFICHAGE"))
+	var fs_row := HBoxContainer.new()
+	fs_row.add_theme_constant_override("separation", 10)
+	vb.add_child(fs_row)
+	var fs_lbl := Label.new()
+	fs_lbl.text = "Plein Écran"
+	fs_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fs_lbl.add_theme_font_size_override("font_size", 13)
+	fs_lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
+	fs_row.add_child(fs_lbl)
+	var fs_hint := Label.new()
+	fs_hint.text = "F11"
+	fs_hint.add_theme_font_size_override("font_size", 11)
+	fs_hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	fs_row.add_child(fs_hint)
+	var fs_check := CheckButton.new()
+	fs_check.button_pressed = GameSettings.fullscreen
+	fs_check.toggled.connect(func(v: bool) -> void: GameSettings.set_fullscreen(v))
+	fs_row.add_child(fs_check)
+
+	vb.add_child(_settings_sep())
+
+	# ── SAUVEGARDE ───────────────────────────────────────────
+	vb.add_child(_settings_section("◆  SAUVEGARDE"))
+	var exp_btn := Button.new()
+	exp_btn.text = "📤  Exporter la sauvegarde"
+	exp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	exp_btn.pressed.connect(_export_save)
+	vb.add_child(exp_btn)
+	var imp_btn := Button.new()
+	imp_btn.text = "📥  Importer une sauvegarde"
+	imp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	imp_btn.pressed.connect(_import_save)
+	vb.add_child(imp_btn)
+
+func _settings_sep() -> ColorRect:
+	var sep := ColorRect.new()
+	sep.custom_minimum_size      = Vector2(0, 1)
+	sep.color                    = Color(1.0, 1.0, 1.0, 0.15)
+	sep.size_flags_horizontal    = Control.SIZE_EXPAND_FILL
+	return sep
+
+func _settings_section(text: String) -> Label:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	return lbl
+
+func _settings_slider(label: String, initial: float, on_change: Callable) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var lbl := Label.new()
+	lbl.text                      = label
+	lbl.custom_minimum_size       = Vector2(72, 0)
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
+	row.add_child(lbl)
+	var slider := HSlider.new()
+	slider.min_value              = 0.0
+	slider.max_value              = 1.0
+	slider.step                   = 0.01
+	slider.value                  = initial
+	slider.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
+	row.add_child(slider)
+	var pct := Label.new()
+	pct.text                      = "%d %%" % int(initial * 100)
+	pct.custom_minimum_size       = Vector2(42, 0)
+	pct.horizontal_alignment      = HORIZONTAL_ALIGNMENT_RIGHT
+	pct.add_theme_font_size_override("font_size", 12)
+	pct.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	row.add_child(pct)
+	slider.value_changed.connect(func(v: float) -> void:
+		pct.text = "%d %%" % int(v * 100)
+		on_change.call(v)
+	)
+	return row
+
+func _export_save() -> void:
+	if not FileAccess.file_exists(SaveManager.SAVE_PATH):
+		return
+	var fd := FileDialog.new()
+	fd.file_mode     = FileDialog.FILE_MODE_SAVE_FILE
+	fd.access        = FileDialog.ACCESS_FILESYSTEM
+	fd.filters       = PackedStringArray(["*.json ; Sauvegarde JSON"])
+	fd.current_file  = "IdleEvolutionSave.json"
+	add_child(fd)
+	fd.popup_centered(Vector2(700, 480))
+	fd.file_selected.connect(func(dest: String) -> void:
+		var src := FileAccess.open(SaveManager.SAVE_PATH, FileAccess.READ)
+		if src:
+			var content := src.get_as_text()
+			src.close()
+			var dst := FileAccess.open(dest, FileAccess.WRITE)
+			if dst:
+				dst.store_string(content)
+				dst.close()
+		fd.queue_free()
+	)
+	fd.canceled.connect(fd.queue_free)
+
+func _import_save() -> void:
+	var fd := FileDialog.new()
+	fd.file_mode  = FileDialog.FILE_MODE_OPEN_FILE
+	fd.access     = FileDialog.ACCESS_FILESYSTEM
+	fd.filters    = PackedStringArray(["*.json ; Sauvegarde JSON"])
+	add_child(fd)
+	fd.popup_centered(Vector2(700, 480))
+	fd.file_selected.connect(func(src_path: String) -> void:
+		var src := FileAccess.open(src_path, FileAccess.READ)
+		if src == null:
+			fd.queue_free()
+			return
+		var content := src.get_as_text()
+		src.close()
+		var json := JSON.new()
+		if json.parse(content) != OK:
+			fd.queue_free()
+			return
+		var dst := FileAccess.open(SaveManager.SAVE_PATH, FileAccess.WRITE)
+		if dst:
+			dst.store_string(content)
+			dst.close()
+		fd.queue_free()
+		get_tree().reload_current_scene()
+	)
+	fd.canceled.connect(fd.queue_free)
+
 
 # ─── Phase d'éclosion : clic ─────────────────────────────────
 # Incrémente le compteur de clics ; au dernier, déclenche l'éclosion en T0.
@@ -711,10 +944,48 @@ func _go_sanctuary() -> void: _open_panel("sanctuary")
 func _go_relic()     -> void: _open_panel("relic")
 func _go_tbd()       -> void: _open_panel("tbd")
 
+# Met à jour les pastilles de notification sur les HexItems.
+func _update_badges() -> void:
+	# hero : entité active prête à évoluer OU passif prêt
+	var hero_alert := false
+	var cid := GameData.player.get("active_creature_id", "") as String
+	if MasterySystem.can_evolve(cid):
+		hero_alert = true
+	if not hero_alert:
+		for pid in (GameData.get_entity(cid).get("unlocked_passives", []) as Array) + \
+				(GameData.player.get("active_passives", []) as Array):
+			if MasterySystem.can_evolve(pid as String):
+				hero_alert = true
+				break
+
+	# forge : un équipement avec XP pleine
+	var forge_alert := false
+	for entry in ForgePanel.BIOME_EQUIP:
+		if GameData.equipment_xp_full(entry[1] as String):
+			forge_alert = true
+			break
+
+	# adventure : un biome ou une créature prêt à évoluer
+	var adv_alert := false
+	for eid in GameData.entities:
+		var e := GameData.entities[eid] as Dictionary
+		if e.get("entity_type", "") in ["biome", "creature"] and MasterySystem.can_evolve(eid):
+			adv_alert = true
+			break
+
+	for pid in _hex_items:
+		var item := _hex_items[pid] as HexItem
+		match pid:
+			"hero":      item.has_notification = hero_alert
+			"forge":     item.has_notification = forge_alert
+			"adventure": item.has_notification = adv_alert
+		item.queue_redraw()
+
 # Refresh du panneau forge ou héro si ouvert, après un drop de ressources ou une forge.
 func _on_resources_changed_refresh() -> void:
 	if _active_panel_id == "forge" or _active_panel_id == "hero":
 		_open_panel(_active_panel_id)
+	_update_badges()
 
 # ─── Utils ────────────────────────────────────────────────────
 # Positionne ctrl centré sur pos avec la taille sz, en mode ancre centre.

@@ -6,10 +6,10 @@
 script = ExtResource("1")
 id = "ingredient_oscar"
 nom_affichage_fr = "Essence d'Oscar"
+lore_fr = "Ce qu'il reste d'Oscar une fois la malediction levee. Une lumiere doree, chaude, qui pese etrangement lourd dans la main."
 nom_affichage_en = "Oscar's Essence"
 biome_source_id = "biome_foret"
 est_unique = true
-quantite_en_stock = 0
 chance = 0.0
 qty_min = 1
 qty_max = 1

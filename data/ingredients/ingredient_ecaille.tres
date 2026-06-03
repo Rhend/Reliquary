@@ -6,10 +6,10 @@
 script = ExtResource("1")
 id = "res_ecaille"
 nom_affichage_fr = "Écaille"
+lore_fr = "Luisante et dure comme du metal, cette ecaille a resiste a des eaux acides pendant des annees. Elle constitue une armure naturelle parfaite."
 nom_affichage_en = "Scale"
 biome_source_id = "biome_montagne"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.25
 qty_min = 1
 qty_max = 3

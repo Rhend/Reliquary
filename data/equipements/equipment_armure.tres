@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "equipment_armure"
 nom_affichage_fr = "Carapace des Marais"
+lore_fr = "Prelevee sur une creature dont personne ne se souvient plus du nom. Elle absorbe les coups comme une eponge absorbe l'eau noire du marecage."
 nom_affichage_en = "Swamp Carapace"
 slot = 2
 biome_source_id = "biome_marecage"

@@ -55,7 +55,6 @@ var village: Dictionary = {
 }
 
 var player: Dictionary = {
-	"luck":               0,
 	"resources":          {},          # item_id → quantité possédée
 	"active_creature_id": "hero",
 	"active_biome_id":    "",
@@ -96,16 +95,16 @@ func _load_all_entities() -> void:
 	# Pièges et bénédictions : entités de maîtrise (XP + évolution manuelle)
 	_load_tres_entities_from_folder("res://data/pieges/",          "trap")
 	_load_tres_entities_from_folder("res://data/benedictions/",    "benediction")
-	# Données statiques VS
+	# Données statiques JSON — chargées EN PREMIER pour que les .tres les écrasent si même ID
+	_load_data_from_folder("res://data/resources/", "resource")
+	_load_data_from_folder("res://data/forge/",     "recipe")
+	# Données statiques VS — écrasent les resources/ si ID partagé (ex: res_fourrure)
 	_load_tres_data_from_folder("res://data/ingredients/", "ingredient")
 	_load_tres_data_from_folder("res://data/fragments/",   "fragment")
 	# Héros : chargé depuis .tres (source de vérité)
 	_load_tres_entities_from_folder("res://data/hero/", "hero")
 	_load_tres_entities_from_folder("res://data/passives/", "passive")
 	_load_tres_entities_from_folder("res://data/equipements/", "equipment")
-	# Données statiques JSON
-	_load_data_from_folder("res://data/resources/", "resource")
-	_load_data_from_folder("res://data/forge/",     "recipe")
 
 # Charge les .tres d'un dossier et initialise les champs de maîtrise.
 func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:
@@ -402,8 +401,8 @@ func can_forge(equipment_id: String) -> bool:
 	if recipe.is_empty():
 		return false
 	for req in recipe:
-		var ingr := get_entity(req.get("ingredient_id", ""))
-		if ingr.is_empty() or int(ingr.get("quantite_en_stock", 0)) < int(req.get("quantite", 1)):
+		var ingr_id := req.get("ingredient_id", "") as String
+		if ingr_id.is_empty() or int(player["resources"].get(ingr_id, 0)) < int(req.get("quantite", 1)):
 			return false
 	return true
 
@@ -420,12 +419,14 @@ func forge(equipment_id: String) -> bool:
 	var current := int(equip.get("maitrise_actuelle", 0))
 	var recipe  := get_forge_recipe(equipment_id, current + 1)
 	for req in recipe:
-		var ingr := get_entity(req.get("ingredient_id", ""))
-		ingr["quantite_en_stock"] = int(ingr.get("quantite_en_stock", 0)) - int(req.get("quantite", 1))
+		var ingr_id := req.get("ingredient_id", "") as String
+		var consume := int(req.get("quantite", 1))
+		player["resources"][ingr_id] = maxi(0, int(player["resources"].get(ingr_id, 0)) - consume)
 	equip["maitrise_actuelle"]           = current + 1
 	equip["xp_maitrise_actuelle"]        = 0.0
 	equip["xp_maitrise_palier_suivant"]  = palier_suivant_cost("equipment", current + 1)
 	EventBus.equipement_evolue.emit(equipment_id, current + 1)
+	EventBus.resources_changed.emit()
 	return true
 
 # ═══════════════════════════════════════════════════════════
@@ -493,52 +494,6 @@ func get_forge_recipes() -> Array:
 			result.append(entities[id])
 	return result
 
-# Vérifie si le joueur possède tous les ingrédients d'une recette.
-func can_craft(recipe: Dictionary) -> bool:
-	for ing in recipe.get("ingredients", []):
-		var needed = int(ing.get("qty", 0))
-		var have   = int(player.get("resources", {}).get(ing.get("item_id", ""), 0))
-		if have < needed:
-			return false
-	return true
-
-# Consomme les ingrédients et équipe le résultat dans le slot approprié.
-# Retourne false si les ressources sont insuffisantes.
-func craft(recipe: Dictionary) -> bool:
-	if not can_craft(recipe):
-		return false
-	for ing in recipe.get("ingredients", []):
-		var item_id = ing.get("item_id", "")
-		var qty     = int(ing.get("qty", 0))
-		player["resources"][item_id] = int(player["resources"].get(item_id, 0)) - qty
-	var result_id = recipe.get("result_id", "")
-	if result_id != "":
-		player["equipment_inventory"].append(result_id)
-	EventBus.resources_changed.emit()
-	return true
-
-func equip_item(item_id: String) -> void:
-	var item = get_entity(item_id)
-	var slot_idx: int = int(item.get("slot", -1))
-	if slot_idx < 0 or slot_idx >= Enums.SlotEquipement.size():
-		return
-	var slot: String = Enums.SlotEquipement.keys()[slot_idx].to_lower()
-	if not player["equipped"].has(slot):
-		return
-	var old_id = player["equipped"].get(slot, "")
-	if old_id != "":
-		player["equipment_inventory"].append(old_id)
-	player["equipment_inventory"].erase(item_id)
-	player["equipped"][slot] = item_id
-	EventBus.equipment_changed.emit()
-
-func unequip_item(slot: String) -> void:
-	var item_id = player["equipped"].get(slot, "")
-	if item_id == "":
-		return
-	player["equipment_inventory"].append(item_id)
-	player["equipped"][slot] = ""
-	EventBus.equipment_changed.emit()
 
 # ═══════════════════════════════════════════════════════════
 #  Ressources

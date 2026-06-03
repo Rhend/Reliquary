@@ -1,10 +1,11 @@
 # ============================================================
 # SaveManager.gd — Sauvegarde automatique sur progression.
 #
-# Format JSON à trois sections :
-#   "player"   — dict complet GameData.player
-#   "entities" — tier / xp / unlocked_passives par entité à progression
+# Format JSON à quatre sections :
+#   "player"   — dict complet GameData.player (resources, equipped, bestiary…)
+#   "entities" — état par entity_type → { id → champs } (tier, xp, flags d'état)
 #   "systems"  — état runtime des autoloads (cooldowns, etc.)
+#   "village"  — dict complet GameData.village (tier, fragments, xp, eclos…)
 #
 # Étendre la sauvegarde :
 #   • Nouvelle donnée joueur  → l'ajouter dans GameData.player (sauvegardé automatiquement).
@@ -23,7 +24,7 @@
 extends Node
 
 const SAVE_PATH     := "user://IdleEvolutionSave.json"
-const SAVE_VER      := 11
+const SAVE_VER      := 12
 const SAVE_DEBOUNCE := 2.0
 
 var _save_dirty:  bool  = false
@@ -43,6 +44,8 @@ func _ready() -> void:
 	EventBus.entity_evolved.connect(_on_progress)
 	EventBus.passive_unlocked.connect(_on_progress)
 	EventBus.equipment_changed.connect(_on_progress)
+	EventBus.equipement_evolue.connect(_on_progress)
+	EventBus.village_tier_change.connect(_on_progress)
 
 func _on_progress(_a = null, _b = null) -> void:
 	_save_dirty = true
@@ -87,14 +90,16 @@ func _save_entities() -> Dictionary:
 			entry["xp_maitrise_actuelle"] = e.get("xp_maitrise_actuelle", 0.0)
 			entry["unlocked_passives"]    = e.get("unlocked_passives",    [])
 
-		# Champs d'état propres aux nouvelles entités
 		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-				"est_collecte", "est_debloque", "quantite_en_stock"]:
+				"est_collecte", "est_debloque"]:
 			if e.has(field):
 				entry[field] = e[field]
 
 		if not entry.is_empty():
-			result[entity_id] = entry
+			var etype: String = e.get("entity_type", "misc")
+			if not result.has(etype):
+				result[etype] = {}
+			result[etype][entity_id] = entry
 	return result
 
 func _save_systems() -> Dictionary:
@@ -127,13 +132,17 @@ func load_save() -> void:
 
 	var data: Dictionary = json.get_data()
 	var saved_ver: int   = int(data.get("version", 0))
-	if saved_ver != SAVE_VER:
-		push_warning("SaveManager: version %d trouvée, %d attendue — sauvegarde ignorée (supprimer le fichier pour repartir proprement)" \
+	# Versions supportées : 11 (format entities plat) et 12+ (hiérarchique).
+	if saved_ver < 11 or saved_ver > SAVE_VER:
+		push_warning("SaveManager: version %d non supportée (attendu 11–%d) — sauvegarde ignorée" \
 			% [saved_ver, SAVE_VER])
 		return
 
 	_load_player(data)
-	_load_entities(data)
+	if saved_ver < 12:
+		_load_entities_v11(data)
+	else:
+		_load_entities(data)
 	_load_systems(data)
 	if data.has("village"):
 		GameData.village.merge(data["village"], true)
@@ -144,7 +153,8 @@ func _load_player(data: Dictionary) -> void:
 		return
 	GameData.player.merge(data["player"], true)
 
-func _load_entities(data: Dictionary) -> void:
+# Charge le format v11 : entities est un dict plat { entity_id → entry }.
+func _load_entities_v11(data: Dictionary) -> void:
 	if not data.has("entities"):
 		return
 	for entity_id in data["entities"]:
@@ -152,17 +162,38 @@ func _load_entities(data: Dictionary) -> void:
 			continue
 		var saved: Dictionary = data["entities"][entity_id]
 		var e: Dictionary     = GameData.entities[entity_id]
-
 		if e.has("maitrise_actuelle"):
 			e["maitrise_actuelle"]    = saved.get("maitrise_actuelle",    0)
 			e["xp_maitrise_actuelle"] = saved.get("xp_maitrise_actuelle", 0.0)
 			e["unlocked_passives"]    = saved.get("unlocked_passives",    [])
 			e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
-
 		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-				"est_collecte", "est_debloque", "quantite_en_stock"]:
+				"est_collecte", "est_debloque"]:
 			if e.has(field) and saved.has(field):
 				e[field] = saved[field]
+
+func _load_entities(data: Dictionary) -> void:
+	if not data.has("entities"):
+		return
+	# Format v12+ : hiérarchique { entity_type → { entity_id → entry } }
+	for _etype in data["entities"]:
+		var type_block: Dictionary = data["entities"][_etype]
+		for entity_id in type_block:
+			if not GameData.entities.has(entity_id):
+				continue
+			var saved: Dictionary = type_block[entity_id]
+			var e: Dictionary     = GameData.entities[entity_id]
+
+			if e.has("maitrise_actuelle"):
+				e["maitrise_actuelle"]    = saved.get("maitrise_actuelle",    0)
+				e["xp_maitrise_actuelle"] = saved.get("xp_maitrise_actuelle", 0.0)
+				e["unlocked_passives"]    = saved.get("unlocked_passives",    [])
+				e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
+
+			for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
+					"est_collecte", "est_debloque"]:
+				if e.has(field) and saved.has(field):
+					e[field] = saved[field]
 
 func _load_systems(data: Dictionary) -> void:
 	if not data.has("systems"):

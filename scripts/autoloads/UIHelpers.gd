@@ -281,8 +281,18 @@ static func add_hover_feedback(node: Control) -> void:
 #   [← Village]  TITRE CENTRÉ
 # on_back est connecté au pressed du bouton retour.
 # Branche un tooltip JRPG sur node : hover → TooltipOverlay.show_for, exit → hide.
-static func register_tooltip(node: Control, title: String, body: String, color: Color = Color.WHITE) -> void:
-	node.mouse_entered.connect(func() -> void: TooltipOverlay.show_for(title, body, color))
+static func register_tooltip(node: Control, title: String, body: String,
+		color: Color = Color.WHITE, lore: String = "") -> void:
+	# Déconnecte le tooltip précédent s'il y en a un (même nœud, nouveau contenu).
+	if node.has_meta("_tt_cb"):
+		var old_cb: Callable = node.get_meta("_tt_cb")
+		if node.mouse_entered.is_connected(old_cb):
+			node.mouse_entered.disconnect(old_cb)
+	if node.mouse_exited.is_connected(TooltipOverlay.hide_tooltip):
+		node.mouse_exited.disconnect(TooltipOverlay.hide_tooltip)
+	var cb := func() -> void: TooltipOverlay.show_for(title, body, color, lore)
+	node.set_meta("_tt_cb", cb)
+	node.mouse_entered.connect(cb)
 	node.mouse_exited.connect(TooltipOverlay.hide_tooltip)
 
 static func scene_header_bar(title: String, color: Color, on_back: Callable) -> Control:
@@ -294,6 +304,7 @@ static func scene_header_bar(title: String, color: Color, on_back: Callable) -> 
 	var back := Button.new()
 	back.text = "← Village"
 	back.pressed.connect(on_back)
+	register_tooltip(back, "Retour au Village", "Revenir au hub principal.", Color.WHITE)
 	hbox.add_child(back)
 	var lbl := Label.new()
 	lbl.text                 = title
@@ -303,3 +314,21 @@ static func scene_header_bar(title: String, color: Color, on_back: Callable) -> 
 	lbl.add_theme_color_override("font_color", color)
 	hbox.add_child(lbl)
 	return bar
+
+# Fondu noir → changement de scène.
+# Ajoute un ColorRect noir en overlay sur `root_node`, l'anime en fondu,
+# puis change la scène. Durée du fade : 0.25s.
+static func fade_to_scene(root_node: Node, scene_path: String) -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if root_node is Control:
+		overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	else:
+		overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root_node.add_child(overlay)
+	var tw := root_node.create_tween()
+	tw.tween_property(overlay, "color:a", 1.0, 0.22)
+	tw.tween_callback(func() -> void:
+		root_node.get_tree().change_scene_to_file(scene_path)
+	)

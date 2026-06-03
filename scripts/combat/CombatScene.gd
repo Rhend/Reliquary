@@ -175,14 +175,14 @@ func _build_column(is_hero: bool) -> Control:
 
 # ── Feed passifs ───────────────────────────────────────────
 func _build_feed() -> Control:
-	var wrap := CenterContainer.new()
-	wrap.custom_minimum_size = Vector2(0, 28)
+	var feed_wrap := CenterContainer.new()
+	feed_wrap.custom_minimum_size = Vector2(0, 28)
 	_feed_box = HBoxContainer.new()
 	_feed_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_feed_box.add_theme_constant_override("separation", 6)
 	_feed_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wrap.add_child(_feed_box)
-	return wrap
+	feed_wrap.add_child(_feed_box)
+	return feed_wrap
 
 # ── Journal à onglets ──────────────────────────────────────
 func _build_log() -> Control:
@@ -198,7 +198,17 @@ func _build_log() -> Control:
 		b.text = tab
 		b.toggle_mode = true
 		b.button_pressed = (tab == _log_filter)
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
 		b.add_theme_font_size_override("font_size", 11)
+		var is_active := (tab == _log_filter)
+		var tc := UIColors.FILTER_ON if is_active else UIColors.TEXT_MUTED
+		b.add_theme_color_override("font_color",         tc)
+		b.add_theme_color_override("font_pressed_color", UIColors.FILTER_ON)
+		b.add_theme_color_override("font_hover_color",   Color(1, 1, 1, 0.75))
+		b.add_theme_stylebox_override("normal",   UIHelpers.card_style(tc, 0.0 if not is_active else 0.12, 0.0 if not is_active else 0.50, 1 if is_active else 0, 4))
+		b.add_theme_stylebox_override("pressed",  UIHelpers.card_style(UIColors.FILTER_ON, 0.12, 0.50, 1, 4))
+		b.add_theme_stylebox_override("hover",    UIHelpers.card_style(UIColors.TEXT_MUTED, 0.08, 0.30, 0, 4))
 		b.pressed.connect(_set_filter.bind(tab))
 		tabs.add_child(b)
 		_tab_buttons[tab] = b
@@ -223,30 +233,36 @@ func _build_log() -> Control:
 
 # ── Barre de bas ───────────────────────────────────────────
 func _build_bottom_bar() -> Control:
-	var m := UIHelpers.margin_of(6)
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 8)
-	m.add_child(hbox)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
 
 	_xp_label = Label.new()
 	_xp_label.text = "XP ce cycle — 0"
+	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_xp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_xp_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_xp_label.add_theme_font_size_override("font_size", 15)
 	_xp_label.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	hbox.add_child(_xp_label)
+	vbox.add_child(_xp_label)
 
 	var tcolor := _hero_tier_color()
 	_flee_btn = Button.new()
 	_flee_btn.text = "Mettre fin à l'expédition"
 	_flee_btn.custom_minimum_size = Vector2(0, 42)
+	_flee_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_flee_btn.add_theme_font_size_override("font_size", 15)
 	_flee_btn.add_theme_color_override("font_color", tcolor)
 	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	_flee_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	_flee_btn.pressed.connect(_on_flee_pressed)
-	hbox.add_child(_flee_btn)
-	return m
+
+	var flee_margin := MarginContainer.new()
+	flee_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	flee_margin.add_theme_constant_override("margin_left",  5)
+	flee_margin.add_theme_constant_override("margin_right", 5)
+	flee_margin.add_theme_constant_override("margin_bottom", 4)
+	flee_margin.add_child(_flee_btn)
+	vbox.add_child(flee_margin)
+	return vbox
 
 # ── Helpers UI ─────────────────────────────────────────────
 
@@ -315,7 +331,8 @@ func _on_adventure_started(_biome_id: String) -> void:
 		int(AdventureSystem.current_hp),
 		int(hstats.get("atk", 0)) + int(heqp.get("atk", 0)),
 		int(hstats.get("def", 0)) + int(heqp.get("def", 0))]
-	UIHelpers.register_tooltip(_hero_name, hname, htt, UIColors.tier_color(htier))
+	UIHelpers.register_tooltip(_hero_name, hname, htt, UIColors.tier_color(htier),
+			c.get("lore_fr", "") as String)
 
 	# Colonne ennemi en attente (vide) jusqu'au premier événement.
 	_enemy_name.text = "—"
@@ -383,7 +400,9 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 		int(enemy_hp),
 		int(enemy.get("atk", 0)),
 		int(enemy.get("def", 0))]
-	UIHelpers.register_tooltip(_enemy_name, ename, ett, UIColors.tier_color(etier))
+	var enemy_entity := GameData.get_entity(enemy.get("id", ""))
+	UIHelpers.register_tooltip(_enemy_name, ename, ett, UIColors.tier_color(etier),
+			enemy_entity.get("lore_fr", "") as String)
 
 	_hero_ring.set_cooldown(0.0)
 	_enemy_ring.set_cooldown(0.0)
@@ -469,11 +488,12 @@ func _on_combat_ended(result: Dictionary) -> void:
 		_enemy_ring.fade_defeated()
 		_cycle_xp = AdventureSystem.get_cycle_xp()
 		_update_xp_label()
-		_add_log("[color=%s]Victoire[/color]" % _hex(UIColors.LOG_VICTORY), ["Héros"])
+		_add_log("[color=%s]— Victoire —[/color]" % _hex(UIColors.LOG_VICTORY), ["Héros"])
 	else:
 		_enemy_ring.celebrate()
 		_hero_ring.fade_defeated()
-		_add_log("[color=%s]Défaite[/color]" % _hex(Color(1.0, 0.8, 0.2)), ["Monstre"])
+		_add_log("[color=%s]— Défaite —[/color]" % _hex(Color(1.0, 0.5, 0.2)), ["Monstre"])
+
 
 func _on_heal_applied(amount: float, new_hp: float) -> void:
 	_hero_ring.update_hp(new_hp)
@@ -558,18 +578,28 @@ func _add_log(bbcode: String, tags: Array) -> void:
 	rt.visible = _matches_filter(tags)
 
 func _log_attack(attacker_name: String, dmg: int, is_crit: bool, tags: Array) -> void:
+	var is_hero_attacker := "Héros" in tags
+	var prefix   := "[color=%s]%s[/color] " % [
+		_hex(Color(0.55, 0.36, 0.97) if is_hero_attacker else Color(0.86, 0.15, 0.15)),
+		"⚔" if is_hero_attacker else "🗡"
+	]
 	var name_part := "[color=%s]%s[/color]" % [_hex(UIColors.LOG_IGNORED), attacker_name]
 	var dmg_part: String
 	if is_crit:
 		dmg_part = "[b][color=%s]★ %d[/color][/b]" % [_hex(UIColors.FILTER_ON), dmg]
 	else:
 		dmg_part = "[color=%s]-%d[/color]" % [_hex(UIColors.LOG_DEFEAT), dmg]
-	_add_log("%s inflige %s" % [name_part, dmg_part], tags)
+	_add_log("%s%s → %s" % [prefix, name_part, dmg_part], tags)
 
 func _set_filter(tab: String) -> void:
 	_log_filter = tab
 	for tab_name: String in _tab_buttons:
-		_tab_buttons[tab_name].button_pressed = (tab_name == tab)
+		var b: Button = _tab_buttons[tab_name]
+		var active := (tab_name == tab)
+		b.button_pressed = active
+		var tc := UIColors.FILTER_ON if active else UIColors.TEXT_MUTED
+		b.add_theme_color_override("font_color", tc)
+		b.add_theme_stylebox_override("normal", UIHelpers.card_style(tc, 0.12 if active else 0.0, 0.50 if active else 0.0, 1 if active else 0, 4))
 	for entry: Dictionary in _log_entries:
 		entry["node"].visible = _matches_filter(entry["tags"])
 
@@ -682,4 +712,4 @@ func _navigate_to_summary() -> void:
 	if _navigating:
 		return
 	_navigating = true
-	get_tree().change_scene_to_file("res://scenes/cycle/CycleSummaryScreen.tscn")
+	UIHelpers.fade_to_scene(self, "res://scenes/cycle/CycleSummaryScreen.tscn")

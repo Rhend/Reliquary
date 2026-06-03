@@ -6,10 +6,10 @@
 script = ExtResource("1")
 id = "res_pierre_montagne"
 nom_affichage_fr = "Pierre de Montagne"
+lore_fr = "Polie par des millenaires de vents glaces. Elle vibre legerement dans la paume - comme si quelque chose y etait enferme."
 nom_affichage_en = "Mountain Stone"
 biome_source_id = "biome_montagne"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.15
 qty_min = 1
 qty_max = 2

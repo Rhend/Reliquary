@@ -206,11 +206,13 @@ func _build_sounds() -> void:
 	_drone = AudioStreamPlayer.new()
 	_drone.volume_db   = -8.0
 	_drone.pitch_scale = 0.7
+	_drone.bus         = "SFX"
 	_drone.stream      = _generate_drone_wav()
 	add_child(_drone)
 
 	_crystal = AudioStreamPlayer.new()
 	_crystal.volume_db = -4.0
+	_crystal.bus       = "SFX"
 	_crystal.stream    = _generate_crystal_wav()
 	add_child(_crystal)
 

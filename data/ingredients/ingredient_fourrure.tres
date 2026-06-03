@@ -6,10 +6,10 @@
 script = ExtResource("1")
 id = "res_fourrure"
 nom_affichage_fr = "Fourrure"
+lore_fr = "Touffue et resistante, elle garde la chaleur mieux que n'importe quel tissu. Les rats des egouts en ont une epaisseur surprenante."
 nom_affichage_en = "Fur"
 biome_source_id = "biome_foret"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.25
 qty_min = 1
 qty_max = 3

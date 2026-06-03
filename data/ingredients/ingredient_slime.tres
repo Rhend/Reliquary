@@ -6,10 +6,10 @@
 script = ExtResource("1")
 id = "res_slime"
 nom_affichage_fr = "Slime Visqueux"
+lore_fr = "Difficile a tenir, impossible a ignorer. Sa composition chimique reste un mystere, mais ses proprietes adhesives sont bien connues des forgerons."
 nom_affichage_en = "Viscous Slime"
 biome_source_id = "biome_marecage"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.3
 qty_min = 1
 qty_max = 4

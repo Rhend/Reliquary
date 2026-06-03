@@ -6,10 +6,10 @@
 script = ExtResource("1")
 id = "res_mineral_fer"
 nom_affichage_fr = "Minerai de Fer"
+lore_fr = "La montagne en regorge, mais l'extraire demande du courage. On dit que les veines suivent les cicatrices d'anciennes batailles souterraines."
 nom_affichage_en = "Iron Ore"
 biome_source_id = "biome_foret"
 est_unique = false
-quantite_en_stock = 0
 chance = 0.15
 qty_min = 1
 qty_max = 2

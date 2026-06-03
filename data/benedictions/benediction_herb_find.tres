@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "herb_find"
 nom_affichage_fr = "Herbes médicinales"
+lore_fr = "Connues de tous ceux qui vivent pres de la foret. Elles n'impressionnent pas, mais ont sauve plus de blesses que n'importe quel remede rare."
 nom_affichage_en = "Medicinal Herbs"
 biome_source_id = "biome_foret"
 effet = "heal"

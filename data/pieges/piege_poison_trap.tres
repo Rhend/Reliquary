@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "poison_trap"
 nom_affichage_fr = "Baies empoisonnées"
+lore_fr = "D'un rouge eclatant, appetissantes, parfaitement letales. La foret attire avec la beaute et tue avec l'ingenuosite."
 nom_affichage_en = "Poison Berries"
 biome_source_id = "biome_foret"
 degats = 25

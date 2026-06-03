@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "creature_montagne_profondeur"
 nom_affichage_fr = "Troll de Pierre"
+lore_fr = "Ne des parois rocheuses, le Troll de Pierre se deplace si lentement qu'on pourrait le confondre avec le decor. Jusqu'a ce qu'il frappe."
 nom_affichage_en = "Stone Troll"
 est_unique = false
 zone_associee = 1

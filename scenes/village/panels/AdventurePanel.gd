@@ -18,14 +18,44 @@ static func build(host: Village) -> void:
 	if not host._adv_selected_biome_id.is_empty() and GameData.get_entity(host._adv_selected_biome_id).is_empty():
 		host._adv_selected_biome_id = ""
 
+	# ── Expédition en cours ───────────────────────────────────
+	if AdventureSystem.is_running:
+		var running_biome := GameData.get_entity(AdventureSystem.current_biome_id)
+		var rname := running_biome.get("nom_affichage_fr", "Biome") as String
+		var zone_names := ["Surface", "Profondeur", "Abysse"]
+		var zone_str   := zone_names[clampi(int(AdventureSystem.zone_courante), 0, 2)] as String
+		var info := PanelContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_stylebox_override("panel", UIHelpers.card_style(tcolor, 0.10, 0.60, 2, 6))
+		var m := UIHelpers.margin_of(10)
+		info.add_child(m)
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 3)
+		m.add_child(vb)
+		var lbl1 := Label.new()
+		lbl1.text = "⚔  Expédition en cours"
+		lbl1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl1.add_theme_font_size_override("font_size", 14)
+		lbl1.add_theme_color_override("font_color", tcolor)
+		vb.add_child(lbl1)
+		var lbl2 := Label.new()
+		lbl2.text = "%s  —  %s" % [rname, zone_str]
+		lbl2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl2.add_theme_font_size_override("font_size", 11)
+		lbl2.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		vb.add_child(lbl2)
+		host._rp_content.add_child(info)
+		# Pas de bouton de départ quand une expédition tourne déjà
+		host._rp_content.add_child(HSeparator.new())
+
 	# ── Slot supérieur : placeholder OU bouton ────────────────
 	var no_biome_selected := host._adv_selected_biome_id.is_empty()
 
-	# Encadré neutre (aucun biome choisi)
+	# Encadré neutre (aucun biome choisi) — masqué si expédition en cours
 	var placeholder := PanelContainer.new()
 	placeholder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	placeholder.custom_minimum_size   = Vector2(0, 52)
-	placeholder.visible = no_biome_selected
+	placeholder.visible = no_biome_selected and not AdventureSystem.is_running
 	placeholder.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.25, 1, 6))
 	var ph_lbl := Label.new()
 	ph_lbl.text = "Choisir un biome pour partir en expédition"
@@ -38,13 +68,13 @@ static func build(host: Village) -> void:
 	placeholder.add_child(ph_lbl)
 	host._rp_content.add_child(placeholder)
 
-	# Bouton actif (biome sélectionné)
+	# Bouton actif (biome sélectionné) — masqué si expédition en cours
 	var btn := Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size   = Vector2(0, 52)
 	btn.add_theme_font_size_override("font_size", 17)
 	btn.add_theme_color_override("font_color", tcolor)
-	btn.visible = not no_biome_selected
+	btn.visible = not no_biome_selected and not AdventureSystem.is_running
 	if not no_biome_selected:
 		var bname: String = str(GameData.get_entity(host._adv_selected_biome_id).get("nom_affichage_fr", host._adv_selected_biome_id)).to_upper()
 		btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
@@ -155,7 +185,8 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 		btooltip_body += "\nMécanique : " + _mech_name(mech_id)
 	UIHelpers.register_tooltip(panel,
 			biome.get("nom_affichage_fr", biome_id) as String,
-			btooltip_body, UIColors.tier_color(btier))
+			btooltip_body, UIColors.tier_color(btier),
+			biome.get("lore_fr", "") as String)
 
 	# Flèche d'accordéon, à droite de l'en-tête du template.
 	var arrow := Label.new()
@@ -187,20 +218,20 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 
 	# Filtrage par zone débloquée : seuls les éléments des zones actives comptent et s'affichent.
 	# Chaque catégorie porte son propre motif de barre d'XP (cf. XPCard.Motif).
-	_adv_category_card(host, cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE,    XPCard.Motif.PAWS)
-	_adv_category_card(host, cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP,        XPCard.Motif.LIGHTNING)
-	_adv_category_card(host, cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES)
+	_adv_category_card(host, cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE,    XPCard.Motif.PAWS,      btier)
+	_adv_category_card(host, cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP,        XPCard.Motif.LIGHTNING, btier)
+	_adv_category_card(host, cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES,   btier)
 	_adv_ingredient_section(cat_vb, pools["ingredients"])
 
 	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
 
 # Carte catégorie cliquable (Créatures / Pièges / Bénédictions) avec compteur de découverte.
 # Panneau cliquable + liste d'entités repliée en dessous. `motif` = motif de barre d'XP.
-static func _adv_category_card(host: Village, parent: VBoxContainer, label: String, pool: Array, color: Color, motif: int = XPCard.Motif.BUBBLES) -> void:
+static func _adv_category_card(host: Village, parent: VBoxContainer, label: String, pool: Array, color: Color, motif: int = XPCard.Motif.BUBBLES, btier: int = 0) -> void:
 	if pool.is_empty():
 		return
 	var body := _accordion(parent, label, "%d / %d" % [MasteryRegistry.count_discovered(pool), pool.size()])
-	_adv_entity_rows(host, body, pool, color, motif)
+	_adv_entity_rows(host, body, pool, color, motif, btier)
 
 # Construit un « accordéon » repliable : panneau neutre cliquable
 # [label | (compteur) | ▶] + section repliée dessous. Retourne le VBox interne
@@ -208,17 +239,17 @@ static func _adv_category_card(host: Village, parent: VBoxContainer, label: Stri
 static func _accordion(parent: VBoxContainer, label: String, count_text: String) -> VBoxContainer:
 	var nc := UIColors.CARD_NEUTRAL
 
-	var wrap := VBoxContainer.new()
-	wrap.add_theme_constant_override("separation", 2)
-	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(wrap)
+	var acc_wrap := VBoxContainer.new()
+	acc_wrap.add_theme_constant_override("separation", 2)
+	acc_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(acc_wrap)
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(panel)
 	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(nc, 0.06, 0.38, 1, 3))
-	wrap.add_child(panel)
+	acc_wrap.add_child(panel)
 
 	var m := UIHelpers.margin_of(6)
 	panel.add_child(m)
@@ -249,7 +280,7 @@ static func _accordion(parent: VBoxContainer, label: String, count_text: String)
 	var section := VBoxContainer.new()
 	section.add_theme_constant_override("separation", 3)
 	section.visible = false
-	wrap.add_child(section)
+	acc_wrap.add_child(section)
 
 	var indent := MarginContainer.new()
 	indent.add_theme_constant_override("margin_left", 10)
@@ -270,7 +301,7 @@ static func _accordion(parent: VBoxContainer, label: String, count_text: String)
 # Remplit parent avec une carte par entité du pool, même format pour tous les types.
 # Entité non découverte → nom "?", palier Commun, XP 0 / seuil (placeholder homogène).
 # `motif` = motif de particules de la barre d'XP (commun à toute la catégorie).
-static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, _color: Color, motif: int = XPCard.Motif.BUBBLES) -> void:
+static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, _color: Color, motif: int = XPCard.Motif.BUBBLES, btier: int = 0) -> void:
 	for entry: Dictionary in pool:
 		var entry_id := entry.get("id", "") as String
 		var is_known := MasteryRegistry.is_discovered(entry_id)
@@ -314,8 +345,9 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		# Tooltip de l'entité.
 		if is_known:
 			var tt_title := disp_name
-			var tt_body  := _tooltip_entity_body(entry, entity)
-			UIHelpers.register_tooltip(panel, tt_title, tt_body, ec)
+			var tt_body  := _tooltip_entity_body(entry, entity, btier)
+			UIHelpers.register_tooltip(panel, tt_title, tt_body, ec,
+					entity.get("lore_fr", "") as String)
 
 		var pm := UIHelpers.margin_of(4)
 		panel.add_child(pm)
@@ -452,9 +484,10 @@ static func _tooltip_zone_line(btier: int) -> String:
 	return "Zone max : %s" % ZONES[clampi(zone_max, 0, 2)]
 
 # Corps de tooltip pour une entité (créature, piège, bénédiction, ingrédient).
-static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary) -> String:
-	var etype := entity.get("entity_type", "") as String
-	var tier  := int(entity.get("maitrise_actuelle", 0))
+static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary, btier: int = 0) -> String:
+	var etype    := entity.get("entity_type", "") as String
+	var tier     := int(entity.get("maitrise_actuelle", 0))
+	var zone_max := Balance.max_unlocked_zone(btier)
 	match etype:
 		"creature":
 			const ZONE_NAMES := ["Surface", "Profondeur", "Abysse"]
@@ -462,14 +495,19 @@ static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary) -> Strin
 			var zname := ZONE_NAMES[clampi(z, 0, 2)] as String
 			return "Zone : %s\nMaîtrise : %s" % [zname, GameData.get_tier_name(tier)]
 		"trap":
-			return "Dégâts : 8 % PV (Surface)  ·  15 % (Profondeur)  ·  30 % (Abysse)\nMaîtrise réduit les dégâts subis."
+			# N'affiche que les zones accessibles
+			const DMG_ZONES := [["Surface", "8 % PV"], ["Profondeur", "15 % PV"], ["Abysse", "30 % PV"]]
+			var parts: PackedStringArray = []
+			for i in mini(zone_max + 1, DMG_ZONES.size()):
+				parts.append("%s : %s" % [DMG_ZONES[i][0], DMG_ZONES[i][1]])
+			return "  ·  ".join(parts) + "\nMaîtrise réduit les dégâts subis."
 		"benediction":
 			return "Bonus XP et soins selon la zone.\nMaîtrise augmente l'effet reçu."
 		"ingredient":
 			var biome_id := entity.get("biome_source_id", "") as String
 			var biome_e  := GameData.get_entity(biome_id)
 			var bname    := biome_e.get("nom_affichage_fr", biome_id) as String
-			var qty      := int(entity.get("quantite_en_stock", 0))
+			var qty      := int(GameData.player["resources"].get(entity.get("id", ""), 0))
 			return "Biome : %s\nEn stock : %d" % [bname, qty]
 		_:
 			return "Maîtrise : %s" % GameData.get_tier_name(tier)

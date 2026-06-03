@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "passive_combat_mastery"
 name = "Maîtrise du Combat"
+lore_fr = "Chaque combat laisse une lecon. Chaque lecon devient une arme."
 type = "flat"
 base_stats = {"effects": [{"id": "atk_bonus", "value": 5, "description": "+5 ATK permanente"}]}
 tier_effects = [{"effects": [{"id": "atk_bonus", "value": 5, "description": "+5 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 12, "description": "+12 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 20, "description": "+20 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 30, "description": "+30 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 45, "description": "+45 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 65, "description": "+65 ATK permanente"}], "conditional_effects": []}]

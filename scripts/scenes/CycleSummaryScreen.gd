@@ -168,6 +168,7 @@ func _build_ui() -> void:
 func _fill_content(vb: VBoxContainer, data: Dictionary,
 		biome: Dictionary, biome_name: String, tcolor: Color) -> void:
 	_section_discoveries(vb, data, biome, tcolor)
+	_section_loot(vb, data, tcolor)
 	_section_xp(vb, data, biome_name, tcolor)
 	_section_evolutions(vb)
 
@@ -182,17 +183,17 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 	var traps     := _filter_zone(pools["traps"],        btier)
 	var benes     := _filter_zone(pools["benedictions"], btier)
 
-	var sh := UIHelpers.section_header("◆  DÉCOUVERTES", tcolor)
-	vb.add_child(sh)
-	_fade_register(sh)
+	var sec := UIHelpers.collapsible_section("◆  DÉCOUVERTES", tcolor)
+	vb.add_child(sec["wrapper"])
+	_fade_register(sec["wrapper"])
+	var body_dec := sec["body"] as VBoxContainer
 
-	# Grille 2 colonnes : items de découverte répartis sur deux colonnes.
 	var rows := GridContainer.new()
 	rows.columns = 2
 	rows.add_theme_constant_override("h_separation", 24)
 	rows.add_theme_constant_override("v_separation", 4)
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(rows)
+	body_dec.add_child(rows)
 
 	_discovery_row(rows, "Créatures rencontrées", MasteryRegistry.count_discovered(creatures), creatures.size())
 	_discovery_row(rows, "Pièges identifiés",     MasteryRegistry.count_discovered(traps),     traps.size())
@@ -208,28 +209,64 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 	_discovery_check(rows, "Fragment de Mémoire", frag_done)
 	_discovery_check(rows, "Créature Unique", biome.get("creature_unique_vaincue", false) as bool)
 
-# ── Section 2 : Répartition XP ─────────────────────────────
+# ── Section 2 : Ressources collectées ──────────────────────────
+func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
+	var loot_detail := data.get("loot_detail", {}) as Dictionary
+	if loot_detail.is_empty():
+		return
+	var sec := UIHelpers.collapsible_section("◆  RESSOURCES COLLECTÉES", tcolor)
+	vb.add_child(sec["wrapper"])
+	_fade_register(sec["wrapper"])
+	var body_loot := sec["body"] as VBoxContainer
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 3)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_loot.add_child(grid)
+
+	for item_id: String in loot_detail:
+		var qty      := int(loot_detail[item_id])
+		var item     := GameData.get_entity(item_id)
+		var nom      := (item.get("nom_affichage_fr", item.get("name", item_id))) as String
+		var is_unique := item.get("est_unique", false) as bool
+		var ic       := UIColors.TIER_LEGENDAIRE if is_unique else UIColors.FILTER_ON
+		var row      := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		grid.add_child(row)
+		var nl := Label.new()
+		nl.text = ("✦ %s" % nom) if is_unique else nom
+		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nl.add_theme_font_size_override("font_size", 12)
+		nl.add_theme_color_override("font_color", ic)
+		row.add_child(nl)
+		var ql := Label.new()
+		ql.text = "+%d" % qty
+		ql.add_theme_font_size_override("font_size", 12)
+		ql.add_theme_color_override("font_color", ic)
+		row.add_child(ql)
+
+# ── Section 3 : Répartition XP ─────────────────────────────
 func _section_xp(vb: VBoxContainer, data: Dictionary,
 		biome_name: String, tcolor: Color) -> void:
-	var sh := UIHelpers.section_header("◆  RÉPARTITION XP", tcolor)
-	vb.add_child(sh)
-	_fade_register(sh)
+	var sec_xp := UIHelpers.collapsible_section("◆  RÉPARTITION XP", tcolor)
+	vb.add_child(sec_xp["wrapper"])
+	_fade_register(sec_xp["wrapper"])
+	var body_xp := sec_xp["body"] as VBoxContainer
 
-	# XP total du cycle en tête de section (déplacé du footer).
 	var total_lbl := Label.new()
 	total_lbl.text = "XP total — %d" % int(data.get("xp_total", 0.0))
 	total_lbl.add_theme_font_size_override("font_size", 18)
 	total_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	vb.add_child(total_lbl)
+	body_xp.add_child(total_lbl)
 	_fade_register(total_lbl)
 
 	var cid := data.get("creature_id", "") as String
-	_xp_entity(vb, "⚔", "Héros", GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
-	_xp_entity(vb, "🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String),
+	_xp_entity(body_xp, "⚔", "Héros", GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
+	_xp_entity(body_xp, "🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String),
 			data.get("xp_biome", 0.0) as float)
 
-	# Entités rencontrées ce cycle : créatures, pièges, bénédictions.
-	# (l'icône indique le type ; la couleur de la carte vient du palier de l'entité)
 	var entities_xp := data.get("xp_entities_detail", {}) as Dictionary
 	for ent_id: String in entities_xp:
 		var e := GameData.get_entity(ent_id)
@@ -238,13 +275,19 @@ func _section_xp(vb: VBoxContainer, data: Dictionary,
 		match e.get("entity_type", ""):
 			"trap":        icon = "▲"
 			"benediction": icon = "✦"
-		_xp_entity(vb, icon, e_name, e, entities_xp[ent_id] as float)
+		_xp_entity(body_xp, icon, e_name, e, entities_xp[ent_id] as float)
 
 	var detail := data.get("xp_passives_detail", {}) as Dictionary
 	for passive_id: String in detail:
 		var p := GameData.get_entity(passive_id)
 		var p_name := p.get("nom_affichage_fr", p.get("name", passive_id)) as String
-		_xp_entity(vb, "⚡", p_name, p, detail[passive_id] as float)
+		_xp_entity(body_xp, "⚡", p_name, p, detail[passive_id] as float)
+
+	var equip_detail := data.get("xp_equip_detail", {}) as Dictionary
+	for equip_id: String in equip_detail:
+		var eq := GameData.get_entity(equip_id)
+		var eq_name := eq.get("nom_affichage_fr", equip_id) as String
+		_xp_entity(body_xp, "🔨", eq_name, eq, equip_detail[equip_id] as float)
 
 # Ajoute une ligne XP pour une entité ayant reçu de l'XP ce cycle (sinon ignorée).
 # La couleur de la carte = couleur du palier (tier) courant de l'entité.
@@ -273,25 +316,26 @@ func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictiona
 
 # ── Section 3 : Évolutions disponibles ─────────────────────
 func _section_evolutions(vb: VBoxContainer) -> void:
-	var sh := UIHelpers.section_header("◆  ÉVOLUTIONS DISPONIBLES", UIColors.FILTER_ON)
-	vb.add_child(sh)
-	_fade_register(sh)
+	var sec_ev := UIHelpers.collapsible_section("◆  ÉVOLUTIONS DISPONIBLES", UIColors.FILTER_ON)
+	vb.add_child(sec_ev["wrapper"])
+	_fade_register(sec_ev["wrapper"])
+	var body_ev := sec_ev["body"] as VBoxContainer
 
 	var found := false
 	for eid: String in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
 		if e.get("entity_type", "") == "equipment":
-			continue   # l'équipement évolue via la Forge, pas le rituel
+			continue
 		if MasterySystem.can_evolve(eid):
 			found = true
-			_evolution_card(vb, eid, e)
+			_evolution_card(body_ev, eid, e)
 
 	if not found:
 		var lbl := Label.new()
 		lbl.text = "Aucune évolution disponible"
 		lbl.add_theme_font_size_override("font_size", 13)
 		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		vb.add_child(lbl)
+		body_ev.add_child(lbl)
 		_fade_register(lbl)
 
 func _evolution_card(vb: VBoxContainer, entity_id: String, entity: Dictionary) -> void:
@@ -483,4 +527,4 @@ func _xp_card(icon: String, label: String, tier: int,
 # ═══════════════════════════════════════════════════════════
 
 func _go_to_village() -> void:
-	get_tree().change_scene_to_file("res://scenes/village/village.tscn")
+	UIHelpers.fade_to_scene(self, "res://scenes/village/village.tscn")

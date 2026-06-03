@@ -12,6 +12,7 @@ extends Resource
 @export var id:                         String     = ""
 @export var nom_affichage_fr:           String     = ""
 @export var nom_affichage_en:           String     = ""
+@export var lore_fr:                    String     = ""
 @export var passifs_par_palier:         Dictionary = {}
 @export var maitrise_actuelle:          int        = 0
 @export var xp_maitrise_actuelle:       float      = 0.0

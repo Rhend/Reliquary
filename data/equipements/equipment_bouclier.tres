@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "equipment_bouclier"
 nom_affichage_fr = "Bouclier de Bois"
+lore_fr = "Grossierement taille mais solide comme la foi. Il a sauve plus de vies que d'elegantes armures de plates."
 nom_affichage_en = "Wooden Shield"
 slot = 4
 biome_source_id = ""

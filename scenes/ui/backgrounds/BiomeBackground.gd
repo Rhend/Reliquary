@@ -140,6 +140,6 @@ func _apply_zone() -> void:
 	material.set_shader_parameter("zone_darken", darken)
 
 # Surcharge ponctuelle d'un uniforme (réglage fin depuis l'appelant).
-func set_param(name: String, value: Variant) -> void:
+func set_param(param_name: String, value: Variant) -> void:
 	if material:
-		material.set_shader_parameter(name, value)
+		material.set_shader_parameter(param_name, value)

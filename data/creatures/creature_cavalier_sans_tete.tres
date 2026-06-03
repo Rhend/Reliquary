@@ -6,6 +6,7 @@
 script = ExtResource("1")
 id = "creature_cavalier_sans_tete"
 nom_affichage_fr = "Cavalier Sans Tête"
+lore_fr = "Condamne a errer sans repos depuis la nuit des temps, il cherche quelque chose qu'il ne retrouvera jamais. Sa tete, dit-on, git au fond du marecage."
 nom_affichage_en = "Headless Rider"
 est_unique = true
 zone_associee = 2

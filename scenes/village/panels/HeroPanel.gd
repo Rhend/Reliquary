@@ -102,7 +102,7 @@ static func build(host: Village) -> void:
 		var equip_id:  String = entry[2]
 		var slot_name: String = entry[3]
 		var equip := GameData.get_entity(equip_id)
-		if equip.is_empty() or not equip.get("est_debloque", false):
+		if equip.is_empty():
 			continue
 		equip_body.add_child(_equip_slot_card(host, slot_key, slot_icon, slot_name, equip_id, equip, tcolor))
 
@@ -145,6 +145,64 @@ static func build(host: Village) -> void:
 		var ingr_sec := UIHelpers.collapsible_section("◆  INGRÉDIENTS", tcolor)
 		ingr_sec["wrapper"].name = "IngredientsSection"
 		host._rp_content.add_child(ingr_sec["wrapper"])
+		var ingr_body := ingr_sec["body"] as VBoxContainer
+
+		# Trie les ingrédients par biome (ordre Montagne → Forêt → Marécage)
+		const BIOME_ORDER := ["biome_montagne", "biome_foret", "biome_marecage"]
+		var ingr_list: Array = []
+		for eid in GameData.entities:
+			var e := GameData.entities[eid] as Dictionary
+			if e.get("entity_type", "") != "ingredient":
+				continue
+			if int(GameData.player["resources"].get(eid, 0)) <= 0:
+				continue
+			ingr_list.append(e)
+		ingr_list.sort_custom(func(a, b):
+			var ia := BIOME_ORDER.find(a.get("biome_source_id", ""))
+			var ib := BIOME_ORDER.find(b.get("biome_source_id", ""))
+			return ia < ib
+		)
+
+		if ingr_list.is_empty():
+			var none_lbl := Label.new()
+			none_lbl.text = "Aucun ingrédient en stock"
+			none_lbl.add_theme_font_size_override("font_size", 11)
+			none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+			none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			ingr_body.add_child(none_lbl)
+		else:
+			var last_biome := ""
+			for e in ingr_list:
+				var biome_src := e.get("biome_source_id", "") as String
+				if biome_src != last_biome:
+					last_biome = biome_src
+					var biome_e  := GameData.get_entity(biome_src)
+					var bname    := biome_e.get("nom_affichage_fr", biome_src) as String if not biome_e.is_empty() else biome_src
+					var btier    := int(biome_e.get("maitrise_actuelle", 0)) if not biome_e.is_empty() else 0
+					var sep := Label.new()
+					sep.text = bname.to_upper()
+					sep.add_theme_font_size_override("font_size", 10)
+					sep.add_theme_color_override("font_color", UIColors.tier_color(btier))
+					ingr_body.add_child(sep)
+				var nom := e.get("nom_affichage_fr", e.get("name", e.get("id", "?"))) as String
+				var eid_key := e.get("id", "") as String
+				var qty := int(GameData.player["resources"].get(eid_key, 0))
+				var is_unique := e.get("est_unique", false) as bool
+				var ic := UIColors.TIER_LEGENDAIRE if is_unique else UIColors.TEXT_HEADER
+				var row := HBoxContainer.new()
+				row.add_theme_constant_override("separation", 6)
+				ingr_body.add_child(row)
+				var nl := Label.new()
+				nl.text = ("  ✦ %s" % nom) if is_unique else ("  %s" % nom)
+				nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				nl.add_theme_font_size_override("font_size", 12)
+				nl.add_theme_color_override("font_color", ic)
+				row.add_child(nl)
+				var ql := Label.new()
+				ql.text = "×%d" % qty
+				ql.add_theme_font_size_override("font_size", 12)
+				ql.add_theme_color_override("font_color", UIColors.FILTER_ON)
+				row.add_child(ql)
 
 
 # Convertit un passif unique vers la forme attendue par _passive_card
@@ -238,7 +296,8 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 		var tt_body  := "Maîtrise : %s" % GameData.get_tier_name(rarity)
 		if cur_eff != "":
 			tt_body += "\nEffet : %s" % cur_eff
-		UIHelpers.register_tooltip(panel, name_txt, tt_body, UIColors.tier_color(rarity))
+		UIHelpers.register_tooltip(panel, name_txt, tt_body, UIColors.tier_color(rarity),
+				pdata.get("lore_fr", "") as String)
 		panel.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton \
 					and event.button_index == MOUSE_BUTTON_LEFT \
@@ -369,7 +428,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	var tt := "Slot : %s  ·  Rang : %s" % [slot_name, GameData.get_tier_name(etier)]
 	if stat_parts.size() > 0:
 		tt += "\n" + "  ".join(stat_parts)
-	UIHelpers.register_tooltip(xpcard, enom, tt, ec)
+	UIHelpers.register_tooltip(xpcard, enom, tt, ec, equip.get("lore_fr", "") as String)
 
 	return wrapper
 
@@ -403,7 +462,7 @@ static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Contr
 			var ingr_id  := req.get("ingredient_id", "") as String
 			var needed   := int(req.get("quantite", 1))
 			var ingr     := GameData.get_entity(ingr_id)
-			var have     := int(ingr.get("quantite_en_stock", 0))
+			var have     := int(GameData.player["resources"].get(ingr_id, 0))
 			var ingr_nom := ingr.get("nom_affichage_fr", ingr_id) as String
 			var ok       := have >= needed
 			var ic       := UIColors.INGREDIENT_OK if ok else UIColors.INGREDIENT_MISSING

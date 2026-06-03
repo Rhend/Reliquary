@@ -88,8 +88,17 @@ func _draw() -> void:
 	var w := size.x * xp_fill
 	var h := size.y
 
+	# Pulsation quand barre pleine
+	var fill_alpha := 0.35
+	if xp_fill >= 1.0:
+		fill_alpha = 0.38 + 0.18 * sin(_t * 2.8)
+		# Halo externe
+		var glow_a := 0.18 + 0.10 * sin(_t * 2.8)
+		draw_rect(Rect2(Vector2(-3, -3), Vector2(size.x + 6, h + 6)),
+				Color(fill_color.r, fill_color.g, fill_color.b, glow_a))
+
 	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)),
-			Color(fill_color.r, fill_color.g, fill_color.b, 0.35))
+			Color(fill_color.r, fill_color.g, fill_color.b, fill_alpha))
 
 	for p in _particles:
 		var xf : float = p[0]
