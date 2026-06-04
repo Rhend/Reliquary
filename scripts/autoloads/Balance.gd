@@ -76,6 +76,9 @@ const CRIT_CHANCE:     float = 0.20   # probabilité de coup critique
 const CRIT_MULTIPLIER: float = 1.8    # multiplicateur de dégâts en cas de critique
 const MIN_DAMAGE:      float = 1.0    # plancher de dégâts après défense (ATK − DEF)
 
+# ─── Endurcissement de biome (Montagne) ─────────────────────
+const MONTAGNE_ENDURCISSEMENT_REDUCTION: float = 0.20  # réduction des dégâts héros (−20 %)
+
 # ─── Poison de biome (Marécage Putride) ──────────────────────
 const BIOME_POISON_DMG_PCT:   float = 0.05  # % de l'ATK héros infligé par stack
 const BIOME_POISON_MAX_STACKS: int  = 3     # stacks maximum
@@ -120,8 +123,7 @@ const XP_BASE_BENEDICTION: float = 6.0   # bénédiction rencontrée
 
 const DEFAULT_XP_COEF: float = 1.0
 const ENTITY_XP_COEF: Dictionary = {
-	"hero":    0.05,
-	"village": 0.75,
+	"hero": 0.05,
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -153,13 +155,12 @@ const CREATURE_CAP_PROFONDEUR: Dictionary = {
 }
 
 # ═══════════════════════════════════════════════════════════
-#  Village — passage de Tier de bâtiments (distinct du palier de Maîtrise)
+#  Village — coût en Fragments pour chaque palier de Maîtrise
 # ═══════════════════════════════════════════════════════════
-# T0 → T1 (déblocage du Forgeron) : double condition simultanée
-#   1) XP de Maîtrise cumulée du Village ≥ VILLAGE_FORGE_XP
-#   2) Fragments de Mémoire ≥ requis (voir GameData.VILLAGE_TIER_REQUIREMENTS)
+# Fragments requis pour passer du palier n au palier n+1 (index = palier source).
+# Palier 0→1 : 1 fragment, 1→2 : 2, …, 4→5 : 5.
 
-const VILLAGE_FORGE_XP: float = 19200.0
+const VILLAGE_FRAGMENT_COSTS: Array[int] = [1, 2, 3, 4, 5]
 
 # ─── Éclosion : naissance du Village (phase préliminaire, pré-T0) ───
 # Progression requise pour faire éclore le Village en T0 et débloquer

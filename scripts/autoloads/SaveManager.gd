@@ -24,7 +24,7 @@
 extends Node
 
 const SAVE_PATH     := "user://IdleEvolutionSave.json"
-const SAVE_VER      := 12
+const SAVE_VER      := 13
 const SAVE_DEBOUNCE := 2.0
 
 var _save_dirty:  bool  = false
@@ -132,11 +132,15 @@ func load_save() -> void:
 
 	var data: Dictionary = json.get_data()
 	var saved_ver: int   = int(data.get("version", 0))
-	# Versions supportées : 11 (format entities plat) et 12+ (hiérarchique).
+	# Versions supportées : 11 (format entities plat), 12-13 (hiérarchique).
 	if saved_ver < 11 or saved_ver > SAVE_VER:
 		push_warning("SaveManager: version %d non supportée (attendu 11–%d) — sauvegarde ignorée" \
 			% [saved_ver, SAVE_VER])
 		return
+
+	# Migrations en chaîne (modifient data in-place)
+	if saved_ver < 13:
+		_migrate_v12_to_v13(data)
 
 	_load_player(data)
 	if saved_ver < 12:
@@ -194,6 +198,17 @@ func _load_entities(data: Dictionary) -> void:
 					"est_collecte", "est_debloque"]:
 				if e.has(field) and saved.has(field):
 					e[field] = saved[field]
+
+# Renomme tier_actuel → maitrise_actuelle dans le village, supprime xp_maitrise et active_creature_id.
+func _migrate_v12_to_v13(data: Dictionary) -> void:
+	if data.has("village"):
+		var v: Dictionary = data["village"]
+		if v.has("tier_actuel"):
+			v["maitrise_actuelle"] = v["tier_actuel"]
+			v.erase("tier_actuel")
+		v.erase("xp_maitrise")
+	if data.has("player"):
+		data["player"].erase("active_creature_id")
 
 func _load_systems(data: Dictionary) -> void:
 	if not data.has("systems"):

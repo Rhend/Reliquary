@@ -40,8 +40,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 		modifier_bonuses: Dictionary, combat_options: Dictionary = {}) -> void:
 	var passives := PassiveSystem.get_combat_bonuses()
 	var equip    := GameData.get_equipment_bonuses()
-	var cid      := GameData.player.get("active_creature_id", "") as String
-	var stats    := GameData.get_effective_stats(cid)
+	var stats    := GameData.get_effective_stats("hero")
 
 	var h_atk: float = (
 		float(stats.get("atk", 0))
@@ -108,7 +107,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 				PassiveSystem.set_shield_cooldown(shield_pid, int(shield_cfg.get("cooldown_cycles", 1)))
 				break
 
-	EventBus.combat_started.emit(cid, enemy, current_hp, e_hp)
+	EventBus.combat_started.emit("hero", enemy, current_hp, e_hp)
 	_play_next()
 
 func stop() -> void:

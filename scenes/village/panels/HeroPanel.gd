@@ -16,8 +16,7 @@ const EQUIP_SLOTS: Array = [
 
 # Point d'entrée : peuple host._rp_content avec la fiche du héros actif.
 static func build(host: Village) -> void:
-	var cid    := GameData.player.get("active_creature_id", "") as String
-	var c      := GameData.get_entity(cid)
+	var c      := GameData.get_entity("hero")
 	var tier   := c.get("maitrise_actuelle", 0) as int
 	var xp     := c.get("xp_maitrise_actuelle",   0.0) as float
 	var ni     := mini(tier + 1, GameData.xp_thresholds.size() - 1)
@@ -41,7 +40,7 @@ static func build(host: Village) -> void:
 	var stats_body := stats_sec["body"] as VBoxContainer
 
 	var eq  := GameData.get_equipment_bonuses()
-	var eff := GameData.get_effective_stats(cid)
+	var eff := GameData.get_effective_stats("hero")
 	var pas := PassiveSystem.get_combat_bonuses()
 
 	var atk_base  := int(eff.get("atk", 0))
@@ -82,7 +81,7 @@ static func build(host: Village) -> void:
 	if tier < GameData.MAX_TIER:
 		if can_ev:
 			stats_body.add_child(host._make_evolve_btn(
-				cid, c.get("nom_affichage_fr", c.get("name", cid)) as String,
+				"hero", c.get("nom_affichage_fr", c.get("name", "hero")) as String,
 				c.get("entity_type", "creature") as String, tier))
 	else:
 		var ml := Label.new()
@@ -141,7 +140,7 @@ static func build(host: Village) -> void:
 			passif_body.add_child(card)
 
 	# ── INGRÉDIENTS (masqué si Village < T1) ─────────────────
-	if (GameData.village.get("tier_actuel", 0) as int) >= 1:
+	if (GameData.village.get("maitrise_actuelle", 0) as int) >= 1:
 		var ingr_sec := UIHelpers.collapsible_section(Translations.T("hero.section.ingredients"), tcolor)
 		ingr_sec["wrapper"].name = "IngredientsSection"
 		host._rp_content.add_child(ingr_sec["wrapper"])
@@ -442,7 +441,7 @@ static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Contr
 	vb.add_theme_constant_override("separation", 3)
 	m.add_child(vb)
 
-	if int(GameData.village.get("tier_actuel", 0)) < 1:
+	if int(GameData.village.get("maitrise_actuelle", 0)) < 1:
 		var lbl := Label.new()
 		lbl.text = Translations.T("hero.forge_required")
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

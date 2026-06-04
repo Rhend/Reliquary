@@ -111,9 +111,8 @@ func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
 
 # Lance une nouvelle aventure dans le biome donné. Réinitialise tous les stats du cycle.
 func start_adventure(biome_id: String) -> void:
-	var biome   = GameData.get_entity(biome_id)
-	var hero_id = GameData.player.get("active_creature_id", "")
-	var hero    = GameData.get_entity(hero_id)
+	var biome = GameData.get_entity(biome_id)
+	var hero  = GameData.get_entity("hero")
 
 	if biome.is_empty() or hero.is_empty():
 		push_error("AdventureSystem: biome ou héros manquant pour démarrer")
@@ -194,20 +193,19 @@ func _on_encounter_timer() -> void:
 
 # Tire le type de rencontre et délègue au handler correspondant.
 func _process_encounter() -> void:
-	var hero_id      = GameData.player.get("active_creature_id", "")
-	var enc_type     = _roll_encounter_type()
-	var enc_data     = {
+	var enc_type = _roll_encounter_type()
+	var enc_data = {
 		"type":    enc_type,
 		"biome_id": current_biome_id,
-		"hero_id":  hero_id
+		"hero_id":  "hero"
 	}
 
 	_cycle_events_total += 1
 
 	match enc_type:
-		"creature":    _handle_creature_encounter(hero_id, enc_data)
-		"benediction": _handle_benediction_encounter(hero_id, enc_data)
-		"trap":        _handle_trap_encounter(hero_id, enc_data)
+		"creature":    _handle_creature_encounter("hero", enc_data)
+		"benediction": _handle_benediction_encounter("hero", enc_data)
+		"trap":        _handle_trap_encounter("hero", enc_data)
 
 # ─── Rencontre Créature ───────────────────────────────────────
 
@@ -226,8 +224,9 @@ func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 	EventBus.adventure_event_resolved.emit(enc_data)
 
 	var combat_options := {
-		"ambush": _is_first_combat and BiomeMechanics.is_ambush_active(),
-		"poison": BiomeMechanics.is_mechanic_active("poison"),
+		"ambush":         _is_first_combat and BiomeMechanics.is_ambush_active(),
+		"poison":         BiomeMechanics.is_mechanic_active("poison"),
+		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
 	}
 	_is_first_combat = false
 	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses(), combat_options)
@@ -293,15 +292,17 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 func _distribute_mastery_xp(event_id: String, event_base: float) -> void:
 	if event_id == "":
 		return
-	var base       := event_base * float(current_modifier.get("xp_mult", 1.0)) * _bless_xp_mult
-	_bless_xp_mult  = 1.0  # consommé une seule fois
-	var event_tier := int(GameData.get_entity(event_id).get("maitrise_actuelle", 0))
+	var base         := event_base * float(current_modifier.get("xp_mult", 1.0)) * _bless_xp_mult
+	_bless_xp_mult    = 1.0  # consommé une seule fois
+	var event_entity := GameData.get_entity(event_id)
+	var event_tier   := int(event_entity.get("maitrise_actuelle", 0))
 
-	MasterySystem.add_xp_to_entity(event_id, base, event_tier)                                       # entité rencontrée
-	MasterySystem.add_xp_to_entity(GameData.player.get("active_creature_id", ""), base, event_tier)  # héros
+	# Pas d'XP à l'entité si créature Unique d'Abysse (statique tier 5)
+	if not (event_entity.get("est_unique", false) and int(event_entity.get("zone_associee", -1)) == 2):
+		MasterySystem.add_xp_to_entity(event_id, base, event_tier)
+	MasterySystem.add_xp_to_entity("hero", base, event_tier)                                         # héros
 	MasterySystem.add_xp_to_entity(current_biome_id, base, event_tier)                               # biome
 	MasterySystem.add_xp_to_all_active(base, event_tier)                                             # passifs actifs
-	GameData.add_village_mastery_xp(base, event_tier)                                                # village
 	for item_id in GameData.player.get("equipped", {}).values():                                     # équipements actifs (biome_source_id défini)
 		if item_id != "":
 			var item := GameData.get_entity(item_id)
@@ -382,8 +383,6 @@ func _on_combat_ended(result: Dictionary) -> void:
 
 # Distribue l'XP, le loot et les ingrédients après une victoire.
 func _resolve_victory(enemy: Dictionary) -> void:
-	var hero_id = GameData.player.get("active_creature_id", "")
-
 	# XP de Maîtrise distribuée à toutes les entités actives (base de combat)
 	_distribute_mastery_xp(enemy.get("id", ""), Balance.XP_BASE_COMBAT)
 
@@ -396,14 +395,14 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_drop_loot(enemy)
 	_drop_ingredient_from_creature(enemy)
 
-	# Ingrédients biome (uniquement une fois la Forge débloquée — Village Tier ≥ 1)
-	if int(GameData.village.get("tier_actuel", 0)) >= 1:
+	# Ingrédients biome (uniquement une fois la Forge débloquée — Village T1)
+	if int(GameData.village.get("maitrise_actuelle", 0)) >= 1:
 		_drop_ingredients()
 
 	_cycle_combats_won += 1
 
 	_check_zone_transition()
-	_apply_regen(hero_id)
+	_apply_regen("hero")
 	_tick_bleed()
 	if is_running:
 		_schedule_next_encounter(COMBAT_POST_DELAY)
@@ -444,10 +443,9 @@ func _trap_dmg_pct() -> float:
 
 # Calcule les PV max effectifs du héros (stats de base + équipement + passifs).
 func get_max_hp() -> float:
-	var hero_id  = GameData.player.get("active_creature_id", "")
 	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)
 	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
-	return float(GameData.get_effective_stats(hero_id).get("hp", 100)) + equip_hp + hp_bonus
+	return float(GameData.get_effective_stats("hero").get("hp", 100)) + equip_hp + hp_bonus
 
 # Programme la prochaine rencontre.
 # Utilise FIRST_ENCOUNTER_DELAY pour la toute première, sinon le délai fourni.
@@ -471,15 +469,12 @@ func _roll_encounter_type() -> String:
 		"creature": 0.70, "benediction": 0.15, "trap": 0.15
 	})
 
-	# Bonne Étoile : déplace -5 % de créatures vers les événements positifs
-	var event_table = BiomeMechanics.modify_event_probabilities(base_table)
+	var luck              = float(_get_effective_luck())
+	var trap_base         = float(base_table.get("trap", 0.15))
+	var luck_shift        = minf(luck * Balance.LUCK_EVENT_SHIFT_PER_POINT, trap_base)
 
-	var luck        = float(_get_effective_luck())
-	var trap_base   = float(event_table.get("trap", 0.15))
-	var luck_shift  = minf(luck * Balance.LUCK_EVENT_SHIFT_PER_POINT, trap_base)
-
-	var creature_chance    = float(event_table.get("creature",    0.70))
-	var benediction_chance = float(event_table.get("benediction", 0.15)) + luck_shift
+	var creature_chance    = float(base_table.get("creature",    0.70))
+	var benediction_chance = float(base_table.get("benediction", 0.15)) + luck_shift
 
 	var roll = randf()
 	if roll < creature_chance:
@@ -510,7 +505,7 @@ func _pick_modifier() -> void:
 func _drop_pool(pool: Array, source_name: String) -> void:
 	if pool.is_empty():
 		return
-	var has_forge := int(GameData.village.get("tier_actuel", 0)) >= 1
+	var has_forge := int(GameData.village.get("maitrise_actuelle", 0)) >= 1
 	var drops:      Array = []
 	var luck_bonus: float = float(_get_effective_luck()) * Balance.LUCK_DROP_BONUS_PER_POINT
 	for entry in pool:
@@ -546,7 +541,7 @@ func _drop_loot(enemy: Dictionary) -> void:
 # Drop un ingrédient standard depuis une créature évolutive (50% de chance).
 # Bloqué tant que la Forge n'est pas débloquée (Village T1).
 func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
-	if int(GameData.village.get("tier_actuel", 0)) < 1:
+	if int(GameData.village.get("maitrise_actuelle", 0)) < 1:
 		return
 	var creature := GameData.get_entity(enemy.get("id", ""))
 	if creature.is_empty() or creature.get("est_unique", false):
@@ -681,7 +676,7 @@ func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 		"victory":              victory,
 		"interrupted":          interrupted,
 		"biome_id":             current_biome_id,
-		"creature_id":          GameData.player.get("active_creature_id", ""),
+		"creature_id":          "hero",
 		"modifier":             current_modifier,
 		"xp_total":             _cycle_xp,
 		"xp_hero":              _cycle_xp_hero,
@@ -716,11 +711,12 @@ func start_unique_combat() -> void:
 		return
 	combat_unique_en_cours = true
 	_encounter_timer.stop()
-	var s   := (unique.get("stats_par_palier", {}) as Dictionary).get(0, {}) as Dictionary
+	var utier       := int(unique.get("maitrise_actuelle", 5))
+	var s           := (unique.get("stats_par_palier", {}) as Dictionary).get(utier, {}) as Dictionary
 	var unique_dict := {
 		"id":         unique.get("id", ""),
 		"name":       unique.get("nom_affichage_fr", ""),
-		"tier":       2,
+		"tier":       utier,
 		"atk":        s.get("atk",       50),
 		"def":        s.get("def",        0),
 		"hp":         s.get("hp",        150),
@@ -733,8 +729,9 @@ func start_unique_combat() -> void:
 	)
 	_is_first_combat = false
 	CombatPlayer.start_combat(unique_dict, current_hp, get_modifier_bonuses(), {
-		"ambush": false,
-		"poison": BiomeMechanics.is_mechanic_active("poison"),
+		"ambush":         false,
+		"poison":         BiomeMechanics.is_mechanic_active("poison"),
+		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
 	})
 
 # Résout la victoire contre la créature Unique : flags, ingrédient, passif, signal.
@@ -763,8 +760,7 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 
 	EventBus.creature_unique_vaincue.emit(current_biome_id, ingr_id, passif_id)
 
-	var hero_id: String = GameData.player.get("active_creature_id", "")
-	_apply_regen(hero_id)
+	_apply_regen("hero")
 	_tick_bleed()
 	if is_running:
 		_schedule_next_encounter(COMBAT_POST_DELAY)

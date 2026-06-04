@@ -12,6 +12,7 @@
 # Options supplémentaires (options dict) :
 #   "ambush"         (bool)   — tour ennemi gratuit avant le cycle VIT
 #   "poison"         (bool)   — poison biome (Marécage Putride)
+#   "endurcissement" (bool)   — dégâts héros −20 % (Montagne Rare+)
 #   "passive_shield" (dict)   — config bouclier d'urgence (Résilience Rare+)
 #   "passive_poison" (dict)   — config poison on-hit (Contact Venimeux Rare+)
 # ============================================================
@@ -42,6 +43,10 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 
 	# ── Options mécaniques ─────────────────────────────────────
 	var use_ambush: bool = options.get("ambush", false)
+
+	# Endurcissement biome (Montagne)
+	var use_endurcissement:   bool  = options.get("endurcissement", false)
+	var endurcissement_mult:  float = (1.0 - Balance.MONTAGNE_ENDURCISSEMENT_REDUCTION) if use_endurcissement else 1.0
 
 	# Poison biome (Marécage Putride)
 	var use_poison:           bool  = options.get("poison", false)
@@ -98,7 +103,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		# ── Tour héros ───────────────────────────────────────────
 		if h_gauge >= Balance.GAUGE_THRESHOLD:
 			h_gauge -= Balance.GAUGE_THRESHOLD
-			var step := _make_hero_step(h_atk, e_def, e_hp, h_crit_chance, h_crit_mult)
+			var step := _make_hero_step(h_atk, e_def, e_hp, h_crit_chance, h_crit_mult, endurcissement_mult)
 			step.tick_time = current_tick
 			e_hp = float(step.target_hp_after)
 			steps.append(step)
@@ -190,10 +195,10 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 
 # Step héros : dégâts simples sur l'ennemi (pas de bouclier côté ennemi).
 static func _make_hero_step(atk: float, target_def: float, target_hp: float,
-		crit_chance: float, crit_mult: float) -> CombatStep:
+		crit_chance: float, crit_mult: float, dmg_mult: float = 1.0) -> CombatStep:
 	var is_crit  := randf() < crit_chance
 	var base_dmg := maxf(atk - target_def, Balance.MIN_DAMAGE)
-	var damage   := base_dmg * (crit_mult if is_crit else 1.0)
+	var damage   := base_dmg * (crit_mult if is_crit else 1.0) * dmg_mult
 	var new_hp   := maxf(target_hp - damage, 0.0)
 
 	var step := CombatStep.new()

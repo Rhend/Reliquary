@@ -22,11 +22,6 @@ const MASTERY_TIERS: Array[String] = [
 ]
 const MAX_TIER: int = 5
 
-# Fragments requis pour passer du Tier n au Tier n+1 (index = tier source).
-const VILLAGE_TIER_REQUIREMENTS: Array[int] = [
-	1,  # T0→T1 (Forgeron) : 1 Fragment requis
-]
-
 # ─── Données de progression (source : Balance.gd) ───────────
 # Référencées ici pour rester le point d'accès runtime habituel
 # (GameData.xp_thresholds) ; la source de vérité reste Balance.
@@ -47,16 +42,14 @@ var entities: Dictionary = {}
 var pending_evolution: Dictionary = {}
 
 var village: Dictionary = {
-	"tier_actuel":         0,     # T0 = Village fraîchement éclos ; T1 = Forgeron (Forge)
+	"maitrise_actuelle":   0,     # 0→5 — palier de Maîtrise du Village, progressé par Fragments
 	"fragments_collectes": [],
-	"xp_maitrise":         0.0,   # XP de Maîtrise cumulée du Village (coef ×0.75) — gate de passage de Tier
 	"eclos":               false, # le Village n'existe pas tant qu'il n'a pas éclos (phase préliminaire)
 	"clics_eclosion":      0,     # progression de la phase d'éclosion (→ Balance.ECLOSION_CLICS)
 }
 
 var player: Dictionary = {
 	"resources":          {},          # item_id → quantité possédée
-	"active_creature_id": "hero",
 	"active_biome_id":    "",
 	"active_passives":    [],
 	"equipped": {
@@ -220,8 +213,8 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 	# pour signaler les paliers redevenus franchissables (cf. plafonnement créature/biome).
 	MasterySystem.reevaluate_creatures_for_biome(entity_id)
 
-	# Rare (tier 2) → libération du Fragment
-	if new_tier == 2:
+	# Rare (T2), Légendaire (T4), Unique (T5) → libération d'un Fragment
+	if new_tier in [2, 4, 5]:
 		for fid in entities:
 			var frag: Dictionary = entities[fid]
 			if frag.get("entity_type", "") != "fragment":
@@ -229,7 +222,7 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 			if frag.get("biome_source_id", "") != entity_id:
 				continue
 			if frag.get("est_collecte", false):
-				break
+				continue
 			frag["est_collecte"] = true
 			village["fragments_collectes"].append(fid)
 			EventBus.fragment_libere.emit(fid, entity_id)
@@ -246,52 +239,21 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 		secondary["est_decouvert"] = true
 		EventBus.biome_revele.emit(secondary_id)
 
-# Retourne true si le Village peut passer au Tier suivant.
-# T0 → T1 (Forgeron) : triple condition simultanée —
-#   1) Fragments de Mémoire ≥ requis
-#   2) XP de Maîtrise du Village ≥ VILLAGE_FORGE_XP
-#   3) Héros à l'XP max de son palier (prêt à évoluer) — voir hero_at_full_xp().
+# Retourne true si le Village peut passer au palier de Maîtrise suivant.
+# Condition unique : Fragments collectés ≥ coût du palier courant (Balance.VILLAGE_FRAGMENT_COSTS).
 func can_upgrade_village() -> bool:
-	var current := int(village.get("tier_actuel", 0))
-	if current >= VILLAGE_TIER_REQUIREMENTS.size():
+	var current := int(village.get("maitrise_actuelle", 0))
+	if current >= Balance.VILLAGE_FRAGMENT_COSTS.size():
 		return false
-	var req := VILLAGE_TIER_REQUIREMENTS[current]
-	if village.get("fragments_collectes", []).size() < req:
-		return false
-	if current == 0:
-		if float(village.get("xp_maitrise", 0.0)) < Balance.VILLAGE_FORGE_XP:
-			return false
-		if not hero_at_full_xp():
-			return false
-	return true
+	var req := Balance.VILLAGE_FRAGMENT_COSTS[current]
+	return village.get("fragments_collectes", []).size() >= req
 
-# Vrai si le héros actif a atteint le seuil d'XP de son palier suivant (barre pleine).
-# Au palier max (plus de seuil), considéré comme plein.
-func hero_at_full_xp() -> bool:
-	var hero := get_entity(player.get("active_creature_id", ""))
-	if hero.is_empty():
-		return false
-	var next_idx := int(hero.get("maitrise_actuelle", 0)) + 1
-	if next_idx >= xp_thresholds.size():
-		return true
-	return float(hero.get("xp_maitrise_actuelle", 0.0)) >= float(xp_thresholds[next_idx])
-
-# Distribue de l'XP de Maîtrise au Village (accumulateur cumulé, coef ×0.75).
-# Le Village n'a pas encore de paliers de Maîtrise : son palier reste 0 pour le
-# calcul d'écart. Sert au gate de passage de Tier (voir can_upgrade_village).
-func add_village_mastery_xp(base_xp: float, event_tier: int) -> void:
-	var coef   := float(Balance.ENTITY_XP_COEF.get("village", Balance.DEFAULT_XP_COEF))
-	var gained := MasterySystem.calculate_xp(base_xp, event_tier, 0) * coef
-	if gained <= 0.0:
-		return
-	village["xp_maitrise"] = float(village.get("xp_maitrise", 0.0)) + gained
-
-# Passe le Village au Tier suivant. Retourne false si impossible.
+# Passe le Village au palier de Maîtrise suivant. Retourne false si impossible.
 func upgrade_village() -> bool:
 	if not can_upgrade_village():
 		return false
-	village["tier_actuel"] = int(village.get("tier_actuel", 0)) + 1
-	EventBus.village_tier_change.emit(village["tier_actuel"])
+	village["maitrise_actuelle"] = int(village.get("maitrise_actuelle", 0)) + 1
+	EventBus.village_tier_change.emit(village["maitrise_actuelle"])
 	return true
 
 # ═══════════════════════════════════════════════════════════
@@ -304,10 +266,9 @@ func get_entity(entity_id: String) -> Dictionary:
 
 # Retourne le nom du palier correspondant à un tier (0–5).
 func get_tier_name(tier: int) -> String:
-	var t = Engine.get_singleton("Translations")
 	if tier < 0 or tier >= MASTERY_TIERS.size():
-		return t.T("tier.unknown") if t != null else "?"
-	return t.T("tier." + str(tier)) if t != null else MASTERY_TIERS[tier]
+		return Translations.T("tier.unknown")
+	return Translations.T("tier." + str(tier))
 
 # Palier maximum d'un type d'entité (créatures → Légendaire 4 ; reste → Unique 5).
 func get_max_tier_for_type(entity_type: String) -> int:
