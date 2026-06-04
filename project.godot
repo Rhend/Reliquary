@@ -16,7 +16,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="IdleEvolution"
 run/main_scene="res://scenes/village/village.tscn"
-config/features=PackedStringArray("4.5", "GL Compatibility")
+config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 config/main_scene="res://scenes/village/village.tscn"
 
@@ -24,6 +24,7 @@ config/main_scene="res://scenes/village/village.tscn"
 
 UIColors="*res://scripts/autoloads/UIColors.gd"
 EventBus="*res://scripts/autoloads/EventBus.gd"
+Translations="*res://scripts/autoloads/Translations.gd"
 GameData="*res://scripts/autoloads/GameData.gd"
 CycleData="*res://scripts/autoloads/CycleData.gd"
 SaveManager="*res://scripts/autoloads/SaveManager.gd"

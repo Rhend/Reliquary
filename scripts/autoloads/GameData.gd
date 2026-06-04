@@ -304,9 +304,10 @@ func get_entity(entity_id: String) -> Dictionary:
 
 # Retourne le nom du palier correspondant à un tier (0–5).
 func get_tier_name(tier: int) -> String:
+	var t = Engine.get_singleton("Translations")
 	if tier < 0 or tier >= MASTERY_TIERS.size():
-		return "Inconnu"
-	return MASTERY_TIERS[tier]
+		return t.T("tier.unknown") if t != null else "?"
+	return t.T("tier." + str(tier)) if t != null else MASTERY_TIERS[tier]
 
 # Palier maximum d'un type d'entité (créatures → Légendaire 4 ; reste → Unique 5).
 func get_max_tier_for_type(entity_type: String) -> int:
@@ -334,10 +335,12 @@ func get_effective_stats(entity_id: String) -> Dictionary:
 	if entity.get("entity_type", "") == "hero":
 		var t := clampi(tier, 0, Balance.HERO_HP_PER_TIER.size() - 1)
 		return {
-			"atk": Balance.HERO_ATK_PER_TIER[t],
-			"def": Balance.HERO_DEF_PER_TIER[t],
-			"hp":  Balance.HERO_HP_PER_TIER[t],
-			"vit": Balance.HERO_VIT,
+			"atk":             Balance.HERO_ATK_PER_TIER[t],
+			"def":             Balance.HERO_DEF_PER_TIER[t],
+			"hp":              Balance.HERO_HP_PER_TIER[t],
+			"vit":             Balance.HERO_VIT,
+			"crit_chance":     float(entity.get("crit_chance",     Balance.CRIT_CHANCE)),
+			"crit_multiplier": float(entity.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
 		}
 
 	var spp := entity.get("stats_par_palier", {}) as Dictionary
@@ -347,18 +350,22 @@ func get_effective_stats(entity_id: String) -> Dictionary:
 			if spp.has(t):
 				var s := spp[t] as Dictionary
 				return {
-					"atk": int(s.get("atk", 0)),
-					"def": int(s.get("def", 0)),
-					"hp":  int(s.get("hp",  0)),
-					"vit": int(s.get("vit", 20)),
+					"atk":             int(s.get("atk", 0)),
+					"def":             int(s.get("def", 0)),
+					"hp":              int(s.get("hp",  0)),
+					"vit":             int(s.get("vit", 20)),
+					"crit_chance":     float(entity.get("crit_chance",     Balance.CRIT_CHANCE)),
+					"crit_multiplier": float(entity.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
 				}
 			t -= 1
 
 	return {
-		"atk": int(entity.get("atk", 0)) + tier * int(entity.get("atk_par_tier", 0)),
-		"def": int(entity.get("def", 0)) + tier * int(entity.get("def_par_tier", 0)),
-		"hp":  int(entity.get("hp",  0)) + tier * int(entity.get("hp_par_tier",  0)),
-		"vit": int(entity.get("vit", 0)) + tier * int(entity.get("vit_par_tier", 0)),
+		"atk":             int(entity.get("atk", 0)) + tier * int(entity.get("atk_par_tier", 0)),
+		"def":             int(entity.get("def", 0)) + tier * int(entity.get("def_par_tier", 0)),
+		"hp":              int(entity.get("hp",  0)) + tier * int(entity.get("hp_par_tier",  0)),
+		"vit":             int(entity.get("vit", 0)) + tier * int(entity.get("vit_par_tier", 0)),
+		"crit_chance":     float(entity.get("crit_chance",     Balance.CRIT_CHANCE)),
+		"crit_multiplier": float(entity.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
 	}
 
 # Bonus cumulés de tous les équipements portés.

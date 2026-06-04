@@ -22,13 +22,13 @@ const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
 # ─── Éveil (phase d'éclosion) ─────────────────────────────────
 # L'orbe se réchauffe vers cette couleur à mesure que l'âme s'éveille.
 const ECLOSION_AWAKEN_COLOR := Color(1.0, 0.86, 0.55)
-# Phrases d'éveil affichées au franchissement des paliers (fraction de progression).
-const BIRTH_PHRASES: Array = [
-	[0.25, "Un battement…  puis un autre.  Quelque chose remue dans le noir."],
-	[0.50, "Le long sommeil se déchire.  Mes souvenirs fuient comme l'eau entre mes doigts."],
-	[0.75, "Un village, tout proche…  et des fragments de rêve épars, alentour."],
-]
-const BIRTH_FINAL := "Je ne sais plus qui je suis…\nmais je m'éveille."
+# Phrases d'éveil : seuils fixes, textes lus depuis Translations au moment de l'affichage.
+func _birth_phrases() -> Array:
+	return [
+		[0.25, Translations.T("birth.phrase_25")],
+		[0.50, Translations.T("birth.phrase_50")],
+		[0.75, Translations.T("birth.phrase_75")],
+	]
 
 # [label, icon, tier_min, callback_name, panel_id]
 # tier_min = palier du héros requis ; exception : FORGE est gated par le Tier du Village.
@@ -82,6 +82,7 @@ func _ready() -> void:
 	EventBus.entity_evolved.connect(func(_id, _t): _update_badges())
 	EventBus.adventure_cycle_ended.connect(func(_s): _update_badges())
 	EventBus.adventure_stopped.connect(_update_badges)
+	GameSettings.language_changed.connect(_on_language_changed)
 
 # Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
 func _active_creature() -> Dictionary:
@@ -139,7 +140,7 @@ func _build_birth(_creature: Dictionary) -> void:
 	add_child(_xp_label)
 
 	var flavor := Label.new()
-	flavor.text = "Ranimez l'étincelle…  réveillez l'âme endormie."
+	flavor.text = Translations.T("birth.flavor")
 	flavor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	flavor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	flavor.add_theme_font_size_override("font_size", 12)
@@ -152,8 +153,9 @@ func _build_birth(_creature: Dictionary) -> void:
 	_birth_phrase = null
 	_birth_phrase_idx = 0
 	_birth_hatching = false
-	while _birth_phrase_idx < BIRTH_PHRASES.size() \
-			and progress + 0.0001 >= float(BIRTH_PHRASES[_birth_phrase_idx][0]):
+	var _bp := _birth_phrases()
+	while _birth_phrase_idx < _bp.size() \
+			and progress + 0.0001 >= float(_bp[_birth_phrase_idx][0]):
 		_birth_phrase_idx += 1
 
 # ─── Tier 1+ : hub hexagonal ──────────────────────────────────
@@ -190,7 +192,7 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	_hub_root.add_child(center_box)
 
 	var lname := Label.new()
-	lname.text = "Village"
+	lname.text = Translations.T("village.tier_label")
 	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lname.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lname.add_theme_font_size_override("font_size", 24)
@@ -246,21 +248,21 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 		var ang := -PI * 0.5 + i * TAU / n
 		var pos := Vector2(cos(ang), sin(ang)) * RING_RADIUS
 		var d: Array = unlocked[i]
-		_make_hex(d[0], d[1], tcolor, pos, Callable(self, d[3]), d[4])
+		_make_hex(Translations.T("menu." + (d[4] as String)), d[1], tcolor, pos, Callable(self, d[3]), d[4])
 
 # Retourne le texte du hint contextuel selon la progression actuelle.
 func _current_hint(vtier: int, hero_tier: int) -> String:
 	var frags := (GameData.village.get("fragments_collectes", []) as Array).size()
 	if vtier == 0 and hero_tier == 0 and frags == 0:
-		return "Partez en expédition pour gagner de l'XP et faire progresser vos entités"
+		return Translations.T("hint.start")
 	if vtier == 0 and frags == 0:
-		return "Faites atteindre Rare à un biome pour libérer un Fragment de Mémoire"
+		return Translations.T("hint.reach_rare")
 	if vtier == 0 and frags >= 1:
-		return "Fragment collecté — continuez à progresser pour faire évoluer le Village"
+		return Translations.T("hint.fragment_ok")
 	if vtier == 1 and not GameData.can_forge("equipment_arme") \
 			and not GameData.can_forge("equipment_anneau") \
 			and not GameData.can_forge("equipment_armure"):
-		return "La Forge est disponible — partez en expédition pour remplir les barres XP de vos équipements"
+		return Translations.T("hint.forge_ready")
 	return ""
 
 # ─── Conditions d'évolution du Village ────────────────────────
@@ -283,7 +285,7 @@ func _build_village_conditions(container: VBoxContainer, vtier: int, vcolor: Col
 
 	if GameData.can_upgrade_village():
 		var ubtn := Button.new()
-		ubtn.text = "▲  Faire évoluer le Village"
+		ubtn.text = "▲  " + Translations.T("village.evolve_btn")
 		ubtn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		ubtn.custom_minimum_size = Vector2(200.0, 26.0)
 		ubtn.add_theme_font_size_override("font_size", 11)
@@ -305,7 +307,7 @@ func _village_upgrade_conditions(vtier: int) -> Array:
 	var frags_need := GameData.VILLAGE_TIER_REQUIREMENTS[vtier]
 	var frags_have: int = (GameData.village.get("fragments_collectes", []) as Array).size()
 	conds.append({
-		"label": "🔮 Fragments",
+		"label": "🔮 " + Translations.T("village.cond.fragments"),
 		"value": "%d / %d" % [frags_have, frags_need],
 		"met":   frags_have >= frags_need,
 	})
@@ -314,7 +316,7 @@ func _village_upgrade_conditions(vtier: int) -> Array:
 	if vtier == 0:
 		var vxp := float(GameData.village.get("xp_maitrise", 0.0))
 		conds.append({
-			"label": "✦ Maîtrise du Village",
+			"label": "✦ " + Translations.T("village.cond.xp"),
 			"value": "%s / %s" % [UIHelpers.xp_fmt(int(vxp)), UIHelpers.xp_fmt(int(Balance.VILLAGE_FORGE_XP))],
 			"met":   vxp >= Balance.VILLAGE_FORGE_XP,
 		})
@@ -326,7 +328,7 @@ func _village_upgrade_conditions(vtier: int) -> Array:
 		if htier + 1 < GameData.xp_thresholds.size():
 			hreq = float(GameData.xp_thresholds[htier + 1])
 		conds.append({
-			"label": "👤 Héros à l'XP max",
+			"label": "👤 " + Translations.T("village.cond.hero_xp"),
 			"value": "%s / %s" % [UIHelpers.xp_fmt(int(hxp)), UIHelpers.xp_fmt(int(hreq))],
 			"met":   GameData.hero_at_full_xp(),
 		})
@@ -349,7 +351,7 @@ func _open_panel(panel_id: String) -> void:
 	# Panneau déjà ouvert → swap de contenu seulement
 	if _rp_root != null:
 		if _rp_title:
-			_rp_title.text = PANEL_TITLES.get(panel_id, panel_id.to_upper())
+			_rp_title.text = Translations.panel_title(panel_id)
 		_swap_panel_content(panel_id)
 		return
 
@@ -413,7 +415,7 @@ func _build_panel_frame(panel_id: String) -> void:
 
 	# Titre
 	_rp_title = Label.new()
-	_rp_title.text = PANEL_TITLES.get(panel_id, panel_id.to_upper())
+	_rp_title.text = Translations.panel_title(panel_id)
 	_rp_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_rp_title.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	_rp_title.add_theme_font_size_override("font_size", 16)
@@ -479,7 +481,7 @@ func _on_start_selected_expedition() -> void:
 # Panneau générique "Bientôt disponible" pour les fonctionnalités non implémentées.
 func _panel_soon(label: String) -> void:
 	var lbl := Label.new()
-	lbl.text = "✦  %s  ✦\n\nBientôt disponible" % label
+	lbl.text = Translations.T("village.soon") % label
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
@@ -615,7 +617,7 @@ func _open_settings_overlay() -> void:
 	var hdr := HBoxContainer.new()
 	vb.add_child(hdr)
 	var title_lbl := Label.new()
-	title_lbl.text = "⚙  PARAMÈTRES"
+	title_lbl.text = Translations.T("settings.title")
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_lbl.add_theme_font_size_override("font_size", 16)
 	title_lbl.add_theme_color_override("font_color", Color.WHITE)
@@ -631,21 +633,21 @@ func _open_settings_overlay() -> void:
 	vb.add_child(_settings_sep())
 
 	# ── AUDIO ────────────────────────────────────────────────
-	vb.add_child(_settings_section("◆  AUDIO"))
-	vb.add_child(_settings_slider("Musique",   GameSettings.volume_music,
+	vb.add_child(_settings_section(Translations.T("settings.audio")))
+	vb.add_child(_settings_slider(Translations.T("settings.music"), GameSettings.volume_music,
 			func(v: float) -> void: GameSettings.set_volume_music(v)))
-	vb.add_child(_settings_slider("Bruitage",  GameSettings.volume_sfx,
+	vb.add_child(_settings_slider(Translations.T("settings.sfx"),  GameSettings.volume_sfx,
 			func(v: float) -> void: GameSettings.set_volume_sfx(v)))
 
 	vb.add_child(_settings_sep())
 
 	# ── AFFICHAGE ────────────────────────────────────────────
-	vb.add_child(_settings_section("◆  AFFICHAGE"))
+	vb.add_child(_settings_section(Translations.T("settings.display")))
 	var fs_row := HBoxContainer.new()
 	fs_row.add_theme_constant_override("separation", 10)
 	vb.add_child(fs_row)
 	var fs_lbl := Label.new()
-	fs_lbl.text = "Plein Écran"
+	fs_lbl.text = Translations.T("settings.fullscreen")
 	fs_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fs_lbl.add_theme_font_size_override("font_size", 13)
 	fs_lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
@@ -663,17 +665,36 @@ func _open_settings_overlay() -> void:
 	vb.add_child(_settings_sep())
 
 	# ── SAUVEGARDE ───────────────────────────────────────────
-	vb.add_child(_settings_section("◆  SAUVEGARDE"))
+	vb.add_child(_settings_section(Translations.T("settings.save")))
 	var exp_btn := Button.new()
-	exp_btn.text = "📤  Exporter la sauvegarde"
+	exp_btn.text = Translations.T("settings.export")
 	exp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	exp_btn.pressed.connect(_export_save)
 	vb.add_child(exp_btn)
 	var imp_btn := Button.new()
-	imp_btn.text = "📥  Importer une sauvegarde"
+	imp_btn.text = Translations.T("settings.import")
 	imp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	imp_btn.pressed.connect(_import_save)
 	vb.add_child(imp_btn)
+
+	vb.add_child(_settings_sep())
+
+	# ── LANGUE ───────────────────────────────────────────────
+	vb.add_child(_settings_section(Translations.T("settings.language")))
+	var lang_row := HBoxContainer.new()
+	lang_row.add_theme_constant_override("separation", 8)
+	lang_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(lang_row)
+	for lang_code: String in ["fr", "en"]:
+		var lang_btn := Button.new()
+		lang_btn.text = Translations.T("settings.lang." + lang_code)
+		lang_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lang_btn.toggle_mode  = true
+		lang_btn.button_pressed = (GameSettings.language == lang_code)
+		lang_btn.focus_mode = Control.FOCUS_NONE
+		var lc := lang_code
+		lang_btn.pressed.connect(func() -> void: GameSettings.set_language(lc))
+		lang_row.add_child(lang_btn)
 
 func _settings_sep() -> ColorRect:
 	var sep := ColorRect.new()
@@ -789,15 +810,16 @@ func _on_birth_click() -> void:
 		_birth_orb.tier_color = TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, progress)
 
 	# Phrases d'éveil au franchissement des paliers (25 / 50 / 75 %).
-	while _birth_phrase_idx < BIRTH_PHRASES.size() \
-			and progress + 0.0001 >= float(BIRTH_PHRASES[_birth_phrase_idx][0]):
-		_show_birth_phrase(BIRTH_PHRASES[_birth_phrase_idx][1], false)
+	var bp := _birth_phrases()
+	while _birth_phrase_idx < bp.size() \
+			and progress + 0.0001 >= float(bp[_birth_phrase_idx][0]):
+		_show_birth_phrase(bp[_birth_phrase_idx][1], false)
 		_birth_phrase_idx += 1
 
 	if clics >= needed:
 		# Éveil final : phrase forte + voile chaud, puis éclosion après un battement.
 		_birth_hatching = true
-		_show_birth_phrase(BIRTH_FINAL, true)
+		_show_birth_phrase(Translations.T("birth.phrase_100"), true)
 		_birth_awaken_flash()
 		var tw := create_tween()
 		tw.tween_interval(1.8)
@@ -864,7 +886,7 @@ func _make_evolve_btn(entity_id: String, entity_name: String,
 		entity_type: String, from_tier: int) -> Button:
 	var nc  := UIColors.tier_color(from_tier + 1)
 	var btn := Button.new()
-	btn.text = "ÉVOLUER ▲"
+	btn.text = Translations.T("btn.evolve")
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.add_theme_color_override("font_color", nc)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -928,13 +950,7 @@ func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Calla
 
 # Retourne la description JRPG d'un hexagone selon son panel_id.
 func _hex_tooltip(panel_id: String) -> String:
-	match panel_id:
-		"hero":      return "Votre héros et ses passifs.\nConsultez ses équipements et sa progression."
-		"adventure": return "Partez en expédition.\nChoisissez un biome et affrontez ses créatures."
-		"forge":     return "Le Forgeron.\nAméliorez vos équipements avec les ingrédients récoltés."
-		"sanctuary": return "Sanctuaire des Évolutions.\nFaites évoluer vos entités au rang supérieur."
-		"relic":     return "Reliques anciennes.\nDébloquez des pouvoirs permanents rares."
-		_:           return "Mystère à venir..."
+	return Translations.T("hex_tt." + panel_id)
 
 # ─── Navigation → panneaux ────────────────────────────────────
 func _go_hero()       -> void: _open_panel("hero")
@@ -986,6 +1002,18 @@ func _on_resources_changed_refresh() -> void:
 	if _active_panel_id == "forge" or _active_panel_id == "hero":
 		_open_panel(_active_panel_id)
 	_update_badges()
+
+# ─── Langue ───────────────────────────────────────────────────
+# Reconstruit le hub + panneau actif + settings overlay si ouverts.
+func _on_language_changed(_lang: String) -> void:
+	var was_open := _active_panel_id
+	_rebuild_hub()
+	if was_open != "":
+		_open_panel(was_open)
+	if _settings_overlay and is_instance_valid(_settings_overlay):
+		_settings_overlay.queue_free()
+		_settings_overlay = null
+		_open_settings_overlay()
 
 # ─── Utils ────────────────────────────────────────────────────
 # Positionne ctrl centré sur pos avec la taille sz, en mode ancre centre.

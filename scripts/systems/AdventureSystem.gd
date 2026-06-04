@@ -16,11 +16,6 @@
 #   Tirés aléatoirement au lancement, ils durent tout le cycle.
 #   Exemples : XP ×1.5, régénération 30 %, pièges ignorés.
 #
-# Combo :
-#   Incrémenté si le héros perd ≤ COMBO_HP_THRESHOLD % de ses PV.
-#   Le combo donne un bonus d'ATK multiplicatif au combat suivant
-#   (+5 % par niveau de combo au-dessus de 1).
-#
 # Luck de cycle :
 #   Accumulée temporairement via les bénédictions de type "luck".
 #   Elle s'ajoute à la luck permanente du joueur pour les rolls du cycle
@@ -30,7 +25,7 @@ extends Node
 
 # ─── Constantes de cadence ──────────────────────────────────
 # (Timings de boucle uniquement. Tout l'équilibrage chiffré — XP,
-#  combo, régén, zones, modificateurs de cycle — est dans Balance.gd.)
+#  régén, zones, modificateurs de cycle — est dans Balance.gd.)
 
 const FIRST_ENCOUNTER_DELAY: float = 1.0  # délai avant la toute première rencontre du cycle
 const COMBAT_POST_DELAY:     float = 2.5  # pause après la fin d'un combat
@@ -49,8 +44,6 @@ var combat_unique_en_cours:   bool       = false  # vrai pendant le combat contr
 var _encounter_timer:         Timer              # timer qui cadence les rencontres
 var _first_encounter_pending: bool  = false      # vrai uniquement pour la toute première rencontre du cycle
 var _is_first_combat:         bool  = true       # vrai jusqu'au premier combat du cycle (embuscade)
-var _combo_count:             int   = 0          # combo courant (remis à 0 si trop de dégâts reçus)
-var _combat_start_hp:         float = 0.0        # PV du héros au début du combat (pour calcul combo)
 
 # Créatures disponibles ce cycle avec leurs poids pondérés.
 # Rempli une fois par cycle via _build_available_creatures().
@@ -62,7 +55,6 @@ var available_creatures: Array = []
 var _cycle_luck:               int        = 0    # Luck temporaire accumulée par les bénédictions de type "luck"
 var _cycle_xp:                 float      = 0.0  # XP totale gagnée par le héros ce cycle
 var _cycle_loot:               int        = 0    # Nombre total d'objets droppés
-var _cycle_combo_max:          int        = 0    # Meilleur combo atteint
 var _cycle_combats_won:        int        = 0    # Combats remportés
 var _cycle_events:             int        = 0    # Rencontres totales (hors créatures)
 var _cycle_events_total:       int        = 0
@@ -131,7 +123,6 @@ func start_adventure(biome_id: String) -> void:
 	is_running       = true
 	current_hp       = get_max_hp()
 
-	_combo_count             = 0
 	_first_encounter_pending = true
 	_is_first_combat         = true
 	zone_courante            = Enums.Zone.SURFACE
@@ -145,7 +136,6 @@ func start_adventure(biome_id: String) -> void:
 	_cycle_luck               = 0
 	_cycle_xp                 = 0.0
 	_cycle_loot               = 0
-	_cycle_combo_max          = 0
 	_cycle_combats_won        = 0
 	_cycle_events             = 0
 	_cycle_events_total       = 0
@@ -175,18 +165,14 @@ func stop_adventure() -> void:
 	_encounter_timer.stop()
 	if CombatPlayer.is_playing:
 		CombatPlayer.stop()
-	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
 	PassiveSystem.decrement_cooldowns()
 	GameData.player["active_biome_id"] = ""
 	CycleData.last_cycle_summary = _build_summary(false, true)
 	EventBus.adventure_stopped.emit()
 
-# Bonus ATK/DEF du modificateur de cycle + bonus de combo.
-# Le combo donne +COMBO_ATK_BONUS_PCT par niveau au-dessus de 1.
 func get_modifier_bonuses() -> Dictionary:
-	var combo_mult = 1.0 + maxf(0.0, float(_combo_count - 1)) * Balance.COMBO_ATK_BONUS_PCT
 	return {
-		"atk_mult": float(current_modifier.get("atk_mult", 1.0)) * combo_mult,
+		"atk_mult": float(current_modifier.get("atk_mult", 1.0)),
 		"def_mult": float(current_modifier.get("def_mult", 1.0))
 	}
 
@@ -233,7 +219,6 @@ func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 		return
 	enemy              = enemy.duplicate()
 	enc_data["enemy"]  = enemy
-	_combat_start_hp   = current_hp
 
 	GameData.record_encounter(
 		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, 0.0
@@ -415,17 +400,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	if int(GameData.village.get("tier_actuel", 0)) >= 1:
 		_drop_ingredients()
 
-	# Combo
-	var max_hp      = get_max_hp()
-	var hp_lost_pct = (_combat_start_hp - current_hp) / max_hp if max_hp > 0.0 else 1.0
-	if hp_lost_pct <= Balance.COMBO_HP_THRESHOLD:
-		_combo_count += 1
-	else:
-		_combo_count = 0
-
-	# Statistiques du cycle
 	_cycle_combats_won += 1
-	_cycle_combo_max    = maxi(_cycle_combo_max, _combo_count)
 
 	_check_zone_transition()
 	_apply_regen(hero_id)
@@ -695,7 +670,6 @@ func _weighted_random_creature() -> Dictionary:
 func _end_adventure(victory: bool) -> void:
 	is_running = false
 	_encounter_timer.stop()
-	_cycle_combo_max  = maxi(_cycle_combo_max,  _combo_count)
 	PassiveSystem.decrement_cooldowns()
 	GameData.player["active_biome_id"] = ""
 	var summary := _build_summary(victory)
@@ -718,7 +692,6 @@ func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 		"loot_total":           _cycle_loot,
 		"loot_detail":          _cycle_loot_detail.duplicate(),
 		"xp_equip_detail":      _cycle_xp_equip_detail.duplicate(),
-		"combo_max":            _cycle_combo_max,
 		"combats_won":          _cycle_combats_won,
 		"events":               _cycle_events,
 		"events_total":         _cycle_events_total,
@@ -743,7 +716,7 @@ func start_unique_combat() -> void:
 		return
 	combat_unique_en_cours = true
 	_encounter_timer.stop()
-	var s := (unique.get("stats_par_palier", {}) as Dictionary).get(0, {}) as Dictionary
+	var s   := (unique.get("stats_par_palier", {}) as Dictionary).get(0, {}) as Dictionary
 	var unique_dict := {
 		"id":         unique.get("id", ""),
 		"name":       unique.get("nom_affichage_fr", ""),
@@ -758,7 +731,6 @@ func start_unique_combat() -> void:
 	GameData.record_encounter(
 		unique_dict["id"], unique_dict["name"], "Créature", current_biome_id, 0.0
 	)
-	_combat_start_hp = current_hp
 	_is_first_combat = false
 	CombatPlayer.start_combat(unique_dict, current_hp, get_modifier_bonuses(), {
 		"ambush": false,

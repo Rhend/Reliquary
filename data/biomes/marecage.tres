@@ -34,4 +34,4 @@ pieges = Array[PiegeData]([ExtResource("5"), ExtResource("6")])
 benedictions = Array[BenedictionData]([ExtResource("7"), ExtResource("8")])
 ingredients_drop = Array[IngredientData]([ExtResource("9"), ExtResource("10")])
 ingredient_unique = ExtResource("11")
-event_table = {"creature": 0.6, "benediction": 0.1, "trap": 0.3}
+event_table = {"creature": 0.7, "benediction": 0.15, "trap": 0.15}

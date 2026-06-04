@@ -8,12 +8,15 @@ extends Node
 
 const SETTINGS_PATH = "user://settings.json"
 
+signal language_changed(lang: String)
+
 # Multiplicateur de durée par step de combat.
 # 1.0 = vitesse normale, 0.5 = x2, 0.25 = x4.
-var combat_speed:   float = 1.0
-var fullscreen:     bool  = false
-var volume_music:   float = 1.0   # 0.0–1.0
-var volume_sfx:     float = 1.0   # 0.0–1.0
+var combat_speed:   float  = 1.0
+var fullscreen:     bool   = false
+var volume_music:   float  = 1.0   # 0.0–1.0
+var volume_sfx:     float  = 1.0   # 0.0–1.0
+var language:       String = "fr"  # "fr" ou "en"
 
 func _ready() -> void:
 	_ensure_audio_buses()
@@ -45,6 +48,13 @@ func set_volume_sfx(value: float) -> void:
 	volume_sfx = clampf(value, 0.0, 1.0)
 	_apply_volume_sfx(volume_sfx)
 	_save()
+
+func set_language(lang: String) -> void:
+	if language == lang:
+		return
+	language = lang
+	_save()
+	language_changed.emit(lang)
 
 func _apply_fullscreen() -> void:
 	var mode := DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN \
@@ -84,6 +94,7 @@ func _save() -> void:
 		"fullscreen":    fullscreen,
 		"volume_music":  volume_music,
 		"volume_sfx":    volume_sfx,
+		"language":      language,
 	}, "\t"))
 	file.close()
 
@@ -100,4 +111,5 @@ func _load() -> void:
 		fullscreen    = bool(data.get("fullscreen",     false))
 		volume_music  = float(data.get("volume_music",  1.0))
 		volume_sfx    = float(data.get("volume_sfx",    1.0))
+		language      = str(data.get("language",        "fr"))
 	file.close()

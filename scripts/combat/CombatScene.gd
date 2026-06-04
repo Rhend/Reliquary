@@ -16,7 +16,7 @@
 class_name CombatScene extends Control
 
 # ─── Filtres du journal ──────────────────────────────────────
-const LOG_TABS := ["Tout", "Héros", "Monstre", "Attaque", "Défense", "Soin", "État"]
+const LOG_TAB_KEYS: Array[String] = ["all", "hero", "monster", "attack", "defense", "heal", "status"]
 
 # ─── Nœuds racine ────────────────────────────────────────────
 var _shaker: Control          # conteneur décalé pour le shake d'écran
@@ -39,7 +39,7 @@ var _feed_box: HBoxContainer
 # ─── Journal ─────────────────────────────────────────────────
 var _log_vbox:    VBoxContainer
 var _log_entries: Array = []          # [{node: RichTextLabel, tags: Array}]
-var _log_filter:  String = "Tout"
+var _log_filter:  String = "all"
 var _tab_buttons: Dictionary = {}     # nom → Button
 
 # ─── Barre de bas ────────────────────────────────────────────
@@ -55,6 +55,12 @@ var _cycle_xp:    float = 0.0
 var _prev_tick:   int   = 0
 var _navigating:  bool  = false
 var _hero_shield: float = 0.0
+
+# ─── Polish combat ──────────────────────────────────────────
+var _danger_pulse_tween: Tween   = null   # pulse PV critique (item 5)
+var _shield_state_pill:  Control = null   # pill bouclier bleue  (item 8)
+var _poison_state_pill:  Control = null   # pill venin violette  (item 8)
+var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
 
 # ═══════════════════════════════════════════════════════════
 func _ready() -> void:
@@ -88,6 +94,7 @@ func _build_ui() -> void:
 	root.add_child(_build_bottom_bar())
 
 	_build_zone_label()
+	_build_mechanic_label()
 
 # ── Zone de combat : fonds animés + 2 colonnes + séparateur diagonal ──
 # Les fonds (Ville côté héros, biome côté créature) sont CONFINÉS à cette zone
@@ -193,15 +200,17 @@ func _build_log() -> Control:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 4)
 	outer.add_child(tabs)
-	for tab: String in LOG_TABS:
+	var tab_labels := Translations.log_tabs()
+	for i in LOG_TAB_KEYS.size():
+		var key := LOG_TAB_KEYS[i]
 		var b := Button.new()
-		b.text = tab
+		b.text = tab_labels[i]
 		b.toggle_mode = true
-		b.button_pressed = (tab == _log_filter)
+		b.button_pressed = (key == _log_filter)
 		b.flat = true
 		b.focus_mode = Control.FOCUS_NONE
 		b.add_theme_font_size_override("font_size", 11)
-		var is_active := (tab == _log_filter)
+		var is_active := (key == _log_filter)
 		var tc := UIColors.FILTER_ON if is_active else UIColors.TEXT_MUTED
 		b.add_theme_color_override("font_color",         tc)
 		b.add_theme_color_override("font_pressed_color", UIColors.FILTER_ON)
@@ -209,9 +218,9 @@ func _build_log() -> Control:
 		b.add_theme_stylebox_override("normal",   UIHelpers.card_style(tc, 0.0 if not is_active else 0.12, 0.0 if not is_active else 0.50, 1 if is_active else 0, 4))
 		b.add_theme_stylebox_override("pressed",  UIHelpers.card_style(UIColors.FILTER_ON, 0.12, 0.50, 1, 4))
 		b.add_theme_stylebox_override("hover",    UIHelpers.card_style(UIColors.TEXT_MUTED, 0.08, 0.30, 0, 4))
-		b.pressed.connect(_set_filter.bind(tab))
+		b.pressed.connect(_set_filter.bind(key))
 		tabs.add_child(b)
-		_tab_buttons[tab] = b
+		_tab_buttons[key] = b
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical   = Control.SIZE_EXPAND_FILL
@@ -237,7 +246,7 @@ func _build_bottom_bar() -> Control:
 	vbox.add_theme_constant_override("separation", 4)
 
 	_xp_label = Label.new()
-	_xp_label.text = "XP ce cycle — 0"
+	_xp_label.text = Translations.T("combat.xp_label")
 	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_xp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_xp_label.add_theme_font_size_override("font_size", 15)
@@ -246,7 +255,7 @@ func _build_bottom_bar() -> Control:
 
 	var tcolor := _hero_tier_color()
 	_flee_btn = Button.new()
-	_flee_btn.text = "Mettre fin à l'expédition"
+	_flee_btn.text = Translations.T("combat.end_btn")
 	_flee_btn.custom_minimum_size = Vector2(0, 42)
 	_flee_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_flee_btn.add_theme_font_size_override("font_size", 15)
@@ -270,11 +279,11 @@ func _build_bottom_bar() -> Control:
 # title : nom de l'état ; tooltip : description (valeur dynamique à calculer plus tard).
 func _benediction_desc(effet: String, valeur: int) -> String:
 	match effet:
-		"heal":          return "+%d PV" % valeur
-		"atk_boost":     return "+%d ATK (temporaire)" % valeur
-		"def_boost":     return "+%d DEF (temporaire)" % valeur
-		"xp_boost":      return "+%d%% XP ce cycle" % valeur
-		_:               return effet if effet != "" else "Effet inconnu"
+		"heal":      return Translations.T("combat.bless.heal") % valeur
+		"atk_boost": return Translations.T("combat.bless.atk")  % valeur
+		"def_boost": return Translations.T("combat.bless.def")  % valeur
+		"xp_boost":  return Translations.T("combat.bless.xp")   % valeur
+		_:           return effet if effet != "" else Translations.T("combat.bless.unknown")
 
 func _add_state_pill(states_box: HBoxContainer, title: String, tooltip: String, color: Color) -> void:
 	var box := PanelContainer.new()
@@ -301,6 +310,7 @@ func _connect_signals() -> void:
 	EventBus.heal_applied.connect(_on_heal_applied)
 	EventBus.adventure_cycle_ended.connect(_on_cycle_ended)
 	EventBus.adventure_stopped.connect(_on_adventure_stopped)
+	EventBus.entity_ready_to_evolve.connect(_on_entity_ready_to_evolve)
 	CombatPlayer.step_started.connect(_on_step_started)
 	CombatPlayer.step_ended.connect(_on_step_ended)
 
@@ -340,9 +350,17 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_enemy_ring.set_hp(0, 1)
 	_hide_action(_enemy_action)
 
+	if _mechanic_label:
+		_mechanic_label.visible = false
 	match BiomeMechanics.active_mechanic:
-		"ambush":       _push_feed("Embuscade", Color(1.0, 0.42, 0.10))
-		"bonne_etoile": _push_feed("Bonne Étoile", Color(0.30, 0.85, 0.40))
+		"ambush":
+			_push_feed(Translations.mech_name("ambush"), Color(1.0, 0.42, 0.10))
+			_show_mechanic_label("⚡ " + Translations.mech_name("ambush"), Color(1.0, 0.42, 0.10))
+		"poison":
+			_show_mechanic_label("☠ " + Translations.mech_name("poison"), Color(0.62, 0.15, 0.78))
+		"bonne_etoile":
+			_push_feed(Translations.mech_name("bonne_etoile"), Color(0.30, 0.85, 0.40))
+			_show_mechanic_label("★ " + Translations.mech_name("bonne_etoile"), Color(0.30, 0.85, 0.40))
 
 func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
@@ -362,7 +380,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 				_hero_ring.damage(tdmg, false)
 				_add_log("[color=%s]%s[/color] inflige [color=%s]-%d[/color]"
 						% [_hex(UIColors.TIER_EPIQUE), tname, _hex(UIColors.LOG_DEFEAT), tdmg],
-						["Monstre", "Attaque", "État"])
+						["monster", "attack", "status"])
 		"benediction":
 			var bene := event_data.get("effect", {}) as Dictionary
 			var bname := bene.get("nom_affichage_fr", "Bénédiction") as String
@@ -376,7 +394,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			UIHelpers.register_tooltip(_enemy_name, bname,
 				"Bénédiction\n%s" % bdesc,
 				UIColors.TYPE_BENEDICTION)
-			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TYPE_BENEDICTION), bname], ["État"])
+			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TYPE_BENEDICTION), bname], ["status"])
 
 func _on_combat_started(creature_id: String, enemy: Dictionary,
 		hero_hp: float, enemy_hp: float) -> void:
@@ -409,9 +427,11 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 	_hero_shield = 0.0
+	_stop_danger_pulse()
+	_clear_state_pills()
 	_prev_tick = 0
 	_flee_btn.disabled = false
-	_add_log("[color=%s]%s[/color] apparaît" % [_hex(Color(1.0, 0.8, 0.2)), ename], ["Monstre"])
+	_add_log("[color=%s]%s[/color] apparaît" % [_hex(Color(1.0, 0.8, 0.2)), ename], ["monster"])
 
 # Début du cooldown : on affiche l'INTENTION de l'attaquant et on lance la
 # charge de son anneau. Aucun dégât appliqué ici — l'attaque atterrit à la
@@ -432,7 +452,7 @@ func _on_step_started(step: CombatStep) -> void:
 	var ring := _hero_ring if is_hero else _enemy_ring
 	var lbl  := _hero_action if is_hero else _enemy_action
 	var base_col := UIColors.STAT_ATK if is_hero else UIColors.TYPE_TRAP
-	_show_action(lbl, "Critique !" if step.is_crit else "Attaque",
+	_show_action(lbl, Translations.T("combat.action.crit") if step.is_crit else Translations.T("combat.action.attack"),
 			UIColors.FILTER_ON if step.is_crit else base_col)
 	ring.set_cooldown(0.0)
 	var tw := create_tween()
@@ -444,34 +464,45 @@ func _on_step_ended(step: CombatStep) -> void:
 	if step.is_poison or step.is_passive_poison:
 		_enemy_ring.update_hp(float(step.target_hp_after))
 		_enemy_ring.poison(step.damage)
-		_add_log("[color=%s]Poison[/color] [color=%s]-%d[/color]"
-				% [_hex(UIColors.TIER_EPIQUE), _hex(UIColors.LOG_DEFEAT), step.damage],
-				["État", "Attaque"])
+		var poison_tag := Translations.T("combat.poison") if step.is_poison else Translations.T("combat.venom")
+		_add_log("[color=%s]%s[/color] [color=%s]-%d[/color]"
+				% [_hex(UIColors.TIER_EPIQUE), poison_tag, _hex(UIColors.LOG_DEFEAT), step.damage],
+				["status", "attack"])
+		if step.is_killing_blow:
+			_kill_impact(_enemy_ring)
 	elif step.attacker == "hero":
 		_enemy_ring.update_hp(float(step.target_hp_after))
 		_enemy_ring.damage(step.damage, step.is_crit)
 		if step.is_crit:
 			_screen_shake()
-		_log_attack(_hero_name.text, step.damage, step.is_crit, ["Héros", "Attaque"])
+		if step.is_killing_blow:
+			_kill_impact(_enemy_ring)
+		_log_attack(_hero_name.text, step.damage, step.is_crit, ["hero", "attack"])
 		if step.passive_poison_proc:
-			_add_log("[color=%s]Contact Venimeux[/color]" % _hex(UIColors.TIER_EPIQUE), ["État"])
+			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TIER_EPIQUE), Translations.T("combat.venom_contact")], ["status"])
+			_update_poison_pill(true)
 	else:
 		if step.shield_absorbed > 0:
 			_hero_shield = maxf(_hero_shield - float(step.shield_absorbed), 0.0)
-			_add_log("[color=%s]Bouclier absorbe %d[/color]"
-					% [_hex(Color(0.3, 0.7, 1.0)), step.shield_absorbed], ["Défense", "État"])
+			_update_shield_pill(int(_hero_shield))
+			_add_log("[color=%s]%s[/color]"
+					% [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_absorb") % step.shield_absorbed], ["defense", "status"])
 		if step.damage > 0:
 			_hero_ring.update_hp(float(step.target_hp_after))
 			_hero_ring.damage(step.damage, step.is_crit)
 			if step.is_crit:
 				_screen_shake()
+			if step.is_killing_blow:
+				_kill_impact(_hero_ring)
+			_check_danger_pulse()
 		elif step.shield_absorbed > 0:
 			_hero_ring.update_hp(float(step.target_hp_after))
 		if step.is_shield_proc:
 			_hero_shield = float(step.shield_value)
-			_push_feed("Bouclier +%d" % step.shield_value, Color(0.3, 0.7, 1.0))
-			_add_log("[color=%s]Bouclier d'urgence activé[/color]" % _hex(Color(0.3, 0.7, 1.0)), ["Défense", "État"])
-		_log_attack(_enemy_name.text, step.damage, step.is_crit, ["Monstre", "Attaque"])
+			_push_feed(Translations.T("combat.shield_pill") % step.shield_value, Color(0.3, 0.7, 1.0))
+			_update_shield_pill(int(_hero_shield))
+			_add_log("[color=%s]%s[/color]" % [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_proc")], ["defense", "status"])
+		_log_attack(_enemy_name.text, step.damage, step.is_crit, ["monster", "attack"])
 
 	_hero_ring.set_cooldown(0.0)
 	_enemy_ring.set_cooldown(0.0)
@@ -483,23 +514,26 @@ func _on_combat_ended(result: Dictionary) -> void:
 	_enemy_ring.set_cooldown(0.0)
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
+	_stop_danger_pulse()
+	_clear_state_pills()
 	if result.get("victory", false):
 		_hero_ring.celebrate()
 		_enemy_ring.fade_defeated()
 		_cycle_xp = AdventureSystem.get_cycle_xp()
 		_update_xp_label()
-		_add_log("[color=%s]— Victoire —[/color]" % _hex(UIColors.LOG_VICTORY), ["Héros"])
+		_add_log("[color=%s]%s[/color]" % [_hex(UIColors.LOG_VICTORY), Translations.T("combat.victory")], ["hero"])
 	else:
 		_enemy_ring.celebrate()
 		_hero_ring.fade_defeated()
-		_add_log("[color=%s]— Défaite —[/color]" % _hex(Color(1.0, 0.5, 0.2)), ["Monstre"])
+		_add_log("[color=%s]%s[/color]" % [_hex(Color(1.0, 0.5, 0.2)), Translations.T("combat.defeat")], ["monster"])
 
 
 func _on_heal_applied(amount: float, new_hp: float) -> void:
 	_hero_ring.update_hp(new_hp)
 	_hero_ring.heal(int(amount))
-	_push_feed("Régénération +%d" % int(amount), UIColors.HEAL_COLOR)
-	_add_log("[color=%s]Soin +%d[/color]" % [_hex(UIColors.HEAL_COLOR), int(amount)], ["Soin"])
+	_push_feed(Translations.T("combat.regen") % int(amount), UIColors.HEAL_COLOR)
+	_add_log("[color=%s]%s[/color]" % [_hex(UIColors.HEAL_COLOR), Translations.T("combat.regen") % int(amount)], ["heal"])
+	_check_danger_pulse()
 
 func _on_cycle_ended(result: Dictionary) -> void:
 	_flee_btn.disabled = true
@@ -578,7 +612,7 @@ func _add_log(bbcode: String, tags: Array) -> void:
 	rt.visible = _matches_filter(tags)
 
 func _log_attack(attacker_name: String, dmg: int, is_crit: bool, tags: Array) -> void:
-	var is_hero_attacker := "Héros" in tags
+	var is_hero_attacker := "hero" in tags
 	var prefix   := "[color=%s]%s[/color] " % [
 		_hex(Color(0.55, 0.36, 0.97) if is_hero_attacker else Color(0.86, 0.15, 0.15)),
 		"⚔" if is_hero_attacker else "🗡"
@@ -604,7 +638,7 @@ func _set_filter(tab: String) -> void:
 		entry["node"].visible = _matches_filter(entry["tags"])
 
 func _matches_filter(tags: Array) -> bool:
-	return _log_filter == "Tout" or _log_filter in tags
+	return _log_filter == "all" or _log_filter in tags
 
 # ═══════════════════════════════════════════════════════════
 #  Zone + Créature Unique (overlays conservés)
@@ -620,8 +654,21 @@ func _build_zone_label() -> void:
 	_zone_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_zone_label)
 
+func _build_mechanic_label() -> void:
+	_mechanic_label = Label.new()
+	_mechanic_label.anchor_left  = 1.0; _mechanic_label.anchor_right  = 1.0
+	_mechanic_label.anchor_top   = 0.0; _mechanic_label.anchor_bottom = 0.0
+	_mechanic_label.offset_left  = -170; _mechanic_label.offset_right = -6
+	_mechanic_label.offset_top   = 6;    _mechanic_label.offset_bottom = 30
+	_mechanic_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_mechanic_label.add_theme_font_size_override("font_size", 13)
+	_mechanic_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mechanic_label.visible = false
+	add_child(_mechanic_label)
+
 func _on_zone_changee(nouvelle_zone: int) -> void:
 	_update_zone_label(nouvelle_zone as Enums.Zone)
+	_show_zone_banner(nouvelle_zone)
 	if _hero_bg:     _hero_bg.set_zone(nouvelle_zone)
 	if _creature_bg: _creature_bg.set_zone(nouvelle_zone)
 	if nouvelle_zone == Enums.Zone.ABYSSE:
@@ -632,9 +679,8 @@ func _on_zone_changee(nouvelle_zone: int) -> void:
 func _update_zone_label(zone: Enums.Zone) -> void:
 	if not _zone_label:
 		return
-	const NOMS := ["Surface", "Profondeur", "Abysse"]
 	var idx := clampi(int(zone), 0, 2)
-	_zone_label.text = "◆ " + NOMS[idx]
+	_zone_label.text = "◆ " + Translations.zone_name(idx)
 	_zone_label.add_theme_color_override("font_color", UIColors.zone_color(idx))
 
 func _show_unique_indicator() -> void:
@@ -689,8 +735,8 @@ func _on_creature_unique_vaincue(_biome_id: String, ingredient_id: String, passi
 	_hide_unique_indicator()
 	var ingr := GameData.get_entity(ingredient_id).get("nom_affichage_fr", ingredient_id) as String
 	var passif := GameData.get_entity(passif_id).get("nom_affichage_fr", passif_id) as String
-	_add_log("[color=%s]Créature Unique vaincue — %s, %s[/color]"
-			% [_hex(Color(1.0, 0.8, 0.2)), ingr, passif], ["Héros"])
+	_add_log("[color=%s]%s[/color]"
+			% [_hex(Color(1.0, 0.8, 0.2)), Translations.T("combat.unique_slain") % [ingr, passif]], ["hero"])
 
 # ═══════════════════════════════════════════════════════════
 #  Helpers
@@ -698,7 +744,7 @@ func _on_creature_unique_vaincue(_biome_id: String, ingredient_id: String, passi
 
 func _update_xp_label() -> void:
 	if _xp_label:
-		_xp_label.text = "XP ce cycle — %d" % int(_cycle_xp)
+		_xp_label.text = Translations.T("combat.xp_label_fmt") % int(_cycle_xp)
 
 func _hero_tier_color() -> Color:
 	var cid := GameData.player.get("active_creature_id", "") as String
@@ -713,3 +759,138 @@ func _navigate_to_summary() -> void:
 		return
 	_navigating = true
 	UIHelpers.fade_to_scene(self, "res://scenes/cycle/CycleSummaryScreen.tscn")
+
+# ═══════════════════════════════════════════════════════════
+#  Polish combat — item 4 (badge mécanique forte)
+# ═══════════════════════════════════════════════════════════
+
+func _show_mechanic_label(text: String, color: Color) -> void:
+	if not _mechanic_label:
+		return
+	_mechanic_label.text = text
+	_mechanic_label.add_theme_color_override("font_color", color)
+	_mechanic_label.visible = true
+
+# ═══════════════════════════════════════════════════════════
+#  Polish combat — item 5 (pulse PV danger ≤30 %)
+# ═══════════════════════════════════════════════════════════
+
+func _check_danger_pulse() -> void:
+	var max_hp := AdventureSystem.get_max_hp()
+	if max_hp <= 0.0:
+		return
+	var ratio := AdventureSystem.current_hp / max_hp
+	if ratio <= 0.30 and AdventureSystem.current_hp > 0.0:
+		if not _danger_pulse_tween or not _danger_pulse_tween.is_running():
+			_start_danger_pulse()
+	else:
+		_stop_danger_pulse()
+
+func _start_danger_pulse() -> void:
+	if _danger_pulse_tween:
+		_danger_pulse_tween.kill()
+	_danger_pulse_tween = create_tween().set_loops()
+	_danger_pulse_tween.tween_property(_hero_ring, "modulate:a", 0.45, 0.35).set_trans(Tween.TRANS_SINE)
+	_danger_pulse_tween.tween_property(_hero_ring, "modulate:a", 1.0,  0.35).set_trans(Tween.TRANS_SINE)
+
+func _stop_danger_pulse() -> void:
+	if _danger_pulse_tween:
+		_danger_pulse_tween.kill()
+		_danger_pulse_tween = null
+	if _hero_ring:
+		_hero_ring.modulate.a = 1.0
+
+# ═══════════════════════════════════════════════════════════
+#  Polish combat — item 6 (flash coup fatal)
+# ═══════════════════════════════════════════════════════════
+
+func _kill_impact(ring: CombatRing) -> void:
+	var tw := create_tween()
+	tw.tween_property(ring, "modulate", Color(2.2, 2.2, 2.2, 1.0), 0.06)
+	tw.tween_property(ring, "modulate", Color.WHITE, 0.40).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+
+# ═══════════════════════════════════════════════════════════
+#  Polish combat — item 7 (bannière de transition de zone)
+# ═══════════════════════════════════════════════════════════
+
+func _show_zone_banner(zone_idx: int) -> void:
+	const PREFIXES := ["", "↓ ", "↓↓ "]
+	var idx       := clampi(zone_idx, 0, 2)
+	var color     := UIColors.zone_color(idx)
+	var lbl       := Label.new()
+	lbl.text      = PREFIXES[idx] + Translations.zone_name(idx)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 24)
+	lbl.add_theme_color_override("font_color", color)
+	lbl.anchor_left   = 0.0; lbl.anchor_right  = 1.0
+	lbl.anchor_top    = 0.5; lbl.anchor_bottom = 0.5
+	lbl.offset_top    = -16; lbl.offset_bottom = 16
+	lbl.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+	add_child(lbl)
+	var tw := create_tween()
+	tw.tween_interval(1.5)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.5)
+	get_tree().create_timer(2.1).timeout.connect(lbl.queue_free)
+
+# ═══════════════════════════════════════════════════════════
+#  Polish combat — item 8 (pills d'état colorées)
+# ═══════════════════════════════════════════════════════════
+
+func _clear_state_pills() -> void:
+	if _hero_states:
+		for child in _hero_states.get_children():
+			child.queue_free()
+	if _enemy_states:
+		for child in _enemy_states.get_children():
+			child.queue_free()
+	_shield_state_pill = null
+	_poison_state_pill = null
+
+func _update_shield_pill(value: int) -> void:
+	var color := Color(0.3, 0.7, 1.0)
+	if value <= 0:
+		if _shield_state_pill and is_instance_valid(_shield_state_pill):
+			_shield_state_pill.queue_free()
+		_shield_state_pill = null
+		return
+	if _shield_state_pill == null or not is_instance_valid(_shield_state_pill):
+		_shield_state_pill = _make_state_pill_node("🛡 %d" % value, color)
+		if _hero_states:
+			_hero_states.add_child(_shield_state_pill)
+	else:
+		(_shield_state_pill.get_child(0) as Label).text = "🛡 %d" % value
+
+func _update_poison_pill(active: bool) -> void:
+	var color := Color(0.62, 0.15, 0.78)
+	if not active:
+		if _poison_state_pill and is_instance_valid(_poison_state_pill):
+			_poison_state_pill.queue_free()
+		_poison_state_pill = null
+		return
+	if _poison_state_pill == null or not is_instance_valid(_poison_state_pill):
+		_poison_state_pill = _make_state_pill_node(Translations.T("combat.venom_pill"), color)
+		if _enemy_states:
+			_enemy_states.add_child(_poison_state_pill)
+
+func _make_state_pill_node(text: String, color: Color) -> Control:
+	var box := PanelContainer.new()
+	box.add_theme_stylebox_override("panel", UIHelpers.card_style(color, 0.18, 0.70, 1, 6))
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", color)
+	box.add_child(lbl)
+	return box
+
+# ═══════════════════════════════════════════════════════════
+#  Polish combat — item 9 (notification d'évolution)
+# ═══════════════════════════════════════════════════════════
+
+func _on_entity_ready_to_evolve(entity_id: String) -> void:
+	if not AdventureSystem.is_running:
+		return
+	var entity := GameData.get_entity(entity_id)
+	var nom    := entity.get("nom_affichage_fr", entity.get("name", entity_id)) as String
+	var tier   := int(entity.get("maitrise_actuelle", 0))
+	_push_feed(Translations.T("combat.ready_evolve") % nom, UIColors.tier_color(mini(tier + 1, 5)))

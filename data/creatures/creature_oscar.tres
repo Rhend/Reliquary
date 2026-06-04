@@ -18,3 +18,5 @@ stats_par_palier = {0: {"atk": 25, "def": 8, "hp": 150, "vit": 20, "xp_reward": 
 ingredients_drop_ids = []
 loot_table = []
 passif_debloque_id = "passif_unique_foret"
+crit_chance = 0.28
+crit_multiplier = 1.9

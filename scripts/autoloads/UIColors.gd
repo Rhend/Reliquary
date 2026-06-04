@@ -90,9 +90,6 @@ const DMG_BY_ENEMY  := Color(1.00, 0.30, 0.15)   # dégâts reçus par le héros
 const DMG_HEAVY_HERO  := Color(1.00, 0.50, 0.08)   # orange éclatant — dégâts forts par le héros
 const DMG_HEAVY_ENEMY := Color(1.00, 0.08, 0.08)   # rouge vif — dégâts forts par l'ennemi
 
-# ── Combo ────────────────────────────────────────────────────
-const COMBO_COLOR := Color(1.00, 0.62, 0.05)
-
 # ───────────────────────────────────────────────────────────
 #  Fonctions utilitaires (logique conditionnelle)
 # ───────────────────────────────────────────────────────────

@@ -15,3 +15,5 @@ extends Resource
 @export var ingredients_drop_ids:       Array[String]      = []
 @export var loot_table:                 Array              = []
 @export var passif_debloque_id:         String             = ""
+@export var crit_chance:                float              = 0.20
+@export var crit_multiplier:            float              = 1.8

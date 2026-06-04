@@ -75,17 +75,21 @@ func start_combat(enemy: Dictionary, current_hp: float,
 		extended_options["passive_poison"] = passive_effects["passive_poison"]
 
 	var hero_stats := {
-		"hp":     current_hp,
-		"hp_max": h_hp_max,
-		"atk":    h_atk,
-		"def":    h_def,
-		"vit":    h_vit,
+		"hp":              current_hp,
+		"hp_max":          h_hp_max,
+		"atk":             h_atk,
+		"def":             h_def,
+		"vit":             h_vit,
+		"crit_chance":     float(stats.get("crit_chance",     Balance.CRIT_CHANCE)),
+		"crit_multiplier": float(stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
 	}
 	var enemy_stats := {
-		"hp":  e_hp,
-		"atk": float(enemy.get("atk", 8)),
-		"def": float(enemy.get("def", 2)),
-		"vit": float(enemy.get("vit", 20)),
+		"hp":              e_hp,
+		"atk":             float(enemy.get("atk", 8)),
+		"def":             float(enemy.get("def", 2)),
+		"vit":             float(enemy.get("vit", 20)),
+		"crit_chance":     float(enemy.get("crit_chance",     Balance.CRIT_CHANCE)),
+		"crit_multiplier": float(enemy.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
 	}
 
 	_enemy_dict       = enemy

@@ -30,11 +30,15 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	var h_atk    := float(hero_stats.get("atk",    10))
 	var h_def    := float(hero_stats.get("def",    5))
 	var h_vit    := maxf(float(hero_stats.get("vit", 20)), 1.0)
+	var h_crit_chance: float = float(hero_stats.get("crit_chance",     Balance.CRIT_CHANCE))
+	var h_crit_mult:   float = float(hero_stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER))
 
 	var e_hp  := float(enemy_stats.get("hp",  50))
 	var e_atk := float(enemy_stats.get("atk", 8))
 	var e_def := float(enemy_stats.get("def", 2))
 	var e_vit := maxf(float(enemy_stats.get("vit", 20)), 1.0)
+	var e_crit_chance: float = float(enemy_stats.get("crit_chance",     Balance.CRIT_CHANCE))
+	var e_crit_mult:   float = float(enemy_stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER))
 
 	# ── Options mécaniques ─────────────────────────────────────
 	var use_ambush: bool = options.get("ambush", false)
@@ -67,7 +71,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 
 	# ── Tour d'embuscade (Forêt Sombre) ─────────────────────────
 	if use_ambush:
-		var ambush_step := _make_enemy_step(e_atk, h_def, h_hp, h_shield)
+		var ambush_step := _make_enemy_step(e_atk, h_def, h_hp, h_shield, e_crit_chance, e_crit_mult)
 		ambush_step.tick_time = 0
 		ambush_step.is_ambush = true
 		h_hp     = float(ambush_step.target_hp_after)
@@ -94,7 +98,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		# ── Tour héros ───────────────────────────────────────────
 		if h_gauge >= Balance.GAUGE_THRESHOLD:
 			h_gauge -= Balance.GAUGE_THRESHOLD
-			var step := _make_hero_step(h_atk, e_def, e_hp)
+			var step := _make_hero_step(h_atk, e_def, e_hp, h_crit_chance, h_crit_mult)
 			step.tick_time = current_tick
 			e_hp = float(step.target_hp_after)
 			steps.append(step)
@@ -116,7 +120,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		# ── Tour ennemi ─────────────────────────────────────────
 		if e_gauge >= Balance.GAUGE_THRESHOLD and h_hp > 0.0:
 			e_gauge -= Balance.GAUGE_THRESHOLD
-			var step := _make_enemy_step(e_atk, h_def, h_hp, h_shield)
+			var step := _make_enemy_step(e_atk, h_def, h_hp, h_shield, e_crit_chance, e_crit_mult)
 			step.tick_time = current_tick
 			h_hp     = float(step.target_hp_after)
 			h_shield = maxf(h_shield - float(step.shield_absorbed), 0.0)
@@ -185,10 +189,11 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 # ─── Factories de steps ─────────────────────────────────────
 
 # Step héros : dégâts simples sur l'ennemi (pas de bouclier côté ennemi).
-static func _make_hero_step(atk: float, target_def: float, target_hp: float) -> CombatStep:
-	var is_crit  := randf() < Balance.CRIT_CHANCE
+static func _make_hero_step(atk: float, target_def: float, target_hp: float,
+		crit_chance: float, crit_mult: float) -> CombatStep:
+	var is_crit  := randf() < crit_chance
 	var base_dmg := maxf(atk - target_def, Balance.MIN_DAMAGE)
-	var damage   := base_dmg * (Balance.CRIT_MULTIPLIER if is_crit else 1.0)
+	var damage   := base_dmg * (crit_mult if is_crit else 1.0)
 	var new_hp   := maxf(target_hp - damage, 0.0)
 
 	var step := CombatStep.new()
@@ -202,10 +207,11 @@ static func _make_hero_step(atk: float, target_def: float, target_hp: float) -> 
 # Step ennemi : dégâts avec absorption bouclier héros.
 # shield_absorbed est mis à jour dans le step ; les HP héros réels = target_hp - (raw - absorbed).
 static func _make_enemy_step(atk: float, target_def: float,
-		target_hp: float, current_shield: float) -> CombatStep:
-	var is_crit  := randf() < Balance.CRIT_CHANCE
+		target_hp: float, current_shield: float,
+		crit_chance: float, crit_mult: float) -> CombatStep:
+	var is_crit  := randf() < crit_chance
 	var base_dmg := maxf(atk - target_def, Balance.MIN_DAMAGE)
-	var raw_dmg  := base_dmg * (Balance.CRIT_MULTIPLIER if is_crit else 1.0)
+	var raw_dmg  := base_dmg * (crit_mult if is_crit else 1.0)
 
 	# Absorption bouclier
 	var absorbed  := minf(raw_dmg, current_shield)

@@ -2,7 +2,7 @@
 # Balance.gd — Source de vérité UNIQUE de l'équilibrage du jeu.
 #
 # Toutes les constantes d'équilibrage globales (combat, XP,
-# maîtrise, combo, drops, zones, modificateurs de cycle…) sont
+# maîtrise, drops, zones, modificateurs de cycle…) sont
 # regroupées ici pour pouvoir retoucher les chiffres et les
 # règles à un seul endroit lors des refontes mathématiques.
 #
@@ -168,13 +168,6 @@ const ECLOSION_CLICS: int = 100
 # Progression ajoutée par clic. Valeur normale : 1 (≈ 100 clics).
 # Réglée à 25 pour accélérer les tests (4 clics → paliers d'éveil 25/50/75/100).
 const ECLOSION_CLIC_VALUE: int = 25
-
-# ═══════════════════════════════════════════════════════════
-#  Combo
-# ═══════════════════════════════════════════════════════════
-
-const COMBO_HP_THRESHOLD:  float = 0.25  # PV perdu max (%) pour conserver le combo
-const COMBO_ATK_BONUS_PCT: float = 0.05  # +5 % ATK par niveau de combo au-dessus de 1
 
 # ═══════════════════════════════════════════════════════════
 #  Régénération

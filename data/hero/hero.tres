@@ -9,6 +9,8 @@ nom_affichage_fr = "Héros"
 lore_fr = "Tu t'eveilles sans nom et sans souvenir, mais avec la certitude que quelque chose t'a attendu ici. Le village te reconnait - meme si toi, tu ne te reconnais pas encore."
 nom_affichage_en = "Hero"
 passifs_par_palier = {}
+crit_chance = 0.20
+crit_multiplier = 2.0
 
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

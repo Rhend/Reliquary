@@ -18,3 +18,5 @@ stats_par_palier = {0: {"atk": 10, "def": 0, "hp": 40, "vit": 30, "xp_reward": 1
 ingredients_drop_ids = ["res_fourrure"]
 loot_table = [{"item_id": "res_fourrure", "chance": 0.3}]
 passif_debloque_id = ""
+crit_chance = 0.25
+crit_multiplier = 1.5

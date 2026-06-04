@@ -36,7 +36,7 @@ static func build(host: Village) -> void:
 	host._rp_content.add_child(id_card["card"] as Control)
 
 	# ── STATISTIQUES ──────────────────────────────────────────
-	var stats_sec := UIHelpers.collapsible_section("◆  STATISTIQUES", tcolor)
+	var stats_sec := UIHelpers.collapsible_section(Translations.T("hero.section.stats"), tcolor)
 	host._rp_content.add_child(stats_sec["wrapper"])
 	var stats_body := stats_sec["body"] as VBoxContainer
 
@@ -57,9 +57,9 @@ static func build(host: Village) -> void:
 	stats_body.add_child(stats_row)
 
 	for row: Array in [
-		["ATK", atk_base + atk_bonus, atk_base, atk_bonus, UIColors.STAT_ATK],
-		["DEF", def_base + def_bonus, def_base, def_bonus, UIColors.STAT_DEF],
-		["PV",  hp_base  + hp_bonus,  hp_base,  hp_bonus,  UIColors.STAT_HP ],
+		[Translations.T("hero.stat.atk"), atk_base + atk_bonus, atk_base, atk_bonus, UIColors.STAT_ATK],
+		[Translations.T("hero.stat.def"), def_base + def_bonus, def_base, def_bonus, UIColors.STAT_DEF],
+		[Translations.T("hero.stat.hp"),  hp_base  + hp_bonus,  hp_base,  hp_bonus,  UIColors.STAT_HP ],
 	]:
 		var grp := HBoxContainer.new()
 		grp.add_theme_constant_override("separation", 4)
@@ -86,28 +86,28 @@ static func build(host: Village) -> void:
 				c.get("entity_type", "creature") as String, tier))
 	else:
 		var ml := Label.new()
-		ml.text = "▲ NIVEAU MAXIMUM"
+		ml.text = Translations.T("tier.max_level")
 		ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		ml.add_theme_font_size_override("font_size", 11)
 		ml.add_theme_color_override("font_color", UIColors.FILTER_ON)
 		stats_body.add_child(ml)
 
 	# ── ÉQUIPEMENT ────────────────────────────────────────────
-	var equip_sec := UIHelpers.collapsible_section("◆  ÉQUIPEMENT", tcolor)
+	var equip_sec := UIHelpers.collapsible_section(Translations.T("hero.section.equip"), tcolor)
 	host._rp_content.add_child(equip_sec["wrapper"])
 	var equip_body := equip_sec["body"] as VBoxContainer
 	for entry in EQUIP_SLOTS:
 		var slot_key:  String = entry[0]
 		var slot_icon: String = entry[1]
 		var equip_id:  String = entry[2]
-		var slot_name: String = entry[3]
+		var slot_name: String = Translations.equip_slot_name(slot_key)
 		var equip := GameData.get_entity(equip_id)
 		if equip.is_empty():
 			continue
 		equip_body.add_child(_equip_slot_card(host, slot_key, slot_icon, slot_name, equip_id, equip, tcolor))
 
 	# ── PASSIFS ───────────────────────────────────────────────
-	var passif_sec := UIHelpers.collapsible_section("◆  PASSIFS", tcolor)
+	var passif_sec := UIHelpers.collapsible_section(Translations.T("hero.section.passives"), tcolor)
 	host._rp_content.add_child(passif_sec["wrapper"])
 	var passif_body := passif_sec["body"] as VBoxContainer
 
@@ -131,7 +131,7 @@ static func build(host: Village) -> void:
 
 	if cards.is_empty():
 		var none_lbl := Label.new()
-		none_lbl.text = "Aucun passif débloqué"
+		none_lbl.text = Translations.T("hero.no_passive")
 		none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		none_lbl.add_theme_font_size_override("font_size", 11)
 		none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
@@ -142,7 +142,7 @@ static func build(host: Village) -> void:
 
 	# ── INGRÉDIENTS (masqué si Village < T1) ─────────────────
 	if (GameData.village.get("tier_actuel", 0) as int) >= 1:
-		var ingr_sec := UIHelpers.collapsible_section("◆  INGRÉDIENTS", tcolor)
+		var ingr_sec := UIHelpers.collapsible_section(Translations.T("hero.section.ingredients"), tcolor)
 		ingr_sec["wrapper"].name = "IngredientsSection"
 		host._rp_content.add_child(ingr_sec["wrapper"])
 		var ingr_body := ingr_sec["body"] as VBoxContainer
@@ -165,7 +165,7 @@ static func build(host: Village) -> void:
 
 		if ingr_list.is_empty():
 			var none_lbl := Label.new()
-			none_lbl.text = "Aucun ingrédient en stock"
+			none_lbl.text = Translations.T("hero.no_ingredient")
 			none_lbl.add_theme_font_size_override("font_size", 11)
 			none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 			none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -276,7 +276,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 	# Cascade des paliers non encore atteints
 	if has_evos:
 		var unlock_hdr := Label.new()
-		unlock_hdr.text = "— À DÉBLOQUER —"
+		unlock_hdr.text = Translations.T("hero.passive.unlock_hdr")
 		unlock_hdr.add_theme_font_size_override("font_size", 9)
 		unlock_hdr.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		unlock_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -293,9 +293,9 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 		# Tooltip passif.
 		var eff_list := pdata.get("effets_par_palier", pdata.get("effet_par_palier", {})) as Dictionary
 		var cur_eff  := str(eff_list.get(str(rarity), "")) as String
-		var tt_body  := "Maîtrise : %s" % GameData.get_tier_name(rarity)
+		var tt_body  := Translations.T("hero.passive.tt_mastery") % GameData.get_tier_name(rarity)
 		if cur_eff != "":
-			tt_body += "\nEffet : %s" % cur_eff
+			tt_body += Translations.T("hero.passive.tt_effect") % cur_eff
 		UIHelpers.register_tooltip(panel, name_txt, tt_body, UIColors.tier_color(rarity),
 				pdata.get("lore_fr", "") as String)
 		panel.gui_input.connect(func(event: InputEvent) -> void:
@@ -349,7 +349,7 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	hb.add_child(name_lbl)
 
 	var xp_lbl := Label.new()
-	xp_lbl.text = "RANG MAX" if is_max else "%s / %s XP" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(xp_need)]
+	xp_lbl.text = Translations.T("tier.max_rank") if is_max else "%s / %s XP" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(xp_need)]
 	xp_lbl.add_theme_font_size_override("font_size", 9)
 	xp_lbl.add_theme_color_override("font_color", tc if is_max else UIColors.TEXT_MUTED)
 	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -387,9 +387,9 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	var stats_dict := equip.get("stats_par_palier", {}) as Dictionary
 	var stats_at   := stats_dict.get(etier, stats_dict.get(0, {})) as Dictionary
 	var stat_parts: PackedStringArray = []
-	if int(stats_at.get("atk", 0)) != 0:              stat_parts.append("ATK +%d" % int(stats_at["atk"]))
-	if int(stats_at.get("def", 0)) != 0:              stat_parts.append("DEF +%d" % int(stats_at["def"]))
-	if int(stats_at.get("hp", 0)) != 0:               stat_parts.append("PV +%d" % int(stats_at["hp"]))
+	if int(stats_at.get("atk", 0)) != 0:              stat_parts.append(Translations.T("hero.stat.atk") + " +%d" % int(stats_at["atk"]))
+	if int(stats_at.get("def", 0)) != 0:              stat_parts.append(Translations.T("hero.stat.def") + " +%d" % int(stats_at["def"]))
+	if int(stats_at.get("hp", 0)) != 0:               stat_parts.append(Translations.T("hero.stat.hp") + " +%d" % int(stats_at["hp"]))
 	if int(stats_at.get("attack_speed_pct", 0)) != 0: stat_parts.append("VIT +%d%%" % int(stats_at["attack_speed_pct"]))
 
 	# ── Carte XP unifiée (DA commune) ─────────────────────────
@@ -425,7 +425,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 		wrapper.add_child(_forge_ready_panel(equip_id, etier, ec))
 
 	# Tooltip JRPG
-	var tt := "Slot : %s  ·  Rang : %s" % [slot_name, GameData.get_tier_name(etier)]
+	var tt := Translations.T("hero.equip.tt_slot") % [slot_name, GameData.get_tier_name(etier)]
 	if stat_parts.size() > 0:
 		tt += "\n" + "  ".join(stat_parts)
 	UIHelpers.register_tooltip(xpcard, enom, tt, ec, equip.get("lore_fr", "") as String)
@@ -444,7 +444,7 @@ static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Contr
 
 	if int(GameData.village.get("tier_actuel", 0)) < 1:
 		var lbl := Label.new()
-		lbl.text = "🔨  Forge Requise"
+		lbl.text = Translations.T("hero.forge_required")
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.add_theme_font_size_override("font_size", 12)
 		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
@@ -454,7 +454,7 @@ static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Contr
 		if recipe.is_empty():
 			return body
 		var hdr_lbl := Label.new()
-		hdr_lbl.text = "🔨  Prêt à forger :"
+		hdr_lbl.text = Translations.T("hero.forge_ready")
 		hdr_lbl.add_theme_font_size_override("font_size", 11)
 		hdr_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY)
 		vb.add_child(hdr_lbl)

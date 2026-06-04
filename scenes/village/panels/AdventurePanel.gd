@@ -22,8 +22,7 @@ static func build(host: Village) -> void:
 	if AdventureSystem.is_running:
 		var running_biome := GameData.get_entity(AdventureSystem.current_biome_id)
 		var rname := running_biome.get("nom_affichage_fr", "Biome") as String
-		var zone_names := ["Surface", "Profondeur", "Abysse"]
-		var zone_str   := zone_names[clampi(int(AdventureSystem.zone_courante), 0, 2)] as String
+		var zone_str   := Translations.zone_name(int(AdventureSystem.zone_courante))
 		var info := PanelContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.add_theme_stylebox_override("panel", UIHelpers.card_style(tcolor, 0.10, 0.60, 2, 6))
@@ -33,7 +32,7 @@ static func build(host: Village) -> void:
 		vb.add_theme_constant_override("separation", 3)
 		m.add_child(vb)
 		var lbl1 := Label.new()
-		lbl1.text = "⚔  Expédition en cours"
+		lbl1.text = "⚔  " + Translations.T("adv.running.expedition")
 		lbl1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl1.add_theme_font_size_override("font_size", 14)
 		lbl1.add_theme_color_override("font_color", tcolor)
@@ -58,7 +57,7 @@ static func build(host: Village) -> void:
 	placeholder.visible = no_biome_selected and not AdventureSystem.is_running
 	placeholder.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.25, 1, 6))
 	var ph_lbl := Label.new()
-	ph_lbl.text = "Choisir un biome pour partir en expédition"
+	ph_lbl.text = Translations.T("adv.biome_placeholder")
 	ph_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ph_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	ph_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -77,9 +76,9 @@ static func build(host: Village) -> void:
 	btn.visible = not no_biome_selected and not AdventureSystem.is_running
 	if not no_biome_selected:
 		var bname: String = str(GameData.get_entity(host._adv_selected_biome_id).get("nom_affichage_fr", host._adv_selected_biome_id)).to_upper()
-		btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+		btn.text = Translations.T("adv.start_btn_named") % bname
 	else:
-		btn.text = "⚔   PARTIR EN EXPÉDITION"
+		btn.text = Translations.T("adv.start_btn")
 	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	btn.pressed.connect(host._on_start_selected_expedition)
@@ -91,7 +90,7 @@ static func build(host: Village) -> void:
 	host._rp_content.add_child(HSeparator.new())
 
 	# ── Liste des biomes (accordéon) ──────────────────────────
-	var biomes_sec  := UIHelpers.collapsible_section("◆  BIOMES DISPONIBLES", tcolor)
+	var biomes_sec  := UIHelpers.collapsible_section(Translations.T("adv.section.biomes"), tcolor)
 	host._rp_content.add_child(biomes_sec["wrapper"])
 	var biomes_body := biomes_sec["body"] as VBoxContainer
 
@@ -128,7 +127,7 @@ static func build(host: Village) -> void:
 				arrow.text = "  ▼" if section.visible else "  ▶"
 				if section.visible:
 					# Ré-sélection : bouton actif.
-					btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+					btn.text = Translations.T("adv.start_btn_named") % bname
 					btn.visible = true
 					placeholder.visible = false
 				else:
@@ -144,7 +143,7 @@ static func build(host: Village) -> void:
 				host._adv_selected_biome_id = bid
 				section.visible = true
 				arrow.text = "  ▼"
-				btn.text = "⚔   PARTIR EN EXPÉDITION — " + bname
+				btn.text = Translations.T("adv.start_btn_named") % bname
 				placeholder.visible = false
 				btn.visible = true
 		)
@@ -182,7 +181,7 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	var btooltip_body := _tooltip_zone_line(btier)
 	var mech_id := biome.get("mecanique_forte_id", "") as String
 	if mech_id != "":
-		btooltip_body += "\nMécanique : " + _mech_name(mech_id)
+		btooltip_body += "\n" + Translations.T("adv.mechanic_label") % _mech_name(mech_id)
 	UIHelpers.register_tooltip(panel,
 			biome.get("nom_affichage_fr", biome_id) as String,
 			btooltip_body, UIColors.tier_color(btier),
@@ -218,9 +217,9 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 
 	# Filtrage par zone débloquée : seuls les éléments des zones actives comptent et s'affichent.
 	# Chaque catégorie porte son propre motif de barre d'XP (cf. XPCard.Motif).
-	_adv_category_card(host, cat_vb, "CRÉATURES",    _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE,    XPCard.Motif.PAWS,      btier)
-	_adv_category_card(host, cat_vb, "PIÈGES",       _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP,        XPCard.Motif.LIGHTNING, btier)
-	_adv_category_card(host, cat_vb, "BÉNÉDICTIONS", _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES,   btier)
+	_adv_category_card(host, cat_vb, Translations.T("adv.section.creatures"),  _filter_pool_by_zone(pools["creatures"], btier),    UIColors.TYPE_CREATURE,    XPCard.Motif.PAWS,      btier)
+	_adv_category_card(host, cat_vb, Translations.T("adv.section.traps"),      _filter_pool_by_zone(pools["traps"], btier),        UIColors.TYPE_TRAP,        XPCard.Motif.LIGHTNING, btier)
+	_adv_category_card(host, cat_vb, Translations.T("adv.section.blessings"),  _filter_pool_by_zone(pools["benedictions"], btier), UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES,   btier)
 	_adv_ingredient_section(cat_vb, pools["ingredients"])
 
 	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
@@ -370,7 +369,7 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		hb.add_child(tbadge)
 
 		if not is_equip:
-			var xp_text := "RANG MAX" if at_max \
+			var xp_text := Translations.T("tier.max_rank") if at_max \
 					else "%s / %s XP" % [UIHelpers.xp_fmt(int(entity_xp)), UIHelpers.xp_fmt(xp_need)]
 			var xp_lbl := Label.new()
 			xp_lbl.text = xp_text
@@ -394,7 +393,7 @@ static func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	# Section absente (pas grisée) tant que la Forge n'est pas débloquée (Village Tier 1).
 	if (GameData.village.get("tier_actuel", 0) as int) < 1:
 		return
-	var body := _accordion(parent, "INGRÉDIENTS", "")
+	var body := _accordion(parent, Translations.T("adv.section.ingredients"), "")
 	for entry: Dictionary in pool:
 		var ec := UIColors.tier_color(int(entry.get("tier", 0)))
 		var row := HBoxContainer.new()
@@ -425,19 +424,18 @@ static func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 # Affiche la mécanique forte du biome : pill colorée (active) ou verrouillée (tier < Rare).
 # Rien si le biome n'a pas de mécanique définie.
 static func _adv_mechanic_row(parent: VBoxContainer, biome: Dictionary) -> void:
-	const MECHS: Dictionary = {
-		"ambush":       ["Embuscade",      "La créature attaque en premier.",                    Color(0.90, 0.35, 0.35)],
-		"poison":       ["Empoisonnement", "Chaque frappe du héros empoisonne l'ennemi (3 max).", Color(0.40, 0.80, 0.30)],
-		"bonne_etoile": ["Bonne Étoile",   "-5 % de combats, +5 % de bénédictions.",             Color(1.00, 0.85, 0.30)],
+	const MECH_COLORS: Dictionary = {
+		"ambush":       Color(0.90, 0.35, 0.35),
+		"poison":       Color(0.40, 0.80, 0.30),
+		"bonne_etoile": Color(1.00, 0.85, 0.30),
 	}
 	var mech_id := biome.get("mecanique_forte_id", "") as String
-	if mech_id == "" or not MECHS.has(mech_id):
+	if mech_id == "" or not MECH_COLORS.has(mech_id):
 		return
 
-	var info    := MECHS[mech_id] as Array
-	var mname   := info[0] as String
-	var mdesc   := info[1] as String
-	var mcolor  := info[2] as Color
+	var mname   := Translations.mech_name(mech_id)
+	var mdesc   := Translations.mech_desc(mech_id)
+	var mcolor  := MECH_COLORS[mech_id] as Color
 	var btier   := int(biome.get("maitrise_actuelle", 0))
 	var active  := btier >= BiomeMechanics.UNLOCK_TIER
 
@@ -462,55 +460,46 @@ static func _adv_mechanic_row(parent: VBoxContainer, biome: Dictionary) -> void:
 
 	var text_lbl := Label.new()
 	text_lbl.text = ("%s  —  %s" % [mname, mdesc]) if active \
-			else ("%s  —  Débloquée à Rare" % mname)
+			else (Translations.T("adv.mechanic_locked") % mname)
 	text_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_lbl.add_theme_font_size_override("font_size", 11)
 	text_lbl.add_theme_color_override("font_color", pill_color)
 	hb.add_child(text_lbl)
 
-	var mtooltip := mdesc if active else "Atteins Rare pour débloquer cette mécanique."
-	UIHelpers.register_tooltip(pill, "Mécanique — %s" % mname, mtooltip, pill_color)
+	var mtooltip := mdesc if active else Translations.T("adv.mechanic_tt_locked")
+	UIHelpers.register_tooltip(pill, Translations.T("adv.mechanic_tt_title") % mname, mtooltip, pill_color)
 
 # ─── Helpers tooltip ──────────────────────────────────────────
 
 static func _mech_name(mech_id: String) -> String:
-	const N: Dictionary = {"ambush": "Embuscade", "poison": "Empoisonnement", "bonne_etoile": "Bonne Étoile"}
-	return N.get(mech_id, mech_id)
+	return Translations.mech_name(mech_id)
 
 # Ligne "Zone max : Surface / Profondeur / Abysse" selon le tier du biome.
 static func _tooltip_zone_line(btier: int) -> String:
 	var zone_max := Balance.max_unlocked_zone(btier)
-	const ZONES := ["Surface", "Profondeur", "Abysse"]
-	return "Zone max : %s" % ZONES[clampi(zone_max, 0, 2)]
+	return Translations.T("adv.zone_max") % Translations.zone_name(zone_max)
 
 # Corps de tooltip pour une entité (créature, piège, bénédiction, ingrédient).
 static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary, btier: int = 0) -> String:
 	var etype    := entity.get("entity_type", "") as String
 	var tier     := int(entity.get("maitrise_actuelle", 0))
-	var zone_max := Balance.max_unlocked_zone(btier)
+	var _zone_max := Balance.max_unlocked_zone(btier)
 	match etype:
 		"creature":
-			const ZONE_NAMES := ["Surface", "Profondeur", "Abysse"]
 			var z    := int(entry.get("zone_associee", 0))
-			var zname := ZONE_NAMES[clampi(z, 0, 2)] as String
-			return "Zone : %s\nMaîtrise : %s" % [zname, GameData.get_tier_name(tier)]
+			return Translations.T("adv.creature.tt") % [Translations.zone_name(z), GameData.get_tier_name(tier)]
 		"trap":
-			# N'affiche que les zones accessibles
-			const DMG_ZONES := [["Surface", "8 % PV"], ["Profondeur", "15 % PV"], ["Abysse", "30 % PV"]]
-			var parts: PackedStringArray = []
-			for i in mini(zone_max + 1, DMG_ZONES.size()):
-				parts.append("%s : %s" % [DMG_ZONES[i][0], DMG_ZONES[i][1]])
-			return "  ·  ".join(parts) + "\nMaîtrise réduit les dégâts subis."
+			return Translations.T("adv.trap.dmg_zones") + Translations.T("adv.trap.mastery_note")
 		"benediction":
-			return "Bonus XP et soins selon la zone.\nMaîtrise augmente l'effet reçu."
+			return Translations.T("adv.bless.desc")
 		"ingredient":
 			var biome_id := entity.get("biome_source_id", "") as String
 			var biome_e  := GameData.get_entity(biome_id)
 			var bname    := biome_e.get("nom_affichage_fr", biome_id) as String
 			var qty      := int(GameData.player["resources"].get(entity.get("id", ""), 0))
-			return "Biome : %s\nEn stock : %d" % [bname, qty]
+			return Translations.T("adv.ingr.tooltip") % [bname, qty]
 		_:
-			return "Maîtrise : %s" % GameData.get_tier_name(tier)
+			return Translations.T("hero.passive.tt_mastery") % GameData.get_tier_name(tier)
 
 # Garde uniquement les entrées dont la zone est débloquée pour ce tier de biome.
 # Les entrées sans champ de zone (pièges, bénédictions — transversaux) sont conservées.

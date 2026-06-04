@@ -87,7 +87,7 @@ func _build_ui() -> void:
 	title_m.add_child(title_hb)
 
 	var title_lbl := Label.new()
-	title_lbl.text                  = "CYCLE TERMINÉ  —  %s" % biome_name.to_upper()
+	title_lbl.text                  = Translations.T("cycle.title") % biome_name.to_upper()
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_lbl.vertical_alignment    = VERTICAL_ALIGNMENT_CENTER
 	title_lbl.add_theme_font_size_override("font_size", 16)
@@ -95,11 +95,11 @@ func _build_ui() -> void:
 	title_hb.add_child(title_lbl)
 
 	# Tag de fin de cycle — style uniforme, seul le texte change.
-	var tag_text := "Défaite"
+	var tag_text := Translations.T("cycle.defeat")
 	if data.get("interrupted", false):
-		tag_text = "Interruption"
+		tag_text = Translations.T("cycle.interrupted")
 	elif data.get("victory", false):
-		tag_text = "Victoire"
+		tag_text = Translations.T("cycle.victory")
 	var tag := PanelContainer.new()
 	tag.add_theme_stylebox_override("panel", UIHelpers.card_style(tcolor, 0.22, 0.80, 1, 10))
 	var tag_lbl := Label.new()
@@ -148,7 +148,7 @@ func _build_ui() -> void:
 	col.add_child(btn_m)
 
 	var btn := Button.new()
-	btn.text = "🏠  RETOUR AU VILLAGE"
+	btn.text = Translations.T("cycle.back_village")
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size   = Vector2(0, 52)
 	btn.add_theme_font_size_override("font_size", 17)
@@ -183,7 +183,7 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 	var traps     := _filter_zone(pools["traps"],        btier)
 	var benes     := _filter_zone(pools["benedictions"], btier)
 
-	var sec := UIHelpers.collapsible_section("◆  DÉCOUVERTES", tcolor)
+	var sec := UIHelpers.collapsible_section(Translations.T("cycle.section.discoveries"), tcolor)
 	vb.add_child(sec["wrapper"])
 	_fade_register(sec["wrapper"])
 	var body_dec := sec["body"] as VBoxContainer
@@ -195,9 +195,9 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body_dec.add_child(rows)
 
-	_discovery_row(rows, "Créatures rencontrées", MasteryRegistry.count_discovered(creatures), creatures.size())
-	_discovery_row(rows, "Pièges identifiés",     MasteryRegistry.count_discovered(traps),     traps.size())
-	_discovery_row(rows, "Bénédictions trouvées",  MasteryRegistry.count_discovered(benes),     benes.size())
+	_discovery_row(rows, Translations.T("cycle.encounters"), MasteryRegistry.count_discovered(creatures), creatures.size())
+	_discovery_row(rows, Translations.T("cycle.traps"),     MasteryRegistry.count_discovered(traps),     traps.size())
+	_discovery_row(rows, Translations.T("cycle.blessings"), MasteryRegistry.count_discovered(benes),     benes.size())
 
 	# Fragment de Mémoire du biome
 	var frag_done := false
@@ -206,15 +206,15 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 		if f.get("entity_type", "") == "fragment" and f.get("biome_source_id", "") == biome_id:
 			frag_done = f.get("est_collecte", false)
 			break
-	_discovery_check(rows, "Fragment de Mémoire", frag_done)
-	_discovery_check(rows, "Créature Unique", biome.get("creature_unique_vaincue", false) as bool)
+	_discovery_check(rows, Translations.T("cycle.discovery.fragment"), frag_done)
+	_discovery_check(rows, Translations.T("cycle.discovery.unique"), biome.get("creature_unique_vaincue", false) as bool)
 
 # ── Section 2 : Ressources collectées ──────────────────────────
 func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
 	var loot_detail := data.get("loot_detail", {}) as Dictionary
 	if loot_detail.is_empty():
 		return
-	var sec := UIHelpers.collapsible_section("◆  RESSOURCES COLLECTÉES", tcolor)
+	var sec := UIHelpers.collapsible_section(Translations.T("cycle.section.resources"), tcolor)
 	vb.add_child(sec["wrapper"])
 	_fade_register(sec["wrapper"])
 	var body_loot := sec["body"] as VBoxContainer
@@ -250,20 +250,20 @@ func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
 # ── Section 3 : Répartition XP ─────────────────────────────
 func _section_xp(vb: VBoxContainer, data: Dictionary,
 		biome_name: String, tcolor: Color) -> void:
-	var sec_xp := UIHelpers.collapsible_section("◆  RÉPARTITION XP", tcolor)
+	var sec_xp := UIHelpers.collapsible_section(Translations.T("cycle.section.xp"), tcolor)
 	vb.add_child(sec_xp["wrapper"])
 	_fade_register(sec_xp["wrapper"])
 	var body_xp := sec_xp["body"] as VBoxContainer
 
 	var total_lbl := Label.new()
-	total_lbl.text = "XP total — %d" % int(data.get("xp_total", 0.0))
+	total_lbl.text = Translations.T("cycle.xp_total") % int(data.get("xp_total", 0.0))
 	total_lbl.add_theme_font_size_override("font_size", 18)
 	total_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
 	body_xp.add_child(total_lbl)
 	_fade_register(total_lbl)
 
 	var cid := data.get("creature_id", "") as String
-	_xp_entity(body_xp, "⚔", "Héros", GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
+	_xp_entity(body_xp, "⚔", Translations.T("cycle.hero_label"), GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
 	_xp_entity(body_xp, "🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String),
 			data.get("xp_biome", 0.0) as float)
 
@@ -316,7 +316,7 @@ func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictiona
 
 # ── Section 3 : Évolutions disponibles ─────────────────────
 func _section_evolutions(vb: VBoxContainer) -> void:
-	var sec_ev := UIHelpers.collapsible_section("◆  ÉVOLUTIONS DISPONIBLES", UIColors.FILTER_ON)
+	var sec_ev := UIHelpers.collapsible_section(Translations.T("cycle.section.evolutions"), UIColors.FILTER_ON)
 	vb.add_child(sec_ev["wrapper"])
 	_fade_register(sec_ev["wrapper"])
 	var body_ev := sec_ev["body"] as VBoxContainer
@@ -332,7 +332,7 @@ func _section_evolutions(vb: VBoxContainer) -> void:
 
 	if not found:
 		var lbl := Label.new()
-		lbl.text = "Aucune évolution disponible"
+		lbl.text = Translations.T("cycle.no_evolution")
 		lbl.add_theme_font_size_override("font_size", 13)
 		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		body_ev.add_child(lbl)
@@ -373,7 +373,7 @@ func _evolution_card(vb: VBoxContainer, entity_id: String, entity: Dictionary) -
 	info.add_child(tier_lbl)
 
 	var btn := Button.new()
-	btn.text = "ÉVOLUER ▲"
+	btn.text = Translations.T("btn.evolve")
 	btn.add_theme_font_size_override("font_size", 13)
 	btn.add_theme_color_override("font_color", nc)
 	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(nc, 0.15, 1.0, 1, 4))

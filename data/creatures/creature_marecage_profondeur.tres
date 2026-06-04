@@ -18,3 +18,5 @@ stats_par_palier = {0: {"atk": 14, "def": 0, "hp": 60, "vit": 28, "xp_reward": 1
 ingredients_drop_ids = ["res_venin", "res_ecaille"]
 loot_table = [{"item_id": "res_venin", "chance": 0.4}, {"item_id": "res_ecaille", "chance": 0.25}]
 passif_debloque_id = ""
+crit_chance = 0.08
+crit_multiplier = 3.2

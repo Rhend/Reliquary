@@ -110,7 +110,14 @@ const STRINGS: Dictionary = {
 		"forge.equip.forge_btn":"Forger → %s",
 		"forge.equip.tt_slot":  "Slot : %s  ·  Rang : %s",
 		"forge.equip.tt_next":  "\n→ %s : %s",
-		"forge.ingr.x_of_y":   "%d / %d",
+		"forge.ingr.x_of_y":        "%d / %d",
+		"forge.locked.title":       "LE FORGERON",
+		"forge.locked.quote":       "« Je ne peux pas encore vous aider. »",
+		"forge.locked.hint":        "Libérez un Fragment de Mémoire\npour faire évoluer le Village.",
+		"forge.recipe.tt_stock":    "En stock : %d\nRequis : %d",
+		"forge.equip.low_xp_pct":   "⧖  XP — %d %%  (continuez l'aventure)",
+		"forge.equip.forge_unavail":      "Forge indisponible",
+		"forge.equip.forge_tt_unavail":   "Remplissez la barre XP et réunissez les ingrédients.",
 
 		# ── AdventurePanel ───────────────────────────────────
 		"adv.running.expedition": "Expédition en cours",
@@ -131,6 +138,7 @@ const STRINGS: Dictionary = {
 		"adv.trap.dmg_zones":     "Surface : 8 %% PV  ·  Profondeur : 15 %% PV  ·  Abysse : 30 %% PV",
 		"adv.trap.mastery_note":  "\nMaîtrise réduit les dégâts subis.",
 		"adv.bless.desc":         "Bonus XP et soins selon la zone.\nMaîtrise augmente l'effet reçu.",
+		"adv.creature.tt":        "Zone : %s\nMaîtrise : %s",
 
 		# ── Mécaniques fortes ─────────────────────────────────
 		"mech.ambush.name":       "Embuscade",
@@ -152,6 +160,24 @@ const STRINGS: Dictionary = {
 		"combat.log.defense":     "Défense",
 		"combat.log.heal":        "Soin",
 		"combat.log.status":      "État",
+		"combat.xp_label_fmt":    "XP ce cycle — %d",
+		"combat.bless.heal":      "+%d PV",
+		"combat.bless.atk":       "+%d ATK (temporaire)",
+		"combat.bless.def":       "+%d DEF (temporaire)",
+		"combat.bless.xp":        "+%d%% XP ce cycle",
+		"combat.bless.unknown":   "Effet inconnu",
+		"combat.action.crit":     "Critique !",
+		"combat.action.attack":   "Attaque",
+		"combat.poison":          "Poison",
+		"combat.venom":           "Venin",
+		"combat.venom_contact":   "Contact Venimeux",
+		"combat.shield_absorb":   "Bouclier absorbe %d",
+		"combat.shield_proc":     "Bouclier d'urgence activé",
+		"combat.shield_pill":     "Bouclier +%d",
+		"combat.regen":           "Régénération +%d",
+		"combat.unique_slain":    "Créature Unique vaincue — %s, %s",
+		"combat.venom_pill":      "☠ Venin",
+		"combat.ready_evolve":    "⬆ %s prêt à évoluer",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "CYCLE TERMINÉ  —  %s",
@@ -168,6 +194,9 @@ const STRINGS: Dictionary = {
 		"cycle.encounters":          "Créatures rencontrées",
 		"cycle.traps":               "Pièges identifiés",
 		"cycle.blessings":           "Bénédictions trouvées",
+		"cycle.section.evolutions":  "◆  ÉVOLUTIONS DISPONIBLES",
+		"cycle.xp_total":            "XP total — %d",
+		"cycle.hero_label":          "Héros",
 
 		# ── Settings ─────────────────────────────────────────
 		"settings.title":         "⚙  PARAMÈTRES",
@@ -289,7 +318,14 @@ const STRINGS: Dictionary = {
 		"forge.equip.forge_btn":"Forge → %s",
 		"forge.equip.tt_slot":  "Slot: %s  ·  Rank: %s",
 		"forge.equip.tt_next":  "\n→ %s: %s",
-		"forge.ingr.x_of_y":   "%d / %d",
+		"forge.ingr.x_of_y":        "%d / %d",
+		"forge.locked.title":       "THE BLACKSMITH",
+		"forge.locked.quote":       "« I can't help you just yet. »",
+		"forge.locked.hint":        "Free a Memory Fragment\nto evolve the Village.",
+		"forge.recipe.tt_stock":    "In stock: %d\nRequired: %d",
+		"forge.equip.low_xp_pct":   "⧖  XP — %d%%  (keep adventuring)",
+		"forge.equip.forge_unavail":      "Forge unavailable",
+		"forge.equip.forge_tt_unavail":   "Fill the XP bar and gather the required ingredients.",
 
 		# ── AdventurePanel ───────────────────────────────────
 		"adv.running.expedition": "Expedition in progress",
@@ -310,6 +346,7 @@ const STRINGS: Dictionary = {
 		"adv.trap.dmg_zones":     "Surface: 8%% HP  ·  Depths: 15%% HP  ·  Abyss: 30%% HP",
 		"adv.trap.mastery_note":  "\nMastery reduces damage taken.",
 		"adv.bless.desc":         "XP bonus and healing based on zone.\nMastery increases the effect.",
+		"adv.creature.tt":        "Zone: %s\nMastery: %s",
 
 		# ── Mécaniques fortes ─────────────────────────────────
 		"mech.ambush.name":       "Ambush",
@@ -331,6 +368,24 @@ const STRINGS: Dictionary = {
 		"combat.log.defense":     "Defense",
 		"combat.log.heal":        "Heal",
 		"combat.log.status":      "Status",
+		"combat.xp_label_fmt":    "XP this cycle — %d",
+		"combat.bless.heal":      "+%d HP",
+		"combat.bless.atk":       "+%d ATK (temporary)",
+		"combat.bless.def":       "+%d DEF (temporary)",
+		"combat.bless.xp":        "+%d%% XP this cycle",
+		"combat.bless.unknown":   "Unknown effect",
+		"combat.action.crit":     "Critical!",
+		"combat.action.attack":   "Attack",
+		"combat.poison":          "Poison",
+		"combat.venom":           "Venom",
+		"combat.venom_contact":   "Venom Contact",
+		"combat.shield_absorb":   "Shield absorbs %d",
+		"combat.shield_proc":     "Emergency shield activated",
+		"combat.shield_pill":     "Shield +%d",
+		"combat.regen":           "Regeneration +%d",
+		"combat.unique_slain":    "Unique Creature slain — %s, %s",
+		"combat.venom_pill":      "☠ Venom",
+		"combat.ready_evolve":    "⬆ %s ready to evolve",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "CYCLE ENDED  —  %s",
@@ -347,6 +402,9 @@ const STRINGS: Dictionary = {
 		"cycle.encounters":          "Creatures encountered",
 		"cycle.traps":               "Traps identified",
 		"cycle.blessings":           "Blessings found",
+		"cycle.section.evolutions":  "◆  AVAILABLE EVOLUTIONS",
+		"cycle.xp_total":            "Total XP — %d",
+		"cycle.hero_label":          "Hero",
 
 		# ── Settings ─────────────────────────────────────────
 		"settings.title":         "⚙  SETTINGS",
