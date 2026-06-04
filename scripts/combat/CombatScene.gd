@@ -333,7 +333,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_hide_action(_hero_action)
 
 	# Tooltip JRPG sur le héros (stats effectives avec équipement)
-	var hstats := GameData.get_effective_stats(cid)
+	var hstats := GameData.get_effective_stats("hero")
 	var heqp   := GameData.get_equipment_bonuses()
 	var htt    := "Rang : %s\nPV : %d  ·  ATK : %d  ·  DEF : %d" % [
 		GameData.get_tier_name(htier),

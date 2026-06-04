@@ -107,7 +107,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 				PassiveSystem.set_shield_cooldown(shield_pid, int(shield_cfg.get("cooldown_cycles", 1)))
 				break
 
-	EventBus.combat_started.emit(cid, enemy, current_hp, e_hp)
+	EventBus.combat_started.emit("hero", enemy, current_hp, e_hp)
 	_play_next()
 
 func stop() -> void:

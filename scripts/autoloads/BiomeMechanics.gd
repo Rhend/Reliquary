@@ -6,8 +6,9 @@
 # consulté par AdventureSystem et CombatPlayer pour activer les effets.
 #
 # Mécaniques :
-#   "ambush" (Forêt Sombre)      — premier ennemi frappe avant le cycle VIT
-#   "poison" (Marécage Putride)  — chaque frappe héros empoisonne l'ennemi
+#   "ambush"        (Forêt Sombre)    — premier ennemi frappe avant le cycle VIT
+#   "poison"        (Marécage Putride)— chaque frappe héros empoisonne l'ennemi
+#   "endurcissement"(Montagne)        — dégâts héros réduits de Balance.MONTAGNE_ENDURCISSEMENT_REDUCTION
 # ============================================================
 extends Node
 

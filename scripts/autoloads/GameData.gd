@@ -266,10 +266,9 @@ func get_entity(entity_id: String) -> Dictionary:
 
 # Retourne le nom du palier correspondant à un tier (0–5).
 func get_tier_name(tier: int) -> String:
-	var t = Engine.get_singleton("Translations")
 	if tier < 0 or tier >= MASTERY_TIERS.size():
-		return t.T("tier.unknown") if t != null else "?"
-	return t.T("tier." + str(tier)) if t != null else MASTERY_TIERS[tier]
+		return Translations.T("tier.unknown")
+	return Translations.T("tier." + str(tier))
 
 # Palier maximum d'un type d'entité (créatures → Légendaire 4 ; reste → Unique 5).
 func get_max_tier_for_type(entity_type: String) -> int:

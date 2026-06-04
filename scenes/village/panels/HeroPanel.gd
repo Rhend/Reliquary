@@ -40,7 +40,7 @@ static func build(host: Village) -> void:
 	var stats_body := stats_sec["body"] as VBoxContainer
 
 	var eq  := GameData.get_equipment_bonuses()
-	var eff := GameData.get_effective_stats(cid)
+	var eff := GameData.get_effective_stats("hero")
 	var pas := PassiveSystem.get_combat_bonuses()
 
 	var atk_base  := int(eff.get("atk", 0))
@@ -81,7 +81,7 @@ static func build(host: Village) -> void:
 	if tier < GameData.MAX_TIER:
 		if can_ev:
 			stats_body.add_child(host._make_evolve_btn(
-				cid, c.get("nom_affichage_fr", c.get("name", cid)) as String,
+				"hero", c.get("nom_affichage_fr", c.get("name", "hero")) as String,
 				c.get("entity_type", "creature") as String, tier))
 	else:
 		var ml := Label.new()

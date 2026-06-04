@@ -76,6 +76,9 @@ const CRIT_CHANCE:     float = 0.20   # probabilité de coup critique
 const CRIT_MULTIPLIER: float = 1.8    # multiplicateur de dégâts en cas de critique
 const MIN_DAMAGE:      float = 1.0    # plancher de dégâts après défense (ATK − DEF)
 
+# ─── Endurcissement de biome (Montagne) ─────────────────────
+const MONTAGNE_ENDURCISSEMENT_REDUCTION: float = 0.20  # réduction des dégâts héros (−20 %)
+
 # ─── Poison de biome (Marécage Putride) ──────────────────────
 const BIOME_POISON_DMG_PCT:   float = 0.05  # % de l'ATK héros infligé par stack
 const BIOME_POISON_MAX_STACKS: int  = 3     # stacks maximum

@@ -224,8 +224,9 @@ func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 	EventBus.adventure_event_resolved.emit(enc_data)
 
 	var combat_options := {
-		"ambush": _is_first_combat and BiomeMechanics.is_ambush_active(),
-		"poison": BiomeMechanics.is_mechanic_active("poison"),
+		"ambush":         _is_first_combat and BiomeMechanics.is_ambush_active(),
+		"poison":         BiomeMechanics.is_mechanic_active("poison"),
+		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
 	}
 	_is_first_combat = false
 	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses(), combat_options)
@@ -728,8 +729,9 @@ func start_unique_combat() -> void:
 	)
 	_is_first_combat = false
 	CombatPlayer.start_combat(unique_dict, current_hp, get_modifier_bonuses(), {
-		"ambush": false,
-		"poison": BiomeMechanics.is_mechanic_active("poison"),
+		"ambush":         false,
+		"poison":         BiomeMechanics.is_mechanic_active("poison"),
+		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
 	})
 
 # Résout la victoire contre la créature Unique : flags, ingrédient, passif, signal.
