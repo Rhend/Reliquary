@@ -40,8 +40,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 		modifier_bonuses: Dictionary, combat_options: Dictionary = {}) -> void:
 	var passives := PassiveSystem.get_combat_bonuses()
 	var equip    := GameData.get_equipment_bonuses()
-	var cid      := GameData.player.get("active_creature_id", "") as String
-	var stats    := GameData.get_effective_stats(cid)
+	var stats    := GameData.get_effective_stats("hero")
 
 	var h_atk: float = (
 		float(stats.get("atk", 0))

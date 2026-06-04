@@ -6,15 +6,12 @@
 # consulté par AdventureSystem et CombatPlayer pour activer les effets.
 #
 # Mécaniques :
-#   "ambush"      (Forêt Sombre)   — premier ennemi frappe avant le cycle VIT
-#   "poison"      (Marécage Putride) — chaque frappe héros empoisonne l'ennemi
-#   "bonne_etoile"                 — probabilités événements déplacées vers le positif (non assignée)
+#   "ambush" (Forêt Sombre)      — premier ennemi frappe avant le cycle VIT
+#   "poison" (Marécage Putride)  — chaque frappe héros empoisonne l'ennemi
 # ============================================================
 extends Node
 
-const UNLOCK_TIER:            int   = 2      # palier Rare requis pour débloquer
-const BONNE_ETOILE_CREATURE:   float = -0.05  # -5 % de combats
-const BONNE_ETOILE_BENEDICTION: float = 0.05  # +5 % d'événements positifs
+const UNLOCK_TIER: int = 2  # palier Rare requis pour débloquer
 
 # Mécanique active pour le cycle courant ("" si aucune).
 var active_mechanic: String = ""
@@ -49,13 +46,3 @@ func is_ambush_active() -> bool:
 # Retourne vrai si la mécanique donnée est active ce cycle.
 func is_mechanic_active(mechanic: String) -> bool:
 	return active_mechanic == mechanic
-
-# Retourne les probabilités d'événements modifiées pour la Bonne Étoile.
-# Pour les autres mécaniques, retourne base_probs inchangé.
-func modify_event_probabilities(base_probs: Dictionary) -> Dictionary:
-	if active_mechanic != "bonne_etoile":
-		return base_probs
-	var modified := base_probs.duplicate()
-	modified["creature"]    = maxf(float(base_probs.get("creature",    0.70)) + BONNE_ETOILE_CREATURE,    0.0)
-	modified["benediction"] = minf(float(base_probs.get("benediction", 0.15)) + BONNE_ETOILE_BENEDICTION, 1.0)
-	return modified

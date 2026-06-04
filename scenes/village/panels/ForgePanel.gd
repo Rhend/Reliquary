@@ -31,7 +31,7 @@ static func _slot_name(slot_idx: int) -> String:
 # ═══════════════════════════════════════════════════════════
 
 static func build(host: Village) -> void:
-	if GameData.village.get("tier_actuel", 0) < 1:
+	if GameData.village.get("maitrise_actuelle", 0) < 1:
 		_build_locked(host)
 		return
 

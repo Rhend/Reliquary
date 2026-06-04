@@ -31,8 +31,7 @@ func _build_ui() -> void:
 		_go_to_village()
 		return
 
-	var cid    := GameData.player.get("active_creature_id", "") as String
-	var hero   := GameData.get_entity(cid)
+	var hero   := GameData.get_entity("hero")
 	var tcolor := UIColors.tier_color(hero.get("maitrise_actuelle", 0) as int)
 
 	var biome      := GameData.get_entity(data.get("biome_id", "") as String)

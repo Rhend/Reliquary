@@ -84,15 +84,13 @@ func _ready() -> void:
 	EventBus.adventure_stopped.connect(_update_badges)
 	GameSettings.language_changed.connect(_on_language_changed)
 
-# Retourne le dictionnaire d'entité de la créature active, ou {} si absente.
+# Retourne le dictionnaire d'entité du héros, ou {} si absent.
 func _active_creature() -> Dictionary:
-	var cid := GameData.player.get("active_creature_id", "") as String
-	if cid.is_empty(): return {}
-	return GameData.get_entity(cid)
+	return GameData.get_entity("hero")
 
-# Tier actuel de la créature active — détermine le layout et les couleurs du hub.
+# Palier de Maîtrise du Village — détermine le layout et les couleurs du hub.
 func _maitrise_actuelle() -> int:
-	return _active_creature().get("maitrise_actuelle", 0) as int
+	return int(GameData.village.get("maitrise_actuelle", 0))
 
 # ─── Construction principale ──────────────────────────────────
 # Point d'entrée de construction : tier 0 → orbe cliquable, tier 1+ → hub hexagonal.
@@ -103,14 +101,12 @@ func _build_ui() -> void:
 	bg.color = UIColors.BG_DARK
 	add_child(bg)
 
-	var creature := _active_creature()
-	var tier     := creature.get("maitrise_actuelle", 0) as int
 	# Tant que le Village n'a pas éclos : phase préliminaire (100 clics).
 	# Une fois éclos, le hub est disponible dès T0 (expéditions incluses).
 	if not GameData.village.get("eclos", false):
-		_build_birth(creature)
+		_build_birth()
 	else:
-		_build_hub(creature, tier)
+		_build_hub()
 
 	_build_fullscreen_btn()
 
@@ -118,7 +114,7 @@ func _build_ui() -> void:
 # Le Village n'existe pas encore : on clique Balance.ECLOSION_CLICS fois pour
 # faire éclore l'incarnation. Au dernier clic → éclosion en T0 + cinématique.
 # UI minimale : orbe cliquable + compteur + message (pas d'anneau).
-func _build_birth(_creature: Dictionary) -> void:
+func _build_birth() -> void:
 	var clics    := int(GameData.village.get("clics_eclosion", 0))
 	var needed   := Balance.ECLOSION_CLICS
 	var progress := clampf(float(clics) / float(needed), 0.0, 1.0)
@@ -158,13 +154,14 @@ func _build_birth(_creature: Dictionary) -> void:
 			and progress + 0.0001 >= float(_bp[_birth_phrase_idx][0]):
 		_birth_phrase_idx += 1
 
-# ─── Tier 1+ : hub hexagonal ──────────────────────────────────
-# Construit le hub circulaire avec les hexagones débloqués par le tier.
-func _build_hub(_creature: Dictionary, tier: int) -> void:
+# ─── Hub hexagonal ────────────────────────────────────────────
+# Construit le hub circulaire avec les hexagones débloqués par le palier du Village.
+func _build_hub() -> void:
+	var village_maitrise := int(GameData.village.get("maitrise_actuelle", 0))
 	var vp     := get_viewport_rect().size
-	var tcolor := UIColors.tier_color(tier)
+	var tcolor := UIColors.tier_color(village_maitrise)
 	var diam_margins := [70.0, 70.0, 82.0, 104.0, 136.0, 164.0]
-	var diam: float = RING_RADIUS * 2.0 + float(diam_margins[tier])
+	var diam: float = RING_RADIUS * 2.0 + float(diam_margins[village_maitrise])
 
 	_hub_root = Control.new()
 	_hub_root.size = vp
@@ -173,14 +170,18 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	_ring = CircleRing.new()
 	_ring.ring_color  = tcolor
 	_ring.ring_radius = RING_RADIUS
-	_ring.tier        = tier
+	_ring.tier        = village_maitrise
+	# Progression de l'anneau : fragments collectés / coût du palier courant
+	var frag_count: int = (GameData.village.get("fragments_collectes", []) as Array).size()
+	if village_maitrise < Balance.VILLAGE_FRAGMENT_COSTS.size():
+		var frag_cost := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise]
+		_ring.fill_fraction = minf(1.0, float(frag_count) / float(frag_cost))
+	else:
+		_ring.fill_fraction = 1.0
 	_center(_ring, Vector2.ZERO, Vector2(diam, diam))
 	_hub_root.add_child(_ring)
 
-	# ── Lecture centrale : nom + palier + Tier Village + conditions ──
-	# Regroupés dans un VBox centré sur le centre exact de l'anneau (grandit
-	# symétriquement dans les deux sens) → reste verticalement centré quel que
-	# soit le nombre de lignes de conditions affichées.
+	# ── Centre : nom Village + palier + fragments + conditions ──
 	var center_box := VBoxContainer.new()
 	center_box.add_theme_constant_override("separation", 2)
 	center_box.anchor_left   = 0.5; center_box.anchor_right  = 0.5
@@ -200,30 +201,19 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 	center_box.add_child(lname)
 
 	var ltier := Label.new()
-	ltier.text = GameData.get_tier_name(tier)
+	ltier.text = GameData.get_tier_name(village_maitrise)
 	ltier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ltier.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ltier.add_theme_font_size_override("font_size", 15)
 	ltier.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.40))
 	center_box.add_child(ltier)
 
-	# ── Info Village + conditions d'évolution ─────────────────
-	var vtier := GameData.village.get("tier_actuel", 0) as int
-	var vcolor := Color(0.55, 0.85, 0.55) if vtier >= 1 else Color(0.6, 0.6, 0.7)
-
-	var vlabel := Label.new()
-	vlabel.text = "Village T%d" % vtier
-	vlabel.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vlabel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vlabel.add_theme_font_size_override("font_size", 12)
-	vlabel.add_theme_color_override("font_color", vcolor)
-	center_box.add_child(vlabel)
-
-	if vtier < GameData.VILLAGE_TIER_REQUIREMENTS.size():
-		_build_village_conditions(center_box, vtier, vcolor)
+	# Conditions d'évolution du Village (tant que le palier max n'est pas atteint)
+	if village_maitrise < Balance.VILLAGE_FRAGMENT_COSTS.size():
+		_build_village_conditions(center_box, village_maitrise, tcolor)
 
 	# ── Hint contextuel (objectif courant) ───────────────────────
-	var hint := _current_hint(vtier, tier)
+	var hint := _current_hint(village_maitrise)
 	if hint != "":
 		var hint_lbl := Label.new()
 		hint_lbl.text = hint
@@ -236,12 +226,9 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 		hint_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.35))
 		_hub_root.add_child(hint_lbl)
 
-	# ── Hex items (forge débloquée par village tier, reste par hero tier) ──
+	# ── HexItems : tous gated uniformément par village_maitrise ──
 	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
-		var pid := d[4] as String
-		if pid == "forge":
-			return vtier >= (d[2] as int)
-		return (d[2] as int) <= tier
+		return (d[2] as int) <= village_maitrise
 	)
 	var n := unlocked.size()
 	for i in n:
@@ -251,37 +238,38 @@ func _build_hub(_creature: Dictionary, tier: int) -> void:
 		_make_hex(Translations.T("menu." + (d[4] as String)), d[1], tcolor, pos, Callable(self, d[3]), d[4])
 
 # Retourne le texte du hint contextuel selon la progression actuelle.
-func _current_hint(vtier: int, hero_tier: int) -> String:
+func _current_hint(village_maitrise: int) -> String:
 	var frags := (GameData.village.get("fragments_collectes", []) as Array).size()
-	if vtier == 0 and hero_tier == 0 and frags == 0:
+	var hero_tier := int(GameData.get_entity("hero").get("maitrise_actuelle", 0))
+	if village_maitrise == 0 and hero_tier == 0 and frags == 0:
 		return Translations.T("hint.start")
-	if vtier == 0 and frags == 0:
+	if village_maitrise == 0 and frags == 0:
 		return Translations.T("hint.reach_rare")
-	if vtier == 0 and frags >= 1:
+	if village_maitrise == 0 and frags >= 1:
 		return Translations.T("hint.fragment_ok")
-	if vtier == 1 and not GameData.can_forge("equipment_arme") \
+	if village_maitrise >= 1 and not GameData.can_forge("equipment_arme") \
 			and not GameData.can_forge("equipment_anneau") \
 			and not GameData.can_forge("equipment_armure"):
 		return Translations.T("hint.forge_ready")
 	return ""
 
 # ─── Conditions d'évolution du Village ────────────────────────
-# Ajoute dans `container` (le VBox central) un petit espace, chaque condition
-# « actuel / requis » (verte si remplie), puis le bouton « Faire évoluer »
-# lorsque toutes le sont. Le tout reste centré via le VBox central.
-func _build_village_conditions(container: VBoxContainer, vtier: int, vcolor: Color) -> void:
+# Affiche le compteur de fragments et le bouton Évoluer si la condition est remplie.
+func _build_village_conditions(container: VBoxContainer, village_maitrise: int, vcolor: Color) -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0.0, 6.0)
 	container.add_child(spacer)
 
-	for cond: Dictionary in _village_upgrade_conditions(vtier):
-		var row := Label.new()
-		row.text = "%s%s  %s" % ["✓ " if cond["met"] else "• ", cond["label"], cond["value"]]
-		row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_theme_font_size_override("font_size", 11)
-		row.add_theme_color_override("font_color", UIColors.LOG_VICTORY if cond["met"] else UIColors.TEXT_MUTED)
-		container.add_child(row)
+	var frag_need := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise]
+	var frag_have: int = (GameData.village.get("fragments_collectes", []) as Array).size()
+	var met := frag_have >= frag_need
+	var row := Label.new()
+	row.text = "%s%s  %d / %d" % ["✓ " if met else "• ", Translations.T("village.cond.fragments"), frag_have, frag_need]
+	row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_font_size_override("font_size", 11)
+	row.add_theme_color_override("font_color", UIColors.LOG_VICTORY if met else UIColors.TEXT_MUTED)
+	container.add_child(row)
 
 	if GameData.can_upgrade_village():
 		var ubtn := Button.new()
@@ -298,42 +286,6 @@ func _build_village_conditions(container: VBoxContainer, vtier: int, vcolor: Col
 				_rebuild_hub()
 		)
 		container.add_child(ubtn)
-
-# Conditions de passage T(vtier)→T(vtier+1), formatées « actuel / requis ».
-# Chaque entrée : { label, value, met }.
-func _village_upgrade_conditions(vtier: int) -> Array:
-	var conds: Array = []
-
-	var frags_need := GameData.VILLAGE_TIER_REQUIREMENTS[vtier]
-	var frags_have: int = (GameData.village.get("fragments_collectes", []) as Array).size()
-	conds.append({
-		"label": "🔮 " + Translations.T("village.cond.fragments"),
-		"value": "%d / %d" % [frags_have, frags_need],
-		"met":   frags_have >= frags_need,
-	})
-
-	# Conditions propres au passage T0 → T1 (déblocage du Forgeron).
-	if vtier == 0:
-		var vxp := float(GameData.village.get("xp_maitrise", 0.0))
-		conds.append({
-			"label": "✦ " + Translations.T("village.cond.xp"),
-			"value": "%s / %s" % [UIHelpers.xp_fmt(int(vxp)), UIHelpers.xp_fmt(int(Balance.VILLAGE_FORGE_XP))],
-			"met":   vxp >= Balance.VILLAGE_FORGE_XP,
-		})
-
-		var hero := _active_creature()
-		var htier := int(hero.get("maitrise_actuelle", 0))
-		var hxp := float(hero.get("xp_maitrise_actuelle", 0.0))
-		var hreq := 0.0
-		if htier + 1 < GameData.xp_thresholds.size():
-			hreq = float(GameData.xp_thresholds[htier + 1])
-		conds.append({
-			"label": "👤 " + Translations.T("village.cond.hero_xp"),
-			"value": "%s / %s" % [UIHelpers.xp_fmt(int(hxp)), UIHelpers.xp_fmt(int(hreq))],
-			"met":   GameData.hero_at_full_xp(),
-		})
-
-	return conds
 
 # ─── Panneau droite ───────────────────────────────────────────
 # Ouvre le panneau JRPG pour panel_id. Re-clic sur le même id → ferme (toggle).
@@ -498,10 +450,8 @@ func _rebuild_hub() -> void:
 	_rp_content = null
 	_hex_items.clear()
 	_active_panel_id = ""
-	var creature := _active_creature()
-	var tier     := creature.get("maitrise_actuelle", 0) as int
 	if GameData.village.get("eclos", false):
-		_build_hub(creature, tier)
+		_build_hub()
 
 # Fragment libéré : feedback + rebuild hub (le bouton upgrade peut apparaître).
 func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
@@ -964,11 +914,10 @@ func _go_tbd()       -> void: _open_panel("tbd")
 func _update_badges() -> void:
 	# hero : entité active prête à évoluer OU passif prêt
 	var hero_alert := false
-	var cid := GameData.player.get("active_creature_id", "") as String
-	if MasterySystem.can_evolve(cid):
+	if MasterySystem.can_evolve("hero"):
 		hero_alert = true
 	if not hero_alert:
-		for pid in (GameData.get_entity(cid).get("unlocked_passives", []) as Array) + \
+		for pid in (GameData.get_entity("hero").get("unlocked_passives", []) as Array) + \
 				(GameData.player.get("active_passives", []) as Array):
 			if MasterySystem.can_evolve(pid as String):
 				hero_alert = true

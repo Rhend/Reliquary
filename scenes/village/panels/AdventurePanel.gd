@@ -391,7 +391,7 @@ static func _adv_ingredient_section(parent: VBoxContainer, pool: Array) -> void:
 	if pool.is_empty():
 		return
 	# Section absente (pas grisée) tant que la Forge n'est pas débloquée (Village Tier 1).
-	if (GameData.village.get("tier_actuel", 0) as int) < 1:
+	if (GameData.village.get("maitrise_actuelle", 0) as int) < 1:
 		return
 	var body := _accordion(parent, Translations.T("adv.section.ingredients"), "")
 	for entry: Dictionary in pool:

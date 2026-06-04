@@ -324,8 +324,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_update_xp_label()
 	_update_zone_label(AdventureSystem.zone_courante)
 
-	var cid    := GameData.player.get("active_creature_id", "") as String
-	var c      := GameData.get_entity(cid)
+	var c      := GameData.get_entity("hero")
 	var htier  := int(c.get("maitrise_actuelle", 0))
 	var hname  := (c.get("nom_affichage_fr", c.get("name", "Héros")) as String)
 	_hero_name.text = hname.to_upper()
@@ -747,8 +746,7 @@ func _update_xp_label() -> void:
 		_xp_label.text = Translations.T("combat.xp_label_fmt") % int(_cycle_xp)
 
 func _hero_tier_color() -> Color:
-	var cid := GameData.player.get("active_creature_id", "") as String
-	return UIColors.tier_color(int(GameData.get_entity(cid).get("maitrise_actuelle", 0)))
+	return UIColors.tier_color(int(GameData.get_entity("hero").get("maitrise_actuelle", 0)))
 
 # Convertit une couleur en chaîne hex "#rrggbb" pour le BBCode.
 func _hex(c: Color) -> String:
