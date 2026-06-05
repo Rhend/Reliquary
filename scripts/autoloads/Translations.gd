@@ -145,8 +145,8 @@ const STRINGS: Dictionary = {
 		"mech.ambush.desc":       "La créature attaque en premier.",
 		"mech.poison.name":       "Empoisonnement",
 		"mech.poison.desc":       "Chaque frappe du héros empoisonne l'ennemi (3 max).",
-		"mech.bonne_etoile.name": "Bonne Étoile",
-		"mech.bonne_etoile.desc": "-5 % de combats, +5 % de bénédictions.",
+		"mech.endurcissement.name": "Endurcissement",
+		"mech.endurcissement.desc": "Dégâts du héros réduits de 20 % contre les créatures du biome.",
 
 		# ── CombatScene ──────────────────────────────────────
 		"combat.end_btn":         "Mettre fin à l'expédition",
@@ -353,8 +353,8 @@ const STRINGS: Dictionary = {
 		"mech.ambush.desc":       "The creature strikes first.",
 		"mech.poison.name":       "Poisoning",
 		"mech.poison.desc":       "Each hero hit poisons the enemy (max 3).",
-		"mech.bonne_etoile.name": "Lucky Star",
-		"mech.bonne_etoile.desc": "-5% fights, +5% blessings.",
+		"mech.endurcissement.name": "Hardening",
+		"mech.endurcissement.desc": "Hero's damage reduced by 20% against biome creatures.",
 
 		# ── CombatScene ──────────────────────────────────────
 		"combat.end_btn":         "End expedition",

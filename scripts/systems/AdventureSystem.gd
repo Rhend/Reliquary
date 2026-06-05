@@ -28,8 +28,8 @@ extends Node
 #  régén, zones, modificateurs de cycle — est dans Balance.gd.)
 
 const FIRST_ENCOUNTER_DELAY: float = 1.0  # délai avant la toute première rencontre du cycle
-const COMBAT_POST_DELAY:     float = 2.5  # pause après la fin d'un combat
-const INSTANT_EVENT_DELAY:   float = 1.0  # pause après piège ou bénédiction
+const COMBAT_POST_DELAY:     float = 4.0  # pause après la fin d'un combat
+const INSTANT_EVENT_DELAY:   float = 4.0  # pause après piège ou bénédiction
 
 # ─── État runtime ────────────────────────────────────────────
 

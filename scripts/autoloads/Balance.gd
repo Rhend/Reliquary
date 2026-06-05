@@ -26,9 +26,9 @@ class_name Balance
 #  T3-T5 extrapolés à ~×1.7/tier HP/ATK, ×2.0 DEF.
 # ═══════════════════════════════════════════════════════════
 
-const HERO_HP_PER_TIER:  Array[int] = [100, 160, 280, 470, 785, 1300]
-const HERO_ATK_PER_TIER: Array[int] = [20,  32,  55,  90,  150, 245]
-const HERO_DEF_PER_TIER: Array[int] = [2,   4,   8,   16,  32,  60]
+const HERO_HP_PER_TIER:  Array[int] = [150, 230, 390, 650, 1085, 1815]
+const HERO_ATK_PER_TIER: Array[int] = [20,  32,  55,  90,  150,  245]
+const HERO_DEF_PER_TIER: Array[int] = [3,   5,   9,   16,  30,   55]
 const HERO_VIT: int = 20  # constant à tous les paliers
 
 # ═══════════════════════════════════════════════════════════
@@ -93,10 +93,11 @@ const SHIELD_VALUE_PCT_DEFAULT: float = 0.15  # % PV max absorbé par le bouclie
 # ═══════════════════════════════════════════════════════════
 
 # XP requis pour franchir du palier n au palier n+1 (index = palier source).
-# Courbe : seuil(n) = 6000 × 2.2^n. L'index 0 est inutilisé (pas de palier −1→0).
+# Courbe : seuil(n) = 360 × 2.2^n. L'index 0 est inutilisé (pas de palier −1→0).
 # Légendaire→Unique (index 5) ne concerne que biomes / pièges / bénédictions
 # (les créatures s'arrêtent à Légendaire — voir ENTITY_MAX_TIER).
-const XP_THRESHOLDS: Array = [0, 6000, 13200, 29040, 63888, 140554]
+# Calibré pour 25-30 min de session beta : cumul jusqu'à Rare = 1152 XP / biome.
+const XP_THRESHOLDS: Array = [0, 360, 792, 1742, 3833, 8432]
 
 # Modificateur d'XP selon l'écart de Maîtrise = (palier de l'entité − palier de l'événement),
 # clampé à ±4. Entité plus FAIBLE que l'événement (écart négatif) → plus d'XP (catch-up).
