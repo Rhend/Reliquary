@@ -597,10 +597,12 @@ func _build_available_creatures(biome_id: String) -> void:
 		_pool_add(surface, Balance.POOL_WEIGHT_SURFACE_ONLY)
 		return
 
-	# Profondeur et Abysse : pondération dynamique par écart de tier.
-	var tier_s := int(surface.get("maitrise_actuelle",    0))
-	var tier_p := int(profondeur.get("maitrise_actuelle", 0))
-	var diff   := tier_s - tier_p  # positif = Surface plus avancée → Profondeur favorisée
+	# Profondeur et Abysse : pondération dynamique par écart de tier entre les deux créatures.
+	# On lit la maîtrise réelle depuis GameData.entities (source de vérité à jour),
+	# pas depuis le dict imbriqué dans le biome (copie figée au chargement).
+	var tier_s := int(GameData.get_entity(surface.get("id",    "")).get("maitrise_actuelle", 0))
+	var tier_p := int(GameData.get_entity(profondeur.get("id", "")).get("maitrise_actuelle", 0))
+	var diff   := tier_s - tier_p  # positif = Surface plus haute → Profondeur favorisée
 	var w_s := maxf(Balance.POOL_WEIGHT_BASE - float(diff) * Balance.POOL_WEIGHT_DIFF_BONUS, 5.0)
 	var w_p := maxf(Balance.POOL_WEIGHT_BASE + float(diff) * Balance.POOL_WEIGHT_DIFF_BONUS, 5.0)
 	_pool_add(surface,    w_s)
