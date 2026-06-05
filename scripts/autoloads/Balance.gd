@@ -200,8 +200,6 @@ const CREATURE_INGREDIENT_DROP_CHANCE: float = 0.5  # chance de drop d'ingrédie
 #  Zones
 # ═══════════════════════════════════════════════════════════
 
-const ZONE_TRANSITION_THRESHOLD: int = 5  # événements résolus avant transition de zone
-
 # Multiplicateur d'intensité des pièges et bénédictions selon la zone.
 const ZONE_INTENSITY_SURFACE:    float = 1.0
 const ZONE_INTENSITY_PROFONDEUR: float = 2.0

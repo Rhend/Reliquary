@@ -38,7 +38,6 @@ var current_biome_id:         String     = ""     # id du biome actuellement exp
 var current_hp:               float      = 0.0    # PV courants du héros
 var current_modifier:         Dictionary = {}     # modificateur de cycle actif
 var zone_courante:            Enums.Zone = Enums.Zone.SURFACE
-var _nb_evenements_zone:      int        = 0      # événements résolus dans la zone courante
 var combat_unique_en_cours:   bool       = false  # vrai pendant le combat contre la créature Unique
 
 var _encounter_timer:         Timer              # timer qui cadence les rencontres
@@ -124,8 +123,7 @@ func start_adventure(biome_id: String) -> void:
 
 	_first_encounter_pending = true
 	_is_first_combat         = true
-	zone_courante            = Enums.Zone.SURFACE
-	_nb_evenements_zone      = 0
+	zone_courante            = _get_max_zone(biome_id)
 	combat_unique_en_cours   = false
 
 	BiomeMechanics.initialize_for_biome(biome_id)
@@ -250,7 +248,6 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 		_cycle_positive_events += 1
 
 	EventBus.adventure_event_resolved.emit(enc_data)
-	_check_zone_transition()
 	_apply_regen(hero_id)
 	_tick_bleed()
 	if is_running:
@@ -333,7 +330,6 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, 5.0
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
-		_check_zone_transition()
 		_apply_regen(hero_id)
 		_schedule_next_encounter()
 	else:
@@ -351,7 +347,6 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 		if current_hp <= 0.0:
 			_end_adventure(false)
 		else:
-			_check_zone_transition()
 			_apply_regen(hero_id)
 			_tick_bleed()
 			if is_running:
@@ -401,7 +396,6 @@ func _resolve_victory(enemy: Dictionary) -> void:
 
 	_cycle_combats_won += 1
 
-	_check_zone_transition()
 	_apply_regen("hero")
 	_tick_bleed()
 	if is_running:
@@ -775,18 +769,3 @@ func _get_max_zone(biome_id: String) -> Enums.Zone:
 	var tier: int = GameData.get_entity(biome_id).get("maitrise_actuelle", 0)
 	return Balance.max_unlocked_zone(tier) as Enums.Zone
 
-# Appelée après chaque événement résolu. Si le seuil est atteint et la zone suivante
-# est débloquée, transition et émission du signal zone_changee.
-func _check_zone_transition() -> void:
-	_nb_evenements_zone += 1
-	if _nb_evenements_zone < Balance.ZONE_TRANSITION_THRESHOLD:
-		return
-	var next_zone: int = int(zone_courante) + 1
-	if next_zone > int(Enums.Zone.ABYSSE):
-		return
-	if next_zone > int(_get_max_zone(current_biome_id)):
-		return
-	zone_courante       = next_zone as Enums.Zone
-	_nb_evenements_zone = 0
-	_build_available_creatures(current_biome_id)
-	EventBus.zone_changee.emit(int(zone_courante))
