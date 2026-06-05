@@ -453,11 +453,7 @@ func _schedule_next_encounter(delay: float = INSTANT_EVENT_DELAY) -> void:
 
 # Tire le type de rencontre selon la zone courante et les probabilités du biome.
 func _roll_encounter_type() -> String:
-	# Abysse : pas de combat — 50 % bénédictions / 50 % pièges
-	if zone_courante == Enums.Zone.ABYSSE:
-		return "benediction" if randf() < Balance.ABYSS_BENEDICTION_CHANCE else "trap"
-
-	# Surface et Profondeur : distribution standard du biome
+	# Distribution standard pour toutes les zones (Surface, Profondeur, Abysse).
 	var biome      = GameData.get_entity(current_biome_id)
 	var base_table = biome.get("event_table", {
 		"creature": 0.70, "benediction": 0.15, "trap": 0.15
@@ -587,25 +583,28 @@ func _drop_ingredients() -> void:
 # ═══════════════════════════════════════════════════════════
 
 # Reconstruit available_creatures selon la zone courante.
-# Surface    : créature Surface uniquement (la Profondeur n'apparaît pas tant
-#              qu'elle n'est pas débloquée — on n'y descend que si la zone l'est)
-# Profondeur : créature Profondeur (70 %) + créature Surface (30 %, taux moindre)
-# Abysse     : aucune créature évolutive (Phase 4 gère l'Unique)
+# Surface              : créature Surface uniquement.
+# Profondeur et Abysse : Surface + Profondeur, pondérées par écart de palier.
+#   - Paliers égaux → 50/50.
+#   - Chaque palier d'écart ajoute Balance.POOL_WEIGHT_DIFF_BONUS à la créature la moins avancée.
 func _build_available_creatures(biome_id: String) -> void:
 	available_creatures = []
-	if zone_courante == Enums.Zone.ABYSSE:
-		return
-
 	var biome      := GameData.get_entity(biome_id)
 	var surface    := biome.get("creature_surface",    {}) as Dictionary
 	var profondeur := biome.get("creature_profondeur", {}) as Dictionary
 
-	match zone_courante:
-		Enums.Zone.SURFACE:
-			_pool_add(surface,    Balance.POOL_WEIGHT_SURFACE)
-		Enums.Zone.PROFONDEUR:
-			_pool_add(surface,    Balance.POOL_WEIGHT_DEEP_SURFACE)
-			_pool_add(profondeur, Balance.POOL_WEIGHT_DEEP_DEEP)
+	if zone_courante == Enums.Zone.SURFACE:
+		_pool_add(surface, Balance.POOL_WEIGHT_SURFACE_ONLY)
+		return
+
+	# Profondeur et Abysse : pondération dynamique par écart de tier.
+	var tier_s := int(surface.get("maitrise_actuelle",    0))
+	var tier_p := int(profondeur.get("maitrise_actuelle", 0))
+	var diff   := tier_s - tier_p  # positif = Surface plus avancée → Profondeur favorisée
+	var w_s := maxf(Balance.POOL_WEIGHT_BASE - float(diff) * Balance.POOL_WEIGHT_DIFF_BONUS, 5.0)
+	var w_p := maxf(Balance.POOL_WEIGHT_BASE + float(diff) * Balance.POOL_WEIGHT_DIFF_BONUS, 5.0)
+	_pool_add(surface,    w_s)
+	_pool_add(profondeur, w_p)
 
 # Convertit un dict créature en entrée de combat et l'ajoute au pool.
 # Utilise le tier de Maîtrise réel de la créature et descend dans stats_par_palier
@@ -698,8 +697,6 @@ func start_unique_combat() -> void:
 	if not is_running or combat_unique_en_cours:
 		return
 	var biome := GameData.get_entity(current_biome_id)
-	if biome.get("creature_unique_vaincue", false):
-		return
 	var unique := biome.get("creature_unique", {}) as Dictionary
 	if unique.is_empty():
 		return

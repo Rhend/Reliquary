@@ -323,6 +323,8 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_cycle_xp = 0.0
 	_update_xp_label()
 	_update_zone_label(AdventureSystem.zone_courante)
+	if AdventureSystem.zone_courante == Enums.Zone.ABYSSE:
+		_show_unique_indicator()
 
 	var c      := GameData.get_entity("hero")
 	var htier  := int(c.get("maitrise_actuelle", 0))
@@ -699,13 +701,12 @@ func _show_unique_indicator() -> void:
 	if _unique_panel != null:
 		return
 	var biome := GameData.get_entity(AdventureSystem.current_biome_id)
-	if biome.get("creature_unique_vaincue", false):
-		return
 	var unique := biome.get("creature_unique", {}) as Dictionary
 	if unique.is_empty():
 		return
-	var nom := unique.get("nom_affichage_fr", "???") as String
-	var color := UIColors.ZONE_ABYSSE
+	var nom            := unique.get("nom_affichage_fr", "???") as String
+	var already_beaten := biome.get("creature_unique_vaincue", false) as bool
+	var color          := UIColors.ZONE_ABYSSE
 
 	_unique_panel = PanelContainer.new()
 	_unique_panel.anchor_left = 0.5; _unique_panel.anchor_right = 0.5
@@ -713,7 +714,7 @@ func _show_unique_indicator() -> void:
 	_unique_panel.offset_left = -150; _unique_panel.offset_right = 150
 	_unique_panel.offset_top = 34;    _unique_panel.offset_bottom = 96
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.18, 0.0, 0.0, 0.90)
+	style.bg_color = Color(0.06, 0.06, 0.06, 0.90) if already_beaten else Color(0.18, 0.0, 0.0, 0.90)
 	style.border_color = color
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(6)
@@ -724,13 +725,13 @@ func _show_unique_indicator() -> void:
 	vb.add_theme_constant_override("separation", 6)
 	_unique_panel.add_child(vb)
 	var lbl := Label.new()
-	lbl.text = "☠  %s vous observe..." % nom
+	lbl.text = ("✔  %s a déjà été vaincu" % nom) if already_beaten else ("☠  %s vous observe..." % nom)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED if already_beaten else color)
 	vb.add_child(lbl)
 	var btn := Button.new()
-	btn.text = "⚔  Affronter %s" % nom
+	btn.text = ("⚔  Réaffronter %s" % nom) if already_beaten else ("⚔  Affronter %s" % nom)
 	btn.add_theme_font_size_override("font_size", 12)
 	btn.add_theme_color_override("font_color", color)
 	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(color, 0.15, 1.0, 1, 4))
@@ -745,6 +746,7 @@ func _hide_unique_indicator() -> void:
 
 func _on_creature_unique_vaincue(_biome_id: String, ingredient_id: String, passif_id: String) -> void:
 	_hide_unique_indicator()
+	_show_unique_indicator()  # reconstruit avec état "déjà vaincu" + bouton réaffronter
 	var ingr := GameData.get_entity(ingredient_id).get("nom_affichage_fr", ingredient_id) as String
 	var passif := GameData.get_entity(passif_id).get("nom_affichage_fr", passif_id) as String
 	_add_log("[color=%s]%s[/color]"

@@ -205,8 +205,6 @@ const ZONE_INTENSITY_SURFACE:    float = 1.0
 const ZONE_INTENSITY_PROFONDEUR: float = 2.0
 const ZONE_INTENSITY_ABYSSE:     float = 3.5
 
-const ABYSS_BENEDICTION_CHANCE: float = 0.5  # Abysse : proba bénédiction (sinon piège)
-
 # Tier de Maîtrise du biome requis pour débloquer chaque zone.
 const ZONE_UNLOCK_TIER_PROFONDEUR: int = 2
 const ZONE_UNLOCK_TIER_ABYSSE:     int = 4
@@ -226,9 +224,9 @@ static func max_unlocked_zone(biome_tier: int) -> int:
 #  Pondération du pool de créatures par zone
 # ═══════════════════════════════════════════════════════════
 
-const POOL_WEIGHT_SURFACE:      float = 100.0  # créature Surface en zone Surface
-const POOL_WEIGHT_DEEP_SURFACE: float = 30.0   # créature Surface en zone Profondeur
-const POOL_WEIGHT_DEEP_DEEP:    float = 70.0   # créature Profondeur en zone Profondeur
+const POOL_WEIGHT_SURFACE_ONLY: float = 100.0  # zone Surface : créature Surface uniquement
+const POOL_WEIGHT_BASE:         float = 50.0   # poids de base quand les deux créatures sont au même palier
+const POOL_WEIGHT_DIFF_BONUS:   float = 10.0   # bonus par palier d'écart, vers la créature la moins avancée
 
 # ═══════════════════════════════════════════════════════════
 #  Modificateurs de cycle (tirage pondéré au lancement d'aventure)
