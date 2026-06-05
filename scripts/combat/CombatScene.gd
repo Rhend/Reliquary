@@ -353,13 +353,23 @@ func _on_adventure_started(_biome_id: String) -> void:
 		_mechanic_label.visible = false
 	match BiomeMechanics.active_mechanic:
 		"ambush":
-			_push_feed(Translations.mech_name("ambush"), Color(1.0, 0.42, 0.10))
-			_show_mechanic_label("⚡ " + Translations.mech_name("ambush"), Color(1.0, 0.42, 0.10))
+			var ac := Color(1.0, 0.42, 0.10)
+			_push_feed(Translations.mech_name("ambush"), ac)
+			_show_mechanic_label("⚡ " + Translations.mech_name("ambush"), ac)
+			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("ambush"),
+					Translations.mech_desc("ambush"), ac)
 		"poison":
-			_show_mechanic_label("☠ " + Translations.mech_name("poison"), Color(0.62, 0.15, 0.78))
+			var pc := Color(0.62, 0.15, 0.78)
+			_push_feed(Translations.mech_name("poison"), pc)
+			_show_mechanic_label("☠ " + Translations.mech_name("poison"), pc)
+			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("poison"),
+					Translations.mech_desc("poison"), pc)
 		"endurcissement":
-			_push_feed(Translations.mech_name("endurcissement"), Color(0.80, 0.55, 0.25))
-			_show_mechanic_label("🗻 " + Translations.mech_name("endurcissement"), Color(0.80, 0.55, 0.25))
+			var ec := Color(0.80, 0.55, 0.25)
+			_push_feed(Translations.mech_name("endurcissement"), ec)
+			_show_mechanic_label("🗻 " + Translations.mech_name("endurcissement"), ec)
+			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("endurcissement"),
+					Translations.mech_desc("endurcissement"), ec)
 
 func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
@@ -661,7 +671,7 @@ func _build_mechanic_label() -> void:
 	_mechanic_label.offset_top   = 6;    _mechanic_label.offset_bottom = 30
 	_mechanic_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_mechanic_label.add_theme_font_size_override("font_size", 13)
-	_mechanic_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mechanic_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	_mechanic_label.visible = false
 	add_child(_mechanic_label)
 
