@@ -25,6 +25,9 @@ const STRINGS: Dictionary = {
 		"zone.0": "Surface",
 		"zone.1": "Profondeur",
 		"zone.2": "Abysse",
+		"zone.tt.0": "Première zone du biome.\n70 % combats · 15 % bénédictions · 15 % pièges\nCréature de Surface uniquement.\nPièges : 8 % de vos PV max.",
+		"zone.tt.1": "Zone intermédiaire. Les dangers s'intensifient.\n70 % combats · 15 % bénédictions · 15 % pièges\nCréatures de Surface et de Profondeur.\nPièges : 15 % de vos PV max.",
+		"zone.tt.2": "Zone finale. Aucun combat automatique.\n50 % bénédictions · 50 % pièges\nPièges : 30 % de vos PV max.\nLa créature Unique peut être affrontée ici.",
 
 		# ── Panel titres (PANEL_TITLES) ───────────────────────
 		"panel.hero":      "HÉRO",
@@ -233,6 +236,9 @@ const STRINGS: Dictionary = {
 		"zone.0": "Surface",
 		"zone.1": "Depths",
 		"zone.2": "Abyss",
+		"zone.tt.0": "First zone of the biome.\n70% fights · 15% blessings · 15% traps\nSurface creature only.\nTraps: 8% of your max HP.",
+		"zone.tt.1": "Intermediate zone. Dangers intensify.\n70% fights · 15% blessings · 15% traps\nSurface and Depths creatures.\nTraps: 15% of your max HP.",
+		"zone.tt.2": "Final zone. No automatic fights.\n50% blessings · 50% traps\nTraps: 30% of your max HP.\nThe Unique creature can be fought here.",
 
 		# ── Panel titres ──────────────────────────────────────
 		"panel.hero":      "HERO",
@@ -461,6 +467,10 @@ func mech_desc(mech_id: String) -> String:
 # Retourne le nom d'une zone (0=Surface, 1=Profondeur/Depths, 2=Abysse/Abyss).
 func zone_name(idx: int) -> String:
 	return T("zone." + str(clampi(idx, 0, 2)))
+
+# Retourne la description tooltip d'une zone.
+func zone_tooltip(idx: int) -> String:
+	return T("zone.tt." + str(clampi(idx, 0, 2)))
 
 # Retourne le nom d'un slot d'équipement traduit (clé = slot_key: "arme", "anneau"…).
 func equip_slot_name(slot_key: String) -> String:

@@ -660,7 +660,7 @@ func _build_zone_label() -> void:
 	_zone_label.offset_top = 6;    _zone_label.offset_bottom = 30
 	_zone_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_zone_label.add_theme_font_size_override("font_size", 13)
-	_zone_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_zone_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(_zone_label)
 
 func _build_mechanic_label() -> void:
@@ -688,9 +688,12 @@ func _on_zone_changee(nouvelle_zone: int) -> void:
 func _update_zone_label(zone: Enums.Zone) -> void:
 	if not _zone_label:
 		return
-	var idx := clampi(int(zone), 0, 2)
+	var idx   := clampi(int(zone), 0, 2)
+	var color := UIColors.zone_color(idx)
 	_zone_label.text = "◆ " + Translations.zone_name(idx)
-	_zone_label.add_theme_color_override("font_color", UIColors.zone_color(idx))
+	_zone_label.add_theme_color_override("font_color", color)
+	UIHelpers.register_tooltip(_zone_label, Translations.zone_name(idx),
+			Translations.zone_tooltip(idx), color)
 
 func _show_unique_indicator() -> void:
 	if _unique_panel != null:
