@@ -357,9 +357,9 @@ func _on_adventure_started(_biome_id: String) -> void:
 			_show_mechanic_label("⚡ " + Translations.mech_name("ambush"), Color(1.0, 0.42, 0.10))
 		"poison":
 			_show_mechanic_label("☠ " + Translations.mech_name("poison"), Color(0.62, 0.15, 0.78))
-		"bonne_etoile":
-			_push_feed(Translations.mech_name("bonne_etoile"), Color(0.30, 0.85, 0.40))
-			_show_mechanic_label("★ " + Translations.mech_name("bonne_etoile"), Color(0.30, 0.85, 0.40))
+		"endurcissement":
+			_push_feed(Translations.mech_name("endurcissement"), Color(0.80, 0.55, 0.25))
+			_show_mechanic_label("🗻 " + Translations.mech_name("endurcissement"), Color(0.80, 0.55, 0.25))
 
 func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
