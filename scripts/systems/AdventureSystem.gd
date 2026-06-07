@@ -3,8 +3,9 @@
 #
 # Fonctionnement général :
 #   1. start_adventure() initialise l'état et tire un modificateur.
-#   2. _schedule_next_encounter() démarre un timer (1 s pour le
-#      premier, 2.5 s après un combat, 1 s après piège ou bénédiction).
+#   2. _schedule_next_encounter() démarre un timer : FIRST_ENCOUNTER_DELAY
+#      pour le premier événement ; Balance.TRANSITION après un combat ;
+#      Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION après un piège/bénédiction.
 #   3. À l'expiration, _process_encounter() tire le type de rencontre
 #      (créature / bénédiction / piège) selon la table du biome.
 #   4. Les rencontres de type créature délèguent à CombatPlayer et
@@ -25,11 +26,9 @@ extends Node
 
 # ─── Constantes de cadence ──────────────────────────────────
 # (Timings de boucle uniquement. Tout l'équilibrage chiffré — XP,
-#  régén, zones, modificateurs de cycle — est dans Balance.gd.)
+#  régén, zones, modificateurs de cycle, durées d'affichage — est dans Balance.gd.)
 
 const FIRST_ENCOUNTER_DELAY: float = 1.0  # délai avant la toute première rencontre du cycle
-const COMBAT_POST_DELAY:     float = 4.0  # pause après la fin d'un combat
-const INSTANT_EVENT_DELAY:   float = 4.0  # pause après piège ou bénédiction
 
 # ─── État runtime ────────────────────────────────────────────
 
@@ -211,7 +210,7 @@ func _process_encounter() -> void:
 func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 	var enemy := _weighted_random_creature()
 	if enemy.is_empty():
-		_schedule_next_encounter()
+		_schedule_next_encounter(Balance.TRANSITION)
 		return
 	enemy              = enemy.duplicate()
 	enc_data["enemy"]  = enemy
@@ -251,7 +250,7 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 	_apply_regen(hero_id)
 	_tick_bleed()
 	if is_running:
-		_schedule_next_encounter()
+		_schedule_next_encounter(Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION)
 
 # Multiplicateur d'intensité des pièges et bénédictions selon la zone.
 func _get_zone_intensity() -> float:
@@ -317,7 +316,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 
 	if traps.is_empty():
 		EventBus.adventure_event_resolved.emit(enc_data)
-		_schedule_next_encounter()
+		_schedule_next_encounter(Balance.TRANSITION)
 		return
 
 	var trap           = traps[randi() % traps.size()]
@@ -331,7 +330,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
 		_apply_regen(hero_id)
-		_schedule_next_encounter()
+		_schedule_next_encounter(Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION)
 	else:
 		_cycle_events          += 1
 		_cycle_traps_triggered += 1
@@ -350,7 +349,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 			_apply_regen(hero_id)
 			_tick_bleed()
 			if is_running:
-				_schedule_next_encounter()
+				_schedule_next_encounter(Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION)
 
 # ═══════════════════════════════════════════════════════════
 #  Résultat de combat
@@ -399,7 +398,7 @@ func _resolve_victory(enemy: Dictionary) -> void:
 	_apply_regen("hero")
 	_tick_bleed()
 	if is_running:
-		_schedule_next_encounter(COMBAT_POST_DELAY)
+		_schedule_next_encounter(Balance.TRANSITION)
 
 # ═══════════════════════════════════════════════════════════
 #  Utilitaires internes
@@ -443,7 +442,7 @@ func get_max_hp() -> float:
 
 # Programme la prochaine rencontre.
 # Utilise FIRST_ENCOUNTER_DELAY pour la toute première, sinon le délai fourni.
-func _schedule_next_encounter(delay: float = INSTANT_EVENT_DELAY) -> void:
+func _schedule_next_encounter(delay: float = 1.0) -> void:
 	if not is_running:
 		return
 	var actual_delay := FIRST_ENCOUNTER_DELAY if _first_encounter_pending else delay
@@ -756,7 +755,7 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 	_apply_regen("hero")
 	_tick_bleed()
 	if is_running:
-		_schedule_next_encounter(COMBAT_POST_DELAY)
+		_schedule_next_encounter(Balance.TRANSITION)
 
 # ═══════════════════════════════════════════════════════════
 #  Zones
@@ -767,4 +766,3 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 func _get_max_zone(biome_id: String) -> Enums.Zone:
 	var tier: int = GameData.get_entity(biome_id).get("maitrise_actuelle", 0)
 	return Balance.max_unlocked_zone(tier) as Enums.Zone
-

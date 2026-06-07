@@ -9,8 +9,7 @@
 # ============================================================
 extends Node
 
-const TICK_DURATION:    float = 0.16
-const MIN_STEP_DURATION: float = 0.20
+# Durée par tour calculée dynamiquement dans start_combat() depuis Balance.
 
 signal step_started(step: CombatStep)
 signal step_ended(step: CombatStep)
@@ -18,7 +17,7 @@ signal combat_finished(winner: String)
 
 var _steps:            Array      = []
 var _index:            int        = 0
-var _prev_tick:        int        = 0
+var _step_duration:    float      = 0.0   # durée par tour calculée à start_combat
 var _timer:            Timer
 var _current_hero_hp:  float      = 0.0
 var _current_enemy_hp: float      = 0.0
@@ -96,7 +95,11 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	_current_enemy_hp = e_hp
 	_steps            = CombatResolver.resolve(hero_stats, enemy_stats, extended_options)
 	_index            = 0
-	_prev_tick        = 0
+
+	# Durée d'affichage bornée : clamp(nb_tours × IDEAL, MIN, MAX), repartie équitablement.
+	var nb := maxi(_steps.size(), 1)
+	var duree := clampf(float(nb) * Balance.TEMPS_TOUR_IDEAL, Balance.COMBAT_MIN, Balance.COMBAT_MAX)
+	_step_duration = duree / float(nb) * GameSettings.combat_speed
 
 	# Enregistrer le cooldown du bouclier si il a procé pendant la résolution
 	var shield_cfg := extended_options.get("passive_shield", {}) as Dictionary
@@ -130,10 +133,7 @@ func _play_next() -> void:
 
 	step_started.emit(step)
 
-	var ticks    := maxi(step.tick_time - _prev_tick, 1)
-	_prev_tick    = step.tick_time
-	var duration := float(ticks) * TICK_DURATION * GameSettings.combat_speed
-	_timer.wait_time = maxf(duration, MIN_STEP_DURATION)
+	_timer.wait_time = maxf(_step_duration, 0.05)
 	_timer.start()
 
 func _on_timer() -> void:

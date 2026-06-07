@@ -221,6 +221,22 @@ static func max_unlocked_zone(biome_tier: int) -> int:
 	return 0
 
 # ═══════════════════════════════════════════════════════════
+#  Cadence d'affichage des événements
+# ═══════════════════════════════════════════════════════════
+# Durées nominales en secondes (à combat_speed = 1.0).
+# Pièges/bénédictions : AFFICHAGE_EVENEMENT puis TRANSITION puis suivant.
+# Combats : durée calculée par CombatPlayer (nb_tours × IDEAL → clamp MIN..MAX)
+#           puis TRANSITION puis suivant.
+# Valeurs à affiner au playtest via COMBAT_MIN / COMBAT_MAX / TEMPS_TOUR_IDEAL ;
+# ne pas toucher les seuils XP pour corriger le ressenti de rythme.
+
+const TRANSITION:          float = 1.0  # pause post-événement avant la rencontre suivante
+const AFFICHAGE_EVENEMENT: float = 1.5  # durée d'affichage fixe d'un piège ou d'une bénédiction
+const COMBAT_MIN:          float = 2.0  # durée minimale d'affichage d'un combat (plancher)
+const COMBAT_MAX:          float = 5.0  # durée maximale d'affichage d'un combat (plafond rafale)
+const TEMPS_TOUR_IDEAL:    float = 1.2  # durée cible par tour (référence de calcul)
+
+# ═══════════════════════════════════════════════════════════
 #  Pondération du pool de créatures par zone
 # ═══════════════════════════════════════════════════════════
 
