@@ -8,10 +8,20 @@ extends PanelContainer
 #   PAWS (empreintes) → Créatures STARS (étoiles) → Héros
 enum Motif { BUBBLES, LIGHTNING, DIAMONDS, CROSSES, PAWS, STARS }
 
+# Couleur or du segment XP gagné ce cycle (fondu vers fill_color en fin d'animation).
+const GAIN_COLOR := Color(1.00, 0.88, 0.20)
+
 var xp_fill    := 0.0
 var fill_color := Color.WHITE
 var motif: int = Motif.BUBBLES
 var _t         := 0.0
+
+# Segment XP gagné :
+#   gain_start ≥ 0  → fraction où commence le segment or (= avant_frac du cycle)
+#   gain_start = -1 → pas de segment (rendu normal monochrome)
+#   gain_t ∈ [0, 1] → 0 = couleur tier, 1 = GAIN_COLOR (lerp)
+var gain_start : float = -1.0
+var gain_t     : float = 0.0
 # Particules générées une seule fois pour cette carte : [ [xf, taille, vitesse, phase], … ].
 # Tirage propre à chaque carte (aléatoire contrôlé) → deux barres du même motif
 # ne s'animent jamais à l'identique, même multipliées à l'écran.
@@ -97,8 +107,18 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2(-3, -3), Vector2(size.x + 6, h + 6)),
 				Color(fill_color.r, fill_color.g, fill_color.b, glow_a))
 
-	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)),
-			Color(fill_color.r, fill_color.g, fill_color.b, fill_alpha))
+	# Rendu en deux segments quand un segment or est actif, sinon monochrome.
+	var has_gain := gain_start >= 0.0 and gain_t > 0.0 and xp_fill > gain_start
+	if has_gain:
+		if gain_start > 0.0:
+			draw_rect(Rect2(Vector2.ZERO, Vector2(size.x * gain_start, h)),
+					Color(fill_color.r, fill_color.g, fill_color.b, fill_alpha))
+		var gc := fill_color.lerp(GAIN_COLOR, gain_t)
+		draw_rect(Rect2(Vector2(size.x * gain_start, 0.0), Vector2(size.x * (xp_fill - gain_start), h)),
+				Color(gc.r, gc.g, gc.b, fill_alpha))
+	else:
+		draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)),
+				Color(fill_color.r, fill_color.g, fill_color.b, fill_alpha))
 
 	for p in _particles:
 		var xf : float = p[0]

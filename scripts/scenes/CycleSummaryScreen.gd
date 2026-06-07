@@ -303,6 +303,7 @@ func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictiona
 	var apres_frac := clampf(xp_apres / xp_max, 0.0, 1.0) if xp_max > 0.0 else 1.0
 
 	var card := _xp_card(icon, label, tier, xp_apres, xp_max, entity.get("entity_type", "") as String)
+	(card["card"] as XPCard).xp_fill = avant_frac
 	vb.add_child(card["container"])
 	_fade_register(card["container"])
 	_xp_anims.append({
@@ -420,8 +421,9 @@ func _run_animation_sequence() -> void:
 	for xp: Dictionary in _xp_anims:
 		await _fill_xp_bar(xp)
 
-# Anime une carte : le remplissage du fond va de xp_avant vers xp_apres,
-# pendant que "+X XP" compte de 0 au gain du cycle.
+# Anime une carte : le remplissage du fond va de xp_avant vers xp_apres.
+# Le segment gagné ce cycle (avant → après) s'affiche en or, puis fond
+# vers la couleur du tier en fin d'animation.
 func _fill_xp_bar(xp: Dictionary) -> void:
 	var card   : XPCard = xp["card"]
 	var xp_lbl : Label  = xp["xp_label"]
@@ -429,15 +431,24 @@ func _fill_xp_bar(xp: Dictionary) -> void:
 	var before : float  = xp["before_frac"]
 	var after  : float  = xp["after_frac"]
 
-	card.xp_fill = before
-	xp_lbl.text = "+0 XP"
+	card.xp_fill    = before
+	card.gain_start = before
+	card.gain_t     = 1.0
+	xp_lbl.text     = "+0 XP"
 
+	# Phase 1 — remplissage de la barre + compteur XP
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(card, "xp_fill", after, 0.75).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_method(func(v: float) -> void:
 		xp_lbl.text = "+%.0f XP" % v
 	, 0.0, gained, 0.75).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	await tw.finished
+
+	# Phase 2 — fondu or → couleur du tier
+	var tw2 := create_tween()
+	tw2.tween_property(card, "gain_t", 0.0, 0.5).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_CUBIC)
+	await tw2.finished
+	card.gain_start = -1.0
 
 # ═══════════════════════════════════════════════════════════
 #  Helpers
