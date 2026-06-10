@@ -8,11 +8,17 @@
 #   add_child(SettingsOverlay.new())
 #
 # Cycle de vie autonome :
-#   • clic hors de la carte ou sur ✕ → l'overlay se libère lui-même ;
+#   • clic hors de la carte, touche Échap ou ✕ → l'overlay se libère lui-même ;
 #   • changement de langue → l'overlay se reconstruit lui-même.
 # ============================================================
 class_name SettingsOverlay
 extends ColorRect
+
+# Échap ferme toujours le panneau (filet de sécurité clavier).
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		get_viewport().set_input_as_handled()
+		queue_free()
 
 func _ready() -> void:
 	color        = Color(0.0, 0.0, 0.0, 0.45)
@@ -38,10 +44,15 @@ func _build() -> void:
 	add_child(center)
 
 	# La carte intercepte les clics : cliquer dedans ne ferme pas l'overlay.
+	# Fond OPAQUE : le panneau ne doit pas laisser transparaître le hub.
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(380, 0)
-	card.add_theme_stylebox_override("panel",
-			UIHelpers.card_style(UIColors.TEXT_HEADER, 0.08, 0.35, 1, 6))
+	var style := StyleBoxFlat.new()
+	style.bg_color     = UIColors.BG_CARD
+	style.border_color = Color(UIColors.TEXT_HEADER, 0.35)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	card.add_theme_stylebox_override("panel", style)
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	center.add_child(card)
 

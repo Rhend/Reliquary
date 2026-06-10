@@ -5,7 +5,8 @@
 # T0+      : hub hexagonal + panneau JRPG glissant (40/60 viewport).
 #
 # Widgets visuels dans scenes/village/widgets/ :
-#   CircleRing, ClickOrb, HexItem, JRPGPanel, XPCard, SettingsOverlay
+#   CircleRing, ClickOrb, HexItem, JRPGPanel, XPCard, SettingsOverlay,
+#   VillageBackdrop (fond d'ambiance animé, évolue avec le palier)
 #
 # Le contenu des panneaux glissants (Héros / Expéditions / Forge) est délégué à
 # des modules dédiés dans scenes/village/panels/ ; ils reçoivent ce nœud (host)
@@ -75,6 +76,15 @@ var _birth_phrase         : Label              # phrase d'éveil affichée actue
 var _birth_phrase_idx     := 0                 # index de la prochaine phrase d'éveil à montrer
 var _birth_hatching       := false             # vrai pendant le battement final avant l'éclosion
 var _settings_overlay     : Control = null     # overlay paramètres, null si fermé
+var _backdrop             : VillageBackdrop    # fond d'ambiance (halo + poussières)
+
+# ─── DEBUG : prévisualisation des paliers du Village ──────────
+# Boutons « Tier − / Tier + » en bas à gauche : montent/descendent le palier
+# du Village pour juger l'évolution visuelle du hub sans jouer.
+# ⚠ Modifie réellement GameData.village (peut finir dans la sauvegarde).
+# Mettre à false avant une release.
+const DEBUG_TIER_BUTTONS := true
+var _debug_tier_lbl: Label = null
 
 # ─── Init ─────────────────────────────────────────────────────
 func _ready() -> void:
@@ -106,6 +116,10 @@ func _build_ui() -> void:
 	bg.color = UIColors.BG_DARK
 	add_child(bg)
 
+	# Fond d'ambiance animé (derrière tout le hub, survit aux rebuilds).
+	_backdrop = VillageBackdrop.new()
+	add_child(_backdrop)
+
 	# Tant que le Village n'a pas éclos : phase préliminaire (100 clics).
 	# Une fois éclos, le hub est disponible dès T0 (expéditions incluses).
 	if not GameData.village.get("eclos", false):
@@ -114,6 +128,7 @@ func _build_ui() -> void:
 		_build_hub()
 
 	_build_fullscreen_btn()
+	_build_debug_tier_buttons()
 
 # ─── Phase d'éclosion : naissance du Village (pré-T0) ─────────
 # Le Village n'existe pas encore : on clique Balance.ECLOSION_CLICS fois pour
@@ -123,6 +138,10 @@ func _build_birth() -> void:
 	var clics    := int(GameData.village.get("clics_eclosion", 0))
 	var needed   := Balance.ECLOSION_CLICS
 	var progress := clampf(float(clics) / float(needed), 0.0, 1.0)
+
+	# Ambiance discrète : le fond se réchauffe avec la progression de l'éveil.
+	if _backdrop:
+		_backdrop.set_tier(0, TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, progress))
 
 	var orb := ClickOrb.new()
 	orb.tier_color   = TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, progress)
@@ -168,6 +187,10 @@ func _build_hub() -> void:
 	var diam_margins := [70.0, 70.0, 82.0, 104.0, 136.0, 164.0]
 	var diam: float = RING_RADIUS * 2.0 + float(diam_margins[village_maitrise])
 
+	# Le fond d'ambiance suit le palier (halo plus présent, poussières plus denses).
+	if _backdrop:
+		_backdrop.set_tier(village_maitrise, tcolor)
+
 	_hub_root = Control.new()
 	_hub_root.size = vp
 	add_child(_hub_root)
@@ -203,15 +226,24 @@ func _build_hub() -> void:
 	lname.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lname.add_theme_font_size_override("font_size", 24)
 	lname.add_theme_color_override("font_color", tcolor)
+	lname.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
+	lname.add_theme_constant_override("shadow_offset_y", 2)
 	center_box.add_child(lname)
 
+	# Nom du palier encadré de deux fines lignes ornementales (touche JRPG).
+	var tier_row := HBoxContainer.new()
+	tier_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	tier_row.add_theme_constant_override("separation", 10)
+	center_box.add_child(tier_row)
+
+	tier_row.add_child(_ornament_line(tcolor))
 	var ltier := Label.new()
 	ltier.text = GameData.get_tier_name(village_maitrise)
 	ltier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ltier.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ltier.add_theme_font_size_override("font_size", 15)
 	ltier.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.40))
-	center_box.add_child(ltier)
+	tier_row.add_child(ltier)
+	tier_row.add_child(_ornament_line(tcolor))
 
 	# Conditions d'évolution du Village (tant que le palier max n'est pas atteint)
 	if village_maitrise < Balance.VILLAGE_FRAGMENT_COSTS.size():
@@ -241,6 +273,35 @@ func _build_hub() -> void:
 		var pos := Vector2(cos(ang), sin(ang)) * RING_RADIUS
 		var d: Array = unlocked[i]
 		_make_hex(Translations.T("menu." + (d[4] as String)), d[1], tcolor, pos, Callable(self, d[3]), d[4])
+
+	_animate_hub_entrance()
+
+# Fine ligne horizontale décorative (ornement du nom de palier).
+func _ornament_line(color: Color) -> ColorRect:
+	var line := ColorRect.new()
+	line.custom_minimum_size = Vector2(26, 1)
+	line.color               = Color(color, 0.55)
+	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return line
+
+# Apparition du hub : l'anneau fond en douceur et les hexagones « poppent »
+# l'un après l'autre autour du cercle. Rejouée à chaque rebuild (changement
+# de palier, langue…) — c'est voulu : l'évolution mérite sa mise en scène.
+func _animate_hub_entrance() -> void:
+	_ring.modulate.a = 0.0
+	var rt := create_tween()
+	rt.tween_property(_ring, "modulate:a", 1.0, 0.45).set_ease(Tween.EASE_OUT)
+
+	var i := 0
+	for pid in _hex_items:
+		var item := _hex_items[pid] as HexItem
+		item.modulate.a = 0.0
+		item.scale      = Vector2(0.6, 0.6)  # pivot déjà centré (cf. _make_hex)
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(item, "modulate:a", 1.0, 0.25).set_delay(0.07 * i)
+		tw.tween_property(item, "scale", Vector2.ONE, 0.40) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK).set_delay(0.07 * i)
+		i += 1
 
 # Retourne le texte du hint contextuel selon la progression actuelle.
 func _current_hint(village_maitrise: int) -> String:
@@ -560,6 +621,56 @@ func _build_fullscreen_btn() -> void:
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
 	btn.pressed.connect(_toggle_settings_overlay)
 	add_child(btn)
+
+# ─── DEBUG : boutons Tier − / Tier + ──────────────────────────
+# Petite barre en bas à gauche pour prévisualiser l'évolution visuelle
+# du hub à chaque palier (cf. DEBUG_TIER_BUTTONS).
+
+func _build_debug_tier_buttons() -> void:
+	if not DEBUG_TIER_BUTTONS:
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.anchor_left = 0.0; row.anchor_right  = 0.0
+	row.anchor_top  = 1.0; row.anchor_bottom = 1.0
+	row.offset_left = 8;   row.offset_top    = -34
+	row.offset_bottom = -8
+	add_child(row)
+
+	row.add_child(_debug_tier_btn("−", -1))
+	_debug_tier_lbl = Label.new()
+	_debug_tier_lbl.text = "Tier %d" % village_tier()
+	_debug_tier_lbl.add_theme_font_size_override("font_size", 11)
+	_debug_tier_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	_debug_tier_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(_debug_tier_lbl)
+	row.add_child(_debug_tier_btn("+", 1))
+
+func _debug_tier_btn(label: String, delta: int) -> Button:
+	var btn := Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(26, 26)
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.30, 1, 4))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(UIColors.TEXT_MUTED, 0.15, 0.50, 1, 4))
+	btn.pressed.connect(_debug_shift_tier.bind(delta))
+	return btn
+
+# Change le palier du Village de `delta` et reconstruit le hub.
+# Force l'éclosion si nécessaire (le hub n'existe qu'après) — dans ce cas
+# on recharge la scène pour nettoyer l'UI d'éclosion.
+func _debug_shift_tier(delta: int) -> void:
+	var was_eclos: bool = GameData.village.get("eclos", false)
+	GameData.village["maitrise_actuelle"] = clampi(village_tier() + delta, 0, GameData.MAX_TIER)
+	GameData.village["eclos"] = true
+	if _debug_tier_lbl:
+		_debug_tier_lbl.text = "Tier %d" % village_tier()
+	if was_eclos:
+		_rebuild_hub()
+	else:
+		get_tree().reload_current_scene()
 
 # ─── Panneau Paramètres ───────────────────────────────────────
 # Tout le contenu (audio, affichage, sauvegarde, langue) vit dans le
