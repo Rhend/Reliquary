@@ -9,8 +9,8 @@ nom_affichage_fr = "Champignon Magique"
 lore_fr = "Il pousse dans l'obscurite totale et brille faiblement. Le consommer procure une clarte inattendue, comme si le monde s'etait mis en pause."
 nom_affichage_en = "Magic Mushroom"
 biome_source_id = "biome_marecage"
-effet = "luck"
-valeur = 10
+effet = "xp_bonus"
+valeur = 50
 
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

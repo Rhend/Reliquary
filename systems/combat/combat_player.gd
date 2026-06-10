@@ -15,6 +15,8 @@ signal step_started(step: CombatStep)
 signal step_ended(step: CombatStep)
 signal combat_finished(winner: String)
 
+const MIN_STEP_DURATION: float = 0.05  # plancher de durée d'un step (sécurité timer)
+
 var _steps:            Array      = []
 var _index:            int        = 0
 var _step_duration:    float      = 0.0   # durée par tour calculée à start_combat
@@ -25,6 +27,12 @@ var _enemy_dict:       Dictionary = {}
 
 var is_playing: bool:
 	get: return _timer != null and not _timer.is_stopped()
+
+# Durée d'affichage d'un step du combat courant (lecture seule).
+# Utilisée par l'UI (CombatScene) pour caler ses animations de charge
+# sur le rythme réel du playback.
+var step_duration: float:
+	get: return _step_duration
 
 func _ready() -> void:
 	_timer          = Timer.new()
@@ -96,10 +104,10 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	_steps            = CombatResolver.resolve(hero_stats, enemy_stats, extended_options)
 	_index            = 0
 
-	# Durée d'affichage bornée : clamp(nb_tours × IDEAL, MIN, MAX), repartie équitablement.
+	# Durée d'affichage bornée : clamp(nb_tours × IDEAL, MIN, MAX), répartie équitablement.
 	var nb := maxi(_steps.size(), 1)
 	var duree := clampf(float(nb) * Balance.TEMPS_TOUR_IDEAL, Balance.COMBAT_MIN, Balance.COMBAT_MAX)
-	_step_duration = duree / float(nb) * GameSettings.combat_speed
+	_step_duration = maxf(duree / float(nb) * GameSettings.combat_speed, MIN_STEP_DURATION)
 
 	# Enregistrer le cooldown du bouclier si il a procé pendant la résolution
 	var shield_cfg := extended_options.get("passive_shield", {}) as Dictionary
@@ -133,7 +141,7 @@ func _play_next() -> void:
 
 	step_started.emit(step)
 
-	_timer.wait_time = maxf(_step_duration, 0.05)
+	_timer.wait_time = _step_duration
 	_timer.start()
 
 func _on_timer() -> void:

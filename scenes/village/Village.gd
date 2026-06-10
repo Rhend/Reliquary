@@ -31,8 +31,9 @@ func _birth_phrases() -> Array:
 	]
 
 # [label, icon, tier_min, callback_name, panel_id]
-# tier_min = palier du héros requis ; exception : FORGE est gated par le Tier du Village.
-# Gates décalés d'un rang : le Village éclot en T0 et débloque déjà les expéditions.
+# tier_min = palier de Maîtrise du VILLAGE requis pour afficher l'hexagone
+# (filtrage uniforme dans _build_hub). Le Village éclot en T0 avec le héros
+# et les expéditions déjà disponibles ; la Forge arrive en T1, etc.
 const MENU_ITEMS: Array = [
 	["HÉRO",        "👤", 0, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  0, "_go_adventure", "adventure" ],
@@ -355,6 +356,13 @@ func _swap_panel_content(panel_id: String) -> void:
 	UIHelpers.clear_children(_rp_content)
 	_fill_panel_content(panel_id)
 
+# Reconstruit le contenu du panneau actuellement ouvert, sans le fermer.
+# À utiliser pour tout rafraîchissement : rappeler _open_panel() avec le
+# panneau déjà ouvert le FERMERAIT (comportement toggle).
+func _refresh_active_panel() -> void:
+	if _rp_root != null and _active_panel_id != "":
+		_swap_panel_content(_active_panel_id)
+
 # ─── Construction du cadre JRPG ──────────────────────────────
 # Crée le JRPGPanel, le titre, le bouton fermer et la zone scrollable.
 func _build_panel_frame(panel_id: String) -> void:
@@ -442,12 +450,17 @@ func _panel_soon(label: String) -> void:
 # ─── Village ──────────────────────────────────────────────────
 
 # Recrée le hub (après upgrade village ou changement de tier).
+# Le panneau droit éventuellement ouvert est libéré (et non orphelin) :
+# l'appelant peut le rouvrir ensuite via _open_panel (cf. _on_language_changed).
 func _rebuild_hub() -> void:
 	if _hub_root and is_instance_valid(_hub_root):
 		_hub_root.queue_free()
 		_hub_root = null
-	_rp_root = null
+	if _rp_root and is_instance_valid(_rp_root):
+		_rp_root.queue_free()
+	_rp_root    = null
 	_rp_content = null
+	_rp_title   = null
 	_hex_items.clear()
 	_active_panel_id = ""
 	if GameData.village.get("eclos", false):
@@ -472,7 +485,7 @@ func _on_biome_revele(biome_id: String) -> void:
 	_show_banner("✦  Nouveau biome révélé : %s  ✦" % nom,
 			Color(0.4, 0.7, 1.0), Color(0.05, 0.10, 0.25, 0.92), 3.0, 0.6)
 	if _active_panel_id == "adventure":
-		_open_panel("adventure")
+		_refresh_active_panel()
 
 # Bannière temporaire en haut de l'écran : texte + couleur d'accent, fond `bg`,
 # affichée `hold` s puis fondue en `fade` s avant disparition. Mutualisée par
@@ -949,7 +962,7 @@ func _update_badges() -> void:
 # Refresh du panneau forge ou héro si ouvert, après un drop de ressources ou une forge.
 func _on_resources_changed_refresh() -> void:
 	if _active_panel_id == "forge" or _active_panel_id == "hero":
-		_open_panel(_active_panel_id)
+		_refresh_active_panel()
 	_update_badges()
 
 # ─── Langue ───────────────────────────────────────────────────

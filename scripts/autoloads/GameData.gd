@@ -80,27 +80,28 @@ func _init_progression_constants() -> void:
 
 # Charge toutes les entités depuis leurs dossiers respectifs.
 func _load_all_entities() -> void:
-	# Biomes : chargés depuis .tres (source de vérité)
-	_load_tres_entities_from_folder("res://data/biomes/", "biome")
-	# Contenu VS : créatures, passifs uniques
-	_load_tres_entities_from_folder("res://data/creatures/",       "creature")
-	_load_tres_entities_from_folder("res://data/passifs_uniques/", "passif_unique")
-	# Pièges et bénédictions : entités de maîtrise (XP + évolution manuelle)
-	_load_tres_entities_from_folder("res://data/pieges/",          "trap")
-	_load_tres_entities_from_folder("res://data/benedictions/",    "benediction")
+	# Entités à Maîtrise (progression XP + évolution manuelle)
+	_load_tres_folder("res://data/biomes/",          "biome")
+	_load_tres_folder("res://data/creatures/",       "creature")
+	_load_tres_folder("res://data/passifs_uniques/", "passif_unique")
+	_load_tres_folder("res://data/pieges/",          "trap")
+	_load_tres_folder("res://data/benedictions/",    "benediction")
 	# Données statiques JSON — chargées EN PREMIER pour que les .tres les écrasent si même ID
 	_load_data_from_folder("res://data/resources/", "resource")
 	_load_data_from_folder("res://data/forge/",     "recipe")
-	# Données statiques VS — écrasent les resources/ si ID partagé (ex: res_fourrure)
-	_load_tres_data_from_folder("res://data/ingredients/", "ingredient")
-	_load_tres_data_from_folder("res://data/fragments/",   "fragment")
-	# Héros : chargé depuis .tres (source de vérité)
-	_load_tres_entities_from_folder("res://data/hero/", "hero")
-	_load_tres_entities_from_folder("res://data/passives/", "passive")
-	_load_tres_entities_from_folder("res://data/equipements/", "equipment")
+	# Données statiques .tres (sans progression) — écrasent les resources/ si ID partagé
+	_load_tres_folder("res://data/ingredients/", "ingredient", false)
+	_load_tres_folder("res://data/fragments/",   "fragment",   false)
+	# Héros, passifs et équipements : entités à Maîtrise
+	_load_tres_folder("res://data/hero/",        "hero")
+	_load_tres_folder("res://data/passives/",    "passive")
+	_load_tres_folder("res://data/equipements/", "equipment")
 
-# Charge les .tres d'un dossier et initialise les champs de maîtrise.
-func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:
+# Charge tous les .tres d'un dossier dans le catalogue d'entités.
+# with_mastery = true → initialise les champs de progression de Maîtrise
+# (maitrise_actuelle, xp_maitrise_actuelle, unlocked_passives, coût du palier suivant).
+# with_mastery = false → données statiques telles quelles (ingrédients, fragments).
+func _load_tres_folder(path: String, entity_type: String, with_mastery: bool = true) -> void:
 	var dir := DirAccess.open(path)
 	if dir == null:
 		return
@@ -113,31 +114,14 @@ func _load_tres_entities_from_folder(path: String, entity_type: String) -> void:
 			if id_val != null and id_val != "":
 				var data := _resource_to_dict(res)
 				data["entity_type"] = entity_type
-				# maitrise_actuelle / xp_maitrise_actuelle proviennent du .tres (source de vérité).
-				if not data.has("maitrise_actuelle"):
-					data["maitrise_actuelle"] = 0
-				if not data.has("xp_maitrise_actuelle"):
-					data["xp_maitrise_actuelle"] = 0.0
-				data["unlocked_passives"] = []
-				data["xp_maitrise_palier_suivant"] = palier_suivant_cost(entity_type, int(data["maitrise_actuelle"]))
-				entities[data["id"]] = data
-		file_name = dir.get_next()
-	dir.list_dir_end()
-
-# Charge les .tres d'un dossier comme données statiques (sans progression).
-func _load_tres_data_from_folder(path: String, entity_type: String) -> void:
-	var dir := DirAccess.open(path)
-	if dir == null:
-		return
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-	while file_name != "":
-		if file_name.ends_with(".tres"):
-			var res := load(path + file_name)
-			var id_val = res.get("id") if res != null else null
-			if id_val != null and id_val != "":
-				var data := _resource_to_dict(res)
-				data["entity_type"] = entity_type
+				if with_mastery:
+					# maitrise_actuelle / xp_maitrise_actuelle proviennent du .tres (source de vérité).
+					if not data.has("maitrise_actuelle"):
+						data["maitrise_actuelle"] = 0
+					if not data.has("xp_maitrise_actuelle"):
+						data["xp_maitrise_actuelle"] = 0.0
+					data["unlocked_passives"] = []
+					data["xp_maitrise_palier_suivant"] = palier_suivant_cost(entity_type, int(data["maitrise_actuelle"]))
 				entities[data["id"]] = data
 		file_name = dir.get_next()
 	dir.list_dir_end()
@@ -194,10 +178,6 @@ func _read_json(path: String) -> Dictionary:
 		push_error("GameData: erreur parsing JSON — " + path)
 		return {}
 	return json.get_data()
-
-# ═══════════════════════════════════════════════════════════
-#  Accesseurs — Entités
-# ═══════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════
 #  Village
@@ -282,6 +262,19 @@ func palier_suivant_cost(entity_type: String, tier: int) -> float:
 		return 0.0
 	return float(xp_thresholds[next_idx])
 
+# Stats brutes d'une entité pour un palier donné, lues dans stats_par_palier.
+# Si le palier exact n'est pas défini dans le .tres, descend au palier
+# inférieur le plus proche. Retourne {} si aucun palier n'est défini.
+# Source unique de cette règle de descente (combat, pool de créatures, stats).
+func stats_at_tier(entity: Dictionary, tier: int) -> Dictionary:
+	var spp := entity.get("stats_par_palier", {}) as Dictionary
+	var t   := tier
+	while t >= 0:
+		if spp.has(t):
+			return spp[t] as Dictionary
+		t -= 1
+	return {}
+
 # Stats effectives d'une entité au palier courant.
 # Héros          → tables Balance.HERO_*_PER_TIER (non-linéaires, source unique).
 # Créatures     → stats_par_palier[tier] du .tres (descend jusqu'au tier 0 si nécessaire).
@@ -304,21 +297,16 @@ func get_effective_stats(entity_id: String) -> Dictionary:
 			"crit_multiplier": float(entity.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
 		}
 
-	var spp := entity.get("stats_par_palier", {}) as Dictionary
-	if not spp.is_empty():
-		var t := tier
-		while t >= 0:
-			if spp.has(t):
-				var s := spp[t] as Dictionary
-				return {
-					"atk":             int(s.get("atk", 0)),
-					"def":             int(s.get("def", 0)),
-					"hp":              int(s.get("hp",  0)),
-					"vit":             int(s.get("vit", 20)),
-					"crit_chance":     float(entity.get("crit_chance",     Balance.CRIT_CHANCE)),
-					"crit_multiplier": float(entity.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
-				}
-			t -= 1
+	var s := stats_at_tier(entity, tier)
+	if not s.is_empty():
+		return {
+			"atk":             int(s.get("atk", 0)),
+			"def":             int(s.get("def", 0)),
+			"hp":              int(s.get("hp",  0)),
+			"vit":             int(s.get("vit", 20)),
+			"crit_chance":     float(entity.get("crit_chance",     Balance.CRIT_CHANCE)),
+			"crit_multiplier": float(entity.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
+		}
 
 	return {
 		"atk":             int(entity.get("atk", 0)) + tier * int(entity.get("atk_par_tier", 0)),

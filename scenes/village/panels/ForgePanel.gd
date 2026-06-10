@@ -494,6 +494,8 @@ static func _forge_btn(host: Village, equip_id: String, next_tier: int,
 		UIHelpers.add_hover_feedback(btn)
 
 		btn.pressed.connect(func() -> void:
+			# GameData.forge() émet resources_changed → Village rafraîchit
+			# le panneau Forge tout seul ; on n'affiche ici que la bannière.
 			if GameData.forge(equip_id):
 				var e   := GameData.get_entity(equip_id)
 				var nom := e.get("nom_affichage_fr", equip_id) as String
@@ -501,7 +503,6 @@ static func _forge_btn(host: Village, equip_id: String, next_tier: int,
 				host._show_banner(
 						"🔨  %s → %s" % [nom, GameData.get_tier_name(nt)],
 						UIColors.LOG_VICTORY, Color(0.02, 0.12, 0.05, 0.92), 2.0, 0.4)
-				host._open_panel("forge")
 		)
 	else:
 		UIHelpers.register_tooltip(btn, Translations.T("forge.equip.forge_unavail"),

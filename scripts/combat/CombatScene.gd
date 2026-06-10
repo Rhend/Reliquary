@@ -52,7 +52,6 @@ var _unique_panel: Control = null
 
 # ─── État ────────────────────────────────────────────────────
 var _cycle_xp:    float = 0.0
-var _prev_tick:   int   = 0
 var _navigating:  bool  = false
 var _hero_shield: float = 0.0
 
@@ -275,26 +274,13 @@ func _build_bottom_bar() -> Control:
 
 # ── Helpers UI ─────────────────────────────────────────────
 
-# Ajoute un pill d'état (infrastructure — aucun état actif pour l'instant).
-# title : nom de l'état ; tooltip : description (valeur dynamique à calculer plus tard).
+# Description lisible de l'effet d'une bénédiction (pour le tooltip).
+# Effets supportés par AdventureSystem : "heal" et "xp_bonus".
 func _benediction_desc(effet: String, valeur: int) -> String:
 	match effet:
-		"heal":      return Translations.T("combat.bless.heal") % valeur
-		"atk_boost": return Translations.T("combat.bless.atk")  % valeur
-		"def_boost": return Translations.T("combat.bless.def")  % valeur
-		"xp_boost":  return Translations.T("combat.bless.xp")   % valeur
-		_:           return effet if effet != "" else Translations.T("combat.bless.unknown")
-
-func _add_state_pill(states_box: HBoxContainer, title: String, tooltip: String, color: Color) -> void:
-	var box := PanelContainer.new()
-	box.add_theme_stylebox_override("panel", UIHelpers.card_style(color, 0.18, 0.70, 1, 6))
-	var lbl := Label.new()
-	lbl.text = title
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", color)
-	box.add_child(lbl)
-	states_box.add_child(box)
-	UIHelpers.register_tooltip(box, title, tooltip, color)
+		"heal":     return Translations.T("combat.bless.heal") % valeur
+		"xp_bonus": return Translations.T("combat.bless.xp")   % valeur
+		_:          return effet if effet != "" else Translations.T("combat.bless.unknown")
 
 # ═══════════════════════════════════════════════════════════
 #  Signaux
@@ -303,7 +289,6 @@ func _add_state_pill(states_box: HBoxContainer, title: String, tooltip: String, 
 func _connect_signals() -> void:
 	EventBus.adventure_started.connect(_on_adventure_started)
 	EventBus.adventure_event_resolved.connect(_on_event_resolved)
-	EventBus.zone_changee.connect(_on_zone_changee)
 	EventBus.creature_unique_vaincue.connect(_on_creature_unique_vaincue)
 	EventBus.combat_started.connect(_on_combat_started)
 	EventBus.combat_ended.connect(_on_combat_ended)
@@ -440,7 +425,6 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_hero_shield = 0.0
 	_stop_danger_pulse()
 	_clear_state_pills()
-	_prev_tick = 0
 	_flee_btn.disabled = false
 	_add_log("[color=%s]%s[/color] apparaît" % [_hex(Color(1.0, 0.8, 0.2)), ename], ["monster"])
 
@@ -449,12 +433,6 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 # fin du cooldown (_on_step_ended). Pendant ce temps, l'autre entité n'affiche
 # rien (pill masquée).
 func _on_step_started(step: CombatStep) -> void:
-	# Durée du step, calée sur le timing réel de CombatPlayer (sync _prev_tick).
-	var ticks := maxi(step.tick_time - _prev_tick, 1)
-	_prev_tick = step.tick_time
-	var dur := maxf(float(ticks) * CombatPlayer.TICK_DURATION * GameSettings.combat_speed,
-			CombatPlayer.MIN_STEP_DURATION)
-
 	# Tick de poison : instantané, pas d'action chargée ni d'intention affichée.
 	if step.is_poison or step.is_passive_poison:
 		return
@@ -466,8 +444,10 @@ func _on_step_started(step: CombatStep) -> void:
 	_show_action(lbl, Translations.T("combat.action.crit") if step.is_crit else Translations.T("combat.action.attack"),
 			UIColors.FILTER_ON if step.is_crit else base_col)
 	ring.set_cooldown(0.0)
+	# La charge de l'anneau dure exactement un step côté CombatPlayer :
+	# l'attaque atterrit visuellement quand l'anneau est plein.
 	var tw := create_tween()
-	tw.tween_method(ring.set_cooldown, 0.0, 1.0, dur).set_ease(Tween.EASE_IN)
+	tw.tween_method(ring.set_cooldown, 0.0, 1.0, CombatPlayer.step_duration).set_ease(Tween.EASE_IN)
 
 # Fin du cooldown : l'attaque atterrit. On applique les dégâts/soins/états,
 # on réinitialise les anneaux et on masque les pills d'action.
@@ -677,16 +657,6 @@ func _build_mechanic_label() -> void:
 	_mechanic_label.visible = false
 	add_child(_mechanic_label)
 
-func _on_zone_changee(nouvelle_zone: int) -> void:
-	_update_zone_label(nouvelle_zone as Enums.Zone)
-	_show_zone_banner(nouvelle_zone)
-	if _hero_bg:     _hero_bg.set_zone(nouvelle_zone)
-	if _creature_bg: _creature_bg.set_zone(nouvelle_zone)
-	if nouvelle_zone == Enums.Zone.ABYSSE:
-		_show_unique_indicator()
-	else:
-		_hide_unique_indicator()
-
 func _update_zone_label(zone: Enums.Zone) -> void:
 	if not _zone_label:
 		return
@@ -821,29 +791,6 @@ func _kill_impact(ring: CombatRing) -> void:
 	var tw := create_tween()
 	tw.tween_property(ring, "modulate", Color(2.2, 2.2, 2.2, 1.0), 0.06)
 	tw.tween_property(ring, "modulate", Color.WHITE, 0.40).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-
-# ═══════════════════════════════════════════════════════════
-#  Polish combat — item 7 (bannière de transition de zone)
-# ═══════════════════════════════════════════════════════════
-
-func _show_zone_banner(zone_idx: int) -> void:
-	const PREFIXES := ["", "↓ ", "↓↓ "]
-	var idx       := clampi(zone_idx, 0, 2)
-	var color     := UIColors.zone_color(idx)
-	var lbl       := Label.new()
-	lbl.text      = PREFIXES[idx] + Translations.zone_name(idx)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 24)
-	lbl.add_theme_color_override("font_color", color)
-	lbl.anchor_left   = 0.0; lbl.anchor_right  = 1.0
-	lbl.anchor_top    = 0.5; lbl.anchor_bottom = 0.5
-	lbl.offset_top    = -16; lbl.offset_bottom = 16
-	lbl.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-	add_child(lbl)
-	var tw := create_tween()
-	tw.tween_interval(1.5)
-	tw.tween_property(lbl, "modulate:a", 0.0, 0.5)
-	get_tree().create_timer(2.1).timeout.connect(lbl.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Polish combat — item 8 (pills d'état colorées)

@@ -70,9 +70,6 @@ signal passives_refreshed()
 
 @warning_ignore("unused_signal")
 signal adventure_started(biome_id: String)
-# Émis par AdventureSystem à chaque changement de zone pendant une expédition.
-@warning_ignore("unused_signal")
-signal zone_changee(nouvelle_zone: int)
 # Émis quand un Fragment est libéré au passage d'un biome à Rare.
 @warning_ignore("unused_signal")
 signal fragment_libere(fragment_id: String, biome_id: String)

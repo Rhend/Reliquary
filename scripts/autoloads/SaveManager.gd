@@ -27,6 +27,13 @@ const SAVE_PATH     := "user://IdleEvolutionSave.json"
 const SAVE_VER      := 13
 const SAVE_DEBOUNCE := 2.0
 
+# Flags d'état booléens persistés par entité (en plus de la progression de Maîtrise).
+# Ajouter un flag ici suffit pour qu'il soit sauvegardé ET rechargé.
+const PERSISTED_FLAGS: Array[String] = [
+	"est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
+	"est_collecte", "est_debloque",
+]
+
 var _save_dirty:  bool  = false
 var _save_loaded: bool  = false
 var _save_timer:  Timer
@@ -90,8 +97,7 @@ func _save_entities() -> Dictionary:
 			entry["xp_maitrise_actuelle"] = e.get("xp_maitrise_actuelle", 0.0)
 			entry["unlocked_passives"]    = e.get("unlocked_passives",    [])
 
-		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-				"est_collecte", "est_debloque"]:
+		for field: String in PERSISTED_FLAGS:
 			if e.has(field):
 				entry[field] = e[field]
 
@@ -157,47 +163,36 @@ func _load_player(data: Dictionary) -> void:
 		return
 	GameData.player.merge(data["player"], true)
 
+# Applique une entrée sauvegardée sur l'entité runtime correspondante :
+# progression de Maîtrise + flags d'état persistés (PERSISTED_FLAGS).
+# Logique commune aux deux formats de sauvegarde (v11 plat / v12+ hiérarchique).
+func _apply_entity_save(e: Dictionary, saved: Dictionary) -> void:
+	if e.has("maitrise_actuelle"):
+		e["maitrise_actuelle"]    = saved.get("maitrise_actuelle",    0)
+		e["xp_maitrise_actuelle"] = saved.get("xp_maitrise_actuelle", 0.0)
+		e["unlocked_passives"]    = saved.get("unlocked_passives",    [])
+		e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
+	for field: String in PERSISTED_FLAGS:
+		if e.has(field) and saved.has(field):
+			e[field] = saved[field]
+
 # Charge le format v11 : entities est un dict plat { entity_id → entry }.
 func _load_entities_v11(data: Dictionary) -> void:
 	if not data.has("entities"):
 		return
 	for entity_id in data["entities"]:
-		if not GameData.entities.has(entity_id):
-			continue
-		var saved: Dictionary = data["entities"][entity_id]
-		var e: Dictionary     = GameData.entities[entity_id]
-		if e.has("maitrise_actuelle"):
-			e["maitrise_actuelle"]    = saved.get("maitrise_actuelle",    0)
-			e["xp_maitrise_actuelle"] = saved.get("xp_maitrise_actuelle", 0.0)
-			e["unlocked_passives"]    = saved.get("unlocked_passives",    [])
-			e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
-		for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-				"est_collecte", "est_debloque"]:
-			if e.has(field) and saved.has(field):
-				e[field] = saved[field]
+		if GameData.entities.has(entity_id):
+			_apply_entity_save(GameData.entities[entity_id], data["entities"][entity_id])
 
+# Charge le format v12+ : hiérarchique { entity_type → { entity_id → entry } }.
 func _load_entities(data: Dictionary) -> void:
 	if not data.has("entities"):
 		return
-	# Format v12+ : hiérarchique { entity_type → { entity_id → entry } }
 	for _etype in data["entities"]:
 		var type_block: Dictionary = data["entities"][_etype]
 		for entity_id in type_block:
-			if not GameData.entities.has(entity_id):
-				continue
-			var saved: Dictionary = type_block[entity_id]
-			var e: Dictionary     = GameData.entities[entity_id]
-
-			if e.has("maitrise_actuelle"):
-				e["maitrise_actuelle"]    = saved.get("maitrise_actuelle",    0)
-				e["xp_maitrise_actuelle"] = saved.get("xp_maitrise_actuelle", 0.0)
-				e["unlocked_passives"]    = saved.get("unlocked_passives",    [])
-				e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
-
-			for field: String in ["est_decouvert", "mecanique_forte_activee", "creature_unique_vaincue",
-					"est_collecte", "est_debloque"]:
-				if e.has(field) and saved.has(field):
-					e[field] = saved[field]
+			if GameData.entities.has(entity_id):
+				_apply_entity_save(GameData.entities[entity_id], type_block[entity_id])
 
 # Renomme tier_actuel → maitrise_actuelle dans le village, supprime xp_maitrise et active_creature_id.
 func _migrate_v12_to_v13(data: Dictionary) -> void:

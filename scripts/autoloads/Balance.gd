@@ -116,6 +116,10 @@ const XP_BASE_COMBAT:      float = 10.0  # créature résolue
 const XP_BASE_TRAP:        float = 6.0   # piège déclenché
 const XP_BASE_BENEDICTION: float = 6.0   # bénédiction rencontrée
 
+# XP créditée au Hall des Évolutions (bestiaire) pour un événement non-combat
+# résolu (piège, bénédiction). Les combats créditent XP_BASE_COMBAT à la victoire.
+const HALL_XP_EVENT: float = 5.0
+
 # ═══════════════════════════════════════════════════════════
 #  Coefficient de progression par type d'entité réceptrice
 # ═══════════════════════════════════════════════════════════
@@ -184,13 +188,6 @@ const DEFAULT_REGEN_PCT: float = 0.0  # régen par défaut entre rencontres (hor
 const MASTERY_COMBAT_ATK_PER_TIER: float = 2.0  # ATK bonus par tier de bestiaire face à l'ennemi
 
 # ═══════════════════════════════════════════════════════════
-#  Luck
-# ═══════════════════════════════════════════════════════════
-
-const LUCK_EVENT_SHIFT_PER_POINT: float = 0.01  # déplacement piège→bénédiction par point de luck
-const LUCK_DROP_BONUS_PER_POINT:  float = 0.01  # bonus de chance de drop par point de luck
-
-# ═══════════════════════════════════════════════════════════
 #  Drops
 # ═══════════════════════════════════════════════════════════
 
@@ -199,11 +196,6 @@ const CREATURE_INGREDIENT_DROP_CHANCE: float = 0.5  # chance de drop d'ingrédie
 # ═══════════════════════════════════════════════════════════
 #  Zones
 # ═══════════════════════════════════════════════════════════
-
-# Multiplicateur d'intensité des pièges et bénédictions selon la zone.
-const ZONE_INTENSITY_SURFACE:    float = 1.0
-const ZONE_INTENSITY_PROFONDEUR: float = 2.0
-const ZONE_INTENSITY_ABYSSE:     float = 3.5
 
 # Tier de Maîtrise du biome requis pour débloquer chaque zone.
 const ZONE_UNLOCK_TIER_PROFONDEUR: int = 2

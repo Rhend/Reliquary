@@ -9,8 +9,8 @@ nom_affichage_fr = "Coquillage Magique"
 lore_fr = "Ramasse loin de toute mer, on ne sait pas comment il est arrive la. Le tenir contre l'oreille ne fait pas entendre la mer - mais quelque chose d'autre."
 nom_affichage_en = "Magic Shell"
 biome_source_id = "biome_montagne"
-effet = "luck"
-valeur = 8
+effet = "xp_bonus"
+valeur = 50
 
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

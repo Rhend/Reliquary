@@ -1,13 +1,12 @@
 # ============================================================
-# UIHelpers.gd — Autoload de factories UI réutilisables.
+# UIHelpers.gd — Factories UI réutilisables (pattern Factory).
 #
 # Centralise toutes les constructions de nœuds répétitives du
-# projet : marges, styles, barres XP, headers de scènes, etc.
+# projet : marges, styles, cartes XP, tooltips, transitions, etc.
 #
-# Toutes les fonctions sont statiques → UIHelpers.fonction().
-# Aucun état interne : ce script ne fait que fabriquer des nœuds.
-# Classe utilitaire (class_name), pas un autoload : les appels statiques
-# se résolvent directement sur le type.
+# Classe utilitaire (class_name), PAS un autoload : toutes les
+# fonctions sont statiques et se résolvent directement sur le
+# type → UIHelpers.fonction(). Aucun état interne.
 # ============================================================
 class_name UIHelpers
 extends Node
@@ -26,20 +25,6 @@ static func margin_of(value: int) -> MarginContainer:
 	var m := MarginContainer.new()
 	set_margins(m, value)
 	return m
-
-# Initialise parent comme scène fullscreen : fond BG_DARK + VBoxContainer zero-gap.
-# Retourne le VBoxContainer racine, prêt à recevoir les sections de la scène.
-static func fullscreen_root(parent: Control) -> VBoxContainer:
-	parent.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg := ColorRect.new()
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.color = UIColors.BG_DARK
-	parent.add_child(bg)
-	var root := VBoxContainer.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 0)
-	parent.add_child(root)
-	return root
 
 # Supprime et libère tous les enfants directs d'un nœud.
 static func clear_children(node: Node) -> void:
@@ -131,21 +116,6 @@ static func section_header(title: String, color: Color) -> Control:
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_child(line)
 	return vb
-
-# Retourne un PanelContainer stylisé tier : card_style + section_header + contenu du builder.
-# builder(vbox: VBoxContainer) est appelé pour peupler le contenu sous le header.
-static func info_panel(title: String, color: Color, builder: Callable) -> Control:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", card_style(color))
-	var m := margin_of(8)
-	panel.add_child(m)
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 5)
-	m.add_child(vbox)
-	vbox.add_child(section_header(title, color))
-	builder.call(vbox)
-	return panel
 
 # Crée une XPCard (PanelContainer à fond rempli proportionnel à l'XP) déjà stylée
 # en « carte de tier » (card_style). Le caller y ajoute ensuite son contenu
@@ -277,9 +247,6 @@ static func add_hover_feedback(node: Control) -> void:
 		tw.parallel().tween_property(node, "modulate", Color(1.30, 1.30, 1.30), 0.14)
 	)
 
-# Retourne la barre de navigation commune aux scènes secondaires :
-#   [← Village]  TITRE CENTRÉ
-# on_back est connecté au pressed du bouton retour.
 # Branche un tooltip JRPG sur node : hover → TooltipOverlay.show_for, exit → hide.
 static func register_tooltip(node: Control, title: String, body: String,
 		color: Color = Color.WHITE, lore: String = "") -> void:
@@ -295,26 +262,6 @@ static func register_tooltip(node: Control, title: String, body: String,
 	node.mouse_entered.connect(cb)
 	node.mouse_exited.connect(TooltipOverlay.hide_tooltip)
 
-static func scene_header_bar(title: String, color: Color, on_back: Callable) -> Control:
-	var bar  := PanelContainer.new()
-	var m    := margin_of(14)
-	bar.add_child(m)
-	var hbox := HBoxContainer.new()
-	m.add_child(hbox)
-	var back := Button.new()
-	back.text = "← Village"
-	back.pressed.connect(on_back)
-	register_tooltip(back, "Retour au Village", "Revenir au hub principal.", Color.WHITE)
-	hbox.add_child(back)
-	var lbl := Label.new()
-	lbl.text                 = title
-	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 20)
-	lbl.add_theme_color_override("font_color", color)
-	hbox.add_child(lbl)
-	return bar
-
 # Fondu noir → changement de scène.
 # Ajoute un ColorRect noir en overlay sur `root_node`, l'anime en fondu,
 # puis change la scène. Durée du fade : 0.25s.
@@ -322,10 +269,7 @@ static func fade_to_scene(root_node: Node, scene_path: String) -> void:
 	var overlay := ColorRect.new()
 	overlay.color = Color(0, 0, 0, 0)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if root_node is Control:
-		overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	else:
-		overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root_node.add_child(overlay)
 	var tw := root_node.create_tween()
 	tw.tween_property(overlay, "color:a", 1.0, 0.22)

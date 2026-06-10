@@ -16,11 +16,6 @@
 # Modificateurs de cycle :
 #   Tirés aléatoirement au lancement, ils durent tout le cycle.
 #   Exemples : XP ×1.5, régénération 30 %, pièges ignorés.
-#
-# Luck de cycle :
-#   Accumulée temporairement via les bénédictions de type "luck".
-#   Elle s'ajoute à la luck permanente du joueur pour les rolls du cycle
-#   et est réinitialisée à chaque nouvelle aventure.
 # ============================================================
 extends Node
 
@@ -50,25 +45,31 @@ var available_creatures: Array = []
 
 # ─── Statistiques du cycle en cours ─────────────────────────
 
-var _cycle_luck:               int        = 0    # Luck temporaire accumulée par les bénédictions de type "luck"
-var _cycle_xp:                 float      = 0.0  # XP totale gagnée par le héros ce cycle
-var _cycle_loot:               int        = 0    # Nombre total d'objets droppés
-var _cycle_combats_won:        int        = 0    # Combats remportés
-var _cycle_events:             int        = 0    # Rencontres totales (hors créatures)
-var _cycle_events_total:       int        = 0
-var _cycle_positive_events:    int        = 0
-var _cycle_traps_triggered:    int        = 0
-var _cycle_xp_hero:            float      = 0.0
-var _cycle_xp_biome:           float      = 0.0
-var _cycle_xp_passives_total:  float      = 0.0
-var _cycle_xp_passives_detail: Dictionary = {}
-# XP par entité rencontrée ce cycle (créatures, pièges, bénédictions).
-var _cycle_xp_entities_detail: Dictionary = {}
-# XP par équipement équipé ce cycle.
-var _cycle_xp_equip_detail:    Dictionary = {}
-# Ingrédients collectés ce cycle : item_id → qty total.
-var _cycle_loot_detail:        Dictionary = {}
-# Saignement : ticks restants et dégâts par tick (calculés à l'application).
+# Regroupe tous les compteurs accumulés pendant un cycle d'expédition.
+# Réinitialisation en UN seul point : start_adventure() recrée l'objet.
+# Pour ajouter un compteur : déclarer le champ ici, et l'exposer dans
+# _build_summary() si le résumé de cycle doit l'afficher.
+class CycleStats:
+	var xp_total:          float = 0.0  # XP de base totale distribuée ce cycle
+	var loot_total:        int   = 0    # nombre total d'objets droppés
+	var combats_won:       int   = 0    # combats remportés
+	var events:            int   = 0    # pièges + bénédictions réellement appliqués
+	var events_total:      int   = 0    # rencontres totales (combats compris)
+	var positive_events:   int   = 0    # bénédictions appliquées
+	var traps_triggered:   int   = 0    # pièges subis (non ignorés)
+	var xp_hero:           float = 0.0  # XP reçue par le héros
+	var xp_biome:          float = 0.0  # XP reçue par le biome exploré
+	var xp_passives_total: float = 0.0  # XP cumulée de tous les passifs actifs
+	var xp_passives_detail: Dictionary = {}  # passive_id → XP reçue
+	var xp_entities_detail: Dictionary = {}  # entité rencontrée → XP reçue
+	var xp_equip_detail:    Dictionary = {}  # équipement porté → XP reçue
+	var loot_detail:        Dictionary = {}  # item_id → quantité totale droppée
+
+var _stats := CycleStats.new()  # stats du cycle courant
+
+# ─── États temporaires persistant entre rencontres ──────────
+
+# Saignement : ticks restants (dégâts par tick = Balance.BLEED_DMG_PCT × PV max).
 var _bleed_remaining: int   = 0
 # Bénédiction XP : multiplicateur d'XP de base appliqué UNE fois sur le prochain événement.
 var _bless_xp_mult:   float = 1.0
@@ -89,19 +90,19 @@ func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
 	var entity := GameData.get_entity(entity_id)
 	match entity.get("entity_type", ""):
 		"hero":
-			_cycle_xp_hero += amount
+			_stats.xp_hero += amount
 		"biome":
-			_cycle_xp_biome += amount
+			_stats.xp_biome += amount
 		"passive":
-			_cycle_xp_passives_total               += amount
-			_cycle_xp_passives_detail[entity_id]    = \
-				_cycle_xp_passives_detail.get(entity_id, 0.0) + amount
+			_stats.xp_passives_total            += amount
+			_stats.xp_passives_detail[entity_id] = \
+				_stats.xp_passives_detail.get(entity_id, 0.0) + amount
 		"equipment":
-			_cycle_xp_equip_detail[entity_id] = \
-				_cycle_xp_equip_detail.get(entity_id, 0.0) + amount
+			_stats.xp_equip_detail[entity_id] = \
+				_stats.xp_equip_detail.get(entity_id, 0.0) + amount
 		"creature", "trap", "benediction":
-			_cycle_xp_entities_detail[entity_id]    = \
-				_cycle_xp_entities_detail.get(entity_id, 0.0) + amount
+			_stats.xp_entities_detail[entity_id] = \
+				_stats.xp_entities_detail.get(entity_id, 0.0) + amount
 
 # ═══════════════════════════════════════════════════════════
 #  Interface publique
@@ -128,24 +129,10 @@ func start_adventure(biome_id: String) -> void:
 	BiomeMechanics.initialize_for_biome(biome_id)
 	_build_available_creatures(biome_id)
 
-	# Réinitialise les statistiques du cycle
-	_cycle_luck               = 0
-	_cycle_xp                 = 0.0
-	_cycle_loot               = 0
-	_cycle_combats_won        = 0
-	_cycle_events             = 0
-	_cycle_events_total       = 0
-	_cycle_positive_events    = 0
-	_cycle_traps_triggered    = 0
-	_cycle_xp_hero            = 0.0
-	_cycle_xp_biome           = 0.0
-	_cycle_xp_passives_total  = 0.0
-	_cycle_xp_passives_detail = {}
-	_cycle_xp_entities_detail = {}
-	_cycle_xp_equip_detail    = {}
-	_cycle_loot_detail        = {}
-	_bleed_remaining          = 0
-	_bless_xp_mult            = 1.0
+	# Réinitialise les statistiques et états temporaires du cycle
+	_stats           = CycleStats.new()
+	_bleed_remaining = 0
+	_bless_xp_mult   = 1.0
 
 	_pick_modifier()
 
@@ -174,11 +161,7 @@ func get_modifier_bonuses() -> Dictionary:
 
 # XP totale gagnée par le héros depuis le début du cycle courant (lecture seule, pour l'UI).
 func get_cycle_xp() -> float:
-	return _cycle_xp
-
-# Luck effective = luck temporaire du cycle (bénédictions de type "luck").
-func _get_effective_luck() -> int:
-	return _cycle_luck
+	return _stats.xp_total
 
 # ═══════════════════════════════════════════════════════════
 #  Boucle de rencontres
@@ -197,7 +180,7 @@ func _process_encounter() -> void:
 		"hero_id":  "hero"
 	}
 
-	_cycle_events_total += 1
+	_stats.events_total += 1
 
 	match enc_type:
 		"creature":    _handle_creature_encounter("hero", enc_data)
@@ -240,11 +223,11 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 		enc_data["effect"]   = bene
 		_distribute_mastery_xp(bene.get("id", ""), Balance.XP_BASE_BENEDICTION)
 		GameData.record_encounter(
-			bene.get("id", ""), bene.get("nom_affichage_fr", "?"), "Bénédiction", current_biome_id, 5.0
+			bene.get("id", ""), bene.get("nom_affichage_fr", "?"), "Bénédiction", current_biome_id, Balance.HALL_XP_EVENT
 		)
 		_apply_benediction_effect(bene)
-		_cycle_events          += 1
-		_cycle_positive_events += 1
+		_stats.events          += 1
+		_stats.positive_events += 1
 
 	EventBus.adventure_event_resolved.emit(enc_data)
 	_apply_regen(hero_id)
@@ -252,17 +235,9 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 	if is_running:
 		_schedule_next_encounter(Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION)
 
-# Multiplicateur d'intensité des pièges et bénédictions selon la zone.
-func _get_zone_intensity() -> float:
-	match zone_courante:
-		Enums.Zone.PROFONDEUR: return Balance.ZONE_INTENSITY_PROFONDEUR
-		Enums.Zone.ABYSSE:     return Balance.ZONE_INTENSITY_ABYSSE
-		_:                     return Balance.ZONE_INTENSITY_SURFACE
-
 # Applique l'effet d'une bénédiction.
 # heal     → % PV max depuis Balance (indépendant de la zone).
 # xp_bonus → multiplie l'XP de base du prochain événement.
-# luck     → valeur × intensité de zone (comportement inchangé).
 func _apply_benediction_effect(bene: Dictionary) -> void:
 	var effect_type := bene.get("effet", "") as String
 
@@ -275,10 +250,6 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 
 		"xp_bonus":
 			_bless_xp_mult = 1.0 + Balance.BLESS_XP_BONUS_PCT
-
-		"luck":
-			var luck_val := float(bene.get("valeur", 0.0)) * _get_zone_intensity()
-			_cycle_luck  += int(luck_val)
 
 # Distribue l'XP de Maîtrise d'un événement résolu à TOUTES les entités actives :
 # l'entité rencontrée, le héros, le biome, le village et les passifs actifs.
@@ -305,7 +276,7 @@ func _distribute_mastery_xp(event_id: String, event_base: float) -> void:
 			if item.get("biome_source_id", "") != "":  # items sans biome = futurs biomes, pas encore actifs
 				MasterySystem.add_xp_to_entity(item_id, base, event_tier)
 
-	_cycle_xp += base
+	_stats.xp_total += base
 
 # ─── Rencontre Piège ──────────────────────────────────────────
 
@@ -326,21 +297,21 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	if current_modifier.get("ignore_traps", false):
 		enc_data["ignored"] = true
 		GameData.record_encounter(
-			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, 5.0
+			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, Balance.HALL_XP_EVENT
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
 		_apply_regen(hero_id)
 		_schedule_next_encounter(Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION)
 	else:
-		_cycle_events          += 1
-		_cycle_traps_triggered += 1
+		_stats.events          += 1
+		_stats.traps_triggered += 1
 		var max_hp := get_max_hp()
 		current_hp  = maxf(current_hp - max_hp * _trap_dmg_pct(), 0.0)
 		if trap.get("inflict_saignement", false):
 			_bleed_remaining = Balance.BLEED_DURATION
 			enc_data["saignement"] = true
 		GameData.record_encounter(
-			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, 5.0
+			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, Balance.HALL_XP_EVENT
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
 		if current_hp <= 0.0:
@@ -391,9 +362,9 @@ func _resolve_victory(enemy: Dictionary) -> void:
 
 	# Ingrédients biome (uniquement une fois la Forge débloquée — Village T1)
 	if int(GameData.village.get("maitrise_actuelle", 0)) >= 1:
-		_drop_ingredients()
+		_drop_biome_ingredients()
 
-	_cycle_combats_won += 1
+	_stats.combats_won += 1
 
 	_apply_regen("hero")
 	_tick_bleed()
@@ -450,7 +421,7 @@ func _schedule_next_encounter(delay: float = 1.0) -> void:
 	_encounter_timer.wait_time = actual_delay
 	_encounter_timer.start()
 
-# Tire le type de rencontre selon la zone courante et les probabilités du biome.
+# Tire le type de rencontre selon les probabilités du biome.
 func _roll_encounter_type() -> String:
 	# Distribution standard pour toutes les zones (Surface, Profondeur, Abysse).
 	var biome      = GameData.get_entity(current_biome_id)
@@ -458,12 +429,8 @@ func _roll_encounter_type() -> String:
 		"creature": 0.70, "benediction": 0.15, "trap": 0.15
 	})
 
-	var luck              = float(_get_effective_luck())
-	var trap_base         = float(base_table.get("trap", 0.15))
-	var luck_shift        = minf(luck * Balance.LUCK_EVENT_SHIFT_PER_POINT, trap_base)
-
 	var creature_chance    = float(base_table.get("creature",    0.70))
-	var benediction_chance = float(base_table.get("benediction", 0.15)) + luck_shift
+	var benediction_chance = float(base_table.get("benediction", 0.15))
 
 	var roll = randf()
 	if roll < creature_chance:
@@ -488,18 +455,16 @@ func _pick_modifier() -> void:
 			break
 	EventBus.modifier_activated.emit(current_modifier)
 
-# Roule un drop depuis un pool d'entrées avec bonus de luck.
-# Chaque entrée : { item_id, chance, name, qty_min?, qty_max? }
+# Roule un drop depuis un pool d'entrées.
+# Chaque entrée : { item_id, chance, qty_min?, qty_max? }
 # source_name : affiché dans loot_dropped (nom ennemi ou "Biome").
 func _drop_pool(pool: Array, source_name: String) -> void:
 	if pool.is_empty():
 		return
 	var has_forge := int(GameData.village.get("maitrise_actuelle", 0)) >= 1
-	var drops:      Array = []
-	var luck_bonus: float = float(_get_effective_luck()) * Balance.LUCK_DROP_BONUS_PER_POINT
+	var drops: Array = []
 	for entry in pool:
-		var roll_threshold := minf(float(entry.get("chance", 0.0)) + luck_bonus, 1.0)
-		if randf() >= roll_threshold:
+		if randf() >= minf(float(entry.get("chance", 0.0)), 1.0):
 			continue
 		var item_id: String = entry.get("item_id", "")
 		if item_id == "":
@@ -517,10 +482,10 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 			"qty":     qty
 		})
 	if not drops.is_empty():
-		_cycle_loot += drops.size()
+		_stats.loot_total += drops.size()
 		for d in drops:
 			var did: String = d.get("item_id", "")
-			_cycle_loot_detail[did] = _cycle_loot_detail.get(did, 0) + int(d.get("qty", 1))
+			_stats.loot_detail[did] = _stats.loot_detail.get(did, 0) + int(d.get("qty", 1))
 		EventBus.loot_dropped.emit(drops, source_name)
 
 # Drop le loot spécifique à l'ennemi vaincu (loot_table de l'ennemi).
@@ -543,39 +508,29 @@ func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
 	if ingr.is_empty():
 		return
 	GameData.add_resource(ingredient_id, 1)
-	_cycle_loot_detail[ingredient_id] = _cycle_loot_detail.get(ingredient_id, 0) + 1
-	_cycle_loot += 1
+	_stats.loot_detail[ingredient_id] = _stats.loot_detail.get(ingredient_id, 0) + 1
+	_stats.loot_total += 1
 	EventBus.loot_dropped.emit(
 		[{"item_id": ingredient_id, "name": ingr.get("nom_affichage_fr", ingredient_id), "qty": 1}],
 		enemy.get("name", "?")
 	)
 
-# Drop des ingrédients depuis ingredients_drop du biome.
+# Drop des ingrédients depuis ingredients_drop du biome (via _drop_pool).
 # Disponible uniquement si Village Tier ≥ 1 (appelé depuis _resolve_victory).
-func _drop_ingredients() -> void:
-	var biome       := GameData.get_entity(current_biome_id)
-	var ingredients := biome.get("ingredients_drop", []) as Array
-	if ingredients.is_empty():
-		return
-	var drops:      Array = []
-	var luck_bonus: float = float(_get_effective_luck()) * Balance.LUCK_DROP_BONUS_PER_POINT
-	for ingr in ingredients:
-		var ingr_dict := ingr as Dictionary
-		var roll_threshold := minf(float(ingr_dict.get("chance", 0.0)) + luck_bonus, 1.0)
-		if randf() >= roll_threshold:
-			continue
-		var item_id: String = ingr_dict.get("id", "")
-		if item_id == "":
-			continue
-		var qty_min: int = int(ingr_dict.get("qty_min", 1))
-		var qty_max: int = int(ingr_dict.get("qty_max", qty_min))
-		var qty:     int = randi_range(qty_min, qty_max)
-		GameData.add_resource(item_id, qty)
-		drops.append({"item_id": item_id, "name": ingr_dict.get("nom_affichage_fr", item_id), "qty": qty})
-		_cycle_loot_detail[item_id] = _cycle_loot_detail.get(item_id, 0) + qty
-	if not drops.is_empty():
-		_cycle_loot += drops.size()
-		EventBus.loot_dropped.emit(drops, "Biome")
+# Les entrées du biome utilisent la clé "id" : on les convertit au format
+# attendu par _drop_pool ("item_id") pour mutualiser le tirage.
+func _drop_biome_ingredients() -> void:
+	var biome := GameData.get_entity(current_biome_id)
+	var pool: Array = []
+	for ingr in biome.get("ingredients_drop", []) as Array:
+		var d := ingr as Dictionary
+		pool.append({
+			"item_id": d.get("id", ""),
+			"chance":  d.get("chance", 0.0),
+			"qty_min": d.get("qty_min", 1),
+			"qty_max": d.get("qty_max", d.get("qty_min", 1)),
+		})
+	_drop_pool(pool, "Biome")
 
 # ═══════════════════════════════════════════════════════════
 #  Distribution pondérée des créatures (par zone)
@@ -607,33 +562,30 @@ func _build_available_creatures(biome_id: String) -> void:
 	_pool_add(surface,    w_s)
 	_pool_add(profondeur, w_p)
 
-# Convertit un dict créature en entrée de combat et l'ajoute au pool.
-# Utilise le tier de Maîtrise réel de la créature et descend dans stats_par_palier
-# jusqu'à trouver le tier le plus proche ≤ tier courant.
+# Convertit un dict créature (.tres) en fiche de combat pour CombatPlayer.
+# Les stats sont lues au palier de Maîtrise courant de la créature, en
+# descendant au palier inférieur le plus proche si absent (GameData.stats_at_tier).
+func _combat_sheet(creature: Dictionary) -> Dictionary:
+	var tier := int(creature.get("maitrise_actuelle", 0))
+	var s    := GameData.stats_at_tier(creature, tier)
+	return {
+		"id":         creature.get("id", ""),
+		"name":       creature.get("nom_affichage_fr", ""),
+		"tier":       tier,
+		"atk":        s.get("atk",       10),
+		"def":        s.get("def",        0),
+		"hp":         s.get("hp",         50),
+		"vit":        s.get("vit",        20),
+		"xp_reward":  s.get("xp_reward",  10),
+		"loot_table": creature.get("loot_table", []),
+	}
+
+# Ajoute une créature au pool du cycle avec son poids de tirage.
 func _pool_add(creature: Dictionary, weight: float) -> void:
 	if creature.is_empty():
 		return
-	var tier := int(creature.get("maitrise_actuelle", 0))
-	var spp  := creature.get("stats_par_palier", {}) as Dictionary
-	var s    := {} as Dictionary
-	var t    := tier
-	while t >= 0:
-		if spp.has(t):
-			s = spp[t] as Dictionary
-			break
-		t -= 1
 	available_creatures.append({
-		"data": {
-			"id":         creature.get("id", ""),
-			"name":       creature.get("nom_affichage_fr", ""),
-			"tier":       tier,
-			"atk":        s.get("atk",       10),
-			"def":        s.get("def",        0),
-			"hp":         s.get("hp",         50),
-			"vit":        s.get("vit",        20),
-			"xp_reward":  s.get("xp_reward",  10),
-			"loot_table": creature.get("loot_table", []),
-		},
+		"data":   _combat_sheet(creature),
 		"weight": weight,
 	})
 
@@ -665,6 +617,7 @@ func _end_adventure(victory: bool) -> void:
 	CycleData.last_cycle_summary = summary
 	EventBus.adventure_cycle_ended.emit(summary)
 
+# Sérialise les stats du cycle en Dictionary pour CycleData / CycleSummaryScreen.
 func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 	return {
 		"victory":              victory,
@@ -672,21 +625,20 @@ func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 		"biome_id":             current_biome_id,
 		"creature_id":          "hero",
 		"modifier":             current_modifier,
-		"xp_total":             _cycle_xp,
-		"xp_hero":              _cycle_xp_hero,
-		"xp_biome":             _cycle_xp_biome,
-		"xp_passives_total":    _cycle_xp_passives_total,
-		"xp_passives_detail":   _cycle_xp_passives_detail,
-		"xp_entities_detail":   _cycle_xp_entities_detail,
-		"loot_total":           _cycle_loot,
-		"loot_detail":          _cycle_loot_detail.duplicate(),
-		"xp_equip_detail":      _cycle_xp_equip_detail.duplicate(),
-		"combats_won":          _cycle_combats_won,
-		"events":               _cycle_events,
-		"events_total":         _cycle_events_total,
-		"positive_events":      _cycle_positive_events,
-		"traps_triggered":      _cycle_traps_triggered,
-		"cycle_luck":           _cycle_luck,
+		"xp_total":             _stats.xp_total,
+		"xp_hero":              _stats.xp_hero,
+		"xp_biome":             _stats.xp_biome,
+		"xp_passives_total":    _stats.xp_passives_total,
+		"xp_passives_detail":   _stats.xp_passives_detail,
+		"xp_entities_detail":   _stats.xp_entities_detail,
+		"loot_total":           _stats.loot_total,
+		"loot_detail":          _stats.loot_detail.duplicate(),
+		"xp_equip_detail":      _stats.xp_equip_detail.duplicate(),
+		"combats_won":          _stats.combats_won,
+		"events":               _stats.events,
+		"events_total":         _stats.events_total,
+		"positive_events":      _stats.positive_events,
+		"traps_triggered":      _stats.traps_triggered,
 	}
 
 # ═══════════════════════════════════════════════════════════
@@ -703,19 +655,7 @@ func start_unique_combat() -> void:
 		return
 	combat_unique_en_cours = true
 	_encounter_timer.stop()
-	var utier       := int(unique.get("maitrise_actuelle", 5))
-	var s           := (unique.get("stats_par_palier", {}) as Dictionary).get(utier, {}) as Dictionary
-	var unique_dict := {
-		"id":         unique.get("id", ""),
-		"name":       unique.get("nom_affichage_fr", ""),
-		"tier":       utier,
-		"atk":        s.get("atk",       50),
-		"def":        s.get("def",        0),
-		"hp":         s.get("hp",        150),
-		"vit":        s.get("vit",        15),
-		"xp_reward":  s.get("xp_reward", 200),
-		"loot_table": unique.get("loot_table", []),
-	}
+	var unique_dict := _combat_sheet(unique)
 	GameData.record_encounter(
 		unique_dict["id"], unique_dict["name"], "Créature", current_biome_id, 0.0
 	)
@@ -748,7 +688,7 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 	GameData.record_encounter(enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, Balance.XP_BASE_COMBAT)
 	_drop_loot(enemy)
 
-	_cycle_combats_won += 1
+	_stats.combats_won += 1
 
 	EventBus.creature_unique_vaincue.emit(current_biome_id, ingr_id, passif_id)
 
