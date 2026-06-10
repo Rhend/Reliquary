@@ -81,9 +81,22 @@ void fragment() {
 		lm = 0.20 + city_line(uv.x + t * 0.011, 16.0 * dd, 0.24, 7.7);
 		ln = 0.24 + city_line(uv.x + t * 0.020, 24.0 * dd, 0.34, 1.3);
 	}
-	if (yb < lf) { col = layer_far.rgb; }
-	if (yb < lm) { col = layer_mid.rgb; }
+	// Perspective atmospherique : plus un plan est lointain, plus il se fond
+	// vers le ciel. Chaque volume se detache ainsi de celui qui est derriere.
+	if (yb < lf) { col = mix(layer_far.rgb, sky_bottom.rgb, 0.35); }
+	if (yb < lm) { col = mix(layer_mid.rgb, sky_bottom.rgb, 0.15); }
 	if (yb < ln) { col = layer_near.rgb; }
+
+	// Lisere de crete : fine lumiere brumeuse au sommet du plan visible,
+	// pour delimiter nettement les silhouettes entre elles et avec le ciel.
+	{
+		float rim_w = 0.015;
+		float rim   = 0.0;
+		if (yb < ln)      { rim = smoothstep(rim_w, 0.0, ln - yb); }
+		else if (yb < lm) { rim = smoothstep(rim_w, 0.0, lm - yb); }
+		else if (yb < lf) { rim = smoothstep(rim_w, 0.0, lf - yb); }
+		col = mix(col, fog_color.rgb, rim * 0.40);
+	}
 
 	// Fenetres tamisees facon torches / bougies (ville uniquement) : rares et douces
 	if (u_mode == 1 && yb < ln) {

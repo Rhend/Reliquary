@@ -12,13 +12,14 @@
 class_name CombatRing extends Control
 
 # Rayons de RÉFÉRENCE (taille minimale garantie). Le dessin s'adapte à la
-# taille réelle du contrôle : plus la zone de combat offre de hauteur, plus
-# l'anneau est grand (cf. _cooldown_radius / _hp_radius).
-const HP_RADIUS       := 64.0
-const COOLDOWN_RADIUS := 76.0
-const HP_WIDTH        := 8.0
-const COOLDOWN_WIDTH  := 4.0
-const PAD             := 34.0   # marge pour flash + chiffres flottants
+# taille réelle du contrôle, borné par COOLDOWN_RADIUS_MAX : l'anneau
+# profite un peu de la place disponible sans devenir envahissant.
+const HP_RADIUS           := 64.0
+const COOLDOWN_RADIUS     := 76.0
+const COOLDOWN_RADIUS_MAX := 88.0   # plafond de croissance de l'anneau
+const HP_WIDTH            := 8.0
+const COOLDOWN_WIDTH      := 4.0
+const PAD                 := 34.0   # marge pour flash + chiffres flottants
 
 const LOW_HP_PCT := 0.30        # seuil de bascule au rouge
 
@@ -69,10 +70,11 @@ func _recenter() -> void:
 		_hp_label.position = _center + Vector2(-70.0, -12.0)
 	queue_redraw()
 
-# Rayon extérieur effectif : grandit avec la place disponible,
-# sans jamais descendre sous le rayon de référence.
+# Rayon extérieur effectif : grandit avec la place disponible, borné
+# entre le rayon de référence et COOLDOWN_RADIUS_MAX.
 func _cooldown_radius() -> float:
-	return maxf(minf(size.x, size.y) * 0.5 - PAD, COOLDOWN_RADIUS)
+	return clampf(minf(size.x, size.y) * 0.5 - PAD,
+			COOLDOWN_RADIUS, COOLDOWN_RADIUS_MAX)
 
 # Rayon intérieur effectif : conserve l'écart de référence avec l'extérieur.
 func _hp_radius() -> float:
