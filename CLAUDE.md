@@ -69,8 +69,10 @@ godot --headless --path . --quit-after 30
 ```
 
 - CI GitHub Actions (`.github/workflows/tests.yml`) lance ces 3 suites à chaque push.
-- Après l'ajout d'un `class_name`, lancer `godot --headless --path . --import`
-  pour rafraîchir le cache global de classes (sinon « Identifier not found »).
+- Après l'ajout d'un `class_name` — y compris quand il arrive via `git pull` sur une
+  autre machine — lancer `godot --headless --path . --import` (ou Projet → Recharger
+  le projet dans l'éditeur). Le cache `.godot/global_script_class_cache.cfg` est local
+  et non versionné ; sans ça : « Parse Error: Could not find type … ».
 - TOUJOURS lancer TestScriptsLoad après un refactor : il détecte les identifiants
   disparus (constantes, signaux) dans tous les scripts, autoloads chargés.
 - `GameData._validate_entities()` warne au boot si un `.tres` est incomplet.
