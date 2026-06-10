@@ -135,11 +135,15 @@ func _build_combat_area() -> Control:
 	_creature_bg.set_zone(zone)
 
 	# Colonnes par-dessus les fonds. Héros (gauche) | séparateur 80px | Ennemi (droite).
+	# Le séparateur VS prend la couleur d'accent du biome exploré (ambiance).
+	var vs := CombatVS.new()
+	vs.accent_color = BiomeBackground.accent_for_biome(biome_id)
+
 	var hbox := HBoxContainer.new()
 	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_child(_build_column(true))
-	hbox.add_child(CombatVS.new())
+	hbox.add_child(vs)
 	hbox.add_child(_build_column(false))
 	area.add_child(hbox)
 	return area

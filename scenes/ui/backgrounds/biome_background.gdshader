@@ -116,7 +116,10 @@ void fragment() {
 			float py = 0.16 + 0.34 * hash(fk * 5.1) + 0.03 * sin(t * 1.5 + fk);
 			vec2  pos = vec2(px, 1.0 - py);
 			float dist_f = distance(uv, pos);
-			float glow   = smoothstep(0.018, 0.0, dist_f);
+			// Coeur lumineux + halo doux : les lueurs restent lisibles
+			// meme sur le decor eclairci.
+			float glow   = smoothstep(0.022, 0.0, dist_f)
+			             + 0.35 * smoothstep(0.045, 0.0, dist_f);
 			float pulse  = 0.5 + 0.5 * sin(t * 3.0 + fk * 2.0);
 			col += accent.rgb * glow * pulse * 0.9 * glow_amount;
 		}
@@ -131,9 +134,10 @@ void fragment() {
 	// Assombrissement par zone (Surface -> Abysse)
 	col *= (1.0 - 0.55 * zone_darken);
 
-	// Vignette + grain
+	// Vignette douce + grain (plancher releve : ne pas ecraser les bords,
+	// c'est la que vivent les anneaux et les noms des combattants)
 	float vig = 1.0 - smoothstep(0.35, 1.15, distance(uv, vec2(0.5)));
-	col *= mix(0.55, 1.0, vig);
+	col *= mix(0.72, 1.0, vig);
 	col += (hash2(uv * 1024.0 + t) - 0.5) * 0.025;
 
 	COLOR = vec4(col, a);
