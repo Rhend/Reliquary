@@ -11,6 +11,9 @@
 # ============================================================
 class_name CombatRing extends Control
 
+# Rayons de RÉFÉRENCE (taille minimale garantie). Le dessin s'adapte à la
+# taille réelle du contrôle : plus la zone de combat offre de hauteur, plus
+# l'anneau est grand (cf. _cooldown_radius / _hp_radius).
 const HP_RADIUS       := 64.0
 const COOLDOWN_RADIUS := 76.0
 const HP_WIDTH        := 8.0
@@ -65,6 +68,15 @@ func _recenter() -> void:
 	if _hp_label:
 		_hp_label.position = _center + Vector2(-70.0, -12.0)
 	queue_redraw()
+
+# Rayon extérieur effectif : grandit avec la place disponible,
+# sans jamais descendre sous le rayon de référence.
+func _cooldown_radius() -> float:
+	return maxf(minf(size.x, size.y) * 0.5 - PAD, COOLDOWN_RADIUS)
+
+# Rayon intérieur effectif : conserve l'écart de référence avec l'extérieur.
+func _hp_radius() -> float:
+	return _cooldown_radius() - (COOLDOWN_RADIUS - HP_RADIUS)
 
 # ═══════════════════════════════════════════════════════════
 #  API publique
@@ -134,23 +146,25 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var top := -PI * 0.5
 	var hp_pct := cur_hp / max_hp if max_hp > 0.0 else 0.0
+	var r_cd := _cooldown_radius()
+	var r_hp := _hp_radius()
 
 	# ── Anneau extérieur : cooldown ──────────────────────────
-	draw_arc(_center, COOLDOWN_RADIUS, 0.0, TAU, 96, Color(camp_color, 0.12), COOLDOWN_WIDTH, true)
+	draw_arc(_center, r_cd, 0.0, TAU, 96, Color(camp_color, 0.12), COOLDOWN_WIDTH, true)
 	if cooldown > 0.001:
 		var cd_ready := cooldown >= 0.999
 		var cd_col := camp_color if cd_ready else UIColors.TEXT_MUTED
-		draw_arc(_center, COOLDOWN_RADIUS, top, top + TAU * cooldown, 96, cd_col, COOLDOWN_WIDTH, true)
+		draw_arc(_center, r_cd, top, top + TAU * cooldown, 96, cd_col, COOLDOWN_WIDTH, true)
 
 	# ── Anneau intérieur : PV (se vide dans le sens horaire) ────
-	draw_arc(_center, HP_RADIUS, 0.0, TAU, 96, Color(camp_color, 0.10), HP_WIDTH, true)
+	draw_arc(_center, r_hp, 0.0, TAU, 96, Color(camp_color, 0.10), HP_WIDTH, true)
 	if hp_pct > 0.001:
 		var hp_col := UIColors.LOG_DEFEAT if hp_pct < LOW_HP_PCT else camp_color
-		draw_arc(_center, HP_RADIUS, top + TAU * (1.0 - hp_pct), top + TAU, 96, hp_col, HP_WIDTH, true)
+		draw_arc(_center, r_hp, top + TAU * (1.0 - hp_pct), top + TAU, 96, hp_col, HP_WIDTH, true)
 
 	# ── Flash (crit doré / soin vert) ────────────────────────
 	if _flash_alpha > 0.001:
-		draw_circle(_center, HP_RADIUS, Color(_flash_col, _flash_alpha * 0.4))
+		draw_circle(_center, r_hp, Color(_flash_col, _flash_alpha * 0.4))
 
 # ═══════════════════════════════════════════════════════════
 #  Interne
@@ -170,7 +184,7 @@ func _spawn_number_at(text: String, font_size: int, color: Color, offset: Vector
 	lbl.add_theme_color_override("font_color", color)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var sx := _center.x + randf_range(-18.0, 18.0) - 20.0 + offset.x
-	var sy := _center.y - HP_RADIUS - 6.0 + offset.y
+	var sy := _center.y - _hp_radius() - 6.0 + offset.y
 	lbl.position = Vector2(sx, sy)
 	_fx_layer.add_child(lbl)
 	var tw := create_tween()

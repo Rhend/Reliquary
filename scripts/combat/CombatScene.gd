@@ -15,6 +15,13 @@
 # ============================================================
 class_name CombatScene extends Control
 
+# ─── Journal de combat (DÉSACTIVÉ) ───────────────────────────
+# Jugé peu utile au playtest : l'espace qu'il occupait est rendu à la
+# zone de combat (les anneaux s'agrandissent automatiquement).
+# Tout le code du journal est conservé et compile toujours :
+# remettre LOG_ENABLED à true suffit pour le réactiver.
+const LOG_ENABLED := false
+
 # ─── Filtres du journal ──────────────────────────────────────
 const LOG_TAB_KEYS: Array[String] = ["all", "hero", "monster", "attack", "defense", "heal", "status"]
 
@@ -89,7 +96,8 @@ func _build_ui() -> void:
 
 	root.add_child(_build_combat_area())
 	root.add_child(_build_feed())
-	root.add_child(_build_log())
+	if LOG_ENABLED:
+		root.add_child(_build_log())
 	root.add_child(_build_bottom_bar())
 
 	_build_zone_label()
@@ -150,7 +158,10 @@ func _build_column(is_hero: bool) -> Control:
 	name_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	col.add_child(name_lbl)
 
+	# L'anneau absorbe la hauteur disponible de la colonne : sans le journal,
+	# la zone de combat est plus haute et l'anneau s'agrandit (rayons adaptatifs).
 	var ring := CombatRing.new()
+	ring.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(ring)
 
 	# Pill d'action : PanelContainer + Label (on garde la référence au Label).
@@ -591,7 +602,10 @@ func _hide_action(lbl: Label) -> void:
 		box.visible = false
 
 # Ajoute une entrée de log (la plus récente en haut), taguée pour le filtre.
+# No-op tant que LOG_ENABLED est false (journal non construit).
 func _add_log(bbcode: String, tags: Array) -> void:
+	if not LOG_ENABLED:
+		return
 	var rt := RichTextLabel.new()
 	rt.bbcode_enabled = true
 	rt.fit_content    = true
