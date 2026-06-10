@@ -82,10 +82,10 @@ signal biome_revele(biome_id: String)
 # Émis après la victoire contre une créature Unique d'Abysse.
 @warning_ignore("unused_signal")
 signal creature_unique_vaincue(biome_id: String, ingredient_id: String, passif_id: String)
-# event_data : { type, biome_id, creature_id, [enemy / effect / trap], [ignored] }
+# event_data : { type, biome_id, hero_id, [enemy / effect / trap], [ignored] }
 @warning_ignore("unused_signal")
 signal adventure_event_resolved(event_data: Dictionary)
-# result     : { victory, biome_id, creature_id }
+# result : résumé complet du cycle — cf. AdventureSystem._build_summary()
 @warning_ignore("unused_signal")
 signal adventure_cycle_ended(result: Dictionary)
 @warning_ignore("unused_signal")
@@ -95,10 +95,10 @@ signal adventure_stopped()
 
 # combat_started : HP initiaux des deux combattants.
 @warning_ignore("unused_signal")
-signal combat_started(creature_id: String, enemy: Dictionary,
-		creature_hp: float, enemy_hp: float)
+signal combat_started(hero_id: String, enemy: Dictionary,
+		hero_hp: float, enemy_hp: float)
 
-# combat_ended   : { victory, remaining_creature_hp, enemy }
+# combat_ended   : { victory, remaining_hero_hp, enemy }
 @warning_ignore("unused_signal")
 signal combat_ended(result: Dictionary)
 

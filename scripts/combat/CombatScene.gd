@@ -278,9 +278,9 @@ func _build_bottom_bar() -> Control:
 # Effets supportés par AdventureSystem : "heal" et "xp_bonus".
 func _benediction_desc(effet: String, valeur: int) -> String:
 	match effet:
-		"heal":     return Translations.T("combat.bless.heal") % valeur
-		"xp_bonus": return Translations.T("combat.bless.xp")   % valeur
-		_:          return effet if effet != "" else Translations.T("combat.bless.unknown")
+		Enums.BlessEffect.HEAL:     return Translations.T("combat.bless.heal") % valeur
+		Enums.BlessEffect.XP_BONUS: return Translations.T("combat.bless.xp")   % valeur
+		_:                          return effet if effet != "" else Translations.T("combat.bless.unknown")
 
 # ═══════════════════════════════════════════════════════════
 #  Signaux
@@ -322,7 +322,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 	# Tooltip JRPG sur le héros (stats effectives avec équipement)
 	var hstats := GameData.get_effective_stats("hero")
 	var heqp   := GameData.get_equipment_bonuses()
-	var htt    := "Rang : %s\nPV : %d  ·  ATK : %d  ·  DEF : %d" % [
+	var htt    := Translations.T("combat.tt_stats") % [
 		GameData.get_tier_name(htier),
 		int(AdventureSystem.current_hp),
 		int(hstats.get("atk", 0)) + int(heqp.get("atk", 0)),
@@ -368,9 +368,10 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_enemy_ring.set_hp(1, 1)
 			_hide_action(_enemy_action)
 			var tdmg := int(trap.get("damage", 0))
-			UIHelpers.register_tooltip(_enemy_name, tname,
-				"Piège  ·  Dégâts : %d%s" % [tdmg, "\n(Ignoré — zone sans créature)" if event_data.get("ignored", false) else ""],
-				UIColors.TYPE_TRAP)
+			var trap_tt := Translations.T("combat.trap_tt") % tdmg
+			if event_data.get("ignored", false):
+				trap_tt += Translations.T("combat.trap_ignored")
+			UIHelpers.register_tooltip(_enemy_name, tname, trap_tt, UIColors.TYPE_TRAP)
 			if not event_data.get("ignored", false):
 				_hero_ring.update_hp(AdventureSystem.current_hp)
 				_hero_ring.damage(tdmg, false)
@@ -388,13 +389,13 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			var bval   := int(bene.get("valeur", 0))
 			var bdesc  := _benediction_desc(beff, bval)
 			UIHelpers.register_tooltip(_enemy_name, bname,
-				"Bénédiction\n%s" % bdesc,
+				Translations.T("combat.bless_tt") % bdesc,
 				UIColors.TYPE_BENEDICTION)
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TYPE_BENEDICTION), bname], ["status"])
 
-func _on_combat_started(creature_id: String, enemy: Dictionary,
+func _on_combat_started(hero_id: String, enemy: Dictionary,
 		hero_hp: float, enemy_hp: float) -> void:
-	var c        := GameData.get_entity(creature_id)
+	var c        := GameData.get_entity(hero_id)
 	var htier    := int(c.get("maitrise_actuelle", 0))
 	var hero_max := AdventureSystem.get_max_hp()
 	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héros")) as String).to_upper()
@@ -409,7 +410,7 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_enemy_ring.set_hp(enemy_hp, enemy_hp)
 
 	# Tooltip JRPG sur le nom de l'ennemi : rang + stats
-	var ett := "Rang : %s\nPV : %d  ·  ATK : %d  ·  DEF : %d" % [
+	var ett := Translations.T("combat.tt_stats") % [
 		etier_name,
 		int(enemy_hp),
 		int(enemy.get("atk", 0)),
@@ -426,7 +427,8 @@ func _on_combat_started(creature_id: String, enemy: Dictionary,
 	_stop_danger_pulse()
 	_clear_state_pills()
 	_flee_btn.disabled = false
-	_add_log("[color=%s]%s[/color] apparaît" % [_hex(Color(1.0, 0.8, 0.2)), ename], ["monster"])
+	_add_log(Translations.T("combat.appears") \
+			% ("[color=%s]%s[/color]" % [_hex(Color(1.0, 0.8, 0.2)), ename]), ["monster"])
 
 # Début du cooldown : on affiche l'INTENTION de l'attaquant et on lance la
 # charge de son anneau. Aucun dégât appliqué ici — l'attaque atterrit à la
@@ -695,13 +697,13 @@ func _show_unique_indicator() -> void:
 	vb.add_theme_constant_override("separation", 6)
 	_unique_panel.add_child(vb)
 	var lbl := Label.new()
-	lbl.text = ("✔  %s a déjà été vaincu" % nom) if already_beaten else ("☠  %s vous observe..." % nom)
+	lbl.text = Translations.T("combat.unique_beaten" if already_beaten else "combat.unique_watches") % nom
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED if already_beaten else color)
 	vb.add_child(lbl)
 	var btn := Button.new()
-	btn.text = ("⚔  Réaffronter %s" % nom) if already_beaten else ("⚔  Affronter %s" % nom)
+	btn.text = Translations.T("combat.unique_refight" if already_beaten else "combat.unique_fight") % nom
 	btn.add_theme_font_size_override("font_size", 12)
 	btn.add_theme_color_override("font_color", color)
 	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(color, 0.15, 1.0, 1, 4))

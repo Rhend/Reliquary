@@ -37,7 +37,7 @@ func refresh_active_passives() -> void:
 	_active_effects.clear()
 	for entity_id in GameData.entities:
 		var et = GameData.entities[entity_id].get("entity_type", "")
-		if et == "creature" or et == "biome":
+		if et == Enums.EntityType.CREATURE or et == Enums.EntityType.BIOME:
 			_apply_entity_passives(entity_id)
 	for passive_id in GameData.player.get("active_passives", []):
 		_apply_passive_effects(passive_id)
@@ -146,7 +146,7 @@ func _get_all_active_passive_ids() -> Array:
 	var ids: Array = []
 	for eid in GameData.entities:
 		var et = GameData.entities[eid].get("entity_type", "")
-		if et == "creature" or et == "biome":
+		if et == Enums.EntityType.CREATURE or et == Enums.EntityType.BIOME:
 			for pid in GameData.entities[eid].get("unlocked_passives", []):
 				if pid not in ids:
 					ids.append(pid)

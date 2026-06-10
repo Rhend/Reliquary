@@ -30,7 +30,7 @@ func calculate_xp(base_xp: float, event_tier: int, receiver_tier: int) -> float:
 # Palier maximum effectif d'une entité : min(plafond de type, plafond créature).
 func effective_max_tier(entity: Dictionary) -> int:
 	var type_max := GameData.get_max_tier_for_type(entity.get("entity_type", ""))
-	if entity.get("entity_type", "") != "creature":
+	if entity.get("entity_type", "") != Enums.EntityType.CREATURE:
 		return type_max
 	return mini(type_max, _creature_biome_cap(entity))
 
@@ -105,7 +105,7 @@ func add_xp_to_all_active(base_xp: float, event_tier: int) -> void:
 
 	for entity_id in GameData.entities:
 		var e = GameData.entities[entity_id]
-		if e.get("entity_type") not in ["hero", "biome"]:
+		if e.get("entity_type") not in [Enums.EntityType.HERO, Enums.EntityType.BIOME]:
 			continue
 		for passive_id in e.get("unlocked_passives", []):
 			if not seen.has(passive_id):
@@ -132,7 +132,7 @@ func _check_evolution(entity_id: String, xp_before: float) -> void:
 func reevaluate_creatures_for_biome(biome_id: String) -> void:
 	for eid in GameData.entities:
 		var e = GameData.entities[eid]
-		if e.get("entity_type", "") != "creature":
+		if e.get("entity_type", "") != Enums.EntityType.CREATURE:
 			continue
 		if str(e.get("biome_id", "")) != biome_id:
 			continue

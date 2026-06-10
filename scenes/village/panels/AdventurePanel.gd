@@ -1,22 +1,22 @@
 # ============================================================
 # AdventurePanel — Contenu du panneau glissant « Expéditions » du Village.
 #
-# Construit dans host._rp_content : bouton de départ + accordéon des biomes
+# Construit dans host.rp_content : bouton de départ + accordéon des biomes
 # découverts (catégories créatures / pièges / bénédictions / ingrédients,
 # filtrées par zone débloquée). Module sans état (fonctions statiques) ;
-# host = nœud Village (accès _rp_content, _adv_selected_biome_id,
-# _make_evolve_btn, _on_start_selected_expedition).
+# host = nœud Village (accès rp_content, adv_selected_biome_id,
+# make_evolve_btn, start_selected_expedition).
 # ============================================================
 class_name AdventurePanel
 
-# Point d'entrée : peuple host._rp_content avec le panneau Expéditions.
+# Point d'entrée : peuple host.rp_content avec le panneau Expéditions.
 static func build(host: Village) -> void:
-	var tier   := host._maitrise_actuelle()
+	var tier   := host.village_tier()
 	var tcolor := UIColors.tier_color(tier)
 
 	# Invalide la sélection si l'entité n'existe plus (pas d'auto-select)
-	if not host._adv_selected_biome_id.is_empty() and GameData.get_entity(host._adv_selected_biome_id).is_empty():
-		host._adv_selected_biome_id = ""
+	if not host.adv_selected_biome_id.is_empty() and GameData.get_entity(host.adv_selected_biome_id).is_empty():
+		host.adv_selected_biome_id = ""
 
 	# ── Expédition en cours ───────────────────────────────────
 	if AdventureSystem.is_running:
@@ -43,12 +43,12 @@ static func build(host: Village) -> void:
 		lbl2.add_theme_font_size_override("font_size", 11)
 		lbl2.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		vb.add_child(lbl2)
-		host._rp_content.add_child(info)
+		host.rp_content.add_child(info)
 		# Pas de bouton de départ quand une expédition tourne déjà
-		host._rp_content.add_child(HSeparator.new())
+		host.rp_content.add_child(HSeparator.new())
 
 	# ── Slot supérieur : placeholder OU bouton ────────────────
-	var no_biome_selected := host._adv_selected_biome_id.is_empty()
+	var no_biome_selected := host.adv_selected_biome_id.is_empty()
 
 	# Encadré neutre (aucun biome choisi) — masqué si expédition en cours
 	var placeholder := PanelContainer.new()
@@ -65,7 +65,7 @@ static func build(host: Village) -> void:
 	ph_lbl.add_theme_font_size_override("font_size", 13)
 	ph_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	placeholder.add_child(ph_lbl)
-	host._rp_content.add_child(placeholder)
+	host.rp_content.add_child(placeholder)
 
 	# Bouton actif (biome sélectionné) — masqué si expédition en cours
 	var btn := Button.new()
@@ -75,23 +75,23 @@ static func build(host: Village) -> void:
 	btn.add_theme_color_override("font_color", tcolor)
 	btn.visible = not no_biome_selected and not AdventureSystem.is_running
 	if not no_biome_selected:
-		var bname: String = str(GameData.get_entity(host._adv_selected_biome_id).get("nom_affichage_fr", host._adv_selected_biome_id)).to_upper()
+		var bname: String = str(GameData.get_entity(host.adv_selected_biome_id).get("nom_affichage_fr", host.adv_selected_biome_id)).to_upper()
 		btn.text = Translations.T("adv.start_btn_named") % bname
 	else:
 		btn.text = Translations.T("adv.start_btn")
 	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
-	btn.pressed.connect(host._on_start_selected_expedition)
+	btn.pressed.connect(host.start_selected_expedition)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(btn)
-	host._rp_content.add_child(btn)
+	host.rp_content.add_child(btn)
 
 	# ── Séparateur ────────────────────────────────────────────
-	host._rp_content.add_child(HSeparator.new())
+	host.rp_content.add_child(HSeparator.new())
 
 	# ── Liste des biomes (accordéon) ──────────────────────────
-	var biomes_sec  := UIHelpers.collapsible_section(Translations.T("adv.section.biomes"), tcolor)
-	host._rp_content.add_child(biomes_sec["wrapper"])
+	var biomes_sec  := UIHelpers.collapsible_section(Translations.T("adv.section.biomes"), tcolor, true, host.panel_ui_state())
+	host.rp_content.add_child(biomes_sec["wrapper"])
 	var biomes_body := biomes_sec["body"] as VBoxContainer
 
 	# Références partagées entre les closures pour l'accordéon
@@ -101,7 +101,7 @@ static func build(host: Village) -> void:
 
 	for eid: String in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
-		if e.get("entity_type", "") != "biome":
+		if e.get("entity_type", "") != Enums.EntityType.BIOME:
 			continue
 		if not e.get("est_decouvert", false):
 			continue
@@ -122,7 +122,7 @@ static func build(host: Village) -> void:
 					and ev.pressed):
 				return
 			var bname := biome_names.get(bid, bid) as String
-			if bid == host._adv_selected_biome_id:
+			if bid == host.adv_selected_biome_id:
 				section.visible = not section.visible
 				arrow.text = "  ▼" if section.visible else "  ▶"
 				if section.visible:
@@ -132,15 +132,15 @@ static func build(host: Village) -> void:
 					placeholder.visible = false
 				else:
 					# Désélection : plus de biome choisi → bouton masqué, placeholder affiché.
-					host._adv_selected_biome_id = ""
+					host.adv_selected_biome_id = ""
 					btn.visible = false
 					placeholder.visible = true
 			else:
-				if host._adv_selected_biome_id in contents \
-						and is_instance_valid(contents[host._adv_selected_biome_id]):
-					contents[host._adv_selected_biome_id].visible = false
-					arrows[host._adv_selected_biome_id].text = "  ▶"
-				host._adv_selected_biome_id = bid
+				if host.adv_selected_biome_id in contents \
+						and is_instance_valid(contents[host.adv_selected_biome_id]):
+					contents[host.adv_selected_biome_id].visible = false
+					arrows[host.adv_selected_biome_id].text = "  ▶"
+				host.adv_selected_biome_id = bid
 				section.visible = true
 				arrow.text = "  ▼"
 				btn.text = Translations.T("adv.start_btn_named") % bname
@@ -199,7 +199,7 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	section.add_theme_constant_override("separation", 2)
 	section.visible = false
 	if MasterySystem.can_evolve(biome_id):
-		wrapper.add_child(host._make_evolve_btn(biome_id,
+		wrapper.add_child(host.make_evolve_btn(biome_id,
 				biome.get("nom_affichage_fr", biome_id) as String, "biome", btier))
 	wrapper.add_child(section)
 
@@ -316,7 +316,7 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		if is_known:
 			entity = GameData.get_entity(entry_id)
 			var bentry := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
-			is_equip   = entity.get("entity_type", "") == "equipment"
+			is_equip   = entity.get("entity_type", "") == Enums.EntityType.EQUIPMENT
 			disp_name  = entry.get("nom_affichage_fr", entry.get("name", "?"))
 			if not entity.is_empty() and not is_equip:
 				entity_tier = entity.get("maitrise_actuelle", 0)
@@ -379,7 +379,7 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 			hb.add_child(xp_lbl)
 
 		if is_known and MasterySystem.can_evolve(entry_id):
-			parent.add_child(host._make_evolve_btn(
+			parent.add_child(host.make_evolve_btn(
 					entry_id, disp_name,
 					entity.get("entity_type", "creature") as String,
 					entity_tier))

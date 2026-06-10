@@ -5,11 +5,11 @@
 # T0+      : hub hexagonal + panneau JRPG glissant (40/60 viewport).
 #
 # Widgets visuels dans scenes/village/widgets/ :
-#   CircleRing, ClickOrb, HexItem, JRPGPanel, XPCard
+#   CircleRing, ClickOrb, HexItem, JRPGPanel, XPCard, SettingsOverlay
 #
 # Le contenu des panneaux glissants (Héros / Expéditions / Forge) est délégué à
 # des modules dédiés dans scenes/village/panels/ ; ils reçoivent ce nœud (host)
-# pour accéder à _rp_content et aux helpers partagés (_make_evolve_btn, etc.).
+# pour accéder à rp_content et aux helpers partagés (make_evolve_btn, etc.).
 # ============================================================
 class_name Village
 extends Control
@@ -52,15 +52,23 @@ const PANEL_TITLES: Dictionary = {
 	"tbd":       "?",
 }
 
-# ─── État ─────────────────────────────────────────────────────
+# ─── API publique pour les panels (HeroPanel / Adventure / Forge) ──
+# Les modules de scenes/village/panels/ reçoivent ce nœud (host) et ne
+# doivent utiliser QUE ces membres publics (+ village_tier(),
+# make_evolve_btn(), show_banner(), start_selected_expedition()).
+
+var rp_content            : VBoxContainer  # zone de contenu scrollable du panneau droit
+var adv_selected_biome_id := ""            # biome sélectionné dans le panneau Expéditions
+
+# ─── État interne ─────────────────────────────────────────────
 var _ring            : CircleRing         # anneau animé central (XP fill + tier visuel)
 var _xp_label        : Label              # compteur de clics sous l'orbe (phase d'éclosion)
 var _hub_root        : Control            # conteneur du hub hexagonal
 var _rp_root         : Control            # panneau droit JRPG — null si fermé
-var _rp_content      : VBoxContainer      # zone de contenu scrollable du panneau droit
 var _rp_title        : Label              # label titre dans la barre du panneau droit
+var _rp_scroll       : ScrollContainer    # zone de scroll du panneau droit — null si fermé
+var _panel_ui_states : Dictionary = {}    # panel_id → état UI persistant (sections ouvertes…)
 var _active_panel_id      := ""           # id du panneau ouvert ("hero", "adventure", …)
-var _adv_selected_biome_id := ""          # biome sélectionné dans le panneau Expéditions
 var _hex_items            : Dictionary = {}   # panel_id → HexItem, pour gérer l'état sélectionné
 var _birth_orb            : ClickOrb           # orbe d'éclosion (juice d'éveil)
 var _birth_phrase         : Label              # phrase d'éveil affichée actuellement
@@ -85,12 +93,8 @@ func _ready() -> void:
 	EventBus.adventure_stopped.connect(_update_badges)
 	GameSettings.language_changed.connect(_on_language_changed)
 
-# Retourne le dictionnaire d'entité du héros, ou {} si absent.
-func _active_creature() -> Dictionary:
-	return GameData.get_entity("hero")
-
 # Palier de Maîtrise du Village — détermine le layout et les couleurs du hub.
-func _maitrise_actuelle() -> int:
+func village_tier() -> int:
 	return int(GameData.village.get("maitrise_actuelle", 0))
 
 # ─── Construction principale ──────────────────────────────────
@@ -336,9 +340,10 @@ func _close_panel() -> void:
 	pt.tween_callback(func() -> void:
 		if _rp_root:
 			_rp_root.queue_free()
-			_rp_root    = null
-			_rp_content = null
-			_rp_title   = null
+			_rp_root   = null
+			rp_content = null
+			_rp_title  = null
+			_rp_scroll = null
 	)
 
 	var ht := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
@@ -351,22 +356,41 @@ func _update_hex_selection(active_id: String) -> void:
 		item.is_selected = (pid == active_id)
 		item.queue_redraw()
 
-# Vide _rp_content et réinjecte le contenu pour panel_id (panneau déjà ouvert).
+# Vide rp_content et réinjecte le contenu pour panel_id (panneau déjà ouvert).
 func _swap_panel_content(panel_id: String) -> void:
-	UIHelpers.clear_children(_rp_content)
+	UIHelpers.clear_children(rp_content)
 	_fill_panel_content(panel_id)
 
 # Reconstruit le contenu du panneau actuellement ouvert, sans le fermer.
 # À utiliser pour tout rafraîchissement : rappeler _open_panel() avec le
 # panneau déjà ouvert le FERMERAIT (comportement toggle).
+# La position de scroll est restaurée ; les sections repliables retrouvent
+# leur état grâce à panel_ui_state() (passé par les panels à UIHelpers).
 func _refresh_active_panel() -> void:
-	if _rp_root != null and _active_panel_id != "":
-		_swap_panel_content(_active_panel_id)
+	if _rp_root == null or _active_panel_id == "":
+		return
+	var scroll_pos: int = _rp_scroll.scroll_vertical if _rp_scroll else 0
+	_swap_panel_content(_active_panel_id)
+	_restore_scroll(scroll_pos)
+
+# Restaure le scroll après reconstruction. Attend une frame : la hauteur
+# du nouveau contenu n'est connue qu'après le layout.
+func _restore_scroll(pos: int) -> void:
+	await get_tree().process_frame
+	if _rp_scroll and is_instance_valid(_rp_scroll):
+		_rp_scroll.scroll_vertical = pos
+
+# Dictionnaire d'état UI du panneau actif, conservé entre reconstructions.
+# Les panels le passent à UIHelpers.collapsible_section (sections ouvertes).
+func panel_ui_state() -> Dictionary:
+	if not _panel_ui_states.has(_active_panel_id):
+		_panel_ui_states[_active_panel_id] = {}
+	return _panel_ui_states[_active_panel_id]
 
 # ─── Construction du cadre JRPG ──────────────────────────────
 # Crée le JRPGPanel, le titre, le bouton fermer et la zone scrollable.
 func _build_panel_frame(panel_id: String) -> void:
-	var tcolor := UIColors.tier_color(_maitrise_actuelle())
+	var tcolor := UIColors.tier_color(village_tier())
 
 	var frame := JRPGPanel.new()
 	frame.panel_color = tcolor
@@ -407,15 +431,16 @@ func _build_panel_frame(panel_id: String) -> void:
 	scroll.offset_bottom = -10
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	frame.add_child(scroll)
+	_rp_scroll = scroll
 
 	var margin := UIHelpers.margin_of(12)
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(margin)
 
-	_rp_content = VBoxContainer.new()
-	_rp_content.add_theme_constant_override("separation", 10)
-	_rp_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	margin.add_child(_rp_content)
+	rp_content = VBoxContainer.new()
+	rp_content.add_theme_constant_override("separation", 10)
+	rp_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(rp_content)
 
 	_fill_panel_content(panel_id)
 
@@ -431,11 +456,11 @@ func _fill_panel_content(panel_id: String) -> void:
 		"tbd":       _panel_soon("?")
 
 # Lance l'aventure sur le biome sélectionné et bascule vers CombatScene.
-func _on_start_selected_expedition() -> void:
-	if _adv_selected_biome_id.is_empty():
+func start_selected_expedition() -> void:
+	if adv_selected_biome_id.is_empty():
 		return
-	GameData.player["active_biome_id"] = _adv_selected_biome_id
-	AdventureSystem.start_adventure(_adv_selected_biome_id)
+	GameData.player["active_biome_id"] = adv_selected_biome_id
+	AdventureSystem.start_adventure(adv_selected_biome_id)
 	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
 
 # Panneau générique "Bientôt disponible" pour les fonctionnalités non implémentées.
@@ -445,7 +470,7 @@ func _panel_soon(label: String) -> void:
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	_rp_content.add_child(lbl)
+	rp_content.add_child(lbl)
 
 # ─── Village ──────────────────────────────────────────────────
 
@@ -458,9 +483,10 @@ func _rebuild_hub() -> void:
 		_hub_root = null
 	if _rp_root and is_instance_valid(_rp_root):
 		_rp_root.queue_free()
-	_rp_root    = null
-	_rp_content = null
-	_rp_title   = null
+	_rp_root   = null
+	rp_content = null
+	_rp_title  = null
+	_rp_scroll = null
 	_hex_items.clear()
 	_active_panel_id = ""
 	if GameData.village.get("eclos", false):
@@ -470,7 +496,7 @@ func _rebuild_hub() -> void:
 func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
 	var frag: Dictionary = GameData.get_entity(fragment_id)
 	var nom  := frag.get("nom_affichage_fr", fragment_id) as String
-	_show_banner("🔮  Fragment libéré : %s" % nom,
+	show_banner(Translations.T("village.fragment_freed") % nom,
 			Color(0.55, 0.85, 0.55), Color(0.05, 0.05, 0.20, 0.92), 2.5, 0.5)
 	_rebuild_hub()
 
@@ -482,7 +508,7 @@ func _on_village_tier_change(_nouveau_tier: int) -> void:
 func _on_biome_revele(biome_id: String) -> void:
 	var biome := GameData.get_entity(biome_id)
 	var nom   := biome.get("nom_affichage_fr", biome_id) as String
-	_show_banner("✦  Nouveau biome révélé : %s  ✦" % nom,
+	show_banner(Translations.T("village.biome_revealed") % nom,
 			Color(0.4, 0.7, 1.0), Color(0.05, 0.10, 0.25, 0.92), 3.0, 0.6)
 	if _active_panel_id == "adventure":
 		_refresh_active_panel()
@@ -490,7 +516,7 @@ func _on_biome_revele(biome_id: String) -> void:
 # Bannière temporaire en haut de l'écran : texte + couleur d'accent, fond `bg`,
 # affichée `hold` s puis fondue en `fade` s avant disparition. Mutualisée par
 # les notifications (Fragment libéré, biome révélé…).
-func _show_banner(text: String, accent: Color, bg: Color, hold: float, fade: float) -> void:
+func show_banner(text: String, accent: Color, bg: Color, hold: float, fade: float) -> void:
 	var banner := PanelContainer.new()
 	banner.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	banner.offset_top    = 20
@@ -536,221 +562,16 @@ func _build_fullscreen_btn() -> void:
 	add_child(btn)
 
 # ─── Panneau Paramètres ───────────────────────────────────────
+# Tout le contenu (audio, affichage, sauvegarde, langue) vit dans le
+# widget SettingsOverlay ; Village ne gère que l'ouverture/fermeture.
 
 func _toggle_settings_overlay() -> void:
 	if _settings_overlay and is_instance_valid(_settings_overlay):
 		_settings_overlay.queue_free()
 		_settings_overlay = null
 		return
-	_open_settings_overlay()
-
-func _open_settings_overlay() -> void:
-	var overlay := ColorRect.new()
-	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	overlay.color        = Color(0.0, 0.0, 0.0, 0.45)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
-			_toggle_settings_overlay()
-	)
-	add_child(overlay)
-	_settings_overlay = overlay
-
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_PASS
-	overlay.add_child(center)
-
-	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(380, 0)
-	card.add_theme_stylebox_override("panel",
-			UIHelpers.card_style(UIColors.TEXT_HEADER, 0.08, 0.35, 1, 6))
-	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.gui_input.connect(func(_ev: InputEvent) -> void: pass)
-	center.add_child(card)
-
-	var mg := UIHelpers.margin_of(16)
-	card.add_child(mg)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 12)
-	mg.add_child(vb)
-
-	# ── En-tête ───────────────────────────────────────────────
-	var hdr := HBoxContainer.new()
-	vb.add_child(hdr)
-	var title_lbl := Label.new()
-	title_lbl.text = Translations.T("settings.title")
-	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_lbl.add_theme_font_size_override("font_size", 16)
-	title_lbl.add_theme_color_override("font_color", Color.WHITE)
-	hdr.add_child(title_lbl)
-	var close_btn := Button.new()
-	close_btn.text = "✕"
-	close_btn.flat = true
-	close_btn.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	close_btn.add_theme_color_override("font_hover_color", Color.WHITE)
-	close_btn.pressed.connect(_toggle_settings_overlay)
-	hdr.add_child(close_btn)
-
-	vb.add_child(_settings_sep())
-
-	# ── AUDIO ────────────────────────────────────────────────
-	vb.add_child(_settings_section(Translations.T("settings.audio")))
-	vb.add_child(_settings_slider(Translations.T("settings.music"), GameSettings.volume_music,
-			func(v: float) -> void: GameSettings.set_volume_music(v)))
-	vb.add_child(_settings_slider(Translations.T("settings.sfx"),  GameSettings.volume_sfx,
-			func(v: float) -> void: GameSettings.set_volume_sfx(v)))
-
-	vb.add_child(_settings_sep())
-
-	# ── AFFICHAGE ────────────────────────────────────────────
-	vb.add_child(_settings_section(Translations.T("settings.display")))
-	var fs_row := HBoxContainer.new()
-	fs_row.add_theme_constant_override("separation", 10)
-	vb.add_child(fs_row)
-	var fs_lbl := Label.new()
-	fs_lbl.text = Translations.T("settings.fullscreen")
-	fs_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fs_lbl.add_theme_font_size_override("font_size", 13)
-	fs_lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
-	fs_row.add_child(fs_lbl)
-	var fs_hint := Label.new()
-	fs_hint.text = "F11"
-	fs_hint.add_theme_font_size_override("font_size", 11)
-	fs_hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	fs_row.add_child(fs_hint)
-	var fs_check := CheckButton.new()
-	fs_check.button_pressed = GameSettings.fullscreen
-	fs_check.toggled.connect(func(v: bool) -> void: GameSettings.set_fullscreen(v))
-	fs_row.add_child(fs_check)
-
-	vb.add_child(_settings_sep())
-
-	# ── SAUVEGARDE ───────────────────────────────────────────
-	vb.add_child(_settings_section(Translations.T("settings.save")))
-	var exp_btn := Button.new()
-	exp_btn.text = Translations.T("settings.export")
-	exp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	exp_btn.pressed.connect(_export_save)
-	vb.add_child(exp_btn)
-	var imp_btn := Button.new()
-	imp_btn.text = Translations.T("settings.import")
-	imp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	imp_btn.pressed.connect(_import_save)
-	vb.add_child(imp_btn)
-
-	vb.add_child(_settings_sep())
-
-	# ── LANGUE ───────────────────────────────────────────────
-	vb.add_child(_settings_section(Translations.T("settings.language")))
-	var lang_row := HBoxContainer.new()
-	lang_row.add_theme_constant_override("separation", 8)
-	lang_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(lang_row)
-	for lang_code: String in ["fr", "en"]:
-		var lang_btn := Button.new()
-		lang_btn.text = Translations.T("settings.lang." + lang_code)
-		lang_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lang_btn.toggle_mode  = true
-		lang_btn.button_pressed = (GameSettings.language == lang_code)
-		lang_btn.focus_mode = Control.FOCUS_NONE
-		var lc := lang_code
-		lang_btn.pressed.connect(func() -> void: GameSettings.set_language(lc))
-		lang_row.add_child(lang_btn)
-
-func _settings_sep() -> ColorRect:
-	var sep := ColorRect.new()
-	sep.custom_minimum_size      = Vector2(0, 1)
-	sep.color                    = Color(1.0, 1.0, 1.0, 0.15)
-	sep.size_flags_horizontal    = Control.SIZE_EXPAND_FILL
-	return sep
-
-func _settings_section(text: String) -> Label:
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	return lbl
-
-func _settings_slider(label: String, initial: float, on_change: Callable) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	var lbl := Label.new()
-	lbl.text                      = label
-	lbl.custom_minimum_size       = Vector2(72, 0)
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
-	row.add_child(lbl)
-	var slider := HSlider.new()
-	slider.min_value              = 0.0
-	slider.max_value              = 1.0
-	slider.step                   = 0.01
-	slider.value                  = initial
-	slider.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
-	row.add_child(slider)
-	var pct := Label.new()
-	pct.text                      = "%d %%" % int(initial * 100)
-	pct.custom_minimum_size       = Vector2(42, 0)
-	pct.horizontal_alignment      = HORIZONTAL_ALIGNMENT_RIGHT
-	pct.add_theme_font_size_override("font_size", 12)
-	pct.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	row.add_child(pct)
-	slider.value_changed.connect(func(v: float) -> void:
-		pct.text = "%d %%" % int(v * 100)
-		on_change.call(v)
-	)
-	return row
-
-func _export_save() -> void:
-	if not FileAccess.file_exists(SaveManager.SAVE_PATH):
-		return
-	var fd := FileDialog.new()
-	fd.file_mode     = FileDialog.FILE_MODE_SAVE_FILE
-	fd.access        = FileDialog.ACCESS_FILESYSTEM
-	fd.filters       = PackedStringArray(["*.json ; Sauvegarde JSON"])
-	fd.current_file  = "IdleEvolutionSave.json"
-	add_child(fd)
-	fd.popup_centered(Vector2(700, 480))
-	fd.file_selected.connect(func(dest: String) -> void:
-		var src := FileAccess.open(SaveManager.SAVE_PATH, FileAccess.READ)
-		if src:
-			var content := src.get_as_text()
-			src.close()
-			var dst := FileAccess.open(dest, FileAccess.WRITE)
-			if dst:
-				dst.store_string(content)
-				dst.close()
-		fd.queue_free()
-	)
-	fd.canceled.connect(fd.queue_free)
-
-func _import_save() -> void:
-	var fd := FileDialog.new()
-	fd.file_mode  = FileDialog.FILE_MODE_OPEN_FILE
-	fd.access     = FileDialog.ACCESS_FILESYSTEM
-	fd.filters    = PackedStringArray(["*.json ; Sauvegarde JSON"])
-	add_child(fd)
-	fd.popup_centered(Vector2(700, 480))
-	fd.file_selected.connect(func(src_path: String) -> void:
-		var src := FileAccess.open(src_path, FileAccess.READ)
-		if src == null:
-			fd.queue_free()
-			return
-		var content := src.get_as_text()
-		src.close()
-		var json := JSON.new()
-		if json.parse(content) != OK:
-			fd.queue_free()
-			return
-		var dst := FileAccess.open(SaveManager.SAVE_PATH, FileAccess.WRITE)
-		if dst:
-			dst.store_string(content)
-			dst.close()
-		fd.queue_free()
-		get_tree().reload_current_scene()
-	)
-	fd.canceled.connect(fd.queue_free)
+	_settings_overlay = SettingsOverlay.new()
+	add_child(_settings_overlay)
 
 
 # ─── Phase d'éclosion : clic ─────────────────────────────────
@@ -845,7 +666,7 @@ func _hatch_village() -> void:
 # ─── Bouton ÉVOLUER pulsant ──────────────────────────────────
 # Fabrique un bouton ÉVOLUER avec pulsation scale 1.0→1.05→1.0 en boucle.
 # La couleur du texte correspond au tier cible (from_tier + 1).
-func _make_evolve_btn(entity_id: String, entity_name: String,
+func make_evolve_btn(entity_id: String, entity_name: String,
 		entity_type: String, from_tier: int) -> Button:
 	var nc  := UIColors.tier_color(from_tier + 1)
 	var btn := Button.new()
@@ -902,7 +723,7 @@ func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Calla
 	item.icon_text   = icon
 	item.label_text  = lbl
 	item.tier_color  = tcolor
-	item.tier        = _maitrise_actuelle()
+	item.tier        = village_tier()
 	item.outward_dir = pos.normalized()
 	item.callback    = cb
 	_center(item, pos, HEX_SIZE)
@@ -947,7 +768,7 @@ func _update_badges() -> void:
 	var adv_alert := false
 	for eid in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
-		if e.get("entity_type", "") in ["biome", "creature"] and MasterySystem.can_evolve(eid):
+		if e.get("entity_type", "") in [Enums.EntityType.BIOME, Enums.EntityType.CREATURE] and MasterySystem.can_evolve(eid):
 			adv_alert = true
 			break
 
@@ -966,16 +787,13 @@ func _on_resources_changed_refresh() -> void:
 	_update_badges()
 
 # ─── Langue ───────────────────────────────────────────────────
-# Reconstruit le hub + panneau actif + settings overlay si ouverts.
+# Reconstruit le hub + panneau actif. Le SettingsOverlay (s'il est ouvert)
+# se reconstruit tout seul : il écoute lui-même language_changed.
 func _on_language_changed(_lang: String) -> void:
 	var was_open := _active_panel_id
 	_rebuild_hub()
 	if was_open != "":
 		_open_panel(was_open)
-	if _settings_overlay and is_instance_valid(_settings_overlay):
-		_settings_overlay.queue_free()
-		_settings_overlay = null
-		_open_settings_overlay()
 
 # ─── Utils ────────────────────────────────────────────────────
 # Positionne ctrl centré sur pos avec la taille sz, en mode ancre centre.

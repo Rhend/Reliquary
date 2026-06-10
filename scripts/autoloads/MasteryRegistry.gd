@@ -9,7 +9,10 @@
 extends Node
 
 # Types d'entités soumises à la Maîtrise (le Héros est exclu).
-const MASTERY_TYPES := ["creature", "biome", "passive", "equipment", "trap", "benediction"]
+const MASTERY_TYPES := [
+	Enums.EntityType.CREATURE, Enums.EntityType.BIOME, Enums.EntityType.PASSIVE,
+	Enums.EntityType.EQUIPMENT, Enums.EntityType.TRAP, Enums.EntityType.BENEDICTION,
+]
 
 # ═══════════════════════════════════════════════════════════
 #  Requêtes publiques
@@ -22,7 +25,7 @@ func is_discovered(entity_id: String) -> bool:
 	if GameData.player.get("bestiary", {}).has(entity_id):
 		return true
 	var e = GameData.get_entity(entity_id)
-	if e.get("entity_type") == "equipment":
+	if e.get("entity_type") == Enums.EntityType.EQUIPMENT:
 		if entity_id in GameData.player.get("equipment_inventory", []):
 			return true
 		if entity_id in GameData.player.get("equipped", {}).values():

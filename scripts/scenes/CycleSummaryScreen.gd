@@ -202,7 +202,7 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 	var frag_done := false
 	for fid in GameData.entities:
 		var f := GameData.entities[fid] as Dictionary
-		if f.get("entity_type", "") == "fragment" and f.get("biome_source_id", "") == biome_id:
+		if f.get("entity_type", "") == Enums.EntityType.FRAGMENT and f.get("biome_source_id", "") == biome_id:
 			frag_done = f.get("est_collecte", false)
 			break
 	_discovery_check(rows, Translations.T("cycle.discovery.fragment"), frag_done)
@@ -261,7 +261,7 @@ func _section_xp(vb: VBoxContainer, data: Dictionary,
 	body_xp.add_child(total_lbl)
 	_fade_register(total_lbl)
 
-	var cid := data.get("creature_id", "") as String
+	var cid := data.get("hero_id", "") as String
 	_xp_entity(body_xp, "⚔", Translations.T("cycle.hero_label"), GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
 	_xp_entity(body_xp, "🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String),
 			data.get("xp_biome", 0.0) as float)
@@ -272,8 +272,8 @@ func _section_xp(vb: VBoxContainer, data: Dictionary,
 		var e_name := e.get("nom_affichage_fr", e.get("name", ent_id)) as String
 		var icon := "🐾"
 		match e.get("entity_type", ""):
-			"trap":        icon = "▲"
-			"benediction": icon = "✦"
+			Enums.EntityType.TRAP:        icon = "▲"
+			Enums.EntityType.BENEDICTION: icon = "✦"
 		_xp_entity(body_xp, icon, e_name, e, entities_xp[ent_id] as float)
 
 	var detail := data.get("xp_passives_detail", {}) as Dictionary
@@ -324,7 +324,7 @@ func _section_evolutions(vb: VBoxContainer) -> void:
 	var found := false
 	for eid: String in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
-		if e.get("entity_type", "") == "equipment":
+		if e.get("entity_type", "") == Enums.EntityType.EQUIPMENT:
 			continue
 		if MasterySystem.can_evolve(eid):
 			found = true

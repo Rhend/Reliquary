@@ -9,7 +9,9 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_run_all()
 	_print_report()
-	get_tree().quit()
+	# Code de sortie ≠ 0 si au moins un échec → exploitable par la CI.
+	var has_failure: bool = _results.any(func(r): return not r["ok"])
+	get_tree().quit(1 if has_failure else 0)
 
 func _run_all() -> void:
 	print("\n=== TEST FLUX EXPÉDITION ===\n")
@@ -133,7 +135,7 @@ func _test_cycle_summary_screen_keys() -> void:
 
 	# Clés lues par CycleSummaryScreen (data.get) + clés du récap standard.
 	var required := [
-		"victory", "interrupted", "biome_id", "creature_id", "modifier",
+		"victory", "interrupted", "biome_id", "hero_id", "modifier",
 		"xp_total", "xp_hero", "xp_biome", "xp_passives_total", "xp_passives_detail",
 		"xp_entities_detail", "xp_equip_detail", "loot_total", "loot_detail",
 		"combats_won", "events", "events_total", "positive_events", "traps_triggered",

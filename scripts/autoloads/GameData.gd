@@ -71,6 +71,7 @@ var player: Dictionary = {
 func _ready() -> void:
 	_init_progression_constants()
 	_load_all_entities()
+	_validate_entities()
 	EventBus.entity_evolved.connect(_on_entity_evolved)
 
 # Référence les constantes de progression depuis Balance (source unique).
@@ -81,21 +82,21 @@ func _init_progression_constants() -> void:
 # Charge toutes les entités depuis leurs dossiers respectifs.
 func _load_all_entities() -> void:
 	# Entités à Maîtrise (progression XP + évolution manuelle)
-	_load_tres_folder("res://data/biomes/",          "biome")
-	_load_tres_folder("res://data/creatures/",       "creature")
-	_load_tres_folder("res://data/passifs_uniques/", "passif_unique")
-	_load_tres_folder("res://data/pieges/",          "trap")
-	_load_tres_folder("res://data/benedictions/",    "benediction")
+	_load_tres_folder("res://data/biomes/",          Enums.EntityType.BIOME)
+	_load_tres_folder("res://data/creatures/",       Enums.EntityType.CREATURE)
+	_load_tres_folder("res://data/passifs_uniques/", Enums.EntityType.PASSIF_UNIQUE)
+	_load_tres_folder("res://data/pieges/",          Enums.EntityType.TRAP)
+	_load_tres_folder("res://data/benedictions/",    Enums.EntityType.BENEDICTION)
 	# Données statiques JSON — chargées EN PREMIER pour que les .tres les écrasent si même ID
-	_load_data_from_folder("res://data/resources/", "resource")
-	_load_data_from_folder("res://data/forge/",     "recipe")
+	_load_data_from_folder("res://data/resources/", Enums.EntityType.RESOURCE)
+	_load_data_from_folder("res://data/forge/",     Enums.EntityType.RECIPE)
 	# Données statiques .tres (sans progression) — écrasent les resources/ si ID partagé
-	_load_tres_folder("res://data/ingredients/", "ingredient", false)
-	_load_tres_folder("res://data/fragments/",   "fragment",   false)
+	_load_tres_folder("res://data/ingredients/", Enums.EntityType.INGREDIENT, false)
+	_load_tres_folder("res://data/fragments/",   Enums.EntityType.FRAGMENT,   false)
 	# Héros, passifs et équipements : entités à Maîtrise
-	_load_tres_folder("res://data/hero/",        "hero")
-	_load_tres_folder("res://data/passives/",    "passive")
-	_load_tres_folder("res://data/equipements/", "equipment")
+	_load_tres_folder("res://data/hero/",        Enums.EntityType.HERO)
+	_load_tres_folder("res://data/passives/",    Enums.EntityType.PASSIVE)
+	_load_tres_folder("res://data/equipements/", Enums.EntityType.EQUIPMENT)
 
 # Charge tous les .tres d'un dossier dans le catalogue d'entités.
 # with_mastery = true → initialise les champs de progression de Maîtrise
@@ -164,6 +165,35 @@ func _load_data_from_folder(path: String, entity_type: String) -> void:
 		file_name = dir.get_next()
 	dir.list_dir_end()
 
+# Vérifie la cohérence minimale des données chargées : champs obligatoires
+# manquants ou valeurs inattendues → push_warning. Ne bloque jamais le jeu ;
+# ce filet sert à repérer les .tres incomplets ou mal remplis pendant le
+# développement (les .get(..., défaut) masqueraient l'erreur silencieusement).
+func _validate_entities() -> void:
+	for eid in entities:
+		var e: Dictionary = entities[eid]
+		var etype: String = e.get("entity_type", "")
+
+		# Toute entité affichée à l'écran doit avoir un nom.
+		# `name` est accepté en repli (convention des passifs, ex-JSON), et les
+		# placeholders pas encore débloqués (est_debloque = false) sont ignorés.
+		if etype not in [Enums.EntityType.RESOURCE, Enums.EntityType.RECIPE] \
+				and e.get("est_debloque", true) \
+				and str(e.get("nom_affichage_fr", "")) == "" \
+				and str(e.get("name", "")) == "":
+			push_warning("GameData: %s (%s) sans nom_affichage_fr ni name" % [eid, etype])
+
+		match etype:
+			Enums.EntityType.CREATURE:
+				if (e.get("stats_par_palier", {}) as Dictionary).is_empty():
+					push_warning("GameData: créature %s sans stats_par_palier" % eid)
+				if str(e.get("biome_id", "")) == "":
+					push_warning("GameData: créature %s sans biome_id (plafond de Maîtrise incalculable)" % eid)
+			Enums.EntityType.BENEDICTION:
+				var eff := str(e.get("effet", ""))
+				if eff not in [Enums.BlessEffect.HEAL, Enums.BlessEffect.XP_BONUS]:
+					push_warning("GameData: bénédiction %s — effet inconnu « %s »" % [eid, eff])
+
 # Lit et parse un fichier JSON. Retourne {} en cas d'erreur.
 func _read_json(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
@@ -186,7 +216,7 @@ func _read_json(path: String) -> Dictionary:
 # Hook entity_evolved : libère le Fragment (Rare) et révèle le biome secondaire (Légendaire).
 func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 	var entity := get_entity(entity_id)
-	if entity.get("entity_type", "") != "biome":
+	if entity.get("entity_type", "") != Enums.EntityType.BIOME:
 		return
 
 	# Le plafond des créatures du biome vient de monter : réévaluer leur XP stockée
@@ -197,7 +227,7 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 	if new_tier in [2, 4, 5]:
 		for fid in entities:
 			var frag: Dictionary = entities[fid]
-			if frag.get("entity_type", "") != "fragment":
+			if frag.get("entity_type", "") != Enums.EntityType.FRAGMENT:
 				continue
 			if frag.get("biome_source_id", "") != entity_id:
 				continue
@@ -286,7 +316,7 @@ func get_effective_stats(entity_id: String) -> Dictionary:
 		return {}
 	var tier := int(entity.get("maitrise_actuelle", 0))
 
-	if entity.get("entity_type", "") == "hero":
+	if entity.get("entity_type", "") == Enums.EntityType.HERO:
 		var t := clampi(tier, 0, Balance.HERO_HP_PER_TIER.size() - 1)
 		return {
 			"atk":             Balance.HERO_ATK_PER_TIER[t],
@@ -349,7 +379,7 @@ func can_forge(equipment_id: String) -> bool:
 	if equip.is_empty():
 		return false
 	var current := int(equip.get("maitrise_actuelle", 0))
-	if current >= get_max_tier_for_type("equipment"):
+	if current >= get_max_tier_for_type(Enums.EntityType.EQUIPMENT):
 		return false
 	if not MasterySystem.can_evolve(equipment_id):
 		return false
@@ -380,7 +410,7 @@ func forge(equipment_id: String) -> bool:
 		player["resources"][ingr_id] = maxi(0, int(player["resources"].get(ingr_id, 0)) - consume)
 	equip["maitrise_actuelle"]           = current + 1
 	equip["xp_maitrise_actuelle"]        = 0.0
-	equip["xp_maitrise_palier_suivant"]  = palier_suivant_cost("equipment", current + 1)
+	equip["xp_maitrise_palier_suivant"]  = palier_suivant_cost(Enums.EntityType.EQUIPMENT, current + 1)
 	EventBus.equipement_evolue.emit(equipment_id, current + 1)
 	EventBus.resources_changed.emit()
 	return true
@@ -446,7 +476,7 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 func get_forge_recipes() -> Array:
 	var result: Array = []
 	for id in entities:
-		if entities[id].get("entity_type") == "recipe":
+		if entities[id].get("entity_type") == Enums.EntityType.RECIPE:
 			result.append(entities[id])
 	return result
 

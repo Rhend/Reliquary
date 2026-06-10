@@ -15,7 +15,13 @@
 # Déclenchement :
 #   Les signaux de progression marquent un flag "dirty" et démarrent un timer
 #   de SAVE_DEBOUNCE secondes. La sauvegarde n'est écrite qu'à l'expiration,
-#   évitant des dizaines de writes par combat.
+#   évitant des dizaines de writes par combat. À la fermeture de la fenêtre,
+#   le flag dirty est flushé immédiatement (aucune progression perdue).
+#
+# Écriture atomique :
+#   Le JSON est écrit dans un fichier .tmp puis renommé par-dessus la
+#   sauvegarde. Un crash en pleine écriture ne peut donc pas corrompre
+#   la sauvegarde existante.
 #
 # Versioning :
 #   Incrémenter SAVE_VER dès qu'un champ est renommé ou supprimé.
@@ -63,6 +69,12 @@ func _flush_save() -> void:
 		_save_dirty = false
 		save()
 
+# Fermeture de la fenêtre : flush immédiat de toute progression en attente
+# de debounce, sinon les 2 dernières secondes de jeu seraient perdues.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_flush_save()
+
 # ═══════════════════════════════════════════════════════════
 #  Sauvegarde
 # ═══════════════════════════════════════════════════════════
@@ -75,13 +87,27 @@ func save() -> void:
 		"systems":  _save_systems(),
 		"village":  GameData.village.duplicate(),
 	}
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if _write_text_atomic(SAVE_PATH, JSON.stringify(data, "\t")):
+		EventBus.save_completed.emit()
+
+# Écrit `content` dans `path` de façon atomique : écriture dans un .tmp
+# puis renommage. Si le renommage direct échoue (cible existante sur
+# certaines plateformes), supprime la cible puis réessaie.
+func _write_text_atomic(path: String, content: String) -> bool:
+	var tmp_path := path + ".tmp"
+	var file := FileAccess.open(tmp_path, FileAccess.WRITE)
 	if file == null:
-		push_error("SaveManager: impossible d'ouvrir le fichier de sauvegarde")
-		return
-	file.store_string(JSON.stringify(data, "\t"))
+		push_error("SaveManager: impossible d'ouvrir %s en écriture" % tmp_path)
+		return false
+	file.store_string(content)
 	file.close()
-	EventBus.save_completed.emit()
+	if DirAccess.rename_absolute(tmp_path, path) == OK:
+		return true
+	DirAccess.remove_absolute(path)
+	if DirAccess.rename_absolute(tmp_path, path) == OK:
+		return true
+	push_error("SaveManager: impossible de remplacer %s" % path)
+	return false
 
 func _save_player() -> Dictionary:
 	return GameData.player.duplicate(true)
@@ -138,8 +164,7 @@ func load_save() -> void:
 
 	var data: Dictionary = json.get_data()
 	var saved_ver: int   = int(data.get("version", 0))
-	# Versions supportées : 11 (format entities plat), 12-13 (hiérarchique).
-	if saved_ver < 11 or saved_ver > SAVE_VER:
+	if not _is_version_supported(saved_ver):
 		push_warning("SaveManager: version %d non supportée (attendu 11–%d) — sauvegarde ignorée" \
 			% [saved_ver, SAVE_VER])
 		return
@@ -212,3 +237,51 @@ func _load_systems(data: Dictionary) -> void:
 	# ── Ajouter ici la restauration des états runtime ──────────
 	if sys.has("passive_cooldowns"):
 		PassiveSystem.passive_cooldowns = (sys["passive_cooldowns"] as Dictionary).duplicate()
+
+# Versions supportées : 11 (format entities plat), 12+ (hiérarchique).
+func _is_version_supported(ver: int) -> bool:
+	return ver >= 11 and ver <= SAVE_VER
+
+# ═══════════════════════════════════════════════════════════
+#  Export / Import (panneau Paramètres)
+# ═══════════════════════════════════════════════════════════
+
+# Copie la sauvegarde courante vers dest_path. Retourne true si OK.
+func export_to(dest_path: String) -> bool:
+	var src := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if src == null:
+		push_warning("SaveManager: aucune sauvegarde à exporter")
+		return false
+	var content := src.get_as_text()
+	src.close()
+	var dst := FileAccess.open(dest_path, FileAccess.WRITE)
+	if dst == null:
+		push_error("SaveManager: impossible d'écrire " + dest_path)
+		return false
+	dst.store_string(content)
+	dst.close()
+	return true
+
+# Valide puis installe une sauvegarde externe à la place de la courante.
+# La sauvegarde actuelle n'est JAMAIS écrasée par un fichier invalide
+# (JSON illisible, structure inattendue ou version non supportée).
+# Retourne true si l'import a réussi — l'appelant recharge alors la scène.
+func import_from(src_path: String) -> bool:
+	var src := FileAccess.open(src_path, FileAccess.READ)
+	if src == null:
+		return false
+	var content := src.get_as_text()
+	src.close()
+
+	var json := JSON.new()
+	if json.parse(content) != OK or not (json.get_data() is Dictionary):
+		push_warning("SaveManager: import refusé — fichier illisible ou mal formé")
+		return false
+	var data: Dictionary = json.get_data()
+	var ver := int(data.get("version", 0))
+	if not _is_version_supported(ver):
+		push_warning("SaveManager: import refusé — version %d non supportée (attendu 11–%d)" \
+				% [ver, SAVE_VER])
+		return false
+
+	return _write_text_atomic(SAVE_PATH, content)

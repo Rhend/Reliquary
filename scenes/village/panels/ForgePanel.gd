@@ -13,12 +13,19 @@
 # ============================================================
 class_name ForgePanel
 
-# Mapping biome → équipement → label section (ordre d'affichage).
+# Mapping biome → équipement → icône de section (ordre d'affichage).
+# Le nom affiché de la section vient des données du biome (nom_affichage_fr).
 const BIOME_EQUIP: Array = [
-	["biome_montagne", "equipment_arme",   "⛰  MONTAGNE"],
-	["biome_foret",    "equipment_anneau", "🌿  FORÊT SOMBRE"],
-	["biome_marecage", "equipment_armure", "💧  MARÉCAGE PUTRIDE"],
+	["biome_montagne", "equipment_arme",   "⛰"],
+	["biome_foret",    "equipment_anneau", "🌿"],
+	["biome_marecage", "equipment_armure", "💧"],
 ]
+
+# Label de section d'un biome : "icône  NOM DU BIOME" depuis les données.
+static func _section_label(biome_id: String, icon: String) -> String:
+	var biome := GameData.get_entity(biome_id)
+	var nom   := biome.get("nom_affichage_fr", biome_id) as String
+	return "%s  %s" % [icon, nom.to_upper()]
 
 static func _slot_name(slot_idx: int) -> String:
 	const SLOT_KEYS := ["arme", "anneau", "armure", "ceinture", "bouclier", "talisman"]
@@ -35,13 +42,14 @@ static func build(host: Village) -> void:
 		_build_locked(host)
 		return
 
-	var hero_tier := int(host._active_creature().get("maitrise_actuelle", 0))
+	var hero_tier := int(GameData.get_entity("hero").get("maitrise_actuelle", 0))
 	var tcolor    := UIColors.tier_color(hero_tier)
 
 	_build_ingredients(host, tcolor)
 
 	for entry in BIOME_EQUIP:
-		_build_biome_section(host, entry[0] as String, entry[1] as String, entry[2] as String)
+		_build_biome_section(host, entry[0] as String, entry[1] as String,
+				_section_label(entry[0] as String, entry[2] as String))
 
 # ═══════════════════════════════════════════════════════════
 #  État verrouillé
@@ -90,15 +98,15 @@ static func _build_locked(host: Village) -> void:
 	hint.autowrap_mode       = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(hint)
 
-	host._rp_content.add_child(card)
+	host.rp_content.add_child(card)
 
 # ═══════════════════════════════════════════════════════════
 #  Section ingrédients
 # ═══════════════════════════════════════════════════════════
 
 static func _build_ingredients(host: Village, tcolor: Color) -> void:
-	var sec  := UIHelpers.collapsible_section(Translations.T("forge.section.ingr"), tcolor)
-	host._rp_content.add_child(sec["wrapper"])
+	var sec  := UIHelpers.collapsible_section(Translations.T("forge.section.ingr"), tcolor, true, host.panel_ui_state())
+	host.rp_content.add_child(sec["wrapper"])
 	var body := sec["body"] as VBoxContainer
 	body.add_theme_constant_override("separation", 2)
 
@@ -111,7 +119,7 @@ static func _build_ingredients(host: Village, tcolor: Color) -> void:
 	var ingr_list: Array = []
 	for eid in GameData.entities:
 		var e: Dictionary = GameData.entities[eid]
-		if e.get("entity_type", "") == "ingredient":
+		if e.get("entity_type", "") == Enums.EntityType.INGREDIENT:
 			ingr_list.append({"id": eid, "e": e})
 
 	ingr_list.sort_custom(func(a, b):
@@ -260,13 +268,13 @@ static func _build_biome_section(host: Village, biome_id: String,
 	# Badge "DISPONIBLE" dans le titre si forge possible
 	var can_f    := GameData.can_forge(equip_id)
 	var xp_full  := GameData.equipment_xp_full(equip_id)
-	var at_max   := int(equip.get("maitrise_actuelle", 0)) >= GameData.get_max_tier_for_type("equipment")
+	var at_max   := int(equip.get("maitrise_actuelle", 0)) >= GameData.get_max_tier_for_type(Enums.EntityType.EQUIPMENT)
 	var title    := section_label
 	if can_f:
 		title += "   ⚡"
 
-	var sec  := UIHelpers.collapsible_section(title, biome_color, true)
-	host._rp_content.add_child(sec["wrapper"])
+	var sec  := UIHelpers.collapsible_section(title, biome_color, true, host.panel_ui_state(), section_label)
+	host.rp_content.add_child(sec["wrapper"])
 	var body := sec["body"] as VBoxContainer
 	body.add_theme_constant_override("separation", 6)
 
@@ -287,7 +295,7 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 	var next_tier   := equip_tier + 1
 	var recipe      := GameData.get_forge_recipe(equip_id, next_tier)
 	var xp_cur      := float(equip.get("xp_maitrise_actuelle", 0.0))
-	var xp_nxt      := GameData.palier_suivant_cost("equipment", equip_tier)
+	var xp_nxt      := GameData.palier_suivant_cost(Enums.EntityType.EQUIPMENT, equip_tier)
 
 	var outer := VBoxContainer.new()
 	outer.add_theme_constant_override("separation", 4)
@@ -500,7 +508,7 @@ static func _forge_btn(host: Village, equip_id: String, next_tier: int,
 				var e   := GameData.get_entity(equip_id)
 				var nom := e.get("nom_affichage_fr", equip_id) as String
 				var nt  := int(e.get("maitrise_actuelle", 0))
-				host._show_banner(
+				host.show_banner(
 						"🔨  %s → %s" % [nom, GameData.get_tier_name(nt)],
 						UIColors.LOG_VICTORY, Color(0.02, 0.12, 0.05, 0.92), 2.0, 0.4)
 		)

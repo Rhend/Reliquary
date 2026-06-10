@@ -54,12 +54,16 @@ static func card_style(color: Color, bg_alpha: float = 0.07,
 #  Composants
 # ═══════════════════════════════════════════════════════════
 
-# Retourne un VBoxContainer contenant un Label titre coloré + un ColorRect séparateur.
-# Utilisé comme en-tête de sous-section dans Village.gd, CombatScene.gd, etc.
 # Section repliable : retourne {wrapper, body}.
 # Ajouter wrapper au parent, peupler body avec le contenu.
 # Cliquer sur l'en-tête bascule la visibilité du body.
-static func collapsible_section(title: String, color: Color, start_open: bool = true) -> Dictionary:
+#
+# `state` (optionnel) : dictionnaire partagé où l'état ouvert/fermé est
+# mémorisé sous la clé `state_key` (par défaut : le titre). Permet de
+# conserver les sections ouvertes quand le panneau est reconstruit
+# (cf. Village.panel_ui_state()).
+static func collapsible_section(title: String, color: Color, start_open: bool = true,
+		state: Dictionary = {}, state_key: String = "") -> Dictionary:
 	var wrapper := VBoxContainer.new()
 	wrapper.add_theme_constant_override("separation", 0)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -89,16 +93,20 @@ static func collapsible_section(title: String, color: Color, start_open: bool = 
 	hdr_vb.add_child(line)
 	wrapper.add_child(hdr_vb)
 
+	var key: String = state_key if state_key != "" else title
+	var open: bool  = state.get(key, start_open)
+
 	var body := VBoxContainer.new()
 	body.add_theme_constant_override("separation", 4)
-	body.visible = start_open
+	body.visible = open
 	wrapper.add_child(body)
 
-	btn.text = title + ("  ▼  " if start_open else "  ▶  ")
+	btn.text = title + ("  ▼  " if open else "  ▶  ")
 
 	btn.pressed.connect(func() -> void:
 		body.visible = not body.visible
-		btn.text = title + ("  ▼  " if body.visible else "  ▶  ")
+		btn.text   = title + ("  ▼  " if body.visible else "  ▶  ")
+		state[key] = body.visible
 	)
 	return {"wrapper": wrapper, "body": body}
 
@@ -181,7 +189,7 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 
 	var xp_lbl := Label.new()
 	if at_max:
-		xp_lbl.text = "RANG MAX"
+		xp_lbl.text = Translations.T("tier.max_rank")
 		xp_lbl.add_theme_color_override("font_color", color)
 	else:
 		xp_lbl.text = "XP  %s / %s" % [xp_fmt(int(xp)), xp_fmt(int(xp_max))]
@@ -202,7 +210,7 @@ static func xp_fmt(xp: int) -> String:
 # Retourne un Label "Aucun" en TEXT_MUTED — état vide pour les listes.
 static func none_label(font_size: int = 13) -> Label:
 	var lbl := Label.new()
-	lbl.text = "Aucun"
+	lbl.text = Translations.T("ui.none")
 	lbl.add_theme_font_size_override("font_size", font_size)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	return lbl

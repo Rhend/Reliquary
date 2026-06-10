@@ -89,18 +89,18 @@ func _on_xp_gained_tracking(entity_id: String, amount: float) -> void:
 		return
 	var entity := GameData.get_entity(entity_id)
 	match entity.get("entity_type", ""):
-		"hero":
+		Enums.EntityType.HERO:
 			_stats.xp_hero += amount
-		"biome":
+		Enums.EntityType.BIOME:
 			_stats.xp_biome += amount
-		"passive":
+		Enums.EntityType.PASSIVE:
 			_stats.xp_passives_total            += amount
 			_stats.xp_passives_detail[entity_id] = \
 				_stats.xp_passives_detail.get(entity_id, 0.0) + amount
-		"equipment":
+		Enums.EntityType.EQUIPMENT:
 			_stats.xp_equip_detail[entity_id] = \
 				_stats.xp_equip_detail.get(entity_id, 0.0) + amount
-		"creature", "trap", "benediction":
+		Enums.EntityType.CREATURE, Enums.EntityType.TRAP, Enums.EntityType.BENEDICTION:
 			_stats.xp_entities_detail[entity_id] = \
 				_stats.xp_entities_detail.get(entity_id, 0.0) + amount
 
@@ -242,13 +242,13 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 	var effect_type := bene.get("effet", "") as String
 
 	match effect_type:
-		"heal":
+		Enums.BlessEffect.HEAL:
 			var max_hp := get_max_hp()
 			var healed := maxf(0.0, max_hp * Balance.BLESS_HEAL_PCT)
 			current_hp  = minf(current_hp + healed, max_hp)
 			EventBus.heal_applied.emit(healed, current_hp)
 
-		"xp_bonus":
+		Enums.BlessEffect.XP_BONUS:
 			_bless_xp_mult = 1.0 + Balance.BLESS_XP_BONUS_PCT
 
 # Distribue l'XP de Maîtrise d'un événement résolu à TOUTES les entités actives :
@@ -331,7 +331,7 @@ func _on_combat_ended(result: Dictionary) -> void:
 	if not is_running:
 		return
 
-	current_hp = result.get("remaining_creature_hp", 0.0)
+	current_hp = result.get("remaining_hero_hp", 0.0)
 
 	if combat_unique_en_cours:
 		combat_unique_en_cours = false
@@ -469,7 +469,7 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 		var item_id: String = entry.get("item_id", "")
 		if item_id == "":
 			continue
-		if not has_forge and GameData.get_entity(item_id).get("entity_type", "") == "ingredient":
+		if not has_forge and GameData.get_entity(item_id).get("entity_type", "") == Enums.EntityType.INGREDIENT:
 			continue
 		var qty_min: int = int(entry.get("qty_min", 1))
 		var qty_max: int = int(entry.get("qty_max", qty_min))
@@ -623,7 +623,7 @@ func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 		"victory":              victory,
 		"interrupted":          interrupted,
 		"biome_id":             current_biome_id,
-		"creature_id":          "hero",
+		"hero_id":              "hero",
 		"modifier":             current_modifier,
 		"xp_total":             _stats.xp_total,
 		"xp_hero":              _stats.xp_hero,

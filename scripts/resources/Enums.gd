@@ -1,5 +1,29 @@
 class_name Enums
 
+# ─── Types d'entités (champ entity_type dans GameData.entities) ──
+# Toujours utiliser ces constantes plutôt que des littéraux : une faute
+# de frappe dans un littéral est silencieuse (les .get(...) retournent
+# leur valeur par défaut au lieu de planter).
+class EntityType:
+	const HERO          := "hero"
+	const CREATURE      := "creature"
+	const BIOME         := "biome"
+	const PASSIVE       := "passive"
+	const PASSIF_UNIQUE := "passif_unique"
+	const EQUIPMENT     := "equipment"
+	const TRAP          := "trap"
+	const BENEDICTION   := "benediction"
+	const INGREDIENT    := "ingredient"
+	const FRAGMENT      := "fragment"
+	const RESOURCE      := "resource"
+	const RECIPE        := "recipe"
+
+# ─── Effets de bénédiction (champ effet des BenedictionData) ──
+# Seuls effets supportés par AdventureSystem._apply_benediction_effect.
+class BlessEffect:
+	const HEAL     := "heal"
+	const XP_BONUS := "xp_bonus"
+
 enum Maitrise {
 	COMMUN     = 0,
 	PEU_COMMUN = 1,

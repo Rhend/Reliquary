@@ -1,0 +1,41 @@
+# CI — lance les tests headless du projet à chaque push / pull request.
+#
+# Trois suites :
+#   • TestScriptsLoad     — smoke test : tous les scripts compilent avec les autoloads
+#   • TestCombatResolver  — unités : résolution de combat (crit, poison, bouclier…)
+#   • TestExpeditionFlow  — boucle d'expédition : stats de cycle + résumé
+# Chaque scène de test quitte avec un code ≠ 0 en cas d'échec.
+
+name: tests
+
+on: [push, pull_request]
+
+env:
+  GODOT_VERSION: 4.6.3
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Télécharger Godot ${{ env.GODOT_VERSION }}
+        run: |
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          chmod +x "Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          echo "GODOT=./Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+
+      # Premier lancement : import des ressources (.godot/) requis avant les tests.
+      - name: Importer les ressources
+        run: $GODOT --headless --path . --import || true
+
+      - name: TestScriptsLoad (compilation des scripts)
+        run: $GODOT --headless --path . res://tests/TestScriptsLoad.tscn
+
+      - name: TestCombatResolver (résolution de combat)
+        run: $GODOT --headless --path . res://tests/TestCombatResolver.tscn
+
+      - name: TestExpeditionFlow (boucle d'expédition)
+        run: $GODOT --headless --path . res://tests/TestExpeditionFlow.tscn

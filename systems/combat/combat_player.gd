@@ -152,9 +152,9 @@ func _on_timer() -> void:
 func _finish(winner: String) -> void:
 	combat_finished.emit(winner)
 	EventBus.combat_ended.emit({
-		"victory":               winner == "hero",
-		"remaining_creature_hp": _current_hero_hp,
-		"enemy":                 _enemy_dict
+		"victory":           winner == "hero",
+		"remaining_hero_hp": _current_hero_hp,
+		"enemy":             _enemy_dict
 	})
 
 func _determine_winner() -> String:

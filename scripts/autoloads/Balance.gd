@@ -128,7 +128,7 @@ const HALL_XP_EVENT: float = 5.0
 
 const DEFAULT_XP_COEF: float = 1.0
 const ENTITY_XP_COEF: Dictionary = {
-	"hero": 0.05,
+	Enums.EntityType.HERO: 0.05,
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -139,8 +139,8 @@ const ENTITY_XP_COEF: Dictionary = {
 
 const DEFAULT_MAX_TIER: int = 5
 const ENTITY_MAX_TIER: Dictionary = {
-	"creature":  4,
-	"equipment": 2,
+	Enums.EntityType.CREATURE:  4,
+	Enums.EntityType.EQUIPMENT: 2,
 }
 
 # ═══════════════════════════════════════════════════════════

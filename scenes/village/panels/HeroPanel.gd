@@ -1,10 +1,10 @@
 # ============================================================
 # HeroPanel — Contenu du panneau glissant « Héros » du Village.
 #
-# Construit dans host._rp_content : nom + palier, barre XP, statistiques
+# Construit dans host.rp_content : nom + palier, barre XP, statistiques
 # (base + bonus), bouton d'évolution, et cartes de passifs dépliables
 # (standard + uniques débloqués). Module sans état (fonctions statiques) ;
-# host = nœud Village (accès _rp_content, _make_evolve_btn).
+# host = nœud Village (accès rp_content, make_evolve_btn).
 # ============================================================
 class_name HeroPanel
 
@@ -14,7 +14,7 @@ const EQUIP_SLOTS: Array = [
 	["armure", "🛡",  "equipment_armure", "Armure"],
 ]
 
-# Point d'entrée : peuple host._rp_content avec la fiche du héros actif.
+# Point d'entrée : peuple host.rp_content avec la fiche du héros actif.
 static func build(host: Village) -> void:
 	var c      := GameData.get_entity("hero")
 	var tier   := c.get("maitrise_actuelle", 0) as int
@@ -32,11 +32,11 @@ static func build(host: Village) -> void:
 	var id_card := UIHelpers.entity_xp_card(
 			c.get("nom_affichage_fr", c.get("name", "Héros")) as String, tier, xp, hero_xp_max,
 			"", c.get("entity_type", "hero") as String)
-	host._rp_content.add_child(id_card["card"] as Control)
+	host.rp_content.add_child(id_card["card"] as Control)
 
 	# ── STATISTIQUES ──────────────────────────────────────────
-	var stats_sec := UIHelpers.collapsible_section(Translations.T("hero.section.stats"), tcolor)
-	host._rp_content.add_child(stats_sec["wrapper"])
+	var stats_sec := UIHelpers.collapsible_section(Translations.T("hero.section.stats"), tcolor, true, host.panel_ui_state())
+	host.rp_content.add_child(stats_sec["wrapper"])
 	var stats_body := stats_sec["body"] as VBoxContainer
 
 	var eq  := GameData.get_equipment_bonuses()
@@ -80,7 +80,7 @@ static func build(host: Village) -> void:
 
 	if tier < GameData.MAX_TIER:
 		if can_ev:
-			stats_body.add_child(host._make_evolve_btn(
+			stats_body.add_child(host.make_evolve_btn(
 				"hero", c.get("nom_affichage_fr", c.get("name", "hero")) as String,
 				c.get("entity_type", "creature") as String, tier))
 	else:
@@ -92,8 +92,8 @@ static func build(host: Village) -> void:
 		stats_body.add_child(ml)
 
 	# ── ÉQUIPEMENT ────────────────────────────────────────────
-	var equip_sec := UIHelpers.collapsible_section(Translations.T("hero.section.equip"), tcolor)
-	host._rp_content.add_child(equip_sec["wrapper"])
+	var equip_sec := UIHelpers.collapsible_section(Translations.T("hero.section.equip"), tcolor, true, host.panel_ui_state())
+	host.rp_content.add_child(equip_sec["wrapper"])
 	var equip_body := equip_sec["body"] as VBoxContainer
 	for entry in EQUIP_SLOTS:
 		var slot_key:  String = entry[0]
@@ -106,8 +106,8 @@ static func build(host: Village) -> void:
 		equip_body.add_child(_equip_slot_card(host, slot_key, slot_icon, slot_name, equip_id, equip, tcolor))
 
 	# ── PASSIFS ───────────────────────────────────────────────
-	var passif_sec := UIHelpers.collapsible_section(Translations.T("hero.section.passives"), tcolor)
-	host._rp_content.add_child(passif_sec["wrapper"])
+	var passif_sec := UIHelpers.collapsible_section(Translations.T("hero.section.passives"), tcolor, true, host.panel_ui_state())
+	host.rp_content.add_child(passif_sec["wrapper"])
 	var passif_body := passif_sec["body"] as VBoxContainer
 
 	var cards: Array[Control] = []
@@ -122,7 +122,7 @@ static func build(host: Village) -> void:
 
 	for eid in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
-		if e.get("entity_type", "") != "passif_unique":
+		if e.get("entity_type", "") != Enums.EntityType.PASSIF_UNIQUE:
 			continue
 		if not (e.get("est_debloque", false) as bool):
 			continue
@@ -141,9 +141,9 @@ static func build(host: Village) -> void:
 
 	# ── INGRÉDIENTS (masqué si Village < T1) ─────────────────
 	if (GameData.village.get("maitrise_actuelle", 0) as int) >= 1:
-		var ingr_sec := UIHelpers.collapsible_section(Translations.T("hero.section.ingredients"), tcolor)
+		var ingr_sec := UIHelpers.collapsible_section(Translations.T("hero.section.ingredients"), tcolor, true, host.panel_ui_state())
 		ingr_sec["wrapper"].name = "IngredientsSection"
-		host._rp_content.add_child(ingr_sec["wrapper"])
+		host.rp_content.add_child(ingr_sec["wrapper"])
 		var ingr_body := ingr_sec["body"] as VBoxContainer
 
 		# Trie les ingrédients par biome (ordre Montagne → Forêt → Marécage)
@@ -151,7 +151,7 @@ static func build(host: Village) -> void:
 		var ingr_list: Array = []
 		for eid in GameData.entities:
 			var e := GameData.entities[eid] as Dictionary
-			if e.get("entity_type", "") != "ingredient":
+			if e.get("entity_type", "") != Enums.EntityType.INGREDIENT:
 				continue
 			if int(GameData.player["resources"].get(eid, 0)) <= 0:
 				continue
@@ -249,7 +249,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 	# Bouton évoluer (action manuelle, si éligible)
 	var pid_ev := pdata.get("id", "") as String
 	if MasterySystem.can_evolve(pid_ev):
-		wrapper.add_child(host._make_evolve_btn(pid_ev,
+		wrapper.add_child(host.make_evolve_btn(pid_ev,
 				pdata.get("name", pid_ev) as String,
 				pdata.get("entity_type", "passive") as String, rarity))
 

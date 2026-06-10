@@ -73,6 +73,11 @@ const STRINGS: Dictionary = {
 		"village.evolve_btn":     "Faire évoluer le Village",
 		"village.tier_label":     "Village",
 		"village.soon":           "✦  %s  ✦\n\nBientôt disponible",
+		"village.fragment_freed": "🔮  Fragment libéré : %s",
+		"village.biome_revealed": "✦  Nouveau biome révélé : %s  ✦",
+
+		# ── Génériques UI ────────────────────────────────────
+		"ui.none": "Aucun",
 
 		# ── Bouton Évoluer ────────────────────────────────────
 		"btn.evolve":  "ÉVOLUER ▲",
@@ -181,6 +186,15 @@ const STRINGS: Dictionary = {
 		"combat.unique_slain":    "Créature Unique vaincue — %s, %s",
 		"combat.venom_pill":      "☠ Venin",
 		"combat.ready_evolve":    "⬆ %s prêt à évoluer",
+		"combat.appears":         "%s apparaît",
+		"combat.tt_stats":        "Rang : %s\nPV : %d  ·  ATK : %d  ·  DEF : %d",
+		"combat.trap_tt":         "Piège  ·  Dégâts : %d",
+		"combat.trap_ignored":    "\n(Ignoré — modificateur Fantôme)",
+		"combat.bless_tt":        "Bénédiction\n%s",
+		"combat.unique_beaten":   "✔  %s a déjà été vaincu",
+		"combat.unique_watches":  "☠  %s vous observe...",
+		"combat.unique_fight":    "⚔  Affronter %s",
+		"combat.unique_refight":  "⚔  Réaffronter %s",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "CYCLE TERMINÉ  —  %s",
@@ -284,6 +298,11 @@ const STRINGS: Dictionary = {
 		"village.evolve_btn":     "Evolve the Village",
 		"village.tier_label":     "Village",
 		"village.soon":           "✦  %s  ✦\n\nComing soon",
+		"village.fragment_freed": "🔮  Fragment freed: %s",
+		"village.biome_revealed": "✦  New biome revealed: %s  ✦",
+
+		# ── Generic UI ───────────────────────────────────────
+		"ui.none": "None",
 
 		# ── Bouton Évoluer ────────────────────────────────────
 		"btn.evolve":  "EVOLVE ▲",
@@ -392,6 +411,15 @@ const STRINGS: Dictionary = {
 		"combat.unique_slain":    "Unique Creature slain — %s, %s",
 		"combat.venom_pill":      "☠ Venom",
 		"combat.ready_evolve":    "⬆ %s ready to evolve",
+		"combat.appears":         "%s appears",
+		"combat.tt_stats":        "Rank: %s\nHP: %d  ·  ATK: %d  ·  DEF: %d",
+		"combat.trap_tt":         "Trap  ·  Damage: %d",
+		"combat.trap_ignored":    "\n(Ignored — Ghost modifier)",
+		"combat.bless_tt":        "Blessing\n%s",
+		"combat.unique_beaten":   "✔  %s has already been defeated",
+		"combat.unique_watches":  "☠  %s is watching you...",
+		"combat.unique_fight":    "⚔  Fight %s",
+		"combat.unique_refight":  "⚔  Fight %s again",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "CYCLE ENDED  —  %s",
