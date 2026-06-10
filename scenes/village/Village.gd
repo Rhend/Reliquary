@@ -193,6 +193,10 @@ func _build_hub() -> void:
 
 	_hub_root = Control.new()
 	_hub_root.size = vp
+	# Conteneur purement visuel : il NE doit PAS capter la souris, sinon il
+	# masque les boutons ⚙ / debug créés avant lui à chaque _rebuild_hub()
+	# (le nouveau hub est ajouté au-dessus). Ses enfants restent cliquables.
+	_hub_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_hub_root)
 
 	_ring = CircleRing.new()
@@ -633,8 +637,8 @@ func _build_debug_tier_buttons() -> void:
 	row.add_theme_constant_override("separation", 6)
 	row.anchor_left = 0.0; row.anchor_right  = 0.0
 	row.anchor_top  = 1.0; row.anchor_bottom = 1.0
-	row.offset_left = 8;   row.offset_top    = -34
-	row.offset_bottom = -8
+	row.offset_left = 8;   row.offset_right  = 160
+	row.offset_top  = -34; row.offset_bottom = -8
 	add_child(row)
 
 	row.add_child(_debug_tier_btn("−", -1))

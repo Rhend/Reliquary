@@ -37,22 +37,26 @@ func _hash(n: float) -> float:
 func _draw() -> void:
 	var c := size * 0.5
 
-	# ── 1. Halo radial : disques concentriques très transparents ──
-	# L'alpha croît doucement avec le palier → le centre « s'éveille ».
+	# ── 1. Halo radial : disques concentriques (le centre « s'éveille ») ──
+	# Dessinés du plus grand au plus petit : les alphas s'additionnent vers
+	# le centre. L'intensité croît nettement avec le palier.
 	var base_r := minf(size.x, size.y) * 0.58
 	for i in 4:
 		var f := 1.0 - float(i) / 4.0
-		var a := (0.016 + 0.010 * float(_tier)) * f * (1.0 + 0.15 * sin(_t * 0.8))
+		var a := (0.045 + 0.022 * float(_tier)) * f * (1.0 + 0.18 * sin(_t * 0.8))
 		draw_circle(c, base_r * (0.45 + 0.55 * f), Color(_tint, a))
 
 	# ── 2. Poussières d'âme : montée lente + scintillement ──
-	var count := 16 + _tier * 8
+	# Chaque poussière = halo doux + cœur lumineux (bien visible sur fond sombre).
+	var count := 18 + _tier * 9
 	for i in count:
 		var fi    := float(i)
 		var speed := 8.0 + 18.0 * _hash(fi * 3.7)
 		var x     := _hash(fi * 1.3) * size.x + sin(_t * 0.5 + fi) * 6.0
 		var y     := fposmod(_hash(fi * 2.1) * size.y - _t * speed, size.y)
 		var tw    := 0.5 + 0.5 * sin(_t * (1.0 + _hash(fi)) + fi * 2.0)
-		var a     := (0.08 + 0.05 * float(_tier)) * tw
-		var rad   := 1.0 + 1.6 * _hash(fi * 5.3)
-		draw_circle(Vector2(x, y), rad, Color(_tint.lightened(0.4), a))
+		var a     := (0.22 + 0.09 * float(_tier)) * tw
+		var rad   := 1.2 + 1.8 * _hash(fi * 5.3)
+		var pos   := Vector2(x, y)
+		draw_circle(pos, rad * 2.6, Color(_tint, a * 0.30))
+		draw_circle(pos, rad, Color(_tint.lightened(0.5), a))
