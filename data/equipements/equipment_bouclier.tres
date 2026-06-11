@@ -5,12 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "equipment_bouclier"
-nom_affichage_fr = "Bouclier de Bois"
-lore_fr = "Grossierement taille mais solide comme la foi. Il a sauve plus de vies que d'elegantes armures de plates."
-nom_affichage_en = "Wooden Shield"
+nom_affichage_fr = ""
+lore_fr = ""
+nom_affichage_en = ""
 slot = 4
 biome_source_id = ""
 maitrise_actuelle = 0
-est_debloque = true
-stats_par_palier = {0: {"hp": 10}}
+est_debloque = false
+stats_par_palier = {}
 recettes_evolution = {}

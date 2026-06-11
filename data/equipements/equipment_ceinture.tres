@@ -6,7 +6,7 @@
 script = ExtResource("1")
 id = "equipment_ceinture"
 nom_affichage_fr = ""
-lore_fr = "Tressee a partir de fibres resistantes recoltees dans les collines. Robuste et discrete, elle tient quand tout le reste lache."
+lore_fr = ""
 nom_affichage_en = ""
 slot = 3
 biome_source_id = ""

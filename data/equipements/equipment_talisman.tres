@@ -5,12 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "equipment_talisman"
-nom_affichage_fr = "Bottes Légères"
-lore_fr = "Cousues avec du cuir de creature, elles semblent toujours seches meme au coeur des marecages. Un cadeau de quelqu'un parti sans explication."
-nom_affichage_en = "Light Boots"
+nom_affichage_fr = ""
+lore_fr = ""
+nom_affichage_en = ""
 slot = 5
 biome_source_id = ""
 maitrise_actuelle = 0
-est_debloque = true
-stats_par_palier = {0: {"attack_speed_pct": 2}}
+est_debloque = false
+stats_par_palier = {}
 recettes_evolution = {}

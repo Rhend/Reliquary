@@ -199,6 +199,13 @@ func _apply_entity_save(e: Dictionary, saved: Dictionary) -> void:
 		e["xp_maitrise_palier_suivant"] = GameData.palier_suivant_cost(e.get("entity_type", ""), int(e["maitrise_actuelle"]))
 	for field: String in PERSISTED_FLAGS:
 		if e.has(field) and saved.has(field):
+			# Garde-fou placeholder : une vieille sauvegarde ne peut pas
+			# ré-activer une entité sans contenu (nom vide) — cas des
+			# équipements des biomes cachés redevenus placeholders.
+			if field == "est_debloque" and bool(saved[field]) \
+					and str(e.get("nom_affichage_fr", "")) == "" \
+					and str(e.get("name", "")) == "":
+				continue
 			e[field] = saved[field]
 
 # Charge le format v11 : entities est un dict plat { entity_id → entry }.
