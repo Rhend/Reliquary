@@ -18,9 +18,11 @@ extends Control
 # ─── Constantes ───────────────────────────────────────────────
 const RING_RADIUS  := 165.0
 const HEX_SIZE     := Vector2(152.0, 152.0)
-# Échelle du hub quand un panneau droit (40 %) est ouvert : le village
-# entier doit tenir, centré, dans les 60 % de gauche.
-const HUB_PANEL_SCALE := 0.8
+# Panneau droit : fraction de l'écran qu'il occupe quand il est ouvert.
+# Le hub est réduit (HUB_PANEL_SCALE) et recentré au milieu de l'espace
+# restant — le village entier doit y tenir (contenu utile ≈ 860 px).
+const PANEL_FRACTION   := 0.5
+const HUB_PANEL_SCALE  := 0.72
 const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
 
 # ─── Éveil (phase d'éclosion) ─────────────────────────────────
@@ -389,20 +391,19 @@ func _open_panel(panel_id: String) -> void:
 		return
 
 	# Réduire le hub : le village ENTIER reste visible, réduit
-	# homothétiquement et RECENTRÉ au milieu des 60 % de gauche.
-	# Le contenu utile (anneau + callouts ≈ 430 px de demi-largeur) tient
-	# à l'échelle 0.8 dans la zone (768 px) — sans vide excessif autour.
-	# Pivot au centre du canvas + décalage x : le centre du hub passe de
-	# 50 % à 30 % de l'écran.
+	# homothétiquement et RECENTRÉ au milieu de l'espace restant à gauche.
+	# Pivot au centre du canvas + décalage x : le centre du hub glisse de
+	# 50 % de l'écran au centre de la zone libre.
+	var hub_center := (1.0 - PANEL_FRACTION) * 0.5
 	_hub_root.pivot_offset = vp * 0.5
 	var ht := create_tween().set_parallel(true) \
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	ht.tween_property(_hub_root, "scale", Vector2.ONE * HUB_PANEL_SCALE, 0.35)
-	ht.tween_property(_hub_root, "position:x", -vp.x * 0.2, 0.35)
+	ht.tween_property(_hub_root, "position:x", vp.x * (hub_center - 0.5), 0.35)
 
-	# Créer le panneau hors écran à droite (40 % de l'écran)
+	# Créer le panneau hors écran à droite
 	_rp_root = Control.new()
-	_rp_root.size     = Vector2(vp.x * 0.4, vp.y)
+	_rp_root.size     = Vector2(vp.x * PANEL_FRACTION, vp.y)
 	_rp_root.position = Vector2(vp.x, 0.0)
 	add_child(_rp_root)
 	_build_panel_frame(panel_id)
@@ -410,7 +411,7 @@ func _open_panel(panel_id: String) -> void:
 
 	# Glissement vers la droite du hub
 	var pt := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	pt.tween_property(_rp_root, "position:x", vp.x * 0.6, 0.35)
+	pt.tween_property(_rp_root, "position:x", vp.x * (1.0 - PANEL_FRACTION), 0.35)
 
 # Ferme le panneau droit avec une animation de glissement vers la droite.
 func _close_panel() -> void:
