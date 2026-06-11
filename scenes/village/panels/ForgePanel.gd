@@ -175,9 +175,14 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 			tt_body += Translations.T("forge.equip.tt_next") % [GameData.get_tier_name(next_tier), _stats_line(stats_nxt_tt)]
 	UIHelpers.register_tooltip(xpcard, nom, tt_body, ec, equip.get("lore_fr", "") as String)
 
-	# ── Stats actuelles ────────────────────────────────────
-	if not stats_cur.is_empty():
-		outer.add_child(_stats_display(stats_cur, ec, false))
+	# ── [Palier actuel] stats ─◆─▶ [Palier suivant] stats ──
+	var next_color := UIColors.tier_color(next_tier)
+	var stats_nxt: Dictionary = {}
+	if not at_max:
+		stats_nxt = _stats_at(equip, next_tier)
+	outer.add_child(_small_spacer(2))
+	outer.add_child(_tier_compare_row(equip_tier, stats_cur,
+			next_tier, stats_nxt, not at_max))
 
 	# ── Rang max ───────────────────────────────────────────
 	if at_max:
@@ -202,29 +207,6 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 		nr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		outer.add_child(nr)
 		return outer
-
-	# ── Séparateur vers palier suivant ──────────────────────
-	outer.add_child(_small_spacer(2))
-	var next_color  := UIColors.tier_color(next_tier)
-	var next_header := HBoxContainer.new()
-	next_header.add_theme_constant_override("separation", 6)
-	var arrow_lbl   := Label.new()
-	arrow_lbl.text  = "→"
-	arrow_lbl.add_theme_font_size_override("font_size", 11)
-	arrow_lbl.add_theme_color_override("font_color", next_color)
-	next_header.add_child(arrow_lbl)
-	var target_lbl  := Label.new()
-	target_lbl.text = GameData.get_tier_name(next_tier)
-	target_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	target_lbl.add_theme_font_size_override("font_size", 11)
-	target_lbl.add_theme_color_override("font_color", next_color)
-	next_header.add_child(target_lbl)
-	outer.add_child(next_header)
-
-	# Aperçu stats palier suivant (delta)
-	var stats_nxt := _stats_at(equip, next_tier)
-	if not stats_nxt.is_empty():
-		outer.add_child(_stats_display(stats_nxt, next_color, true))
 
 	# ── Ingrédients requis ─────────────────────────────────
 	outer.add_child(_small_spacer(2))
@@ -399,51 +381,102 @@ static func _stats_at(equip: Dictionary, tier: int) -> Dictionary:
 	var spp := equip.get("stats_par_palier", {}) as Dictionary
 	return spp.get(tier, spp.get(0, {})) as Dictionary
 
-# Affiche une ligne de stats avec icônes et couleurs par stat
-static func _stats_display(stats: Dictionary, accent: Color, is_preview: bool) -> Control:
+# ── Ligne comparative de paliers ─────────────────────────────
+# « [Palier] ⚔+12 ❤+30  ─◆─▶  [Palier+1] ⚔+18 ❤+45 » sur UNE ligne,
+# centrée. Sans palier suivant (rang max) : seule la moitié gauche.
+static func _tier_compare_row(cur_tier: int, stats_cur: Dictionary,
+		next_tier: int, stats_nxt: Dictionary, show_next: bool) -> Control:
 	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 12)
+	hb.add_theme_constant_override("separation", 8)
 
+	hb.add_child(_tier_badge(cur_tier))
+	var cur_grp := _stats_inline(stats_cur, true, Color.WHITE)
+	if cur_grp:
+		hb.add_child(cur_grp)
+
+	if show_next:
+		var nc := UIColors.tier_color(next_tier)
+		hb.add_child(_compare_sep(UIColors.tier_color(cur_tier), nc))
+		hb.add_child(_tier_badge(next_tier))
+		var nxt_grp := _stats_inline(stats_nxt, false, nc)
+		if nxt_grp:
+			hb.add_child(nxt_grp)
+
+	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.add_child(hb)
+	return center
+
+# Pilule « nom du palier » aux couleurs du tier.
+static func _tier_badge(tier: int) -> Control:
+	var tc   := UIColors.tier_color(tier)
+	var pill := PanelContainer.new()
+	pill.add_theme_stylebox_override("panel", UIHelpers.card_style(tc, 0.12, 0.55, 1, 8))
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_left",   7)
+	m.add_theme_constant_override("margin_right",  7)
+	m.add_theme_constant_override("margin_top",    1)
+	m.add_theme_constant_override("margin_bottom", 1)
+	pill.add_child(m)
+	var lbl := Label.new()
+	lbl.text = GameData.get_tier_name(tier)
+	lbl.add_theme_font_size_override("font_size", 10)
+	lbl.add_theme_color_override("font_color", tc.lerp(Color.WHITE, 0.25))
+	m.add_child(lbl)
+	return pill
+
+# Stats compactes « ⚔+12 🛡+3 ❤+30 ⚡+10% » ; couleurs par stat pour le
+# palier actuel, couleur du tier cible pour l'aperçu. Null si aucune stat.
+static func _stats_inline(stats: Dictionary, use_stat_colors: bool,
+		accent: Color) -> Control:
 	var entries: Array = [
 		["atk",              "⚔", UIColors.STAT_ATK],
 		["def",              "🛡", UIColors.STAT_DEF],
 		["hp",               "❤", UIColors.STAT_HP],
 		["attack_speed_pct", "⚡", UIColors.FILTER_ON],
 	]
-
-	var has_stat := false
+	var grp := HBoxContainer.new()
+	grp.add_theme_constant_override("separation", 7)
 	for e in entries:
 		var val := int(stats.get(e[0], 0))
 		if val == 0:
 			continue
-		has_stat = true
-		var grp := HBoxContainer.new()
-		grp.add_theme_constant_override("separation", 2)
-		hb.add_child(grp)
+		var l := Label.new()
+		l.text = "%s+%d%s" % [e[1], val, "%" if e[0] == "attack_speed_pct" else ""]
+		l.add_theme_font_size_override("font_size", 11)
+		l.add_theme_color_override("font_color",
+				(e[2] as Color) if use_stat_colors else accent)
+		grp.add_child(l)
+	if grp.get_child_count() == 0:
+		grp.free()
+		return null
+	return grp
 
-		var icon_l := Label.new()
-		icon_l.text = e[1] as String
-		icon_l.add_theme_font_size_override("font_size", 11)
-		grp.add_child(icon_l)
-
-		var val_l := Label.new()
-		if e[0] == "attack_speed_pct":
-			val_l.text = "+%d%% VIT" % val
-		else:
-			val_l.text = "+%d " % val + Translations.T("hero.stat." + (e[0] as String))
-		val_l.add_theme_font_size_override("font_size", 11)
-		val_l.add_theme_color_override("font_color",
-				accent if is_preview else (e[2] as Color))
-		grp.add_child(val_l)
-
-	if not has_stat:
-		return Control.new()
-
-	# Centrer la ligne dans un wrapper
-	var center := CenterContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.add_child(hb)
-	return center
+# Séparateur stylé « ──◆──▶ » : dégradé du tier actuel vers le suivant.
+static func _compare_sep(from_c: Color, to_c: Color) -> Control:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 3)
+	var l1 := ColorRect.new()
+	l1.custom_minimum_size = Vector2(10, 1)
+	l1.color               = Color(from_c, 0.55)
+	l1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(l1)
+	var dia := Label.new()
+	dia.text = "◆"
+	dia.add_theme_font_size_override("font_size", 9)
+	dia.add_theme_color_override("font_color", to_c)
+	hb.add_child(dia)
+	var l2 := ColorRect.new()
+	l2.custom_minimum_size = Vector2(10, 1)
+	l2.color               = Color(to_c, 0.55)
+	l2.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(l2)
+	var arrow := Label.new()
+	arrow.text = "▶"
+	arrow.add_theme_font_size_override("font_size", 10)
+	arrow.add_theme_color_override("font_color", to_c)
+	hb.add_child(arrow)
+	return hb
 
 # Formate les stats en string pour les tooltips
 static func _stats_line(stats: Dictionary) -> String:
