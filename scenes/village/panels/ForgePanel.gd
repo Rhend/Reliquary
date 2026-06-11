@@ -175,14 +175,15 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 			tt_body += Translations.T("forge.equip.tt_next") % [GameData.get_tier_name(next_tier), _stats_line(stats_nxt_tt)]
 	UIHelpers.register_tooltip(xpcard, nom, tt_body, ec, equip.get("lore_fr", "") as String)
 
-	# ── [Palier actuel] stats ─◆─▶ [Palier suivant] stats ──
+	# Ligne comparative « [Palier] stats ─◆─▶ [Palier+1] stats », affichée
+	# en PIED de carte (sous la recette et le bouton Forger) dans toutes
+	# les sorties de la fonction.
 	var next_color := UIColors.tier_color(next_tier)
 	var stats_nxt: Dictionary = {}
 	if not at_max:
 		stats_nxt = _stats_at(equip, next_tier)
-	outer.add_child(_small_spacer(2))
-	outer.add_child(_tier_compare_row(equip_tier, stats_cur,
-			next_tier, stats_nxt, not at_max))
+	var compare_row := _tier_compare_row(equip_tier, stats_cur,
+			next_tier, stats_nxt, not at_max)
 
 	# ── Rang max ───────────────────────────────────────────
 	if at_max:
@@ -196,6 +197,7 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 		max_lbl.add_theme_color_override("font_color", UIColors.TIER_LEGENDAIRE)
 		max_row.add_child(max_lbl)
 		outer.add_child(max_row)
+		outer.add_child(compare_row)
 		return outer
 
 	# ── Recette manquante ──────────────────────────────────
@@ -206,6 +208,7 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 		nr.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		nr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		outer.add_child(nr)
+		outer.add_child(compare_row)
 		return outer
 
 	# ── Ingrédients requis ─────────────────────────────────
@@ -225,6 +228,10 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 	# ── Bouton Forger ──────────────────────────────────────
 	outer.add_child(_small_spacer(2))
 	outer.add_child(_forge_btn(host, equip_id, next_tier, next_color, can_forge_it))
+
+	# ── [Palier actuel] ─◆─▶ [Palier suivant] sous le bouton ──
+	outer.add_child(_small_spacer(2))
+	outer.add_child(compare_row)
 
 	return outer
 
