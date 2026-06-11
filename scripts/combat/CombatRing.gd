@@ -41,10 +41,14 @@ var _flash_alpha: float = 0.0
 var _disp_hp:    float = 100.0
 var _ghost_hp:   float = 100.0
 var _ghost_hold: float = 0.0
+# Symétrique pour les soins : _heal_hp reste au niveau d'avant le gain,
+# le segment [_heal_hp → _disp_hp] s'affiche en vert puis se résorbe.
+var _heal_hp:    float = 100.0
+var _heal_hold:  float = 0.0
 var _spin_t:     float = 99.0  # éclair de contour à l'entrée (99 = inactif)
 const SPIN_DUR   := 0.5
-const GHOST_HOLD := 0.45       # s de maintien de la traînée après une blessure
-const GHOST_DRAIN := 0.32      # vitesse de drain (fraction de max_hp par s)
+const GHOST_HOLD := 0.45       # s de maintien de la traînée après une blessure/soin
+const GHOST_DRAIN := 0.32      # vitesse de résorption (fraction de max_hp par s)
 
 var _hp_label: Label
 var _fx_layer: Control
@@ -113,15 +117,18 @@ func set_hp(p_cur: float, p_max: float) -> void:
 	cur_hp    = clampf(p_cur, 0.0, max_hp)
 	_disp_hp  = cur_hp
 	_ghost_hp = cur_hp
+	_heal_hp  = cur_hp
 	_refresh_label()
 	queue_redraw()
 
 # Cible : _disp_hp glisse vers cur_hp dans _process (jamais de saut sec).
-# Une blessure (re)arme le maintien de la traînée fantôme.
+# Une blessure (re)arme la traînée rouge ; un soin, la traînée verte.
 func update_hp(p_cur: float) -> void:
 	var nv := clampf(p_cur, 0.0, max_hp)
 	if nv < cur_hp:
 		_ghost_hold = GHOST_HOLD
+	elif nv > cur_hp:
+		_heal_hold = GHOST_HOLD
 	cur_hp = nv
 
 # Entrée en scène d'un combattant : pop élastique + fondu + éclair
@@ -214,6 +221,14 @@ func _process(delta: float) -> void:
 			_ghost_hp = maxf(_ghost_hp - max_hp * delta * GHOST_DRAIN, _disp_hp)
 	else:
 		_ghost_hp = _disp_hp
+	# Traînée de soin : reste au niveau d'avant le gain, puis remonte.
+	if _heal_hp < _disp_hp:
+		if _heal_hold > 0.0:
+			_heal_hold -= delta
+		else:
+			_heal_hp = minf(_heal_hp + max_hp * delta * GHOST_DRAIN, _disp_hp)
+	else:
+		_heal_hp = _disp_hp
 
 	_refresh_label()
 	queue_redraw()
@@ -252,6 +267,12 @@ func _draw() -> void:
 		var danger := clampf((hp_pct - LOW_HP_PCT) / 0.12, 0.0, 1.0)
 		var hp_col := UIColors.LOG_DEFEAT.lerp(camp_color, danger)
 		draw_arc(_center, r_hp, top + TAU * (1.0 - hp_pct), top + TAU, 96, hp_col, HP_WIDTH, true)
+
+	# Traînée de soin : le segment fraîchement gagné brille en vert.
+	var heal_pct := _heal_hp / max_hp if max_hp > 0.0 else 0.0
+	if hp_pct > heal_pct + 0.002:
+		draw_arc(_center, r_hp, top + TAU * (1.0 - hp_pct), top + TAU * (1.0 - heal_pct),
+				96, Color(0.35, 1.0, 0.55, 0.60), HP_WIDTH, true)
 
 	# ── Flash (crit doré / soin vert) ────────────────────────
 	if _flash_alpha > 0.001:
