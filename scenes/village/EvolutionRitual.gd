@@ -564,6 +564,13 @@ func _get_evolution_text() -> String:
 
 	var lines: Array[String] = []
 
+	# Équipement forgé — afficher les stats du nouveau palier.
+	if entity_type == "equipment":
+		var spp        := entity.get("stats_par_palier", {}) as Dictionary
+		var stats_line := ForgePanel._stats_line(spp.get(to_tier, {}) as Dictionary)
+		if not stats_line.is_empty():
+			lines.append("✦ " + stats_line)
+
 	var te_list: Array = entity.get("tier_effects", [])
 	if to_tier < te_list.size():
 		for eff: Dictionary in te_list[to_tier].get("effects", []):

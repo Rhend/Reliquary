@@ -42,7 +42,7 @@ PassiveSystem, MasteryRegistry, BiomeMechanics, TooltipOverlay.
 - **Panels ↔ Village** : HeroPanel/AdventurePanel/ForgePanel reçoivent le nœud Village
   (`host`) et n'utilisent QUE son API publique : `rp_content`, `make_evolve_btn()`,
   `show_banner()`, `village_tier()`, `adv_selected_biome_id`,
-  `start_selected_expedition()`, `panel_ui_state()`.
+  `start_selected_expedition()`, `panel_ui_state()`, `launch_evolution_ritual()`.
 - **Rafraîchir un panneau ouvert** = `_refresh_active_panel()` — JAMAIS `_open_panel()`
   (comportement toggle : il le fermerait).
 - **Sections repliables** : `UIHelpers.collapsible_section(titre, couleur, ouvert,

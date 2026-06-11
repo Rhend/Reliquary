@@ -815,7 +815,7 @@ func _birth_awaken_flash() -> void:
 func _hatch_village() -> void:
 	GameData.village["eclos"] = true
 	SaveManager.save()
-	_launch_evolution_ritual("village", "hero", "Village", 0, 0, {"eclosion": true})
+	launch_evolution_ritual("village", "hero", "Village", 0, 0, {"eclosion": true})
 
 # ─── Bouton ÉVOLUER pulsant ──────────────────────────────────
 # Fabrique un bouton ÉVOLUER avec pulsation scale 1.0→1.05→1.0 en boucle.
@@ -841,14 +841,15 @@ func make_evolve_btn(entity_id: String, entity_name: String,
 	btn.pressed.connect(func() -> void:
 		if MasterySystem.evolve_entity(entity_id):
 			SaveManager.save()
-			_launch_evolution_ritual(entity_type, entity_id, entity_name,
+			launch_evolution_ritual(entity_type, entity_id, entity_name,
 					from_tier, from_tier + 1)
 	)
 	return btn
 
 # ─── Rituel d'ascension ──────────────────────────────────────
 # Stocke les paramètres dans GameData puis fond vers noir avant de changer de scène.
-func _launch_evolution_ritual(entity_type: String, entity_id: String,
+# API publique : aussi utilisée par ForgePanel après une forge réussie.
+func launch_evolution_ritual(entity_type: String, entity_id: String,
 		entity_name: String, from_tier: int, to_tier: int, extra: Dictionary = {}) -> void:
 	GameData.pending_evolution = {
 		"entity_type": entity_type,

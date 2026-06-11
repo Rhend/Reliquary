@@ -79,6 +79,15 @@ func _shoot_evolution() -> void:
 		"from_tier":   1,
 		"to_tier":     2,
 	}
+	# SHOT_ENTITY=equipment → variante équipement forgé (Anneau T0→T1).
+	if OS.get_environment("SHOT_ENTITY") == "equipment":
+		GameData.pending_evolution = {
+			"entity_type": "equipment",
+			"entity_id":   "equipment_anneau",
+			"entity_name": "Anneau de Forêt",
+			"from_tier":   0,
+			"to_tier":     1,
+		}
 	var ritual: Control = (load("res://scenes/village/EvolutionRitual.tscn") as PackedScene).instantiate()
 	add_child(ritual)
 	await get_tree().create_timer(1.6).timeout
