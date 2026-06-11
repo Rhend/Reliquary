@@ -85,7 +85,12 @@ godot --headless --path . --quit-after 30
 ## Sauvegarde
 
 - `user://IdleEvolutionSave.json` (`%APPDATA%/Godot/app_userdata/IdleEvolution/`),
-  `SAVE_VER = 13`, versions acceptées 11+.
+  `SAVE_VER = 13`, versions acceptées 11+. À chaque écriture l'ancienne sauvegarde
+  devient `.bak` (rechargé automatiquement si la principale est illisible) ; un
+  fichier illisible est copié en `.corrupt` au lieu d'être écrasé en silence.
+- `save()` REFUSE d'écrire si `load_save()` n'a jamais tourné alors qu'une
+  sauvegarde existe — un outil/test qui émet des signaux de progression sans
+  passer par le Village ne peut plus détruire la progression du joueur.
 - Étendre : nouvelle donnée joueur → `GameData.player` (auto) ; nouveau flag d'entité
   → `SaveManager.PERSISTED_FLAGS` ; nouvel état système → `_save_systems()/_load_systems()`.
 - Ne JAMAIS écrire la sauvegarde dans un test : déconnecter les listeners de

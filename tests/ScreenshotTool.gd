@@ -18,6 +18,7 @@ extends Node
 var _vp: SubViewport
 
 func _ready() -> void:
+	_disable_save_writes()
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	_vp = SubViewport.new()
 	_vp.size = Vector2i(1280, 720)
@@ -32,9 +33,20 @@ func _ready() -> void:
 		"hero":      await _shoot_hero_panel()
 		"combat":    await _shoot_combat()
 		_:           await _shoot_summary()
-	# Aucune écriture de sauvegarde au quit.
-	SaveManager._save_dirty = false
 	get_tree().quit(0)
+
+# Coupe TOUT déclencheur d'écriture de sauvegarde : l'outil simule des
+# expéditions (XP, loot) qui marqueraient le flag dirty et, après le
+# debounce, ÉCRASERAIENT la sauvegarde du joueur avec l'état simulé.
+func _disable_save_writes() -> void:
+	for sig: Signal in [EventBus.xp_gained, EventBus.bestiary_updated,
+			EventBus.resources_changed, EventBus.entity_evolved,
+			EventBus.passive_unlocked, EventBus.equipment_changed,
+			EventBus.equipement_evolue, EventBus.village_tier_change]:
+		if sig.is_connected(SaveManager._on_progress):
+			sig.disconnect(SaveManager._on_progress)
+	SaveManager._save_timer.stop()
+	SaveManager._save_dirty = false
 
 # ── Capture du récap de cycle ───────────────────────────────
 func _shoot_summary() -> void:

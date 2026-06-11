@@ -30,6 +30,8 @@
 extends Node
 
 const SAVE_PATH     := "user://IdleEvolutionSave.json"
+const BACKUP_PATH   := SAVE_PATH + ".bak"      # avant-dernière sauvegarde valide
+const CORRUPT_PATH  := SAVE_PATH + ".corrupt"  # copie d'un fichier illisible (preuve)
 const SAVE_VER      := 13
 const SAVE_DEBOUNCE := 2.0
 
@@ -42,6 +44,11 @@ const PERSISTED_FLAGS: Array[String] = [
 
 var _save_dirty:  bool  = false
 var _save_loaded: bool  = false
+# load_save() a tourné (même si aucun fichier n'existait). Tant que ce
+# n'est pas le cas, save() REFUSE d'écraser une sauvegarde existante :
+# un outil dev / test qui émet des signaux de progression sans passer
+# par le Village ne peut plus détruire la progression du joueur.
+var _load_attempted: bool = false
 var _save_timer:  Timer
 
 func _ready() -> void:
@@ -80,6 +87,10 @@ func _notification(what: int) -> void:
 # ═══════════════════════════════════════════════════════════
 
 func save() -> void:
+	# Garde-fou : ne JAMAIS écraser une sauvegarde qu'on n'a pas chargée.
+	if not _load_attempted and FileAccess.file_exists(SAVE_PATH):
+		push_warning("SaveManager: écriture refusée — sauvegarde existante jamais chargée (outil/test ?)")
+		return
 	var data := {
 		"version":  SAVE_VER,
 		"player":   _save_player(),
@@ -90,9 +101,9 @@ func save() -> void:
 	if _write_text_atomic(SAVE_PATH, JSON.stringify(data, "\t")):
 		EventBus.save_completed.emit()
 
-# Écrit `content` dans `path` de façon atomique : écriture dans un .tmp
-# puis renommage. Si le renommage direct échoue (cible existante sur
-# certaines plateformes), supprime la cible puis réessaie.
+# Écrit `content` dans `path` de façon atomique : écriture dans un .tmp,
+# rotation de l'ancienne sauvegarde vers .bak (filet de sécurité chargé
+# automatiquement si la principale devient illisible), puis renommage.
 func _write_text_atomic(path: String, content: String) -> bool:
 	var tmp_path := path + ".tmp"
 	var file := FileAccess.open(tmp_path, FileAccess.WRITE)
@@ -100,13 +111,17 @@ func _write_text_atomic(path: String, content: String) -> bool:
 		push_error("SaveManager: impossible d'ouvrir %s en écriture" % tmp_path)
 		return false
 	file.store_string(content)
+	file.flush()
 	file.close()
+	# Rotation : l'ancienne sauvegarde devient le backup.
+	if FileAccess.file_exists(path):
+		if FileAccess.file_exists(BACKUP_PATH):
+			DirAccess.remove_absolute(BACKUP_PATH)
+		DirAccess.rename_absolute(path, BACKUP_PATH)
 	if DirAccess.rename_absolute(tmp_path, path) == OK:
 		return true
-	DirAccess.remove_absolute(path)
-	if DirAccess.rename_absolute(tmp_path, path) == OK:
-		return true
-	push_error("SaveManager: impossible de remplacer %s" % path)
+	push_error("SaveManager: impossible de remplacer %s (l'ancienne version est dans %s)"
+			% [path, BACKUP_PATH])
 	return false
 
 func _save_player() -> Dictionary:
@@ -147,27 +162,26 @@ func _save_systems() -> Dictionary:
 func load_save() -> void:
 	if _save_loaded:
 		return
-	_save_loaded = true
+	_save_loaded    = true
+	_load_attempted = true
 
-	if not FileAccess.file_exists(SAVE_PATH):
+	# Sauvegarde principale, sinon repli sur le backup (.bak).
+	var data := _read_save_file(SAVE_PATH)
+	if data.is_empty() and FileAccess.file_exists(BACKUP_PATH):
+		data = _read_save_file(BACKUP_PATH)
+		if not data.is_empty():
+			push_warning("SaveManager: sauvegarde principale illisible — backup .bak restauré")
+	if data.is_empty():
+		# Fichier présent mais inutilisable : copie de quarantaine pour ne pas
+		# l'écraser silencieusement à la prochaine sauvegarde.
+		if FileAccess.file_exists(SAVE_PATH):
+			DirAccess.copy_absolute(
+					ProjectSettings.globalize_path(SAVE_PATH),
+					ProjectSettings.globalize_path(CORRUPT_PATH))
+			push_error("SaveManager: sauvegarde illisible — copie conservée dans %s" % CORRUPT_PATH)
 		return
 
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
-	if file == null:
-		return
-	var json := JSON.new()
-	var err  := json.parse(file.get_as_text())
-	file.close()
-	if err != OK:
-		push_error("SaveManager: fichier de sauvegarde corrompu — ignoré")
-		return
-
-	var data: Dictionary = json.get_data()
-	var saved_ver: int   = int(data.get("version", 0))
-	if not _is_version_supported(saved_ver):
-		push_warning("SaveManager: version %d non supportée (attendu 11–%d) — sauvegarde ignorée" \
-			% [saved_ver, SAVE_VER])
-		return
+	var saved_ver: int = int(data.get("version", 0))
 
 	# Migrations en chaîne (modifient data in-place)
 	if saved_ver < 13:
@@ -185,6 +199,31 @@ func load_save() -> void:
 	# sauvegardes antérieures à son introduction.
 	GameData.reconcile_equipment_unlocks()
 	EventBus.load_completed.emit()
+
+# Lit et valide un fichier de sauvegarde. Retourne {} si le fichier est
+# absent, illisible, mal formé ou de version non supportée.
+func _read_save_file(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {}
+	var json := JSON.new()
+	var err  := json.parse(file.get_as_text())
+	file.close()
+	if err != OK:
+		push_error("SaveManager: %s corrompu (JSON invalide)" % path)
+		return {}
+	if not (json.get_data() is Dictionary):
+		push_error("SaveManager: %s corrompu (racine non-dictionnaire)" % path)
+		return {}
+	var data: Dictionary = json.get_data()
+	var saved_ver: int   = int(data.get("version", 0))
+	if not _is_version_supported(saved_ver):
+		push_warning("SaveManager: %s en version %d non supportée (attendu 11–%d)" \
+				% [path, saved_ver, SAVE_VER])
+		return {}
+	return data
 
 func _load_player(data: Dictionary) -> void:
 	if not data.has("player"):
