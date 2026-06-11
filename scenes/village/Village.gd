@@ -385,13 +385,16 @@ func _open_panel(panel_id: String) -> void:
 		_swap_panel_content(panel_id)
 		return
 
-	# Réduire le hub à 40 %
+	# Réduire le hub : le village ENTIER reste visible, réduit
+	# homothétiquement dans les 60 % de gauche (pivot sur le bord gauche,
+	# centré verticalement) — aucun recadrage, aucun débordement.
+	_hub_root.pivot_offset = Vector2(0.0, vp.y * 0.5)
 	var ht := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	ht.tween_property(_hub_root, "size:x", vp.x * 0.4, 0.35)
+	ht.tween_property(_hub_root, "scale", Vector2(0.6, 0.6), 0.35)
 
-	# Créer le panneau hors écran à droite
+	# Créer le panneau hors écran à droite (40 % de l'écran)
 	_rp_root = Control.new()
-	_rp_root.size     = Vector2(vp.x * 0.6, vp.y)
+	_rp_root.size     = Vector2(vp.x * 0.4, vp.y)
 	_rp_root.position = Vector2(vp.x, 0.0)
 	add_child(_rp_root)
 	_build_panel_frame(panel_id)
@@ -399,7 +402,7 @@ func _open_panel(panel_id: String) -> void:
 
 	# Glissement vers la droite du hub
 	var pt := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	pt.tween_property(_rp_root, "position:x", vp.x * 0.4, 0.35)
+	pt.tween_property(_rp_root, "position:x", vp.x * 0.6, 0.35)
 
 # Ferme le panneau droit avec une animation de glissement vers la droite.
 func _close_panel() -> void:
@@ -421,7 +424,7 @@ func _close_panel() -> void:
 	)
 
 	var ht := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	ht.tween_property(_hub_root, "size:x", vp.x, 0.25)
+	ht.tween_property(_hub_root, "scale", Vector2.ONE, 0.25)
 
 # Met à jour l'état is_selected de tous les HexItems selon le panneau ouvert.
 func _update_hex_selection(active_id: String) -> void:

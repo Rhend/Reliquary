@@ -29,7 +29,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Effets de passifs (bonus plats + conditionnels) | `scripts/systems/PassiveSystem.gd` |
 | Résolution de combat instantanée VIT-based (statique, pure) | `systems/combat/combat_resolver.gd` |
 | Playback cosmétique des CombatStep | `systems/combat/combat_player.gd` |
-| Hub hexagonal + panneaux JRPG 40/60 | `scenes/village/Village.gd` |
+| Hub hexagonal + panneaux JRPG 60/40 (hub scalé ×0.6, panneau 40 %) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
 
