@@ -665,7 +665,10 @@ func _show_event_stinger(title: String, name_txt: String, detail: String,
 	tw.tween_property(holder, "modulate:a", 1.0, 0.12).set_ease(Tween.EASE_OUT)
 	tw.tween_property(panel, "scale", Vector2.ONE, 0.40) \
 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.chain().tween_interval(maxf(Balance.AFFICHAGE_EVENEMENT - 0.3, 0.6))
+	# set_parallel(false) : tout ce qui suit redevient séquentiel (chain()
+	# ne chaînerait que le tweener suivant, le fondu partirait trop tôt).
+	tw.set_parallel(false)
+	tw.tween_interval(maxf(Balance.AFFICHAGE_EVENEMENT - 0.3, 0.6))
 	tw.tween_property(holder, "modulate:a", 0.0, 0.30).set_ease(Tween.EASE_IN)
 	tw.tween_callback(holder.queue_free)
 

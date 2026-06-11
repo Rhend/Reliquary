@@ -73,9 +73,7 @@ func _shoot_combat() -> void:
 	EventBus.adventure_event_resolved.emit({
 		"type": "trap", "biome_id": "biome_foret", "hero_id": "hero", "trap": trap,
 	})
-	await get_tree().create_timer(0.25).timeout
-	_capture("res://tests/_shot_combat_trap_a.png")
-	await get_tree().create_timer(0.45).timeout
+	await get_tree().create_timer(0.7).timeout
 	_capture("res://tests/_shot_combat_trap.png")
 	await get_tree().create_timer(1.2).timeout
 

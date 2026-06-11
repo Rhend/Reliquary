@@ -591,8 +591,10 @@ func _animate_xp_card(xp: Dictionary, delay: float) -> void:
 	, 0.0, gained, 0.85).set_delay(delay).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 
 	# Fin du remplissage : gerbe d'étincelles + petit rebond de la carte,
-	# puis fondu or → couleur du tier.
-	tw.chain().tween_callback(func() -> void:
+	# puis fondu or → couleur du tier. set_parallel(false) : tout ce qui
+	# suit doit s'enchaîner (chain() ne chaînerait que le tweener suivant).
+	tw.set_parallel(false)
+	tw.tween_callback(func() -> void:
 		card.spawn_completion_sparks()
 		_pop(card, 1.015)
 	)
