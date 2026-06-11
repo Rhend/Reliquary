@@ -10,6 +10,13 @@ var _t            := 0.0
 
 const _SPARKS := [0.4, 1.2, 2.1, 2.9, 3.8, 4.6, 5.4]
 
+# Sprite radial doux partagé par tous les orbes/étincelles de l'anneau.
+var _glow_tex: GradientTexture2D
+
+func _ready() -> void:
+	_glow_tex = UIHelpers.radial_glow_tex(64,
+			[0.0, 0.20, 0.55, 1.0], [1.0, 0.80, 0.22, 0.0])
+
 func _process(dt: float) -> void:
 	_t += dt
 	pivot_offset = size * 0.5
@@ -100,9 +107,8 @@ func _epique(c: Vector2, r: float, w: float) -> void:
 	for i in 3:
 		var angle := _t * 0.80 + i * TAU / 3.0
 		var op := c + Vector2(cos(angle), sin(angle)) * (r + 34.0)
-		draw_circle(op, 9.0, Color(ring_color.r, ring_color.g, ring_color.b, 0.22))
 		var orb := ring_color; orb.a = 0.80 + 0.18 * sin(_t * 2.0 + i * 1.5)
-		draw_circle(op, 3.5 + 1.0 * sin(_t * 2.5 + i), orb)
+		_orb(op, 3.5 + 1.0 * sin(_t * 2.5 + i), 16.0, orb, 0.50)
 	_sparks(c, r, w, 7, 0.14, 2.5)
 
 func _legendaire(c: Vector2, r: float, w: float) -> void:
@@ -135,15 +141,13 @@ func _legendaire(c: Vector2, r: float, w: float) -> void:
 	for i in 3:
 		var angle := _t * 0.9 + i * TAU / 3.0
 		var op := c + Vector2(cos(angle), sin(angle)) * (r + 36.0)
-		draw_circle(op, 11.0, Color(ring_color.r, ring_color.g, ring_color.b, 0.25))
 		var orb := ring_color; orb.a = 0.88
-		draw_circle(op, 4.0 + 1.2 * sin(_t * 2.5 + i), orb)
+		_orb(op, 4.0 + 1.2 * sin(_t * 2.5 + i), 20.0, orb, 0.55)
 	for i in 2:
 		var angle := _t * 0.5 + i * PI + 0.4
 		var op := c + Vector2(cos(angle), sin(angle)) * (r + 50.0)
-		draw_circle(op, 7.0, Color(ring_color.r, ring_color.g, ring_color.b, 0.20))
 		var orb := ring_color.lightened(0.3); orb.a = 0.70
-		draw_circle(op, 3.0, orb)
+		_orb(op, 3.0, 13.0, orb, 0.42)
 	_sparks(c, r, w, 7, 0.17, 2.8)
 
 func _unique(c: Vector2, r: float) -> void:
@@ -175,21 +179,27 @@ func _unique(c: Vector2, r: float) -> void:
 	for i in 3:
 		var angle := _t * 1.1 + i * TAU / 3.0
 		var op   := c + Vector2(cos(angle), sin(angle)) * (r + 28.0)
-		draw_circle(op, 9.0 + beat * 3.0, Color(ring_color.r, ring_color.g, ring_color.b, 0.28))
 		var orb  := ring_color; orb.a = 0.90
-		draw_circle(op, 3.5 + 1.5 * beat, orb)
+		_orb(op, 3.5 + 1.5 * beat, 17.0 + beat * 5.0, orb, 0.60)
 	for i in 3:
 		var angle := _t * 0.7 + i * TAU / 3.0 + PI / 6.0
 		var op   := c + Vector2(cos(angle), sin(angle)) * (r + 46.0)
-		draw_circle(op, 6.0, Color(ring_color.r, ring_color.g, ring_color.b, 0.20))
 		var orb  := ring_color.lightened(0.2); orb.a = 0.75
-		draw_circle(op, 2.5, orb)
+		_orb(op, 2.5, 11.0, orb, 0.40)
 	var solo_a := _t * 1.6 + 0.3
 	var solo_p := c + Vector2(cos(solo_a), sin(solo_a)) * (r + 60.0)
-	draw_circle(solo_p, 5.0, Color(ring_color.r, ring_color.g, ring_color.b, 0.18))
 	var solo_c := ring_color.lightened(0.5); solo_c.a = 0.75 + 0.25 * beat
-	draw_circle(solo_p, 3.5, solo_c)
+	_orb(solo_p, 3.5, 10.0 + beat * 4.0, solo_c, 0.40)
 	_sparks(c, r, w, 7, 0.20, 3.0)
+
+# Orbe : jupe lumineuse douce (dégradé GPU, aucun bord visible) + cœur
+# net antialiasé. Remplace les anciens duos « disque plat + disque dur ».
+func _orb(pos: Vector2, core_r: float, glow_r: float,
+		core: Color, glow_a: float) -> void:
+	draw_texture_rect(_glow_tex,
+			Rect2(pos - Vector2.ONE * glow_r, Vector2.ONE * glow_r * 2.0),
+			false, Color(ring_color, glow_a))
+	draw_circle(pos, core_r, core, true, -1.0, true)
 
 func _borders(c: Vector2, r: float, w: float) -> void:
 	draw_arc(c, r + w * 0.5 + 0.5, 0.0, TAU, 64, Color(0, 0, 0, 0.55), 1.5, true)
@@ -200,6 +210,10 @@ func _sparks(c: Vector2, r: float, w: float, count: int, speed: float, max_r: fl
 		var a: float = _SPARKS[i % _SPARKS.size()] + _t * speed
 		var sp := c + Vector2(cos(a), sin(a)) * (r + w + 7.0)
 		var bl := 0.5 + 0.5 * sin(_t * 2.2 + i * 1.4)
-		if bl > 0.55:
-			var sc := ring_color; sc.a = (bl - 0.55) * 2.2
-			draw_circle(sp, 1.5 + bl * max_r, sc)
+		# Enveloppe douce : l'étincelle s'allume et s'éteint progressivement
+		# (l'ancien seuil sec `bl > 0.55` la faisait apparaître d'un coup).
+		var env := smoothstep(0.45, 0.95, bl)
+		if env <= 0.02:
+			continue
+		var sc := ring_color.lightened(0.3); sc.a = env * 0.9
+		_orb(sp, (0.8 + bl * max_r) * 0.55, (1.5 + bl * max_r) * 2.0, sc, env * 0.5)

@@ -50,6 +50,28 @@ static func card_style(color: Color, bg_alpha: float = 0.07,
 	s.set_corner_radius_all(corner_radius)
 	return s
 
+# Texture radiale blanche → transparente (dégradé interpolé par le GPU :
+# aucun banding, contrairement à des disques concentriques empilés).
+# `offsets`/`alphas` décrivent le falloff du centre (0.0) au bord (1.0).
+# À dessiner via draw_texture_rect(tex, rect, false, couleur) — la couleur
+# module la teinte ET l'alpha global. Construire UNE fois (dans _ready).
+static func radial_glow_tex(px: int, offsets: Array[float],
+		alphas: Array[float]) -> GradientTexture2D:
+	var g := Gradient.new()
+	var cols := PackedColorArray()
+	for a in alphas:
+		cols.append(Color(1, 1, 1, a))
+	g.offsets = PackedFloat32Array(offsets)
+	g.colors  = cols
+	var tex := GradientTexture2D.new()
+	tex.gradient  = g
+	tex.fill      = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to   = Vector2(1.0, 0.5)
+	tex.width     = px
+	tex.height    = px
+	return tex
+
 # ═══════════════════════════════════════════════════════════
 #  Composants
 # ═══════════════════════════════════════════════════════════
