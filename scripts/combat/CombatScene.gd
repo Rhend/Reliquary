@@ -35,6 +35,10 @@ var _hero_ring:   CombatRing
 var _enemy_ring:  CombatRing
 var _hero_name:   Label
 var _enemy_name:  Label
+var _hero_name_style:  StyleBoxFlat   # bordure de la plaque de nom (teintée)
+var _enemy_name_style: StyleBoxFlat
+var _hero_name_chip:   Control
+var _enemy_name_chip:  Control
 var _hero_action: Label
 var _enemy_action: Label
 var _hero_states: HBoxContainer
@@ -156,14 +160,33 @@ func _build_column(is_hero: bool) -> Control:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 8)
 
+	# Plaque de nom : capsule sombre bordée à la couleur du combattant —
+	# lisible quel que soit le fond animé derrière.
+	var name_center := CenterContainer.new()
+	col.add_child(name_center)
+	var name_chip := PanelContainer.new()
+	var chip_style := StyleBoxFlat.new()
+	chip_style.bg_color     = Color(0.04, 0.05, 0.09, 0.88)
+	chip_style.border_color = Color(1, 1, 1, 0.15)
+	chip_style.set_border_width_all(1)
+	chip_style.set_corner_radius_all(9)
+	name_chip.add_theme_stylebox_override("panel", chip_style)
+	name_center.add_child(name_chip)
+	var name_m := MarginContainer.new()
+	name_m.add_theme_constant_override("margin_left", 14)
+	name_m.add_theme_constant_override("margin_right", 14)
+	name_m.add_theme_constant_override("margin_top", 4)
+	name_m.add_theme_constant_override("margin_bottom", 5)
+	name_chip.add_child(name_m)
+
 	var name_lbl := Label.new()
 	name_lbl.text = "—"
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 17)
+	name_lbl.add_theme_font_size_override("font_size", 18)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	name_lbl.add_theme_constant_override("outline_size", 4)
-	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	col.add_child(name_lbl)
+	name_lbl.add_theme_constant_override("outline_size", 3)
+	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	name_m.add_child(name_lbl)
 
 	# L'anneau absorbe la hauteur disponible de la colonne : sans le journal,
 	# la zone de combat est plus haute et l'anneau s'agrandit (rayons adaptatifs).
@@ -193,9 +216,23 @@ func _build_column(is_hero: bool) -> Control:
 
 	if is_hero:
 		_hero_name = name_lbl; _hero_ring = ring; _hero_action = action; _hero_states = states
+		_hero_name_style = chip_style; _hero_name_chip = name_chip
 	else:
 		_enemy_name = name_lbl; _enemy_ring = ring; _enemy_action = action; _enemy_states = states
+		_enemy_name_style = chip_style; _enemy_name_chip = name_chip
 	return col
+
+# Teinte la bordure d'une plaque de nom à la couleur du combattant
+# et fait « pop » la plaque (nouvelle rencontre).
+func _present_name(chip: Control, style: StyleBoxFlat, color: Color) -> void:
+	style.border_color = Color(color.r, color.g, color.b, 0.75)
+	chip.pivot_offset = chip.size * 0.5
+	chip.scale = Vector2(0.7, 0.7)
+	chip.modulate.a = 0.0
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(chip, "modulate:a", 1.0, 0.15).set_ease(Tween.EASE_OUT)
+	tw.tween_property(chip, "scale", Vector2.ONE, 0.35) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 # ── Feed passifs ───────────────────────────────────────────
 func _build_feed() -> Control:
@@ -337,6 +374,8 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_hero_name.text = hname.to_upper()
 	_hero_ring.setup(UIColors.tier_color(htier))
 	_hero_ring.set_hp(AdventureSystem.current_hp, AdventureSystem.current_hp)
+	_hero_ring.enter_combat()
+	_present_name(_hero_name_chip, _hero_name_style, UIColors.tier_color(htier))
 	_hide_action(_hero_action)
 
 	# Tooltip JRPG sur le héros (stats effectives avec équipement)
@@ -386,6 +425,8 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_enemy_name.text = tname.to_upper()
 			_enemy_ring.setup(UIColors.TYPE_TRAP)
 			_enemy_ring.set_hp(1, 1)
+			_enemy_ring.enter_combat()
+			_present_name(_enemy_name_chip, _enemy_name_style, UIColors.TYPE_TRAP)
 			_hide_action(_enemy_action)
 			var tdmg := int(trap.get("damage", 0))
 			var trap_tt := Translations.T("combat.trap_tt") % tdmg
@@ -410,6 +451,8 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_enemy_name.text = bname.to_upper()
 			_enemy_ring.setup(UIColors.TYPE_BENEDICTION)
 			_enemy_ring.set_hp(1, 1)
+			_enemy_ring.enter_combat()
+			_present_name(_enemy_name_chip, _enemy_name_style, UIColors.TYPE_BENEDICTION)
 			_hide_action(_enemy_action)
 			var beff   := bene.get("effet", "") as String
 			var bval   := int(bene.get("valeur", 0))
@@ -436,6 +479,9 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 	_enemy_name.text = ename.to_upper()
 	_enemy_ring.setup(UIColors.tier_color(etier))
 	_enemy_ring.set_hp(enemy_hp, enemy_hp)
+	# Arrivée de la rencontre : pop élastique de l'anneau + de la plaque.
+	_enemy_ring.enter_combat()
+	_present_name(_enemy_name_chip, _enemy_name_style, UIColors.tier_color(etier))
 
 	# Tooltip JRPG sur le nom de l'ennemi : rang + stats
 	var ett := Translations.T("combat.tt_stats") % [
@@ -495,7 +541,7 @@ func _on_step_ended(step: CombatStep) -> void:
 		_enemy_ring.update_hp(float(step.target_hp_after))
 		_enemy_ring.damage(step.damage, step.is_crit)
 		if step.is_crit:
-			_screen_shake()
+			_screen_shake(1.7)
 		if step.is_killing_blow:
 			_kill_impact(_enemy_ring)
 		_log_attack(_hero_name.text, step.damage, step.is_crit, ["hero", "attack"])
@@ -512,7 +558,7 @@ func _on_step_ended(step: CombatStep) -> void:
 			_hero_ring.update_hp(float(step.target_hp_after))
 			_hero_ring.damage(step.damage, step.is_crit)
 			if step.is_crit:
-				_screen_shake()
+				_screen_shake(1.7)
 			if step.is_killing_blow:
 				_kill_impact(_hero_ring)
 			_check_danger_pulse()
@@ -540,12 +586,15 @@ func _on_combat_ended(result: Dictionary) -> void:
 	if result.get("victory", false):
 		_hero_ring.celebrate()
 		_enemy_ring.fade_defeated()
+		# La plaque du vaincu s'éteint avec lui (la prochaine rencontre la ravive).
+		create_tween().tween_property(_enemy_name_chip, "modulate:a", 0.35, 0.5)
 		_cycle_xp = AdventureSystem.get_cycle_xp()
 		_update_xp_label()
 		_add_log("[color=%s]%s[/color]" % [_hex(UIColors.LOG_VICTORY), Translations.T("combat.victory")], ["hero"])
 	else:
 		_enemy_ring.celebrate()
 		_hero_ring.fade_defeated()
+		create_tween().tween_property(_hero_name_chip, "modulate:a", 0.35, 0.5)
 		_add_log("[color=%s]%s[/color]" % [_hex(Color(1.0, 0.5, 0.2)), Translations.T("combat.defeat")], ["monster"])
 
 
@@ -672,13 +721,16 @@ func _show_event_stinger(title: String, name_txt: String, detail: String,
 	tw.tween_property(holder, "modulate:a", 0.0, 0.30).set_ease(Tween.EASE_IN)
 	tw.tween_callback(holder.queue_free)
 
-# Shake d'écran : translateX ±5px sur ~350ms puis retour.
-func _screen_shake() -> void:
+# Shake d'écran : translation X/Y amortie sur ~350ms puis retour.
+# strength : 1.0 = coup normal, ~1.7 = critique (plus ample + vertical).
+func _screen_shake(strength: float = 1.0) -> void:
 	var tw := create_tween()
 	var amps := [5.0, -5.0, 4.0, -3.0]
 	for a: float in amps:
-		tw.tween_property(_shaker, "position:x", a, 0.35 / float(amps.size())).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(_shaker, "position:x", 0.0, 0.05)
+		tw.tween_property(_shaker, "position",
+				Vector2(a * strength, -a * 0.45 * (strength - 0.6)),
+				0.35 / float(amps.size())).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(_shaker, "position", Vector2.ZERO, 0.05)
 
 # Ajoute un pill transitoire dans le feed (disparaît après ~2s).
 func _push_feed(text: String, color: Color) -> void:

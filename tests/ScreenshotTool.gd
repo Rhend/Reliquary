@@ -58,11 +58,16 @@ func _shoot_village() -> void:
 
 # ── Capture de l'écran de combat : combat, piège, bénédiction ──
 func _shoot_combat() -> void:
+	GameData.get_entity("hero")["crit_chance"] = 1.0   # crits garantis pour la capture
+	# 100 % créatures : le tirage naturel ne pollue pas les captures forcées.
+	GameData.get_entity("biome_foret")["event_table"] = \
+			{"creature": 1.0, "benediction": 0.0, "trap": 0.0}
 	AdventureSystem.start_adventure("biome_foret")
 	var combat: Control = (load("res://scenes/combat/CombatScene.tscn") as PackedScene).instantiate()
 	_vp.add_child(combat)
-	await get_tree().create_timer(3.0).timeout
+	await get_tree().create_timer(1.8).timeout
 	_capture("res://tests/_shot_combat_fight.png")
+	await get_tree().create_timer(1.2).timeout
 
 	# Fige la boucle idle pour des captures déterministes, puis force
 	# l'affichage d'un piège et d'une bénédiction (UI seulement).
