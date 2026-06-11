@@ -1,9 +1,9 @@
 # ============================================================
 # ForgePanel — Panneau Forge polish.
 #
-# Layout :
-#   ◆ INGRÉDIENTS   — inventaire groupé par biome, mini-cartes avec hover
-#   ◆ [BIOME]       — XPCard équipement + stats + recette + bouton forgé
+# Layout : une section par biome — XPCard équipement + stats + recette
+# + bouton forger. L'inventaire d'ingrédients vit dans le panneau HÉROS
+# (HeroPanel) ; ici on ne montre que les recettes et leur disponibilité.
 #
 # Conventions visuelles :
 #   • Couleur = biome tier (évolue au fil de la progression)
@@ -41,11 +41,6 @@ static func build(host: Village) -> void:
 	if GameData.village.get("maitrise_actuelle", 0) < 1:
 		_build_locked(host)
 		return
-
-	var hero_tier := int(GameData.get_entity("hero").get("maitrise_actuelle", 0))
-	var tcolor    := UIColors.tier_color(hero_tier)
-
-	_build_ingredients(host, tcolor)
 
 	for entry in BIOME_EQUIP:
 		_build_biome_section(host, entry[0] as String, entry[1] as String,
@@ -99,155 +94,6 @@ static func _build_locked(host: Village) -> void:
 	vb.add_child(hint)
 
 	host.rp_content.add_child(card)
-
-# ═══════════════════════════════════════════════════════════
-#  Section ingrédients
-# ═══════════════════════════════════════════════════════════
-
-static func _build_ingredients(host: Village, tcolor: Color) -> void:
-	var sec  := UIHelpers.collapsible_section(Translations.T("forge.section.ingr"), tcolor, true, host.panel_ui_state())
-	host.rp_content.add_child(sec["wrapper"])
-	var body := sec["body"] as VBoxContainer
-	body.add_theme_constant_override("separation", 2)
-
-	# Ordre d'affichage des biomes
-	var biome_order: Array = []
-	for entry in BIOME_EQUIP:
-		biome_order.append(entry[0] as String)
-
-	# Collecte + tri
-	var ingr_list: Array = []
-	for eid in GameData.entities:
-		var e: Dictionary = GameData.entities[eid]
-		if e.get("entity_type", "") == Enums.EntityType.INGREDIENT:
-			ingr_list.append({"id": eid, "e": e})
-
-	ingr_list.sort_custom(func(a, b):
-		var ia := biome_order.find(a["e"].get("biome_source_id", ""))
-		var ib := biome_order.find(b["e"].get("biome_source_id", ""))
-		if ia != ib: return ia < ib
-		return int(a["e"].get("est_unique", false)) < int(b["e"].get("est_unique", false))
-	)
-
-	var last_biome := ""
-	var any_ingr   := false
-
-	for item in ingr_list:
-		var eid  := item["id"] as String
-		var e    := item["e"] as Dictionary
-		var qty  := int(GameData.player["resources"].get(eid, 0))
-		var src  := e.get("biome_source_id", "") as String
-
-		# ── Séparateur de biome ────────────────────────────
-		if src != last_biome:
-			last_biome = src
-			if any_ingr:
-				body.add_child(_small_spacer(4))
-			body.add_child(_biome_header(src))
-
-		body.add_child(_ingredient_card(eid, e, qty))
-		any_ingr = true
-
-	if not any_ingr:
-		var none_lbl := UIHelpers.none_label(11)
-		none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		body.add_child(none_lbl)
-
-# En-tête de groupe biome : ligne colorée + nom
-static func _biome_header(biome_src: String) -> Control:
-	var biome  := GameData.get_entity(biome_src)
-	var bname  := biome.get("nom_affichage_fr", biome_src) as String if not biome.is_empty() else biome_src
-	var btier  := int(biome.get("maitrise_actuelle", 0)) if not biome.is_empty() else 0
-	var bc     := UIColors.tier_color(btier)
-
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 6)
-
-	var line1 := ColorRect.new()
-	line1.custom_minimum_size = Vector2(16, 1)
-	line1.color               = Color(bc.r, bc.g, bc.b, 0.55)
-	line1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hb.add_child(line1)
-
-	var lbl := Label.new()
-	lbl.text = bname.to_upper()
-	lbl.add_theme_font_size_override("font_size", 10)
-	lbl.add_theme_color_override("font_color", Color(bc.r, bc.g, bc.b, 0.85))
-	hb.add_child(lbl)
-
-	var line2 := ColorRect.new()
-	line2.custom_minimum_size   = Vector2(0, 1)
-	line2.color                 = Color(bc.r, bc.g, bc.b, 0.35)
-	line2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line2.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
-	hb.add_child(line2)
-
-	return hb
-
-# Mini-carte d'un ingrédient avec hover feedback + tooltip
-static func _ingredient_card(eid: String, e: Dictionary, qty: int) -> Control:
-	var is_unique := e.get("est_unique", false) as bool
-	var nom       := e.get("nom_affichage_fr", eid) as String
-	var biome_src := e.get("biome_source_id", "") as String
-	var biome_e   := GameData.get_entity(biome_src)
-	var btier     := int(biome_e.get("maitrise_actuelle", 0)) if not biome_e.is_empty() else 0
-	var bc        := UIColors.tier_color(btier)
-	var has_stock := qty > 0
-	var txt_color := UIColors.FILTER_ON if is_unique and has_stock \
-			else (UIColors.TEXT_HEADER if has_stock else UIColors.TEXT_MUTED)
-
-	var card := PanelContainer.new()
-	card.size_flags_horizontal       = Control.SIZE_EXPAND_FILL
-	card.mouse_default_cursor_shape  = Control.CURSOR_POINTING_HAND
-	card.add_theme_stylebox_override("panel",
-			UIHelpers.card_style(bc if has_stock else UIColors.TEXT_MUTED,
-					0.05 if has_stock else 0.03,
-					0.22 if has_stock else 0.12, 1, 4))
-
-	var m := UIHelpers.margin_of(6)
-	card.add_child(m)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	m.add_child(row)
-
-	# Icône unique
-	if is_unique:
-		var star := Label.new()
-		star.text = "✦"
-		star.add_theme_font_size_override("font_size", 11)
-		star.add_theme_color_override("font_color",
-				UIColors.TIER_LEGENDAIRE if has_stock else UIColors.TEXT_MUTED)
-		row.add_child(star)
-
-	var name_lbl := Label.new()
-	name_lbl.text                    = nom
-	name_lbl.size_flags_horizontal   = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 12)
-	name_lbl.add_theme_color_override("font_color", txt_color)
-	row.add_child(name_lbl)
-
-	# Badge quantité
-	var qty_lbl := Label.new()
-	qty_lbl.text = "×%d" % qty if has_stock else "×0"
-	qty_lbl.add_theme_font_size_override("font_size", 12)
-	qty_lbl.add_theme_color_override("font_color",
-			UIColors.FILTER_ON if has_stock else UIColors.TEXT_MUTED)
-	row.add_child(qty_lbl)
-
-	# Hover feedback
-	UIHelpers.add_hover_feedback(card)
-
-	# Tooltip
-	var biome_name := biome_e.get("nom_affichage_fr", biome_src) as String if not biome_e.is_empty() else biome_src
-	var tt_body    := Translations.T("forge.ingr.tt_stock") % [biome_name, qty]
-	if is_unique:
-		tt_body += "\n✦ " + Translations.T("forge.ingr.unique")
-	UIHelpers.register_tooltip(card, nom, tt_body,
-			bc if has_stock else UIColors.TEXT_MUTED,
-			e.get("lore_fr", "") as String)
-
-	return card
 
 # ═══════════════════════════════════════════════════════════
 #  Section équipement par biome
