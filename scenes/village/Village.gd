@@ -395,6 +395,7 @@ func _open_panel(panel_id: String) -> void:
 	_rp_root.position = Vector2(vp.x, 0.0)
 	add_child(_rp_root)
 	_build_panel_frame(panel_id)
+	_raise_settings_overlay()
 
 	# Glissement vers la droite du hub
 	var pt := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
@@ -564,6 +565,7 @@ func _rebuild_hub() -> void:
 	_active_panel_id = ""
 	if GameData.village.get("eclos", false):
 		_build_hub()
+	_raise_settings_overlay()
 
 # Fragment libéré : feedback + rebuild hub (le bouton upgrade peut apparaître).
 func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
@@ -695,6 +697,13 @@ func _toggle_settings_overlay() -> void:
 		return
 	_settings_overlay = SettingsOverlay.new()
 	add_child(_settings_overlay)
+
+# L'overlay Paramètres doit rester AU-DESSUS de tout : _rebuild_hub() et
+# _open_panel() ajoutent leurs nœuds après lui dans l'arbre (donc par-dessus,
+# pour le dessin ET la souris) — on le repasse en dernier enfant.
+func _raise_settings_overlay() -> void:
+	if _settings_overlay and is_instance_valid(_settings_overlay):
+		_settings_overlay.move_to_front()
 
 
 # ─── Phase d'éclosion : clic ─────────────────────────────────
