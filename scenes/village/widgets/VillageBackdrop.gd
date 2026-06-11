@@ -48,7 +48,7 @@ func _draw() -> void:
 
 	# ── 2. Poussières d'âme : montée lente + scintillement ──
 	# Chaque poussière = halo doux + cœur lumineux (bien visible sur fond sombre).
-	var count := 18 + _tier * 9
+	var count := 18 + _tier * 18
 	for i in count:
 		var fi    := float(i)
 		var speed := 8.0 + 18.0 * _hash(fi * 3.7)
