@@ -51,13 +51,13 @@ func _draw() -> void:
 			var ang  := _t * 0.22 + float(i) * TAU / RAY_COUNT
 			var wide := i % 2 == 0
 			var half := deg_to_rad(5.0 if wide else 2.4)
-			var len  := RAY_LEN * (0.80 + 0.20 * sin(_t * 0.7 + float(i) * 1.7))
+			var ray_len := RAY_LEN * (0.80 + 0.20 * sin(_t * 0.7 + float(i) * 1.7))
 			var a    := intensity * (0.085 if wide else 0.045) \
 					* (0.75 + 0.25 * sin(_t * 1.3 + float(i) * 2.3))
 			var pts := PackedVector2Array([
 				c,
-				c + Vector2(cos(ang - half), sin(ang - half)) * len,
-				c + Vector2(cos(ang + half), sin(ang + half)) * len,
+				c + Vector2(cos(ang - half), sin(ang - half)) * ray_len,
+				c + Vector2(cos(ang + half), sin(ang + half)) * ray_len,
 			])
 			draw_colored_polygon(pts, Color(color.r, color.g, color.b, a))
 
