@@ -25,7 +25,7 @@ const SLOTS: Array = [
 	["anneau",   "💍", "equipment_anneau",   -1.0, 146.0, Vector2(-34.0, 108.0)],
 	["armure",   "🛡", "equipment_armure",    1.0,  42.0, Vector2(  0.0,  82.0)],
 	["bouclier", "⬡",  "equipment_bouclier",  1.0,  94.0, Vector2( 38.0, 100.0)],
-	["ceinture", "🪢", "equipment_ceinture",  1.0, 146.0, Vector2(  0.0, 116.0)],
+	["ceinture", "🪢", "equipment_ceinture",  1.0, 146.0, Vector2(  0.0, 113.0)],
 ]
 
 var _tint     := Color(0.6, 0.6, 0.7)
@@ -77,14 +77,16 @@ func _make_slot(slot_key: String, icon: String, equip_id: String,
 					0.70 if unlocked else 0.25, 1, 6))
 	add_child(box)
 
-	var ico := Label.new()
-	ico.text = icon
-	ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ico.add_theme_font_size_override("font_size", 15)
-	ico.add_theme_color_override("font_color",
-			ec.lerp(Color.WHITE, 0.35) if unlocked else Color(1, 1, 1, 0.25))
-	box.add_child(ico)
+	# Icône uniquement si l'équipement est débloqué — une case verrouillée
+	# reste vide (la grille grisée se suffit, pas de fausse promesse).
+	if unlocked:
+		var ico := Label.new()
+		ico.text = icon
+		ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+		ico.add_theme_font_size_override("font_size", 15)
+		ico.add_theme_color_override("font_color", ec.lerp(Color.WHITE, 0.35))
+		box.add_child(ico)
 
 	# Nom du slot sous la case : identification immédiate.
 	var slot_name := Translations.equip_slot_name(slot_key)
@@ -135,21 +137,72 @@ func _draw() -> void:
 		draw_line(from, to, Color(ec, 0.30), 1.0, true)
 		draw_circle(to, 2.0, Color(ec, 0.55), true, -1.0, true)
 
-	var body := _tint.lerp(Color.WHITE, 0.10); body.a = 0.88
-	# Tête
-	draw_circle(Vector2(cx, 36.0), 14.0, body, true, -1.0, true)
-	draw_arc(Vector2(cx, 36.0), 14.0, 0.0, TAU, 32,
-			_tint.lightened(0.35), 1.5, true)
-	# Torse (capsule épaules → taille)
-	draw_line(Vector2(cx, 58.0), Vector2(cx, 112.0), body, 26.0, true)
-	# Bras vers les mains + mains
-	draw_line(Vector2(cx - 12.0, 66.0), Vector2(cx - 36.0, 96.0), body, 8.0, true)
-	draw_line(Vector2(cx + 12.0, 66.0), Vector2(cx + 36.0, 96.0), body, 8.0, true)
-	draw_circle(Vector2(cx - 38.0, 100.0), 5.0, body, true, -1.0, true)
-	draw_circle(Vector2(cx + 38.0, 100.0), 5.0, body, true, -1.0, true)
-	# Ceinture : fine ligne sombre à la taille
-	draw_line(Vector2(cx - 13.0, 116.0), Vector2(cx + 13.0, 116.0),
-			Color(0, 0, 0, 0.35), 3.0, true)
-	# Jambes
-	draw_line(Vector2(cx - 7.0, 122.0), Vector2(cx - 10.0, 170.0), body, 9.0, true)
-	draw_line(Vector2(cx + 7.0, 122.0), Vector2(cx + 10.0, 170.0), body, 9.0, true)
+	_draw_hero_figure(cx)
+
+# Silhouette héroïque de face : épaules en deltoïdes ronds, taille
+# marquée, bras articulés visibles PAR-DESSUS le torse, jambes
+# continues aux articulations adoucies (cercles aux genoux), pieds.
+# Modelé simple : lumière sur la poitrine, ombre vers les jambes.
+func _draw_hero_figure(cx: float) -> void:
+	var body  := _tint.lerp(Color.WHITE, 0.10); body.a = 0.90
+	var shade := _tint.darkened(0.30);          shade.a = 0.92
+	var rim   := _tint.lightened(0.45)
+
+	# ── Jambes : cuisse → genou → mollet, joints arrondis, pieds ──
+	for s: float in [-1.0, 1.0]:
+		var hip   := Vector2(cx + s * 6.5, 116.0)
+		var knee  := Vector2(cx + s * 8.5, 142.0)
+		var ankle := Vector2(cx + s * 10.0, 164.0)
+		draw_line(hip, knee, shade, 10.0, true)
+		draw_circle(knee, 4.6, shade, true, -1.0, true)   # genou : joint lisse
+		draw_line(knee, ankle, shade, 8.5, true)
+		# pied : capsule vers l'extérieur
+		draw_line(ankle + Vector2(0.0, 2.0),
+				ankle + Vector2(s * 9.0, 3.0), shade, 6.5, true)
+
+	# ── Bassin : trapèze taille → hanches (recouvre le haut des cuisses) ──
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(cx - 12.0, 104.0), Vector2(cx + 12.0, 104.0),
+		Vector2(cx + 14.0, 121.0), Vector2(cx - 14.0, 121.0),
+	]), shade)
+
+	# ── Torse : trapèze épaules larges → taille en V ──
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(cx - 20.0, 60.0), Vector2(cx + 20.0, 60.0),
+		Vector2(cx + 12.0, 108.0), Vector2(cx - 12.0, 108.0),
+	]), body)
+	# Deltoïdes : épaules rondes aux coins du trapèze
+	draw_circle(Vector2(cx - 17.0, 63.0), 7.5, body, true, -1.0, true)
+	draw_circle(Vector2(cx + 17.0, 63.0), 7.5, body, true, -1.0, true)
+	# Modelé : lumière sur la poitrine, ombre vers la taille
+	_shade_sprite(Vector2(cx, 70.0), 24.0, Color(1, 1, 1, 0.18))
+	_shade_sprite(Vector2(cx, 100.0), 22.0, Color(0, 0, 0, 0.22))
+
+	# ── Bras (par-dessus le torse) : épaule → coude → main ──
+	for s: float in [-1.0, 1.0]:
+		var shoulder := Vector2(cx + s * 19.0, 66.0)
+		var elbow    := Vector2(cx + s * 30.0, 84.0)
+		var hand     := Vector2(cx + s * 37.0, 99.0)
+		draw_line(shoulder, elbow, body, 7.5, true)
+		draw_circle(elbow, 3.6, body, true, -1.0, true)   # coude : joint lisse
+		draw_line(elbow, hand, body, 6.0, true)
+		draw_circle(hand, 4.5, body, true, -1.0, true)
+
+	# ── Ceinture : ligne sombre + boucle ──
+	draw_line(Vector2(cx - 12.5, 112.0), Vector2(cx + 12.5, 112.0),
+			Color(0, 0, 0, 0.42), 4.0, true)
+	draw_circle(Vector2(cx, 112.0), 2.4, Color(rim.r, rim.g, rim.b, 0.55), true, -1.0, true)
+
+	# ── Cou + tête ──
+	draw_line(Vector2(cx, 50.0), Vector2(cx, 61.0), body, 8.0, true)
+	draw_circle(Vector2(cx, 35.0), 13.0, body, true, -1.0, true)
+	# Modelé de la tête : lumière haut-gauche
+	_shade_sprite(Vector2(cx - 4.0, 30.0), 9.0, Color(1, 1, 1, 0.22))
+	draw_arc(Vector2(cx, 35.0), 13.0, 0.0, TAU, 32,
+			Color(rim.r, rim.g, rim.b, 0.70), 1.5, true)
+
+# Sprite radial doux (réutilise la texture du halo) pour le modelé.
+func _shade_sprite(center: Vector2, radius: float, col: Color) -> void:
+	draw_texture_rect(_glow_tex,
+			Rect2(center - Vector2.ONE * radius, Vector2.ONE * radius * 2.0),
+			false, col)
