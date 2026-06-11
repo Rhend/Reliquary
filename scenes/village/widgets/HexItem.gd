@@ -9,7 +9,7 @@ var hex_radius      := 58.0
 var outward_dir     := Vector2.RIGHT
 var is_hovered      := false
 var is_selected     := false
-var has_notification := false   # pastille rouge = action disponible
+var has_notification := false   # étoile dorée = action disponible
 var _htween         : Tween
 var _t              := 0.0
 
@@ -76,16 +76,47 @@ func _draw() -> void:
 	if has_notification:
 		_draw_badge(c)
 
-# Pastille rouge pulsée en haut à droite de l'hexagone.
+# Étoile d'évolution — éclat doré en haut à droite de la bulle :
+# halo qui respire, étoile 4 branches en rotation lente, contre-étoile
+# blanche, cœur brillant et particule en orbite. Or = langage visuel
+# de la progression (FILTER_ON / Légendaire), bien plus invitant que
+# l'ancienne pastille rouge « erreur ».
 func _draw_badge(c: Vector2) -> void:
-	var r      := hex_radius * 0.78
-	var bpos   := c + Vector2(r * 0.68, -r * 0.68)
-	var brad   := 7.0 + 0.8 * sin(_t * 3.5)
-	var glow_a := 0.35 + 0.20 * sin(_t * 3.5)
-	draw_circle(bpos, brad + 5.0, Color(1.0, 0.22, 0.22, glow_a))
-	draw_circle(bpos, brad,       Color(0.0, 0.0, 0.0, 0.60))
-	draw_circle(bpos, brad - 1.5, Color(1.0, 0.28, 0.28, 1.0))
-	draw_circle(bpos, brad - 3.0, Color(1.0, 0.55, 0.55, 0.70))
+	var r    := hex_radius * 0.78
+	var bpos := c + Vector2(r * 0.70, -r * 0.70)
+	var gold := Color(1.0, 0.82, 0.25)
+
+	# Respiration : douce la plupart du temps, petit pic régulier (twinkle).
+	var breath  := 0.5 + 0.5 * sin(_t * 2.4)
+	var twinkle := pow(maxf(sin(_t * 1.2), 0.0), 8.0)   # flash bref périodique
+	var srad    := 9.0 + 1.8 * breath + 3.0 * twinkle
+
+	# Halo doux (sprite radial GPU — aucun cercle dur)
+	_shade(bpos, srad * 2.4, Color(gold, 0.28 + 0.22 * breath + 0.25 * twinkle))
+
+	# Étoile 4 branches en rotation lente + contre-étoile blanche
+	var rot := _t * 0.7
+	_draw_spark(bpos, srad, rot, Color(1.0, 0.86, 0.40, 0.95))
+	_draw_spark(bpos, srad * 0.52, -rot * 1.7, Color(1.0, 1.0, 1.0, 0.85))
+
+	# Cœur brillant
+	draw_circle(bpos, 2.0 + 1.0 * breath, Color(1.0, 1.0, 1.0, 0.95), true, -1.0, true)
+
+	# Particule en orbite (étincelle qui tourne autour de l'étoile)
+	var oa  := _t * 1.6
+	var opp := bpos + Vector2(cos(oa), sin(oa)) * (srad * 1.6)
+	var ofl := 0.55 + 0.45 * sin(_t * 5.0)
+	draw_circle(opp, 2.6, Color(gold, 0.30 * ofl))
+	draw_circle(opp, 1.2, Color(1.0, 0.95, 0.70, 0.90 * ofl))
+
+# Étoile 4 branches (losanges croisés) : 8 sommets alternés long/court.
+func _draw_spark(p: Vector2, r: float, rot: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for i in 8:
+		var rad := r if i % 2 == 0 else r * 0.28
+		var a   := rot + float(i) * PI / 4.0
+		pts.append(p + Vector2(cos(a), sin(a)) * rad)
+	draw_colored_polygon(pts, col)
 
 func _callout(c: Vector2) -> void:
 	var font := ThemeDB.fallback_font
