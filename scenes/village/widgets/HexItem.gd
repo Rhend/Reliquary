@@ -14,8 +14,13 @@ var has_notification := false   # pastille rouge = action disponible
 var _htween         : Tween
 var _t              := 0.0
 
+# Sprite radial doux pour le modelé des pastilles rondes (lumière/ombre).
+var _shade_tex: GradientTexture2D
+
 func _ready() -> void:
 	pivot_offset = size * 0.5
+	_shade_tex = UIHelpers.radial_glow_tex(64,
+			[0.0, 0.35, 1.0], [1.0, 0.55, 0.0])
 	var ico := Label.new()
 	ico.text = icon_text
 	ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -153,9 +158,11 @@ func _round(c: Vector2, with_fx: bool) -> void:
 	draw_circle(c + Vector2(2.0, 3.5), r, Color(0, 0, 0, 0.45))
 	var fill := tier_color.darkened(0.20); fill.a = 0.96
 	draw_circle(c, r, fill)
-	# Reflet haut (highlight)
-	draw_arc(c, r - 4.0, -PI * 0.80, -PI * 0.20, 16, Color(1, 1, 1, 0.38), 5.0, true)
-	draw_arc(c, r - 4.0,  PI * 0.20,  PI * 0.80, 16, Color(0, 0, 0, 0.28), 4.0, true)
+	# Modelé sphérique doux : lumière en haut, ombre en bas (dégradés GPU —
+	# remplace les anciens croissants blanc/noir à bandes dures).
+	# Les sprites s'éteignent avant le bord du disque : rien ne déborde.
+	_shade(c + Vector2(0.0, -r * 0.40), r * 0.58, Color(1, 1, 1, 0.30))
+	_shade(c + Vector2(0.0,  r * 0.42), r * 0.56, Color(0, 0, 0, 0.32))
 	# Bordure lumineuse pulsée
 	var border := tier_color.lightened(0.15); border.a = 0.75 + 0.25 * sin(_t * 1.8)
 	draw_arc(c, r, 0.0, TAU, 64, border, 2.5, true)
@@ -252,6 +259,12 @@ func _hexa(c: Vector2, with_fx: bool, with_pulse: bool) -> void:
 		_draw_border(pts, tier_color.lightened(0.4), 3.5)
 		var soft := tier_color; soft.a = 0.55
 		_draw_border(_hex(c, eff_r + 10.0), soft, 7.0)
+
+# Sprite radial doux centré (modelé lumière/ombre des pastilles rondes).
+func _shade(center: Vector2, radius: float, col: Color) -> void:
+	draw_texture_rect(_shade_tex,
+			Rect2(center - Vector2.ONE * radius, Vector2.ONE * radius * 2.0),
+			false, col)
 
 func _hex(c: Vector2, r: float) -> PackedVector2Array:
 	var pts := PackedVector2Array()

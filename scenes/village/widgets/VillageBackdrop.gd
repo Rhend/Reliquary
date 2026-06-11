@@ -58,13 +58,13 @@ func _draw() -> void:
 	# Deux couches légèrement déphasées : la respiration paraît organique.
 	var breathe := 1.0 + 0.045 * sin(_t * 0.55)
 	var halo_r  := minf(size.x, size.y) * 0.78 * breathe
-	var halo_a  := (0.11 + 0.035 * float(_tier)) * (1.0 + 0.10 * sin(_t * 0.8))
+	var halo_a  := (0.17 + 0.05 * float(_tier)) * (1.0 + 0.10 * sin(_t * 0.8))
 	_blit(_halo_tex, c, halo_r, Color(_tint, halo_a))
 	_blit(_halo_tex, c, halo_r * 0.42 * (2.0 - breathe),
-			Color(_tint.lightened(0.12), halo_a * 0.55))
+			Color(_tint.lightened(0.16), halo_a * 0.70))
 
 	# ── 2. Poussières d'âme : parallaxe + fondu aux bords ──
-	var count := 18 + _tier * 18
+	var count := 27 + _tier * 27
 	for i in count:
 		var fi  := float(i)
 		var h_x := _hash(fi * 1.3)   # position horizontale de base
