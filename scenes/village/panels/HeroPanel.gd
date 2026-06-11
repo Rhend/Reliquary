@@ -24,6 +24,10 @@ static func build(host: Village) -> void:
 	var can_ev := tier < GameData.MAX_TIER and xp >= xpmax
 	var tcolor := UIColors.tier_color(tier)
 
+	# ── Bonhomme d'équipement : 6 slots anatomiques ───────────
+	# Tout en haut, avant la barre d'XP et les Statistiques.
+	host.rp_content.add_child(HeroDoll.new())
+
 	# ── Carte d'identité + XP (DA commune — UIHelpers.entity_xp_card) ──
 	# Palier max → xp_max = 0 → la carte affiche « RANG MAX ».
 	var hero_xp_max := xpmax
