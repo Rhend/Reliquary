@@ -160,6 +160,11 @@ func _build_column(is_hero: bool) -> Control:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 8)
 
+	# Respiration : décolle la plaque de nom du bord haut de la zone.
+	var top_pad := Control.new()
+	top_pad.custom_minimum_size = Vector2(0, 16)
+	col.add_child(top_pad)
+
 	# Plaque de nom : capsule sombre bordée à la couleur du combattant —
 	# lisible quel que soit le fond animé derrière.
 	var name_center := CenterContainer.new()
@@ -202,7 +207,9 @@ func _build_column(is_hero: bool) -> Control:
 	var action := Label.new()
 	action.text = "—"
 	action.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	action.add_theme_font_size_override("font_size", 12)
+	action.add_theme_font_size_override("font_size", 14)
+	action.add_theme_constant_override("outline_size", 3)
+	action.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	action.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	action_box.add_child(action)
 	var action_center := CenterContainer.new()
@@ -732,24 +739,38 @@ func _screen_shake(strength: float = 1.0) -> void:
 				0.35 / float(amps.size())).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(_shaker, "position", Vector2.ZERO, 0.05)
 
-# Ajoute un pill transitoire dans le feed (disparaît après ~2s).
+# Ajoute un pill transitoire dans le feed (pop-in, disparaît après ~2s).
 func _push_feed(text: String, color: Color) -> void:
 	if not _feed_box:
 		return
 	var box := PanelContainer.new()
-	box.add_theme_stylebox_override("panel", UIHelpers.card_style(color, 0.16, 0.70, 1, 8))
+	var style := UIHelpers.card_style(color, 0.26, 0.90, 1, 9)
+	style.content_margin_left   = 10
+	style.content_margin_right  = 10
+	style.content_margin_top    = 2
+	style.content_margin_bottom = 3
+	box.add_theme_stylebox_override("panel", style)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var lbl := Label.new()
 	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 12)
-	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_constant_override("outline_size", 3)
+	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	lbl.add_theme_color_override("font_color", color.lightened(0.30))
 	box.add_child(lbl)
 	_feed_box.add_child(box)
+	# Pop-in (pivot connu une fois la taille calculée).
+	box.scale = Vector2(0.5, 0.5)
+	box.resized.connect(func() -> void:
+		box.pivot_offset = box.size * 0.5
+	, CONNECT_ONE_SHOT)
 	var tw := create_tween()
-	tw.tween_interval(2.0)
+	tw.tween_property(box, "scale", Vector2.ONE, 0.30) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.8)
 	tw.tween_property(box, "modulate:a", 0.0, 0.4)
 	# Suppression garantie via un SceneTreeTimer indépendant du Tween.
-	get_tree().create_timer(2.5).timeout.connect(box.queue_free)
+	get_tree().create_timer(2.6).timeout.connect(box.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Journal
@@ -758,11 +779,23 @@ func _push_feed(text: String, color: Color) -> void:
 # Affiche l'intention d'action (capsule visible). Le parent du label est la capsule.
 func _show_action(lbl: Label, text: String, color: Color) -> void:
 	lbl.text = text
-	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_color_override("font_color", color.lightened(0.30))
 	var box := lbl.get_parent()
 	if box is PanelContainer:
-		box.add_theme_stylebox_override("panel", UIHelpers.card_style(color, 0.12, 0.50, 1, 8))
+		# Capsule bien visible : fond plus dense, bordure franche, padding.
+		var style := UIHelpers.card_style(color, 0.30, 0.95, 1, 9)
+		style.content_margin_left   = 12
+		style.content_margin_right  = 12
+		style.content_margin_top    = 3
+		style.content_margin_bottom = 4
+		box.add_theme_stylebox_override("panel", style)
 		box.visible = true
+		# Pop d'annonce : la capsule claque à chaque intention d'action.
+		var bc := box as Control
+		bc.pivot_offset = bc.size * 0.5
+		bc.scale = Vector2(0.6, 0.6)
+		create_tween().tween_property(bc, "scale", Vector2.ONE, 0.28) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 # Masque entièrement la capsule d'action : aucun résidu visible hors action.
 func _hide_action(lbl: Label) -> void:
