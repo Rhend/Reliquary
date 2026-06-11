@@ -61,7 +61,9 @@ func start_combat(enemy: Dictionary, current_hp: float,
 		+ float(passives.get("def_bonus", 0.0))
 		+ float(equip.get("def", 0.0))
 	) * float(modifier_bonuses.get("def_mult", 1.0))
-	var h_vit: float = float(stats.get("vit", 20))
+	# attack_speed_pct (équipement, ex. Anneau) accélère la jauge VIT.
+	var h_vit: float = float(stats.get("vit", 20)) \
+			* (1.0 + float(equip.get("attack_speed_pct", 0.0)) / 100.0)
 
 	# HP maximum du héros (pour le calcul du seuil de bouclier)
 	var h_hp_max: float = (

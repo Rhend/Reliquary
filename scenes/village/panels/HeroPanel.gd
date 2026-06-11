@@ -50,9 +50,12 @@ static func build(host: Village) -> void:
 	var atk_base  := int(eff.get("atk", 0))
 	var atk_bonus := int(eq.get("atk", 0)) + int(pas.get("atk_bonus", 0))
 	var def_base  := int(eff.get("def", 0))
-	var def_bonus := int(pas.get("def_bonus", 0))
+	var def_bonus := int(eq.get("def", 0)) + int(pas.get("def_bonus", 0))
 	var hp_base   := int(eff.get("hp", 0))
 	var hp_bonus  := int(eq.get("hp", 0)) + int(pas.get("hp_bonus", 0))
+	# VIT effective = base × (1 + attack_speed_pct/100) — même formule que le combat.
+	var vit_base  := int(eff.get("vit", 20))
+	var vit_bonus := int(round(vit_base * float(eq.get("attack_speed_pct", 0.0)) / 100.0))
 
 	var stats_row := HBoxContainer.new()
 	stats_row.add_theme_constant_override("separation", 24)
@@ -63,6 +66,7 @@ static func build(host: Village) -> void:
 		[Translations.T("hero.stat.atk"), atk_base + atk_bonus, atk_base, atk_bonus, UIColors.STAT_ATK],
 		[Translations.T("hero.stat.def"), def_base + def_bonus, def_base, def_bonus, UIColors.STAT_DEF],
 		[Translations.T("hero.stat.hp"),  hp_base  + hp_bonus,  hp_base,  hp_bonus,  UIColors.STAT_HP ],
+		[Translations.T("hero.stat.vit"), vit_base + vit_bonus, vit_base, vit_bonus, UIColors.FILTER_ON],
 	]:
 		var grp := HBoxContainer.new()
 		grp.add_theme_constant_override("separation", 4)
