@@ -76,6 +76,11 @@ godot --headless --path . --quit-after 30
 - TOUJOURS lancer TestScriptsLoad après un refactor : il détecte les identifiants
   disparus (constantes, signaux) dans tous les scripts, autoloads chargés.
 - `GameData._validate_entities()` warne au boot si un `.tres` est incomplet.
+- **Simuler des clics dans un test headless** : la fenêtre racine fait **64×64 px**
+  (la taille du projet est ignorée) → tout clic au-delà tombe hors fenêtre et le
+  picking GUI échoue silencieusement. Faire d'abord
+  `get_tree().root.size = Vector2i(1280, 720)`, puis `root.push_input(ev)`
+  (motion + press + release) fonctionne.
 
 ## Sauvegarde
 
