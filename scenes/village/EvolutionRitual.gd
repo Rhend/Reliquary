@@ -20,9 +20,13 @@ const ECLOSION_COLOR := Color(1.0, 0.85, 0.4)  # doré chaud — naissance du Vi
 var _card:           Control           = null
 var _card_style:     StyleBoxFlat      = null
 var _from_tier_lbl:  Label             = null   # label tier à l'intérieur de la carte
+var _tier_chip_style: StyleBoxFlat     = null   # pastille du tier dans la carte
+var _icon_lbl:       Label             = null   # icône d'entité dans la carte
 var _tier_label:     Label             = null   # grand texte palier (en haut)
 var _flash:          ColorRect         = null
 var _particles:      CPUParticles2D    = null
+var _rays:           GodRays           = null   # rayons divins derrière la carte
+var _title_fx:       SummaryFX         = null   # burst d'étincelles sur le titre
 var _drone:          AudioStreamPlayer = null
 var _crystal:        AudioStreamPlayer = null
 
@@ -55,6 +59,15 @@ func _build_ui() -> void:
 	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	add_child(bg)
 
+	# Rayons divins (halo + rayons rotatifs + onde de choc), foyer sur la carte.
+	var from_color := UIColors.tier_color(_params.get("from_tier", 0) as int)
+	if _params.get("eclosion", false):
+		from_color = Color(0.35, 0.35, 0.45)
+	_rays = GodRays.new()
+	_rays.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_rays.color = from_color
+	add_child(_rays)
+
 	_build_entity_card()
 	_build_tier_label()
 	_build_particles()
@@ -68,30 +81,41 @@ func _build_ui() -> void:
 
 	_build_sounds()
 
+# Icône d'entité selon le type — même langage visuel que le récap de cycle.
+func _entity_icon() -> String:
+	if _params.get("eclosion", false):
+		return "🏠"
+	match _params.get("entity_type", "") as String:
+		"creature":                 return "🐾"
+		"trap":                     return "▲"
+		"benediction":              return "✦"
+		"biome":                    return "🌿"
+		"equipment":                return "🔨"
+		"hero":                     return "⚔"
+		"village":                  return "🏠"
+		"passive", "passif_unique": return "⚡"
+		_:                          return "✦"
+
 func _build_entity_card() -> void:
 	var from_tier  := _params.get("from_tier", 0) as int
 	var from_color := UIColors.tier_color(from_tier)
 
 	_card_style = StyleBoxFlat.new()
-	_card_style.bg_color      = Color(from_color.r, from_color.g, from_color.b, 0.12)
+	_card_style.bg_color      = Color(0.05, 0.06, 0.10, 0.94)
 	_card_style.border_color  = Color(from_color.r, from_color.g, from_color.b, 0.80)
-	_card_style.border_width_left  = 3
-	_card_style.border_width_right = 3
-	_card_style.border_width_top   = 3
-	_card_style.border_width_bottom = 3
-	_card_style.corner_radius_top_left     = 10
-	_card_style.corner_radius_top_right    = 10
-	_card_style.corner_radius_bottom_left  = 10
-	_card_style.corner_radius_bottom_right = 10
+	_card_style.set_border_width_all(2)
+	_card_style.set_corner_radius_all(14)
+	_card_style.shadow_color  = Color(0, 0, 0, 0.55)
+	_card_style.shadow_size   = 22
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(280, 140)
+	card.custom_minimum_size = Vector2(300, 190)
 	card.add_theme_stylebox_override("panel", _card_style)
 	card.anchor_left  = 0.5; card.anchor_right  = 0.5
 	card.anchor_top   = 0.5; card.anchor_bottom = 0.5
-	card.offset_left  = -140.0; card.offset_right  = 140.0
-	card.offset_top   = -70.0;  card.offset_bottom = 70.0
-	card.pivot_offset = Vector2(140, 70)
+	card.offset_left  = -150.0; card.offset_right  = 150.0
+	card.offset_top   = -95.0;  card.offset_bottom = 95.0
+	card.pivot_offset = Vector2(150, 95)
 	card.modulate.a   = 0.0
 	card.scale        = Vector2(0.8, 0.8)
 
@@ -99,48 +123,86 @@ func _build_entity_card() -> void:
 	card.add_child(margin)
 
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 8)
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	margin.add_child(vb)
+
+	# Icône d'entité — remplit l'espace mort de l'ancienne carte.
+	_icon_lbl = Label.new()
+	_icon_lbl.text = _entity_icon()
+	_icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_icon_lbl.add_theme_font_size_override("font_size", 44)
+	_icon_lbl.add_theme_color_override("font_color", from_color.lightened(0.25))
+	vb.add_child(_icon_lbl)
 
 	var entity_name := (_params.get("entity_name", "Entité") as String).to_upper()
 	var name_lbl := Label.new()
 	name_lbl.text = entity_name
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 20)
+	name_lbl.add_theme_font_size_override("font_size", 21)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.add_theme_constant_override("outline_size", 4)
+	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	vb.add_child(name_lbl)
+
+	# Pastille de tier (le grand texte du palier vient s'y morpher).
+	var chip := PanelContainer.new()
+	chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_tier_chip_style = UIHelpers.card_style(from_color, 0.16, 0.85, 1, 10)
+	chip.add_theme_stylebox_override("panel", _tier_chip_style)
+	vb.add_child(chip)
+
+	var chip_m := MarginContainer.new()
+	chip_m.add_theme_constant_override("margin_left", 12)
+	chip_m.add_theme_constant_override("margin_right", 12)
+	chip_m.add_theme_constant_override("margin_top", 3)
+	chip_m.add_theme_constant_override("margin_bottom", 3)
+	chip.add_child(chip_m)
 
 	_from_tier_lbl = Label.new()
 	_from_tier_lbl.text = GameData.get_tier_name(from_tier).to_upper()
 	_from_tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_from_tier_lbl.add_theme_font_size_override("font_size", 13)
-	_from_tier_lbl.add_theme_color_override("font_color", from_color)
-	vb.add_child(_from_tier_lbl)
+	_from_tier_lbl.add_theme_color_override("font_color", from_color.lightened(0.20))
+	chip_m.add_child(_from_tier_lbl)
 
 	add_child(card)
 	_card = card
 
 func _build_tier_label() -> void:
 	var to_tier := _params.get("to_tier", 1) as int
+	var accent  := _accent_color()
 
 	_tier_label = Label.new()
 	_tier_label.text                 = "ÉCLOSION" if _params.get("eclosion", false) else GameData.get_tier_name(to_tier).to_upper()
 	_tier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tier_label.add_theme_font_size_override("font_size", 56)
-	_tier_label.add_theme_color_override("font_color", Color.WHITE)
-	_tier_label.add_theme_constant_override("outline_size", 5)
-	_tier_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
-	# En haut de l'écran (~100px depuis le top), centré horizontalement (±280px)
+	_tier_label.add_theme_font_size_override("font_size", 64)
+	_tier_label.add_theme_color_override("font_color", accent.lightened(0.35))
+	_tier_label.add_theme_constant_override("outline_size", 8)
+	_tier_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.85))
+	# En haut de l'écran (~100px depuis le top), centré horizontalement (±320px)
 	_tier_label.anchor_left   = 0.5; _tier_label.anchor_right  = 0.5
 	_tier_label.anchor_top    = 0.0; _tier_label.anchor_bottom = 0.0
-	_tier_label.offset_left   = -280.0; _tier_label.offset_right  = 280.0
-	_tier_label.offset_top    = 70.0;   _tier_label.offset_bottom = 150.0
-	_tier_label.pivot_offset  = Vector2(280.0, 40.0)
+	_tier_label.offset_left   = -320.0; _tier_label.offset_right  = 320.0
+	_tier_label.offset_top    = 60.0;   _tier_label.offset_bottom = 160.0
+	_tier_label.pivot_offset  = Vector2(320.0, 50.0)
 	_tier_label.modulate.a    = 0.0
 	_tier_label.scale         = Vector2(0.5, 0.5)
 	_tier_label.z_index       = 100
 	add_child(_tier_label)
+
+	# Étincelles de révélation, par-dessus le grand texte.
+	_title_fx = SummaryFX.new()
+	_title_fx.mode   = SummaryFX.Mode.BANNER
+	_title_fx.accent = accent
+	_title_fx.shine  = false   # burst seul, qui déborde librement du titre
+	_title_fx.anchor_left  = 0.5; _title_fx.anchor_right  = 0.5
+	_title_fx.anchor_top   = 0.0; _title_fx.anchor_bottom = 0.0
+	_title_fx.offset_left  = -320.0; _title_fx.offset_right  = 320.0
+	_title_fx.offset_top   = 60.0;   _title_fx.offset_bottom = 160.0
+	_title_fx.z_index      = 110
+	add_child(_title_fx)
 
 func _build_particles() -> void:
 	var vp      := get_viewport_rect().size
@@ -151,19 +213,19 @@ func _build_particles() -> void:
 
 	_particles = CPUParticles2D.new()
 	_particles.emitting              = false
-	_particles.amount                = 60
-	_particles.lifetime              = 2.5
+	_particles.amount                = 110
+	_particles.lifetime              = 3.0
 	_particles.explosiveness         = 0.0
 	_particles.emission_shape        = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
 	_particles.emission_rect_extents = Vector2(vp.x * 0.5, 5.0)
 	_particles.position              = Vector2(vp.x * 0.5, vp.y + 20.0)
 	_particles.direction             = Vector2(0.0, -1.0)
-	_particles.spread                = 10.0
-	_particles.gravity               = Vector2(0.0, -150.0)
-	_particles.initial_velocity_min  = 80.0
-	_particles.initial_velocity_max  = 120.0
-	_particles.scale_amount_min      = 0.4
-	_particles.scale_amount_max      = 0.9
+	_particles.spread                = 12.0
+	_particles.gravity               = Vector2(0.0, -180.0)
+	_particles.initial_velocity_min  = 90.0
+	_particles.initial_velocity_max  = 170.0
+	_particles.scale_amount_min      = 0.6
+	_particles.scale_amount_max      = 1.6
 	_particles.color                 = Color.WHITE
 	_particles.texture               = _make_particle_texture()
 
@@ -303,6 +365,10 @@ func _phase2_card_appear() -> void:
 func _phase3_ascension_start() -> void:
 	_particles.emitting = true
 
+	# Les rayons divins s'éveillent pendant la montée rituelle.
+	create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE) \
+		.tween_property(_rays, "intensity", 0.55, 2.0)
+
 	_drone.play()
 	create_tween().set_ease(Tween.EASE_IN_OUT) \
 		.tween_property(_drone, "pitch_scale", 1.8, 2.0)
@@ -326,8 +392,12 @@ func _phase3_ascension_start() -> void:
 
 func _update_card_color(progress: float, from_c: Color, to_c: Color) -> void:
 	var c := from_c.lerp(to_c, progress)
-	_card_style.bg_color     = Color(c.r, c.g, c.b, 0.12)
 	_card_style.border_color = Color(c.r, c.g, c.b, 0.80)
+	_tier_chip_style.bg_color     = Color(c.r, c.g, c.b, 0.16)
+	_tier_chip_style.border_color = Color(c.r, c.g, c.b, 0.85)
+	_rays.color = c
+	if is_instance_valid(_icon_lbl):
+		_icon_lbl.add_theme_color_override("font_color", c.lightened(0.25))
 	if is_instance_valid(_card):
 		_card.queue_redraw()
 
@@ -336,6 +406,14 @@ func _phase4_revelation() -> void:
 	_flash.modulate.a = 1.0
 	create_tween().tween_property(_flash, "modulate:a", 0.0, 0.2)
 	_crystal.play()
+
+	# Onde de choc + pic d'intensité des rayons, puis ils se posent.
+	_rays.fire_shockwave()
+	_title_fx.fire_burst()
+	var rays_tw := create_tween()
+	rays_tw.tween_property(_rays, "intensity", 1.0, 0.15).set_ease(Tween.EASE_OUT)
+	rays_tw.tween_property(_rays, "intensity", 0.50, 0.80) \
+			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 
 	# Grand texte palier : apparaît en deux temps élastiques, puis descend dans la carte
 	_tier_label.modulate.a = 1.0
@@ -362,10 +440,10 @@ func _start_tier_descent() -> void:
 	var clone := Label.new()
 	clone.text                 = _tier_label.text
 	clone.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	clone.add_theme_font_size_override("font_size", 56)
-	clone.add_theme_color_override("font_color", Color.WHITE)
-	clone.add_theme_constant_override("outline_size", 5)
-	clone.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
+	clone.add_theme_font_size_override("font_size", 64)
+	clone.add_theme_color_override("font_color", _accent_color().lightened(0.35))
+	clone.add_theme_constant_override("outline_size", 8)
+	clone.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.85))
 	clone.anchor_left   = 0.0; clone.anchor_right  = 0.0
 	clone.anchor_top    = 0.0; clone.anchor_bottom = 0.0
 	clone.position      = tier_rect.position
@@ -378,7 +456,7 @@ func _start_tier_descent() -> void:
 	_tier_label.modulate.a = 0.0
 
 	# Calculer la position cible : le pivot_offset (centre du clone) doit atterrir sur from_center
-	var scale_target := 13.0 / 56.0
+	var scale_target := 13.0 / 64.0
 	var from_center  := from_rect.get_center()
 	var target_pos   := from_center - tier_rect.size * 0.5  # pivot_offset = size/2
 
@@ -397,7 +475,7 @@ func _finish_tier_replacement() -> void:
 	var to_tier  := _params.get("to_tier", 1) as int
 	var to_color := UIColors.tier_color(to_tier)
 	_from_tier_lbl.text = GameData.get_tier_name(to_tier).to_upper()
-	_from_tier_lbl.add_theme_color_override("font_color", to_color)
+	_from_tier_lbl.add_theme_color_override("font_color", to_color.lightened(0.20))
 	create_tween().tween_property(_from_tier_lbl, "modulate:a", 1.0, 0.15)
 
 # ─── Phase 5 : carte remonte au tiers supérieur + texte bonus surgit ────────
@@ -406,11 +484,14 @@ func _phase5_celebration() -> void:
 	if _params.get("eclosion", false) and is_instance_valid(_tier_label):
 		create_tween().tween_property(_tier_label, "modulate:a", 0.0, 0.3)
 
-	# Carte glisse vers le tiers supérieur avec effet élastique d'arrivée
+	# Carte glisse vers le tiers supérieur avec effet élastique d'arrivée ;
+	# le foyer des rayons la suit.
 	var slide := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	slide.set_parallel(true)
-	slide.tween_property(_card, "offset_top",    -210.0, 0.4)
-	slide.tween_property(_card, "offset_bottom",  -70.0, 0.4)
+	slide.tween_property(_card, "offset_top",    -235.0, 0.4)
+	slide.tween_property(_card, "offset_bottom",  -45.0, 0.4)
+	slide.tween_property(_rays, "center_offset", Vector2(0.0, -140.0), 0.4)
+	slide.tween_property(_rays, "intensity", 0.35, 0.6)
 
 	# Panneau cadre + label bonus, 120px sous le bas de la carte
 	var bonus_text := _get_evolution_text()
@@ -418,12 +499,12 @@ func _phase5_celebration() -> void:
 		var to_color := _accent_color()
 
 		var panel_style := StyleBoxFlat.new()
-		panel_style.bg_color     = Color(to_color.r, to_color.g, to_color.b, 0.08)
+		panel_style.bg_color     = Color(0.05, 0.06, 0.10, 0.92)
 		panel_style.border_color = Color(to_color.r, to_color.g, to_color.b, 0.55)
-		panel_style.border_width_left   = 2; panel_style.border_width_right  = 2
-		panel_style.border_width_top    = 2; panel_style.border_width_bottom = 2
-		panel_style.corner_radius_top_left     = 8; panel_style.corner_radius_top_right    = 8
-		panel_style.corner_radius_bottom_left  = 8; panel_style.corner_radius_bottom_right = 8
+		panel_style.set_border_width_all(1)
+		panel_style.set_corner_radius_all(10)
+		panel_style.shadow_color = Color(0, 0, 0, 0.45)
+		panel_style.shadow_size  = 14
 
 		var bonus_panel := PanelContainer.new()
 		bonus_panel.add_theme_stylebox_override("panel", panel_style)
@@ -440,10 +521,12 @@ func _phase5_celebration() -> void:
 		var bonus := Label.new()
 		bonus.text                 = bonus_text
 		bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		bonus.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 		bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
-		bonus.add_theme_font_size_override("font_size", 24)
+		bonus.add_theme_font_size_override("font_size", 20)
 		bonus.add_theme_color_override("font_color", Color.WHITE)
 		bonus.add_theme_constant_override("outline_size", 3)
+		bonus.add_theme_constant_override("line_spacing", 6)
 		bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 		inner_margin.add_child(bonus)
 		add_child(bonus_panel)
@@ -486,7 +569,7 @@ func _get_evolution_text() -> String:
 		for eff: Dictionary in te_list[to_tier].get("effects", []):
 			var desc := eff.get("description", "") as String
 			if not desc.is_empty():
-				lines.append("• " + desc)
+				lines.append("✦ " + desc)
 
 	var passifs := entity.get("passifs_par_palier", {}) as Dictionary
 	if passifs.has(to_tier):
@@ -504,18 +587,20 @@ func _show_return_button() -> void:
 	var to_color := _accent_color()
 
 	var btn := Button.new()
-	btn.text = "REVENIR AU VILLAGE"
-	btn.add_theme_stylebox_override("normal",   UIHelpers.card_style(to_color, 0.15, 0.70, 2, 6))
-	btn.add_theme_stylebox_override("hover",    UIHelpers.card_style(to_color, 0.32, 1.00, 2, 6))
-	btn.add_theme_stylebox_override("pressed",  UIHelpers.card_style(to_color, 0.45, 1.00, 2, 6))
-	btn.add_theme_stylebox_override("focus",    UIHelpers.card_style(to_color, 0.15, 0.70, 2, 6))
-	btn.add_theme_color_override("font_color", Color.WHITE)
-	btn.add_theme_font_size_override("font_size", 14)
+	btn.text = "🏠  REVENIR AU VILLAGE"
+	btn.add_theme_stylebox_override("normal",   UIHelpers.card_style(to_color, 0.10, 0.70, 1, 8))
+	btn.add_theme_stylebox_override("hover",    UIHelpers.card_style(to_color, 0.22, 1.00, 1, 8))
+	btn.add_theme_stylebox_override("pressed",  UIHelpers.card_style(to_color, 0.40, 1.00, 1, 8))
+	btn.add_theme_stylebox_override("focus",    UIHelpers.card_style(to_color, 0.10, 0.70, 1, 8))
+	btn.add_theme_color_override("font_color", to_color.lightened(0.25))
+	btn.add_theme_color_override("font_hover_color", to_color.lightened(0.50))
+	btn.add_theme_font_size_override("font_size", 16)
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	btn.anchor_left   = 0.5; btn.anchor_right  = 0.5
 	btn.anchor_top    = 1.0; btn.anchor_bottom = 1.0
-	btn.offset_left   = -120.0; btn.offset_right  = 120.0
-	btn.offset_top    = -60.0;  btn.offset_bottom = -24.0
-	btn.pivot_offset  = Vector2(120.0, 18.0)
+	btn.offset_left   = -160.0; btn.offset_right  = 160.0
+	btn.offset_top    = -72.0;  btn.offset_bottom = -26.0
+	btn.pivot_offset  = Vector2(160.0, 23.0)
 	btn.modulate.a    = 0.0
 	btn.z_index       = 60
 	add_child(btn)
