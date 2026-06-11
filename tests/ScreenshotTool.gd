@@ -13,11 +13,16 @@
 # ============================================================
 extends Node
 
+# Les scènes capturées sont rendues dans un SubViewport offscreen fixe :
+# la taille de la fenêtre OS (DPI, plein écran…) n'influe plus sur les PNG.
+var _vp: SubViewport
+
 func _ready() -> void:
-	# GameSettings force le plein écran exclusif → repasser en fenêtré
-	# pour des captures stables en 1280×720.
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	get_window().size = Vector2i(1280, 720)
+	_vp = SubViewport.new()
+	_vp.size = Vector2i(1280, 720)
+	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_vp)
 	var mode := OS.get_environment("SHOT_MODE")
 	if mode == "":
 		mode = "summary"
@@ -25,6 +30,7 @@ func _ready() -> void:
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
+		"combat":    await _shoot_combat()
 		_:           await _shoot_summary()
 	# Aucune écriture de sauvegarde au quit.
 	SaveManager._save_dirty = false
@@ -34,7 +40,7 @@ func _ready() -> void:
 func _shoot_summary() -> void:
 	_fake_cycle_data()
 	var screen: Control = (load("res://scenes/cycle/CycleSummaryScreen.tscn") as PackedScene).instantiate()
-	add_child(screen)
+	_vp.add_child(screen)
 	await get_tree().create_timer(1.55).timeout
 	_capture("res://tests/_shot_summary_mid.png")
 	await get_tree().create_timer(7.0).timeout
@@ -43,12 +49,43 @@ func _shoot_summary() -> void:
 # ── Capture du village avec pastilles de notification ───────
 func _shoot_village() -> void:
 	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
-	add_child(village)
+	_vp.add_child(village)
 	await get_tree().create_timer(1.2).timeout
 	for item: HexItem in village._hex_items.values():
 		item.has_notification = true
 	await get_tree().create_timer(1.0).timeout
 	_capture("res://tests/_shot_village_badges.png")
+
+# ── Capture de l'écran de combat : combat, piège, bénédiction ──
+func _shoot_combat() -> void:
+	AdventureSystem.start_adventure("biome_foret")
+	var combat: Control = (load("res://scenes/combat/CombatScene.tscn") as PackedScene).instantiate()
+	_vp.add_child(combat)
+	await get_tree().create_timer(3.0).timeout
+	_capture("res://tests/_shot_combat_fight.png")
+
+	# Fige la boucle idle pour des captures déterministes, puis force
+	# l'affichage d'un piège et d'une bénédiction (UI seulement).
+	AdventureSystem._encounter_timer.stop()
+	CombatPlayer.stop()
+	var trap := GameData.get_entity("spike_trap").duplicate()
+	trap["damage"] = 12
+	EventBus.adventure_event_resolved.emit({
+		"type": "trap", "biome_id": "biome_foret", "hero_id": "hero", "trap": trap,
+	})
+	await get_tree().create_timer(0.25).timeout
+	_capture("res://tests/_shot_combat_trap_a.png")
+	await get_tree().create_timer(0.45).timeout
+	_capture("res://tests/_shot_combat_trap.png")
+	await get_tree().create_timer(1.2).timeout
+
+	EventBus.adventure_event_resolved.emit({
+		"type": "benediction", "biome_id": "biome_foret", "hero_id": "hero",
+		"effect": GameData.get_entity("herb_find").duplicate(),
+	})
+	await get_tree().create_timer(0.7).timeout
+	_capture("res://tests/_shot_combat_bene.png")
+	AdventureSystem.is_running = false
 
 # ── Capture du panneau Héros (HeroDoll) ─────────────────────
 func _shoot_hero_panel() -> void:
@@ -56,13 +93,13 @@ func _shoot_hero_panel() -> void:
 	for eid: String in ["equipment_anneau", "equipment_armure"]:
 		GameData.get_entity(eid)["est_debloque"] = true
 	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
-	add_child(village)
+	_vp.add_child(village)
 	await get_tree().create_timer(1.0).timeout
 	village._open_panel("hero")
 	await get_tree().create_timer(1.2).timeout
 	_capture("res://tests/_shot_hero_panel.png")
 	# Zoom ×3 sur la zone du pantin (moitié haute du panneau droit).
-	var img := get_viewport().get_texture().get_image()
+	var img := _vp.get_texture().get_image()
 	var w := img.get_width()
 	var zone := Rect2i(int(w * 0.58), 0, int(w * 0.40), int(img.get_height() * 0.45))
 	var crop := img.get_region(zone)
@@ -89,7 +126,7 @@ func _shoot_evolution() -> void:
 			"to_tier":     1,
 		}
 	var ritual: Control = (load("res://scenes/village/EvolutionRitual.tscn") as PackedScene).instantiate()
-	add_child(ritual)
+	_vp.add_child(ritual)
 	await get_tree().create_timer(1.6).timeout
 	_capture("res://tests/_shot_evo_rise.png")
 	await get_tree().create_timer(1.1).timeout
@@ -98,14 +135,8 @@ func _shoot_evolution() -> void:
 	_capture("res://tests/_shot_evo_celebrate.png")
 
 func _capture(path: String) -> void:
-	# Certains écrans (Village) ré-appliquent le plein écran via GameSettings :
-	# re-forcer le fenêtré 1280×720 juste avant la prise.
-	if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-		get_window().size = Vector2i(1280, 720)
-		await get_tree().process_frame
 	await RenderingServer.frame_post_draw
-	var img := get_viewport().get_texture().get_image()
+	var img := _vp.get_texture().get_image()
 	img.save_png(path)
 	print("Screenshot -> ", path)
 

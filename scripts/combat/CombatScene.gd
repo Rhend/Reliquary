@@ -67,6 +67,7 @@ var _danger_pulse_tween: Tween   = null   # pulse PV critique (item 5)
 var _shield_state_pill:  Control = null   # pill bouclier bleue  (item 8)
 var _poison_state_pill:  Control = null   # pill venin violette  (item 8)
 var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
+var _stinger:            Control = null   # bandeau d'événement piège/bénédiction
 
 # ═══════════════════════════════════════════════════════════
 func _ready() -> void:
@@ -158,8 +159,10 @@ func _build_column(is_hero: bool) -> Control:
 	var name_lbl := Label.new()
 	name_lbl.text = "—"
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 14)
-	name_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	name_lbl.add_theme_font_size_override("font_size", 17)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.add_theme_constant_override("outline_size", 4)
+	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	col.add_child(name_lbl)
 
 	# L'anneau absorbe la hauteur disponible de la colonne : sans le journal,
@@ -276,6 +279,8 @@ func _build_bottom_bar() -> Control:
 	_flee_btn.add_theme_color_override("font_color", tcolor)
 	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	_flee_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
+	_flee_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UIHelpers.add_hover_feedback(_flee_btn)
 	_flee_btn.pressed.connect(_on_flee_pressed)
 
 	var flee_margin := MarginContainer.new()
@@ -384,12 +389,18 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_hide_action(_enemy_action)
 			var tdmg := int(trap.get("damage", 0))
 			var trap_tt := Translations.T("combat.trap_tt") % tdmg
-			if event_data.get("ignored", false):
+			var ignored := event_data.get("ignored", false) as bool
+			if ignored:
 				trap_tt += Translations.T("combat.trap_ignored")
 			UIHelpers.register_tooltip(_enemy_name, tname, trap_tt, UIColors.TYPE_TRAP)
-			if not event_data.get("ignored", false):
+			var trap_detail := Translations.T("combat.stinger.ignored") if ignored \
+					else Translations.T("combat.stinger.trap_dmg") % tdmg
+			_show_event_stinger(Translations.T("combat.stinger.trap"), tname,
+					trap_detail, UIColors.TYPE_TRAP, not ignored)
+			if not ignored:
 				_hero_ring.update_hp(AdventureSystem.current_hp)
 				_hero_ring.damage(tdmg, false)
+				_check_danger_pulse()
 				_add_log("[color=%s]%s[/color] inflige [color=%s]-%d[/color]"
 						% [_hex(UIColors.TIER_EPIQUE), tname, _hex(UIColors.LOG_DEFEAT), tdmg],
 						["monster", "attack", "status"])
@@ -406,6 +417,8 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			UIHelpers.register_tooltip(_enemy_name, bname,
 				Translations.T("combat.bless_tt") % bdesc,
 				UIColors.TYPE_BENEDICTION)
+			_show_event_stinger(Translations.T("combat.stinger.bless"), bname,
+					bdesc, UIColors.TYPE_BENEDICTION, false)
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TYPE_BENEDICTION), bname], ["status"])
 
 func _on_combat_started(hero_id: String, enemy: Dictionary,
@@ -558,6 +571,103 @@ func _on_flee_pressed() -> void:
 # ═══════════════════════════════════════════════════════════
 #  Animation cooldown / shake / feed
 # ═══════════════════════════════════════════════════════════
+
+# ─── Stinger d'événement (piège / bénédiction) ──────────────
+# Bandeau central impossible à rater : flash plein écran teinté +
+# slam-in (scale TRANS_BACK), maintien ~AFFICHAGE_EVENEMENT, fondu.
+# Résout « je ne vois jamais les pièges/bénédictions » : sans journal,
+# le seul indice était le nom dans la colonne ennemie pendant 2,5 s.
+func _show_event_stinger(title: String, name_txt: String, detail: String,
+		color: Color, danger: bool) -> void:
+	if is_instance_valid(_stinger):
+		_stinger.queue_free()
+
+	# Flash plein écran teinté (rouge danger / vert bénédiction).
+	var flash := ColorRect.new()
+	flash.color = Color(color.r, color.g, color.b, 0.18)
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.z_index = 90
+	add_child(flash)
+	var ftw := create_tween()
+	ftw.tween_property(flash, "color:a", 0.0, 0.5).set_ease(Tween.EASE_OUT)
+	ftw.tween_callback(flash.queue_free)
+
+	# Bandeau centré dans le tiers haut de la zone de combat.
+	var holder := CenterContainer.new()
+	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.anchor_bottom = 0.58
+	holder.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+	holder.z_index       = 95
+	add_child(holder)
+	_stinger = holder
+
+	var panel := PanelContainer.new()
+	var ps := StyleBoxFlat.new()
+	ps.bg_color     = Color(0.04, 0.05, 0.09, 0.94)
+	ps.border_color = Color(color.r, color.g, color.b, 0.95)
+	ps.set_border_width_all(2)
+	ps.set_corner_radius_all(12)
+	ps.shadow_color = Color(color.r, color.g, color.b, 0.35)
+	ps.shadow_size  = 16
+	panel.add_theme_stylebox_override("panel", ps)
+	holder.add_child(panel)
+
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_left", 22)
+	m.add_theme_constant_override("margin_right", 22)
+	m.add_theme_constant_override("margin_top", 10)
+	m.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(m)
+
+	var vb := VBoxContainer.new()
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 2)
+	m.add_child(vb)
+
+	var kind_lbl := Label.new()
+	kind_lbl.text = title
+	kind_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	kind_lbl.add_theme_font_size_override("font_size", 12)
+	kind_lbl.add_theme_color_override("font_color", color.lightened(0.25))
+	vb.add_child(kind_lbl)
+
+	var name_lbl := Label.new()
+	name_lbl.text = name_txt.to_upper()
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lbl.add_theme_font_size_override("font_size", 24)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.add_theme_constant_override("outline_size", 6)
+	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	vb.add_child(name_lbl)
+
+	if detail != "":
+		var detail_lbl := Label.new()
+		detail_lbl.text = detail
+		detail_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		detail_lbl.add_theme_font_size_override("font_size", 17)
+		detail_lbl.add_theme_color_override("font_color", color.lightened(0.30))
+		detail_lbl.add_theme_constant_override("outline_size", 4)
+		detail_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+		vb.add_child(detail_lbl)
+
+	if danger:
+		_screen_shake()
+
+	# Slam-in → maintien → fondu de sortie.
+	holder.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_callback(func() -> void:
+		panel.pivot_offset = panel.size * 0.5
+		panel.scale = Vector2(1.35, 1.35)
+	)
+	tw.set_parallel(true)
+	tw.tween_property(holder, "modulate:a", 1.0, 0.12).set_ease(Tween.EASE_OUT)
+	tw.tween_property(panel, "scale", Vector2.ONE, 0.40) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_interval(maxf(Balance.AFFICHAGE_EVENEMENT - 0.3, 0.6))
+	tw.tween_property(holder, "modulate:a", 0.0, 0.30).set_ease(Tween.EASE_IN)
+	tw.tween_callback(holder.queue_free)
 
 # Shake d'écran : translateX ±5px sur ~350ms puis retour.
 func _screen_shake() -> void:
@@ -747,8 +857,16 @@ func _on_creature_unique_vaincue(_biome_id: String, ingredient_id: String, passi
 # ═══════════════════════════════════════════════════════════
 
 func _update_xp_label() -> void:
-	if _xp_label:
-		_xp_label.text = Translations.T("combat.xp_label_fmt") % int(_cycle_xp)
+	if not _xp_label:
+		return
+	_xp_label.text = Translations.T("combat.xp_label_fmt") % int(_cycle_xp)
+	# Petit pop à chaque gain : le compteur vit au rythme du cycle.
+	_xp_label.pivot_offset = _xp_label.size * 0.5
+	var tw := create_tween()
+	tw.tween_property(_xp_label, "scale", Vector2(1.12, 1.12), 0.08) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_xp_label, "scale", Vector2.ONE, 0.18) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _hero_tier_color() -> Color:
 	return UIColors.tier_color(int(GameData.get_entity("hero").get("maitrise_actuelle", 0)))
