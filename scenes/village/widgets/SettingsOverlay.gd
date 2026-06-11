@@ -8,17 +8,12 @@
 #   add_child(SettingsOverlay.new())
 #
 # Cycle de vie autonome :
-#   • clic hors de la carte, touche Échap ou ✕ → l'overlay se libère lui-même ;
+#   • clic hors de la carte ou ✕ → l'overlay se libère lui-même ;
+#   • Échap → géré par Village (_unhandled_key_input), qui ouvre/ferme ;
 #   • changement de langue → l'overlay se reconstruit lui-même.
 # ============================================================
 class_name SettingsOverlay
 extends ColorRect
-
-# Échap ferme toujours le panneau (filet de sécurité clavier).
-func _unhandled_key_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()
-		queue_free()
 
 func _ready() -> void:
 	color        = Color(0.0, 0.0, 0.0, 0.45)
@@ -116,35 +111,34 @@ func _build() -> void:
 
 	# ── SAUVEGARDE ───────────────────────────────────────────
 	vb.add_child(_section(Translations.T("settings.save")))
+	var save_row := HBoxContainer.new()
+	save_row.add_theme_constant_override("separation", 8)
+	vb.add_child(save_row)
 	var exp_btn := Button.new()
 	exp_btn.text = Translations.T("settings.export")
 	exp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	exp_btn.pressed.connect(_export_save)
-	vb.add_child(exp_btn)
+	save_row.add_child(exp_btn)
 	var imp_btn := Button.new()
 	imp_btn.text = Translations.T("settings.import")
 	imp_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	imp_btn.pressed.connect(_import_save)
-	vb.add_child(imp_btn)
+	save_row.add_child(imp_btn)
 
 	vb.add_child(_sep())
 
 	# ── LANGUE ───────────────────────────────────────────────
 	vb.add_child(_section(Translations.T("settings.language")))
-	var lang_row := HBoxContainer.new()
-	lang_row.add_theme_constant_override("separation", 8)
-	lang_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.add_child(lang_row)
-	for lang_code: String in ["fr", "en"]:
-		var lang_btn := Button.new()
-		lang_btn.text = Translations.T("settings.lang." + lang_code)
-		lang_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lang_btn.toggle_mode  = true
-		lang_btn.button_pressed = (GameSettings.language == lang_code)
-		lang_btn.focus_mode = Control.FOCUS_NONE
-		var lc := lang_code
-		lang_btn.pressed.connect(func() -> void: GameSettings.set_language(lc))
-		lang_row.add_child(lang_btn)
+	var lang_codes: Array[String] = ["fr", "en"]
+	var lang_opt := OptionButton.new()
+	lang_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lang_opt.focus_mode = Control.FOCUS_NONE
+	for i in lang_codes.size():
+		lang_opt.add_item(Translations.T("settings.lang." + lang_codes[i]), i)
+	lang_opt.select(lang_codes.find(GameSettings.language))
+	lang_opt.item_selected.connect(func(idx: int) -> void:
+		GameSettings.set_language(lang_codes[idx]))
+	vb.add_child(lang_opt)
 
 # ─── Fabriques de lignes ──────────────────────────────────────
 

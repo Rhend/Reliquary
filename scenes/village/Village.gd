@@ -103,6 +103,14 @@ func _ready() -> void:
 	EventBus.adventure_stopped.connect(_update_badges)
 	GameSettings.language_changed.connect(_on_language_changed)
 
+# Échap ouvre/ferme le panneau Paramètres (les popups modaux — FileDialog —
+# consomment Échap avant nous, donc pas de conflit).
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.keycode == KEY_ESCAPE:
+		get_viewport().set_input_as_handled()
+		_toggle_settings_overlay()
+
 # Palier de Maîtrise du Village — détermine le layout et les couleurs du hub.
 func village_tier() -> int:
 	return int(GameData.village.get("maitrise_actuelle", 0))
