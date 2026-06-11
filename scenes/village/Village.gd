@@ -18,6 +18,9 @@ extends Control
 # ─── Constantes ───────────────────────────────────────────────
 const RING_RADIUS  := 165.0
 const HEX_SIZE     := Vector2(152.0, 152.0)
+# Échelle du hub quand un panneau droit (40 %) est ouvert : le village
+# entier doit tenir, centré, dans les 60 % de gauche.
+const HUB_PANEL_SCALE := 0.8
 const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
 
 # ─── Éveil (phase d'éclosion) ─────────────────────────────────
@@ -386,11 +389,16 @@ func _open_panel(panel_id: String) -> void:
 		return
 
 	# Réduire le hub : le village ENTIER reste visible, réduit
-	# homothétiquement dans les 60 % de gauche (pivot sur le bord gauche,
-	# centré verticalement) — aucun recadrage, aucun débordement.
-	_hub_root.pivot_offset = Vector2(0.0, vp.y * 0.5)
-	var ht := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	ht.tween_property(_hub_root, "scale", Vector2(0.6, 0.6), 0.35)
+	# homothétiquement et RECENTRÉ au milieu des 60 % de gauche.
+	# Le contenu utile (anneau + callouts ≈ 430 px de demi-largeur) tient
+	# à l'échelle 0.8 dans la zone (768 px) — sans vide excessif autour.
+	# Pivot au centre du canvas + décalage x : le centre du hub passe de
+	# 50 % à 30 % de l'écran.
+	_hub_root.pivot_offset = vp * 0.5
+	var ht := create_tween().set_parallel(true) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	ht.tween_property(_hub_root, "scale", Vector2.ONE * HUB_PANEL_SCALE, 0.35)
+	ht.tween_property(_hub_root, "position:x", -vp.x * 0.2, 0.35)
 
 	# Créer le panneau hors écran à droite (40 % de l'écran)
 	_rp_root = Control.new()
@@ -423,8 +431,10 @@ func _close_panel() -> void:
 			_rp_scroll = null
 	)
 
-	var ht := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	var ht := create_tween().set_parallel(true) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	ht.tween_property(_hub_root, "scale", Vector2.ONE, 0.25)
+	ht.tween_property(_hub_root, "position:x", 0.0, 0.25)
 
 # Met à jour l'état is_selected de tous les HexItems selon le panneau ouvert.
 func _update_hex_selection(active_id: String) -> void:
