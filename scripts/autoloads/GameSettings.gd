@@ -13,7 +13,7 @@ signal language_changed(lang: String)
 # Multiplicateur de durée par step de combat.
 # 1.0 = vitesse normale, 0.5 = x2, 0.25 = x4.
 var combat_speed:   float  = 1.0
-var fullscreen:     bool   = false
+var fullscreen:     bool   = true   # défaut aligné sur window/size/mode=4
 var volume_music:   float  = 1.0   # 0.0–1.0
 var volume_sfx:     float  = 1.0   # 0.0–1.0
 var language:       String = "fr"  # "fr" ou "en"
@@ -108,7 +108,7 @@ func _load() -> void:
 	if json.parse(file.get_as_text()) == OK:
 		var data = json.get_data()
 		combat_speed  = float(data.get("combat_speed",  1.0))
-		fullscreen    = bool(data.get("fullscreen",     false))
+		fullscreen    = bool(data.get("fullscreen",     true))
 		volume_music  = float(data.get("volume_music",  1.0))
 		volume_sfx    = float(data.get("volume_sfx",    1.0))
 		language      = str(data.get("language",        "fr"))
