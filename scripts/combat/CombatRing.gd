@@ -35,10 +35,16 @@ var _flash_alpha: float = 0.0
 # PV affichés : _disp_hp suit cur_hp en douceur (lissage exponentiel),
 # _ghost_hp traîne derrière en cas de dégâts (barre fantôme façon
 # jeux de combat : on LIT la perte au lieu d'un saut sec).
-var _disp_hp:  float = 100.0
-var _ghost_hp: float = 100.0
-var _spin_t:   float = 99.0    # éclair de contour à l'entrée (99 = inactif)
-const SPIN_DUR := 0.5
+# La traînée TIENT GHOST_HOLD secondes avant de drainer : même une
+# petite blessure (héros : −7 sur 150) reste lisible, pas seulement
+# les gros coups relatifs (ennemi : −17 sur 40).
+var _disp_hp:    float = 100.0
+var _ghost_hp:   float = 100.0
+var _ghost_hold: float = 0.0
+var _spin_t:     float = 99.0  # éclair de contour à l'entrée (99 = inactif)
+const SPIN_DUR   := 0.5
+const GHOST_HOLD := 0.45       # s de maintien de la traînée après une blessure
+const GHOST_DRAIN := 0.32      # vitesse de drain (fraction de max_hp par s)
 
 var _hp_label: Label
 var _fx_layer: Control
@@ -111,8 +117,12 @@ func set_hp(p_cur: float, p_max: float) -> void:
 	queue_redraw()
 
 # Cible : _disp_hp glisse vers cur_hp dans _process (jamais de saut sec).
+# Une blessure (re)arme le maintien de la traînée fantôme.
 func update_hp(p_cur: float) -> void:
-	cur_hp = clampf(p_cur, 0.0, max_hp)
+	var nv := clampf(p_cur, 0.0, max_hp)
+	if nv < cur_hp:
+		_ghost_hold = GHOST_HOLD
+	cur_hp = nv
 
 # Entrée en scène d'un combattant : pop élastique + fondu + éclair
 # de contour qui fait un tour complet de l'anneau.
@@ -195,9 +205,13 @@ func _process(delta: float) -> void:
 	_disp_hp = lerpf(_disp_hp, cur_hp, 1.0 - exp(-delta * 9.0))
 	if absf(_disp_hp - cur_hp) < 0.4:
 		_disp_hp = cur_hp
-	# …et la barre fantôme draine lentement derrière (dégâts lisibles).
+	# …et la barre fantôme tient un instant, puis draine lentement
+	# derrière (la perte reste lisible même petite par rapport au max).
 	if _ghost_hp > _disp_hp:
-		_ghost_hp = maxf(_ghost_hp - max_hp * delta * 0.55, _disp_hp)
+		if _ghost_hold > 0.0:
+			_ghost_hold -= delta
+		else:
+			_ghost_hp = maxf(_ghost_hp - max_hp * delta * GHOST_DRAIN, _disp_hp)
 	else:
 		_ghost_hp = _disp_hp
 
