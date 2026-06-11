@@ -91,6 +91,7 @@ const STRINGS: Dictionary = {
 		"hero.stat.atk":            "ATK",
 		"hero.stat.def":            "DEF",
 		"hero.stat.hp":             "PV",
+		"hero.stat.vit":            "VIT",
 		"hero.no_passive":          "Aucun passif débloqué",
 		"hero.no_ingredient":       "Aucun ingrédient en stock",
 		"hero.equip.slot.arme":     "Arme",
@@ -217,6 +218,10 @@ const STRINGS: Dictionary = {
 		"cycle.section.evolutions":  "◆  ÉVOLUTIONS DISPONIBLES",
 		"cycle.xp_total":            "XP total — %d",
 		"cycle.hero_label":          "Héros",
+		"cycle.stat.combats":        "Combats",
+		"cycle.stat.events":         "Événements",
+		"cycle.stat.loot":           "Butin",
+		"cycle.stat.xp":             "XP totale",
 
 		# ── Settings ─────────────────────────────────────────
 		"settings.title":         "⚙  PARAMÈTRES",
@@ -319,6 +324,7 @@ const STRINGS: Dictionary = {
 		"hero.stat.atk":            "ATK",
 		"hero.stat.def":            "DEF",
 		"hero.stat.hp":             "HP",
+		"hero.stat.vit":            "SPD",
 		"hero.no_passive":          "No passive unlocked",
 		"hero.no_ingredient":       "No ingredient in stock",
 		"hero.equip.slot.arme":     "Weapon",
@@ -445,6 +451,10 @@ const STRINGS: Dictionary = {
 		"cycle.section.evolutions":  "◆  AVAILABLE EVOLUTIONS",
 		"cycle.xp_total":            "Total XP — %d",
 		"cycle.hero_label":          "Hero",
+		"cycle.stat.combats":        "Battles",
+		"cycle.stat.events":         "Events",
+		"cycle.stat.loot":           "Loot",
+		"cycle.stat.xp":             "Total XP",
 
 		# ── Settings ─────────────────────────────────────────
 		"settings.title":         "⚙  SETTINGS",

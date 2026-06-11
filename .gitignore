@@ -5,6 +5,9 @@
 export/
 *.import
 
+# Captures de l'outil dev ScreenshotTool
+tests/_shot_*.png
+
 # Claude Code — local machine settings
 .claude/settings.local.json
 

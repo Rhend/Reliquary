@@ -22,6 +22,9 @@ var _t         := 0.0
 #   gain_t ∈ [0, 1] → 0 = couleur tier, 1 = GAIN_COLOR (lerp)
 var gain_start : float = -1.0
 var gain_t     : float = 0.0
+# Étincelles one-shot (récap de cycle) : jaillissent du segment gagné quand
+# la barre finit de se remplir. [x, y, vx, vy, taille, âge, vie] — en px.
+var _sparks    : Array = []
 # Particules générées une seule fois pour cette carte : [ [xf, taille, vitesse, phase], … ].
 # Tirage propre à chaque carte (aléatoire contrôlé) → deux barres du même motif
 # ne s'animent jamais à l'identique, même multipliées à l'écran.
@@ -85,12 +88,39 @@ func _generate_particles() -> void:
 			randf(),                                                            # phase
 		])
 
+# Gerbe d'étincelles dorées montant du segment gagné — appelée par le
+# récap de cycle quand l'animation de remplissage se termine.
+func spawn_completion_sparks() -> void:
+	var x0 := size.x * clampf(maxf(gain_start, 0.0), 0.0, 1.0)
+	var x1 := size.x * clampf(xp_fill, 0.0, 1.0)
+	if x1 <= x0:
+		x0 = 0.0
+	for i in randi_range(10, 14):
+		_sparks.append([
+			randf_range(x0, maxf(x1, x0 + 1.0)),   # x de départ
+			size.y,                                # part du bas de la barre
+			randf_range(-14.0, 14.0),              # dérive horizontale
+			randf_range(-78.0, -34.0),             # vitesse de montée
+			randf_range(1.2, 2.6),                 # taille
+			0.0,                                   # âge
+			randf_range(0.45, 0.85),               # durée de vie
+		])
+
 func _process(delta: float) -> void:
-	if xp_fill > 0.0:
-		_t += delta
-		queue_redraw()
+	if xp_fill <= 0.0 and _sparks.is_empty():
+		return
+	_t += delta
+	if not _sparks.is_empty():
+		for s: Array in _sparks:
+			s[0] += (s[2] as float) * delta
+			s[1] += (s[3] as float) * delta
+			s[3] = (s[3] as float) + 30.0 * delta   # décélération de la montée
+			s[5] = (s[5] as float) + delta
+		_sparks = _sparks.filter(func(s: Array) -> bool: return (s[5] as float) < (s[6] as float))
+	queue_redraw()
 
 func _draw() -> void:
+	_draw_sparks()
 	if xp_fill <= 0.0: return
 	if _particles.is_empty():
 		_generate_particles()
@@ -144,6 +174,15 @@ func _draw() -> void:
 			Motif.PAWS:      _draw_paw(Vector2(bx, by), r, alpha)
 			Motif.STARS:     _draw_star(Vector2(bx, by), r, alpha)
 			_:               _draw_bubble(Vector2(bx, by), r, alpha)
+
+# Étincelles de fin de remplissage : cœur clair + halo or, fondu sur la vie.
+func _draw_sparks() -> void:
+	for s: Array in _sparks:
+		var a := 1.0 - (s[5] as float) / (s[6] as float)
+		var pos := Vector2(s[0] as float, s[1] as float)
+		var sz  := s[4] as float
+		draw_circle(pos, sz * 2.0, Color(GAIN_COLOR.r, GAIN_COLOR.g, GAIN_COLOR.b, a * 0.28))
+		draw_circle(pos, sz, Color(1.0, 0.97, 0.82, a))
 
 # ─── Formes par motif ───────────────────────────────────────
 

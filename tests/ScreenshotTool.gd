@@ -1,0 +1,146 @@
+# ============================================================
+# ScreenshotTool.gd — Outil DEV : capture d'écran de scènes UI.
+#
+# Lance une scène avec des données factices et sauvegarde des
+# captures PNG dans tests/. N'écrit JAMAIS la sauvegarde.
+#
+#   godot --path . res://tests/ScreenshotTool.tscn
+#
+# Mode via variable d'environnement SHOT_MODE :
+#   "summary" (défaut) — CycleSummaryScreen avec un cycle factice
+#   "village"          — hub du village avec pastilles forcées
+#   "evolution"        — EvolutionRitual avec une évolution factice
+# ============================================================
+extends Node
+
+func _ready() -> void:
+	# GameSettings force le plein écran exclusif → repasser en fenêtré
+	# pour des captures stables en 1280×720.
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	get_window().size = Vector2i(1280, 720)
+	var mode := OS.get_environment("SHOT_MODE")
+	if mode == "":
+		mode = "summary"
+	match mode:
+		"village":   await _shoot_village()
+		"evolution": await _shoot_evolution()
+		"hero":      await _shoot_hero_panel()
+		_:           await _shoot_summary()
+	# Aucune écriture de sauvegarde au quit.
+	SaveManager._save_dirty = false
+	get_tree().quit(0)
+
+# ── Capture du récap de cycle ───────────────────────────────
+func _shoot_summary() -> void:
+	_fake_cycle_data()
+	var screen: Control = (load("res://scenes/cycle/CycleSummaryScreen.tscn") as PackedScene).instantiate()
+	add_child(screen)
+	await get_tree().create_timer(1.55).timeout
+	_capture("res://tests/_shot_summary_mid.png")
+	await get_tree().create_timer(7.0).timeout
+	_capture("res://tests/_shot_summary_end.png")
+
+# ── Capture du village avec pastilles de notification ───────
+func _shoot_village() -> void:
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	add_child(village)
+	await get_tree().create_timer(1.2).timeout
+	for item: HexItem in village._hex_items.values():
+		item.has_notification = true
+	await get_tree().create_timer(1.0).timeout
+	_capture("res://tests/_shot_village_badges.png")
+
+# ── Capture du panneau Héros (HeroDoll) ─────────────────────
+func _shoot_hero_panel() -> void:
+	# Débloque quelques équipements pour voir cases pleines ET vides.
+	for eid: String in ["equipment_anneau", "equipment_armure"]:
+		GameData.get_entity(eid)["est_debloque"] = true
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	add_child(village)
+	await get_tree().create_timer(1.0).timeout
+	village._open_panel("hero")
+	await get_tree().create_timer(1.2).timeout
+	_capture("res://tests/_shot_hero_panel.png")
+	# Zoom ×3 sur la zone du pantin (moitié haute du panneau droit).
+	var img := get_viewport().get_texture().get_image()
+	var w := img.get_width()
+	var zone := Rect2i(int(w * 0.58), 0, int(w * 0.40), int(img.get_height() * 0.45))
+	var crop := img.get_region(zone)
+	crop.resize(crop.get_width() * 3, crop.get_height() * 3, Image.INTERPOLATE_NEAREST)
+	crop.save_png("res://tests/_shot_hero_doll_zoom.png")
+	print("Screenshot -> res://tests/_shot_hero_doll_zoom.png")
+
+# ── Capture du rituel d'évolution à 3 moments clés ──────────
+func _shoot_evolution() -> void:
+	GameData.pending_evolution = {
+		"entity_type": "creature",
+		"entity_id":   "creature_foret_surface",
+		"entity_name": "Rat des Égouts",
+		"from_tier":   1,
+		"to_tier":     2,
+	}
+	var ritual: Control = (load("res://scenes/village/EvolutionRitual.tscn") as PackedScene).instantiate()
+	add_child(ritual)
+	await get_tree().create_timer(1.6).timeout
+	_capture("res://tests/_shot_evo_rise.png")
+	await get_tree().create_timer(1.1).timeout
+	_capture("res://tests/_shot_evo_reveal.png")
+	await get_tree().create_timer(2.3).timeout
+	_capture("res://tests/_shot_evo_celebrate.png")
+
+func _capture(path: String) -> void:
+	# Certains écrans (Village) ré-appliquent le plein écran via GameSettings :
+	# re-forcer le fenêtré 1280×720 juste avant la prise.
+	if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		get_window().size = Vector2i(1280, 720)
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	img.save_png(path)
+	print("Screenshot -> ", path)
+
+# Résumé de cycle factice : XP réparties réalistes, butin, une évolution dispo.
+func _fake_cycle_data() -> void:
+	var detail_xp := {
+		"creature_foret_surface": 0.0,
+		"spike_trap":             0.0,
+		"herb_find":              0.0,
+	}
+	# Donne à chaque entité une XP cohérente (barre partiellement remplie).
+	var gains := {}
+	for eid: String in ["hero", "biome_foret", "passive_combat_mastery",
+			"equipment_anneau"] + detail_xp.keys():
+		var e := GameData.get_entity(eid)
+		if e.is_empty():
+			continue
+		var tier := int(e.get("maitrise_actuelle", 0))
+		var idx: int = mini(tier + 1, GameData.xp_thresholds.size() - 1)
+		var threshold := float(GameData.xp_thresholds[idx])
+		var frac := 1.15 if eid == "creature_foret_surface" else 0.55
+		e["xp_maitrise_actuelle"] = threshold * frac
+		gains[eid] = threshold * 0.40
+	for eid: String in detail_xp:
+		detail_xp[eid] = gains.get(eid, 25.0)
+
+	GameData.get_entity("biome_foret")["est_decouvert"] = true
+
+	CycleData.last_cycle_summary = {
+		"victory":              true,
+		"interrupted":          false,
+		"biome_id":             "biome_foret",
+		"hero_id":              "hero",
+		"modifier":             {},
+		"xp_total":             412.0,
+		"xp_hero":              gains.get("hero", 120.0),
+		"xp_biome":             gains.get("biome_foret", 90.0),
+		"xp_passives_total":    gains.get("passive_combat_mastery", 30.0),
+		"xp_passives_detail":   {"passive_combat_mastery": gains.get("passive_combat_mastery", 30.0)},
+		"xp_entities_detail":   detail_xp,
+		"loot_total":           7,
+		"loot_detail":          {"res_fourrure": 6, "ingredient_oscar": 1},
+		"xp_equip_detail":      {"equipment_anneau": gains.get("equipment_anneau", 20.0)},
+		"combats_won":          9,
+		"events":               11,
+		"events_total":         12,
+	}
