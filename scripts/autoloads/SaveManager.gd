@@ -181,6 +181,9 @@ func load_save() -> void:
 	_load_systems(data)
 	if data.has("village"):
 		GameData.village.merge(data["village"], true)
+	# Rattrapage de la règle « biome Peu Commun → équipement » sur les
+	# sauvegardes antérieures à son introduction.
+	GameData.reconcile_equipment_unlocks()
 	EventBus.load_completed.emit()
 
 func _load_player(data: Dictionary) -> void:

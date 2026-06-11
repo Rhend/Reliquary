@@ -75,6 +75,7 @@ const STRINGS: Dictionary = {
 		"village.soon":           "✦  %s  ✦\n\nBientôt disponible",
 		"village.fragment_freed": "🔮  Fragment libéré : %s",
 		"village.biome_revealed": "✦  Nouveau biome révélé : %s  ✦",
+		"village.equipment_unlocked": "⚔  Équipement obtenu : %s",
 
 		# ── Génériques UI ────────────────────────────────────
 		"ui.none": "Aucun",
@@ -99,6 +100,7 @@ const STRINGS: Dictionary = {
 		"hero.equip.slot.bouclier": "Bouclier",
 		"hero.equip.slot.talisman": "Talisman",
 		"hero.doll.empty":          "Emplacement libre — à découvrir.",
+		"hero.equip.locked_hint":   "Monte un biome au palier Peu Commun pour obtenir son équipement.",
 		"hero.forge_required":      "🔨  Forge Requise",
 		"hero.forge_ready":         "🔨  Prêt à forger :",
 		"hero.passive.unlock_hdr":  "— À DÉBLOQUER —",
@@ -301,6 +303,7 @@ const STRINGS: Dictionary = {
 		"village.soon":           "✦  %s  ✦\n\nComing soon",
 		"village.fragment_freed": "🔮  Fragment freed: %s",
 		"village.biome_revealed": "✦  New biome revealed: %s  ✦",
+		"village.equipment_unlocked": "⚔  Equipment obtained: %s",
 
 		# ── Generic UI ───────────────────────────────────────
 		"ui.none": "None",
@@ -325,6 +328,7 @@ const STRINGS: Dictionary = {
 		"hero.equip.slot.bouclier": "Shield",
 		"hero.equip.slot.talisman": "Talisman",
 		"hero.doll.empty":          "Empty slot — to be discovered.",
+		"hero.equip.locked_hint":   "Raise a biome to Uncommon to obtain its equipment.",
 		"hero.forge_required":      "🔨  Forge Required",
 		"hero.forge_ready":         "🔨  Ready to forge:",
 		"hero.passive.unlock_hdr":  "— TO UNLOCK —",

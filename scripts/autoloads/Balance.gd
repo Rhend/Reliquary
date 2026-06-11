@@ -31,6 +31,11 @@ const HERO_ATK_PER_TIER: Array[int] = [20,  32,  55,  90,  150,  245]
 const HERO_DEF_PER_TIER: Array[int] = [3,   5,   9,   16,  30,   55]
 const HERO_VIT: int = 20  # constant à tous les paliers
 
+# Palier de Maîtrise qu'un biome doit atteindre pour livrer son équipement
+# (obtenu au palier Commun/T0). Progression : T0 découverte → T1 équipement
+# → T2 mécanique forte du biome.
+const EQUIPMENT_UNLOCK_BIOME_TIER: int = 1
+
 # ═══════════════════════════════════════════════════════════
 #  Stats génériques des créatures par palier [T0..T5]
 #  Surface et Profondeur — valeurs de référence spec.

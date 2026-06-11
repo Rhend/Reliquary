@@ -102,6 +102,7 @@ func _ready() -> void:
 	EventBus.resources_changed.connect(_on_resources_changed_refresh)
 	EventBus.equipement_evolue.connect(func(_id, _tier): _on_resources_changed_refresh())
 	EventBus.equipment_changed.connect(_on_resources_changed_refresh)
+	EventBus.equipment_unlocked.connect(_on_equipment_unlocked)
 	EventBus.entity_ready_to_evolve.connect(func(_id): _update_badges())
 	EventBus.entity_evolved.connect(func(_id, _t): _update_badges())
 	EventBus.adventure_cycle_ended.connect(func(_s): _update_badges())
@@ -592,6 +593,13 @@ func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
 # Village tier change : rebuild hub (nouvelle couleur, nouveau bouton forge).
 func _on_village_tier_change(_nouveau_tier: int) -> void:
 	_rebuild_hub()
+
+# Équipement de biome obtenu (biome → Peu Commun) : bannière dorée.
+func _on_equipment_unlocked(equip_id: String) -> void:
+	var e   := GameData.get_entity(equip_id)
+	var nom := e.get("nom_affichage_fr", equip_id) as String
+	show_banner(Translations.T("village.equipment_unlocked") % nom,
+			Color(0.95, 0.80, 0.40), Color(0.16, 0.11, 0.02, 0.92), 2.5, 0.5)
 
 # Nouveau biome révélé : bannière + refresh du panneau Expéditions si ouvert.
 func _on_biome_revele(biome_id: String) -> void:

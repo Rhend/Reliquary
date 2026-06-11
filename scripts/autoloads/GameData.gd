@@ -53,7 +53,7 @@ var player: Dictionary = {
 	"active_biome_id":    "",
 	"active_passives":    [],
 	"equipped": {
-		"arme":     "equipment_arme",
+		"arme":     "",
 		"anneau":   "",
 		"armure":   "",
 		"ceinture": "",
@@ -213,7 +213,8 @@ func _read_json(path: String) -> Dictionary:
 #  Village
 # ═══════════════════════════════════════════════════════════
 
-# Hook entity_evolved : libère le Fragment (Rare) et révèle le biome secondaire (Légendaire).
+# Hook entity_evolved : équipement du biome (Peu Commun), Fragment (Rare),
+# biome secondaire révélé (Légendaire).
 func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 	var entity := get_entity(entity_id)
 	if entity.get("entity_type", "") != Enums.EntityType.BIOME:
@@ -222,6 +223,10 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 	# Le plafond des créatures du biome vient de monter : réévaluer leur XP stockée
 	# pour signaler les paliers redevenus franchissables (cf. plafonnement créature/biome).
 	MasterySystem.reevaluate_creatures_for_biome(entity_id)
+
+	# Peu Commun (T1) → l'équipement du biome est obtenu (au palier Commun/T0)
+	if new_tier >= Balance.EQUIPMENT_UNLOCK_BIOME_TIER:
+		unlock_biome_equipment(entity_id)
 
 	# Rare (T2), Légendaire (T4), Unique (T5) → libération d'un Fragment
 	if new_tier in [2, 4, 5]:
@@ -248,6 +253,55 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 			return
 		secondary["est_decouvert"] = true
 		EventBus.biome_revele.emit(secondary_id)
+
+# Clé de slot (player.equipped) par index `slot` des EquipmentData.
+const EQUIP_SLOT_KEYS: Array[String] = [
+	"arme", "anneau", "armure", "ceinture", "bouclier", "talisman",
+]
+
+# Débloque et équipe l'équipement lié à un biome — règle : biome Peu
+# Commun (T1) → équipement obtenu au palier Commun (T0). Ne fait rien si
+# déjà débloqué ou si l'équipement est un placeholder sans contenu.
+func unlock_biome_equipment(biome_id: String) -> void:
+	for eid in entities:
+		var equip: Dictionary = entities[eid]
+		if equip.get("entity_type", "") != Enums.EntityType.EQUIPMENT:
+			continue
+		if equip.get("biome_source_id", "") != biome_id:
+			continue
+		if equip.get("est_debloque", false):
+			continue
+		if str(equip.get("nom_affichage_fr", "")) == "":
+			continue
+		equip["est_debloque"] = true
+		var slot_idx := int(equip.get("slot", 0))
+		if slot_idx < EQUIP_SLOT_KEYS.size():
+			var slot_key := EQUIP_SLOT_KEYS[slot_idx]
+			if str(player["equipped"].get(slot_key, "")) == "":
+				player["equipped"][slot_key] = eid
+		EventBus.equipment_unlocked.emit(eid)
+		EventBus.equipment_changed.emit()
+
+# Rattrapage (anciennes sauvegardes / changement de règle), appelé après
+# load : biome Peu Commun+ → équipement livré ; biome en dessous →
+# équipement repris (la règle s'applique rétroactivement).
+func reconcile_equipment_unlocks() -> void:
+	for eid in entities:
+		var equip: Dictionary = entities[eid]
+		if equip.get("entity_type", "") != Enums.EntityType.EQUIPMENT:
+			continue
+		var bid := str(equip.get("biome_source_id", ""))
+		if bid == "" or str(equip.get("nom_affichage_fr", "")) == "":
+			continue   # placeholder sans contenu
+		var btier := int(get_entity(bid).get("maitrise_actuelle", 0))
+		if btier >= Balance.EQUIPMENT_UNLOCK_BIOME_TIER:
+			unlock_biome_equipment(bid)
+		elif equip.get("est_debloque", false):
+			equip["est_debloque"] = false
+			var slot_idx := int(equip.get("slot", 0))
+			if slot_idx < EQUIP_SLOT_KEYS.size() \
+					and str(player["equipped"].get(EQUIP_SLOT_KEYS[slot_idx], "")) == eid:
+				player["equipped"][EQUIP_SLOT_KEYS[slot_idx]] = ""
 
 # Retourne true si le Village peut passer au palier de Maîtrise suivant.
 # Condition unique : Fragments collectés ≥ coût du palier courant (Balance.VILLAGE_FRAGMENT_COSTS).

@@ -107,6 +107,9 @@ signal combat_ended(result: Dictionary)
 # Émis quand un item est équipé ou déséquipé.
 @warning_ignore("unused_signal")
 signal equipment_changed()
+# Émis quand l'équipement d'un biome est obtenu (biome → Peu Commun).
+@warning_ignore("unused_signal")
+signal equipment_unlocked(equipment_id: String)
 # Émis après la forge d'un équipement (passage au palier suivant).
 @warning_ignore("unused_signal")
 signal equipement_evolue(equipment_id: String, nouveau_palier: int)

@@ -99,15 +99,27 @@ static func build(host: Village) -> void:
 	var equip_sec := UIHelpers.collapsible_section(Translations.T("hero.section.equip"), tcolor, true, host.panel_ui_state())
 	host.rp_content.add_child(equip_sec["wrapper"])
 	var equip_body := equip_sec["body"] as VBoxContainer
+	var any_equip := false
 	for entry in EQUIP_SLOTS:
 		var slot_key:  String = entry[0]
 		var slot_icon: String = entry[1]
 		var equip_id:  String = entry[2]
 		var slot_name: String = Translations.equip_slot_name(slot_key)
 		var equip := GameData.get_entity(equip_id)
-		if equip.is_empty():
+		# Non débloqué (biome pas encore Peu Commun) : le HeroDoll montre
+		# déjà la case vide, pas de carte ici.
+		if equip.is_empty() or not equip.get("est_debloque", false):
 			continue
 		equip_body.add_child(_equip_slot_card(host, slot_key, slot_icon, slot_name, equip_id, equip, tcolor))
+		any_equip = true
+	if not any_equip:
+		var hint := Label.new()
+		hint.text = Translations.T("hero.equip.locked_hint")
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.add_theme_font_size_override("font_size", 11)
+		hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		equip_body.add_child(hint)
 
 	# ── PASSIFS ───────────────────────────────────────────────
 	var passif_sec := UIHelpers.collapsible_section(Translations.T("hero.section.passives"), tcolor, true, host.panel_ui_state())

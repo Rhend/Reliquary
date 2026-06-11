@@ -107,6 +107,11 @@ godot --headless --path . --quit-after 30
 | Marécage Putride (`biome_marecage`) | poison (coups héros empoisonnent) | Armure | Cavalier Sans Tête |
 | Montagne (`biome_montagne`) | endurcissement (dégâts héros −20 %) | Arme | Gorlab |
 
+Progression d'un biome : T0 découverte → **T1 Peu Commun : son équipement est
+obtenu (à T0) et auto-équipé** (`Balance.EQUIPMENT_UNLOCK_BIOME_TIER`,
+`GameData.unlock_biome_equipment`) → T2 Rare : mécanique forte → T4 Légendaire :
+biome secondaire révélé. Le joueur démarre SANS équipement.
+
 Biomes secondaires (révélés au Légendaire du parent) : Collines, Ville Fantôme, Cimetière.
 Ambiances visuelles : presets dans `BiomeBackground.PRESETS` (+ `accent_for_biome()`
 utilisé par le séparateur VS).
