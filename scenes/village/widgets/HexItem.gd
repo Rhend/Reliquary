@@ -1,7 +1,6 @@
 class_name HexItem
 extends Control
 
-var icon_text       := ""
 var label_text      := ""
 var tier_color      := Color.WHITE
 var tier            := 1
@@ -14,51 +13,55 @@ var has_notification := false   # pastille rouge = action disponible
 var _htween         : Tween
 var _t              := 0.0
 
-# Sprite radial doux pour le modelé des pastilles rondes (lumière/ombre).
+# ─── Énergie intérieure ───────────────────────────────────────
+# Plus d'icône : le contenu de la bulle EST le feedback. _energy pilote
+# l'intensité de l'animation interne (cœur + tourbillon), lissée dans
+# _process pour des transitions organiques entre les états :
+#   0.0 = repos · ~0.45 = hover (« bouillonnement », promesse du clic)
+#   1.0 = sélectionné (cœur d'énergie chargé qui tourbillonne en continu)
+# Le clic déclenche en plus une onde de charge (_burst_t) : la boule
+# d'énergie se remplit du centre vers le bord.
+const BURST_DUR := 0.45
+var _energy  := 0.0
+var _burst_t := 99.0   # temps écoulé depuis le clic ; 99 = inactif
+
+# Sprite radial doux : modelé des pastilles rondes + lueurs d'énergie.
 var _shade_tex: GradientTexture2D
 
 func _ready() -> void:
 	pivot_offset = size * 0.5
 	_shade_tex = UIHelpers.radial_glow_tex(64,
 			[0.0, 0.35, 1.0], [1.0, 0.55, 0.0])
-	var ico := Label.new()
-	ico.text = icon_text
-	ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ico.add_theme_font_size_override("font_size", 50)
-	ico.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ico.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(ico)
 	mouse_entered.connect(_on_enter)
 	mouse_exited.connect(_on_exit)
 
 func _process(dt: float) -> void:
 	_t += dt
+	_burst_t += dt
+	var target := 1.0 if is_selected else (0.45 if is_hovered else 0.0)
+	_energy = lerpf(_energy, target, 1.0 - exp(-dt * 6.0))
 	queue_redraw()
 
+# Le hover ne grossit plus la bulle : il « réveille » son contenu (_energy).
 func _on_enter() -> void:
 	is_hovered = true
-	_tween_scale(1.2)
 	queue_redraw()
 
 func _on_exit() -> void:
 	is_hovered = false
-	_tween_scale(1.0)
 	queue_redraw()
-
-func _tween_scale(target: float) -> void:
-	if _htween: _htween.kill()
-	_htween = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	_htween.tween_property(self, "scale", Vector2(target, target), 0.15)
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton \
 			and event.button_index == MOUSE_BUTTON_LEFT \
 			and event.pressed:
+		_burst_t = 0.0   # onde de charge intérieure
 		if _htween: _htween.kill()
 		_htween = create_tween().set_trans(Tween.TRANS_SINE)
-		_htween.tween_property(self, "scale", Vector2(0.88, 0.88), 0.07)
+		_htween.tween_property(self, "scale", Vector2(0.92, 0.92), 0.06)
 		_htween.tween_callback(callback)
+		_htween.tween_property(self, "scale", Vector2.ONE, 0.18) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _draw() -> void:
 	var c := size * 0.5
@@ -163,6 +166,7 @@ func _round(c: Vector2, with_fx: bool) -> void:
 	# Les sprites s'éteignent avant le bord du disque : rien ne déborde.
 	_shade(c + Vector2(0.0, -r * 0.40), r * 0.58, Color(1, 1, 1, 0.30))
 	_shade(c + Vector2(0.0,  r * 0.42), r * 0.56, Color(0, 0, 0, 0.32))
+	_inner_energy(c, r * 0.86)
 	# Bordure lumineuse pulsée
 	var border := tier_color.lightened(0.15); border.a = 0.75 + 0.25 * sin(_t * 1.8)
 	draw_arc(c, r, 0.0, TAU, 64, border, 2.5, true)
@@ -187,9 +191,8 @@ func _round(c: Vector2, with_fx: bool) -> void:
 		# Liseré blanc intérieur
 		draw_arc(c, r - 3.0, 0.0, TAU, 64, Color(1.0, 1.0, 1.0, 0.55), 1.5, true)
 	elif is_hovered:
-		var ex: float = 16.0 if with_fx else 14.0
-		var corona := tier_color; corona.a = 0.30
-		draw_circle(c, r + ex, corona)
+		# Pas de couronne externe : le feedback hover vient du contenu
+		# (_inner_energy), juste un liseré pour souligner la forme.
 		draw_arc(c, r, 0.0, TAU, 64, tier_color.lightened(0.4), 3.5, true)
 
 func _hexa(c: Vector2, with_fx: bool, with_pulse: bool) -> void:
@@ -227,6 +230,8 @@ func _hexa(c: Vector2, with_fx: bool, with_pulse: bool) -> void:
 	draw_line(pts[1], pts[2], Color(0, 0, 0, 0.60), 2.0, true)
 	draw_line(pts[2], pts[3], Color(0, 0, 0, 0.50), 1.5, true)
 
+	_inner_energy(c, eff_r * 0.70)
+
 	# Bordure externe pulsée
 	var border := tier_color.lightened(0.20); border.a = 0.65 + 0.25 * sin(_t * 1.8)
 	_draw_border(pts, border, 2.0)
@@ -252,19 +257,56 @@ func _hexa(c: Vector2, with_fx: bool, with_pulse: bool) -> void:
 		# Liseré blanc intérieur
 		_draw_border(_hex(c, eff_r - 3.0), Color(1.0, 1.0, 1.0, 0.55), 1.5)
 	elif is_hovered:
-		var expand: float = 18.0
-		if with_fx: expand = 22.0
-		var corona := tier_color; corona.a = 0.30
-		draw_colored_polygon(_hex(c, eff_r + expand), corona)
+		# Pas de couronne externe : le feedback hover vient du contenu
+		# (_inner_energy), juste un liseré pour souligner la forme.
 		_draw_border(pts, tier_color.lightened(0.4), 3.5)
-		var soft := tier_color; soft.a = 0.55
-		_draw_border(_hex(c, eff_r + 10.0), soft, 7.0)
 
 # Sprite radial doux centré (modelé lumière/ombre des pastilles rondes).
 func _shade(center: Vector2, radius: float, col: Color) -> void:
 	draw_texture_rect(_shade_tex,
 			Rect2(center - Vector2.ONE * radius, Vector2.ONE * radius * 2.0),
 			false, col)
+
+# ─── Animation intérieure : cœur d'énergie + tourbillon ──────
+# `ir` = rayon intérieur disponible (l'animation ne déborde jamais).
+func _inner_energy(c: Vector2, ir: float) -> void:
+	var e := _energy
+	var bursting := _burst_t < BURST_DUR
+	if e <= 0.02 and not bursting:
+		return
+
+	# 1. Cœur d'énergie : grossit, s'éclaircit et pulse plus vite avec e.
+	var pulse  := 1.0 + 0.07 * sin(_t * (2.2 + 3.0 * e))
+	var core_r := ir * (0.18 + 0.52 * e) * pulse
+	var core_a := 0.30 + 0.50 * e
+	_shade(c, core_r * 2.1, Color(tier_color.lightened(0.40), core_a * 0.55))
+	draw_circle(c, core_r * 0.50,
+			Color(tier_color.lightened(0.75), core_a), true, -1.0, true)
+
+	# 2. Tourbillon : 3 bras spiraux (segments d'arc enroulés autour du
+	#    cœur) — lents et discrets au hover, rapides et nets en sélection.
+	var spin := _t * (0.9 + 2.8 * e)
+	for arm in 3:
+		var ph := spin + float(arm) * TAU / 3.0
+		for s in 4:
+			var fr  := (float(s) + 0.5) / 4.0          # 0 = centre → 1 = bord
+			var rr  := ir * (0.30 + 0.58 * fr)
+			var ang := ph + fr * 2.6                   # enroulement spiral
+			var sa  := (0.08 + 0.45 * e) * (1.0 - fr * 0.55)
+			var col := tier_color.lightened(0.55); col.a = sa
+			draw_arc(c, rr, ang, ang + 0.55 - 0.18 * fr, 8, col,
+					2.6 - 1.2 * fr, true)
+
+	# 3. Onde de charge au clic : la boule se remplit du centre au bord.
+	if bursting:
+		var bp := _burst_t / BURST_DUR
+		var eo := 1.0 - pow(1.0 - bp, 3.0)             # ease-out cubique
+		var br := ir * eo
+		var ba := 1.0 - bp
+		draw_circle(c, br, Color(tier_color.lightened(0.55), ba * 0.30),
+				true, -1.0, true)
+		draw_arc(c, br, 0.0, TAU, 48,
+				Color(tier_color.lightened(0.85), ba * 0.9), 3.0, true)
 
 func _hex(c: Vector2, r: float) -> PackedVector2Array:
 	var pts := PackedVector2Array()

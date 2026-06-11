@@ -850,9 +850,10 @@ func _launch_evolution_ritual(entity_type: String, entity_id: String,
 
 # ─── Factory hexagone ─────────────────────────────────────────
 # Crée un HexItem, le positionne sur le hub et l'enregistre dans _hex_items.
-func _make_hex(lbl: String, icon: String, tcolor: Color, pos: Vector2, cb: Callable, panel_id: String) -> void:
+# `_icon` : conservé dans la signature pour les appelants, mais plus affiché —
+# l'intérieur de la bulle est désormais l'animation d'énergie (cf. HexItem).
+func _make_hex(lbl: String, _icon: String, tcolor: Color, pos: Vector2, cb: Callable, panel_id: String) -> void:
 	var item := HexItem.new()
-	item.icon_text   = icon
 	item.label_text  = lbl
 	item.tier_color  = tcolor
 	item.tier        = village_tier()
