@@ -2,7 +2,8 @@
 # SettingsOverlay — Panneau Paramètres modal plein écran.
 #
 # Sections : Audio (musique / SFX) · Affichage (plein écran) ·
-#            Sauvegarde (export / import) · Langue (FR / EN).
+#            Sauvegarde (export / import) · Langue (FR / EN) ·
+#            Quitter (sauvegarde puis ferme l'application).
 #
 # Usage (Village) :
 #   add_child(SettingsOverlay.new())
@@ -139,6 +140,27 @@ func _build() -> void:
 	lang_opt.item_selected.connect(func(idx: int) -> void:
 		GameSettings.set_language(lang_codes[idx]))
 	vb.add_child(lang_opt)
+
+	vb.add_child(_sep())
+
+	# ── QUITTER ──────────────────────────────────────────────
+	# get_tree().quit() n'émet PAS NOTIFICATION_WM_CLOSE_REQUEST :
+	# la sauvegarde doit être écrite explicitement avant de quitter.
+	var quit_btn := Button.new()
+	quit_btn.text = Translations.T("settings.quit")
+	quit_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quit_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	quit_btn.add_theme_font_size_override("font_size", 13)
+	quit_btn.add_theme_color_override("font_color", UIColors.INGREDIENT_MISSING)
+	quit_btn.add_theme_stylebox_override("normal",
+			UIHelpers.card_style(UIColors.INGREDIENT_MISSING, 0.06, 0.35, 1, 5))
+	quit_btn.add_theme_stylebox_override("hover",
+			UIHelpers.card_style(UIColors.INGREDIENT_MISSING, 0.14, 0.70, 1, 5))
+	quit_btn.pressed.connect(func() -> void:
+		SaveManager.save()
+		get_tree().quit()
+	)
+	vb.add_child(quit_btn)
 
 # ─── Fabriques de lignes ──────────────────────────────────────
 
