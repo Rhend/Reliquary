@@ -1,0 +1,74 @@
+{
+  "biomes": [
+    { "id": "biome_foret",    "fr": "Forêt Sombre",     "en": "Dark Forest" },
+    { "id": "biome_marecage", "fr": "Marécage Putride", "en": "Putrid Swamp" },
+    { "id": "biome_montagne", "fr": "Montagne",         "en": "Mountain" }
+  ],
+  "hero": [
+    { "id": "hero", "fr": "Héros", "en": "Hero" }
+  ],
+  "creatures": [
+    { "id": "creature_foret_surface",       "fr": "Rat des Égouts",     "en": "Sewer Rat",      "biome": "biome_foret",    "zone": "surface" },
+    { "id": "creature_foret_profondeur",    "fr": "Ours Légendaire",    "en": "Legendary Bear", "biome": "biome_foret",    "zone": "profondeur" },
+    { "id": "creature_oscar",               "fr": "Oscar",              "en": "Oscar",          "biome": "biome_foret",    "zone": "unique" },
+    { "id": "creature_marecage_surface",    "fr": "Grenouille Géante",  "en": "Giant Frog",     "biome": "biome_marecage", "zone": "surface" },
+    { "id": "creature_marecage_profondeur", "fr": "Serpent des Marais", "en": "Swamp Serpent",  "biome": "biome_marecage", "zone": "profondeur" },
+    { "id": "creature_cavalier_sans_tete",  "fr": "Cavalier Sans Tête", "en": "Headless Rider", "biome": "biome_marecage", "zone": "unique" },
+    { "id": "creature_montagne_surface",    "fr": "Loup des Cimes",     "en": "Ridge Wolf",     "biome": "biome_montagne", "zone": "surface" },
+    { "id": "creature_montagne_profondeur", "fr": "Troll de Pierre",    "en": "Stone Troll",    "biome": "biome_montagne", "zone": "profondeur" },
+    { "id": "creature_gorlab",              "fr": "Gorlab",             "en": "Gorlab",         "biome": "biome_montagne", "zone": "unique" }
+  ],
+  "pieges": [
+    { "id": "spike_trap",    "fr": "Piège à Pieux",      "en": "Spike Trap",   "biome": "biome_foret" },
+    { "id": "poison_trap",   "fr": "Baies Empoisonnées", "en": "Poison Berries", "biome": "biome_foret" },
+    { "id": "boue_mouvante", "fr": "Boue Mouvante",      "en": "Quickmud",     "biome": "biome_marecage" },
+    { "id": "miasmes",       "fr": "Miasmes Toxiques",   "en": "Toxic Miasma", "biome": "biome_marecage" },
+    { "id": "jellyfish",     "fr": "Chute de Pierres",   "en": "Rockfall",     "biome": "biome_montagne" },
+    { "id": "quicksand",     "fr": "Crevasse",           "en": "Crevasse",     "biome": "biome_montagne" }
+  ],
+  "benedictions": [
+    { "id": "herb_find",          "fr": "Herbes médicinales",      "en": "Medicinal Herbs",   "biome": "biome_foret" },
+    { "id": "lucky_charm",        "fr": "Breloque porte-bonheur",  "en": "Lucky Charm",       "biome": "biome_foret" },
+    { "id": "champignon_magique", "fr": "Champignon Magique",      "en": "Magic Mushroom",    "biome": "biome_marecage" },
+    { "id": "boue_curative",      "fr": "Boue Curative",           "en": "Healing Mud",       "biome": "biome_marecage" },
+    { "id": "tide_pool",          "fr": "Source Chaude",           "en": "Hot Spring",        "biome": "biome_montagne" },
+    { "id": "sea_shell",          "fr": "Géode Étincelante",       "en": "Glittering Geode",  "biome": "biome_montagne" }
+  ],
+  "equipements": [
+    { "id": "equipment_anneau",   "fr": "Anneau de Forêt",     "en": "Forest Ring",    "biome": "biome_foret",    "slot": "anneau" },
+    { "id": "equipment_armure",   "fr": "Carapace des Marais", "en": "Swamp Carapace", "biome": "biome_marecage", "slot": "armure" },
+    { "id": "equipment_arme",     "fr": "Lame de Pierre",      "en": "Stone Blade",    "biome": "biome_montagne", "slot": "arme" },
+    { "id": "equipment_ceinture", "fr": "", "en": "", "slot": "ceinture", "placeholder": true },
+    { "id": "equipment_bouclier", "fr": "", "en": "", "slot": "bouclier", "placeholder": true },
+    { "id": "equipment_talisman", "fr": "", "en": "", "slot": "talisman", "placeholder": true }
+  ],
+  "ingredients": [
+    { "id": "res_fourrure",                  "fr": "Fourrure",           "en": "Fur",             "biome": "biome_foret" },
+    { "id": "res_slime",                     "fr": "Slime Visqueux",     "en": "Viscous Slime",   "biome": "biome_foret" },
+    { "id": "res_venin",                     "fr": "Venin",              "en": "Venom",           "biome": "biome_marecage" },
+    { "id": "res_ecaille",                   "fr": "Écaille",            "en": "Scale",           "biome": "biome_marecage" },
+    { "id": "res_mineral_fer",               "fr": "Minerai de Fer",     "en": "Iron Ore",        "biome": "biome_montagne" },
+    { "id": "res_pierre_montagne",           "fr": "Pierre de Montagne", "en": "Mountain Stone",  "biome": "biome_montagne" },
+    { "id": "ingredient_oscar",              "fr": "Essence d'Oscar",    "en": "Oscar's Essence", "biome": "biome_foret",    "unique": true },
+    { "id": "ingredient_cavalier_sans_tete", "fr": "Tête du Cavalier",   "en": "Rider's Head",    "biome": "biome_marecage", "unique": true },
+    { "id": "ingredient_gorlab",             "fr": "Cœur de Gorlab",     "en": "Gorlab's Heart",  "biome": "biome_montagne", "unique": true }
+  ],
+  "fragments": [
+    { "id": "fragment_foret",    "fr": "Fragment de Forêt",    "en": "Forest Fragment",   "biome": "biome_foret" },
+    { "id": "fragment_marecage", "fr": "Fragment de Marécage", "en": "Swamp Fragment",    "biome": "biome_marecage" },
+    { "id": "fragment_montagne", "fr": "Fragment de Montagne", "en": "Mountain Fragment", "biome": "biome_montagne" }
+  ],
+  "passifs": [
+    { "id": "passive_combat_mastery", "fr": "Maîtrise du Combat", "en": "Combat Mastery" },
+    { "id": "passive_regeneration",   "fr": "Régénération",       "en": "Regeneration" },
+    { "id": "passive_resistance",     "fr": "Résistance",         "en": "Resistance" },
+    { "id": "passive_resilience",     "fr": "Résilience",         "en": "Resilience" },
+    { "id": "passive_fortification",  "fr": "Fortification",      "en": "Fortification" },
+    { "id": "passive_poison_touch",   "fr": "Contact Venimeux",   "en": "Venom Touch" }
+  ],
+  "passifs_uniques": [
+    { "id": "passif_unique_foret",    "fr": "Essence de Forêt",    "en": "Forest Essence",   "biome": "biome_foret" },
+    { "id": "passif_unique_marecage", "fr": "Essence du Marécage", "en": "Swamp Essence",    "biome": "biome_marecage" },
+    { "id": "passif_unique_montagne", "fr": "Essence de Montagne", "en": "Mountain Essence", "biome": "biome_montagne" }
+  ]
+}
