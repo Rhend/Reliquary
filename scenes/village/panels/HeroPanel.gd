@@ -100,36 +100,28 @@ static func build(host: Village) -> void:
 		stats_body.add_child(ml)
 
 	# ── ÉQUIPEMENT ────────────────────────────────────────────
-	var equip_sec := UIHelpers.collapsible_section(Translations.T("hero.section.equip"), tcolor, true, host.panel_ui_state())
-	host.rp_content.add_child(equip_sec["wrapper"])
-	var equip_body := equip_sec["body"] as VBoxContainer
-	var any_equip := false
+	# Section INVISIBLE tant qu'aucun équipement n'est obtenu : son
+	# apparition est la récompense du premier biome monté à Peu Commun.
+	var unlocked_slots: Array = []
 	for entry in EQUIP_SLOTS:
-		var slot_key:  String = entry[0]
-		var slot_icon: String = entry[1]
-		var equip_id:  String = entry[2]
-		var slot_name: String = Translations.equip_slot_name(slot_key)
-		var equip := GameData.get_entity(equip_id)
-		# Non débloqué (biome pas encore Peu Commun) : le HeroDoll montre
-		# déjà la case vide, pas de carte ici.
-		if equip.is_empty() or not equip.get("est_debloque", false):
-			continue
-		equip_body.add_child(_equip_slot_card(host, slot_key, slot_icon, slot_name, equip_id, equip, tcolor))
-		any_equip = true
-	if not any_equip:
-		var hint := Label.new()
-		hint.text = Translations.T("hero.equip.locked_hint")
-		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hint.add_theme_font_size_override("font_size", 11)
-		hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		equip_body.add_child(hint)
+		var equip := GameData.get_entity(entry[2] as String)
+		if not equip.is_empty() and equip.get("est_debloque", false):
+			unlocked_slots.append(entry)
+	if not unlocked_slots.is_empty():
+		var equip_sec := UIHelpers.collapsible_section(Translations.T("hero.section.equip"), tcolor, true, host.panel_ui_state())
+		host.rp_content.add_child(equip_sec["wrapper"])
+		var equip_body := equip_sec["body"] as VBoxContainer
+		for entry in unlocked_slots:
+			var slot_key:  String = entry[0]
+			var slot_icon: String = entry[1]
+			var equip_id:  String = entry[2]
+			var slot_name: String = Translations.equip_slot_name(slot_key)
+			equip_body.add_child(_equip_slot_card(host, slot_key, slot_icon,
+					slot_name, equip_id, GameData.get_entity(equip_id), tcolor))
 
 	# ── PASSIFS ───────────────────────────────────────────────
-	var passif_sec := UIHelpers.collapsible_section(Translations.T("hero.section.passives"), tcolor, true, host.panel_ui_state())
-	host.rp_content.add_child(passif_sec["wrapper"])
-	var passif_body := passif_sec["body"] as VBoxContainer
-
+	# Même règle que l'Équipement : la section n'apparaît qu'avec son
+	# premier passif débloqué.
 	var cards: Array[Control] = []
 	var seen: Array           = []
 	for pid in (c.get("unlocked_passives", []) as Array) + (GameData.player.get("active_passives", []) as Array):
@@ -148,14 +140,10 @@ static func build(host: Village) -> void:
 			continue
 		cards.append(_passive_card(host, _normalize_unique_passive(eid, e), tcolor))
 
-	if cards.is_empty():
-		var none_lbl := Label.new()
-		none_lbl.text = Translations.T("hero.no_passive")
-		none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		none_lbl.add_theme_font_size_override("font_size", 11)
-		none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		passif_body.add_child(none_lbl)
-	else:
+	if not cards.is_empty():
+		var passif_sec := UIHelpers.collapsible_section(Translations.T("hero.section.passives"), tcolor, true, host.panel_ui_state())
+		host.rp_content.add_child(passif_sec["wrapper"])
+		var passif_body := passif_sec["body"] as VBoxContainer
 		for card in cards:
 			passif_body.add_child(card)
 

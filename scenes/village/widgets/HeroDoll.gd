@@ -9,6 +9,8 @@
 # Trois cases par colonne, de part et d'autre de la silhouette, avec
 # un fin connecteur vers le point d'ancrage anatomique : lisible, sans
 # chevauchement. Détails (nom, palier, stats, lore) en tooltip.
+# Seuls les slots dont l'équipement est OBTENU sont rendus : la
+# silhouette nue se pare progressivement, slot par slot.
 # ============================================================
 class_name HeroDoll
 extends Control
@@ -62,31 +64,30 @@ func _layout() -> void:
 # ── Case + nom du slot ────────────────────────────────────────
 func _make_slot(slot_key: String, icon: String, equip_id: String,
 		side: float, y: float, anchor: Vector2) -> void:
-	var equip    := GameData.get_entity(equip_id)
-	var unlocked: bool = not equip.is_empty() \
-			and equip.get("est_debloque", false)
-	var etier := int(equip.get("maitrise_actuelle", 0)) if unlocked else 0
-	var ec    := UIColors.tier_color(etier) if unlocked else UIColors.TEXT_MUTED
+	var equip := GameData.get_entity(equip_id)
+	# Slot INVISIBLE tant que son équipement n'est pas obtenu (biome associé
+	# monté à Peu Commun) : la silhouette se pare au fil de la progression,
+	# chaque nouvelle case est une révélation.
+	if equip.is_empty() or not equip.get("est_debloque", false):
+		return
+	var etier := int(equip.get("maitrise_actuelle", 0))
+	var ec    := UIColors.tier_color(etier)
 
 	var box := PanelContainer.new()
 	box.custom_minimum_size = SLOT_SIZE
 	box.size                = SLOT_SIZE
 	box.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	box.add_theme_stylebox_override("panel",
-			UIHelpers.card_style(ec, 0.12 if unlocked else 0.04,
-					0.70 if unlocked else 0.25, 1, 6))
+			UIHelpers.card_style(ec, 0.12, 0.70, 1, 6))
 	add_child(box)
 
-	# Icône uniquement si l'équipement est débloqué — une case verrouillée
-	# reste vide (la grille grisée se suffit, pas de fausse promesse).
-	if unlocked:
-		var ico := Label.new()
-		ico.text = icon
-		ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-		ico.add_theme_font_size_override("font_size", 15)
-		ico.add_theme_color_override("font_color", ec.lerp(Color.WHITE, 0.35))
-		box.add_child(ico)
+	var ico := Label.new()
+	ico.text = icon
+	ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	ico.add_theme_font_size_override("font_size", 15)
+	ico.add_theme_color_override("font_color", ec.lerp(Color.WHITE, 0.35))
+	box.add_child(ico)
 
 	# Nom du slot sous la case : identification immédiate.
 	var slot_name := Translations.equip_slot_name(slot_key)
@@ -96,34 +97,20 @@ func _make_slot(slot_key: String, icon: String, equip_id: String,
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_lbl.add_theme_font_size_override("font_size", 9)
-	name_lbl.add_theme_color_override("font_color",
-			Color(ec, 0.85) if unlocked else Color(UIColors.TEXT_MUTED, 0.6))
+	name_lbl.add_theme_color_override("font_color", Color(ec, 0.85))
 	add_child(name_lbl)
 
-	if unlocked:
-		var tt := Translations.T("hero.equip.tt_slot") \
-				% [slot_name, GameData.get_tier_name(etier)]
-		var spp   := equip.get("stats_par_palier", {}) as Dictionary
-		var stats := spp.get(etier, spp.get(0, {})) as Dictionary
-		var line  := ForgePanel._stats_line(stats)
-		if line != "":
-			tt += "\n" + line
-		UIHelpers.register_tooltip(box,
-				Translations.entity_name(equip, equip_id), tt, ec,
-				Translations.entity_lore(equip))
-		UIHelpers.add_hover_feedback(box)
-	else:
-		# Équipement existant dont le biome source est découvert : on explique
-		# la vraie condition (palier à atteindre). Sinon, slot encore mystère.
-		var biome_id := equip.get("biome_source_id", "") as String
-		var biome    := GameData.get_entity(biome_id)
-		var tt_body  := Translations.T("hero.doll.empty")
-		if not equip.is_empty() and biome.get("est_decouvert", false):
-			tt_body = Translations.T("hero.doll.locked") % [
-				Translations.entity_name(biome, biome_id),
-				GameData.get_tier_name(Balance.EQUIPMENT_UNLOCK_BIOME_TIER),
-			]
-		UIHelpers.register_tooltip(box, slot_name, tt_body, UIColors.TEXT_MUTED)
+	var tt := Translations.T("hero.equip.tt_slot") \
+			% [slot_name, GameData.get_tier_name(etier)]
+	var spp   := equip.get("stats_par_palier", {}) as Dictionary
+	var stats := spp.get(etier, spp.get(0, {})) as Dictionary
+	var line  := ForgePanel._stats_line(stats)
+	if line != "":
+		tt += "\n" + line
+	UIHelpers.register_tooltip(box,
+			Translations.entity_name(equip, equip_id), tt, ec,
+			Translations.entity_lore(equip))
+	UIHelpers.add_hover_feedback(box)
 
 	_items.append([box, name_lbl, side, y, anchor, ec])
 

@@ -107,12 +107,13 @@ func _shoot_combat() -> void:
 
 # ── Capture du panneau Héros (HeroDoll) ─────────────────────
 func _shoot_hero_panel() -> void:
-	# Débloque quelques équipements pour voir cases pleines ET vides.
-	for eid: String in ["equipment_anneau", "equipment_armure"]:
-		GameData.get_entity(eid)["est_debloque"] = true
 	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
 	_vp.add_child(village)
 	await get_tree().create_timer(1.0).timeout
+	# Injection APRÈS le boot (load_save écraserait l'état forcé) :
+	# 2 équipements obtenus → leurs slots visibles, l'Arme reste cachée.
+	for eid: String in ["equipment_anneau", "equipment_armure"]:
+		GameData.get_entity(eid)["est_debloque"] = true
 	village._open_panel("hero")
 	await get_tree().create_timer(1.2).timeout
 	_capture("res://tests/_shot_hero_panel.png")
