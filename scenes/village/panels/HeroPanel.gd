@@ -158,13 +158,9 @@ static func build(host: Village) -> void:
 # d'une ligne chacun). Quantité en vert, uniques marqués ✦ or, détail
 # (provenance + lore) dans le tooltip.
 static func _build_ingredients(host: Village, tcolor: Color) -> void:
-	var ingr_sec := UIHelpers.collapsible_section(Translations.T("hero.section.ingredients"), tcolor, true, host.panel_ui_state())
-	ingr_sec["wrapper"].name = "IngredientsSection"
-	host.rp_content.add_child(ingr_sec["wrapper"])
-	var body := ingr_sec["body"] as VBoxContainer
-	body.add_theme_constant_override("separation", 4)
-
 	# Groupage par biome source (seulement les ingrédients possédés).
+	# Section ABSENTE tant que l'inventaire est vide (règle générale :
+	# pas de coquille vide, l'apparition signale le premier drop).
 	var by_biome: Dictionary = {}
 	for eid in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
@@ -177,15 +173,14 @@ static func _build_ingredients(host: Village, tcolor: Color) -> void:
 		if not by_biome.has(src):
 			by_biome[src] = []
 		(by_biome[src] as Array).append({"e": e, "qty": qty})
-
 	if by_biome.is_empty():
-		var none_lbl := Label.new()
-		none_lbl.text = Translations.T("hero.no_ingredient")
-		none_lbl.add_theme_font_size_override("font_size", 11)
-		none_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		none_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		body.add_child(none_lbl)
 		return
+
+	var ingr_sec := UIHelpers.collapsible_section(Translations.T("hero.section.ingredients"), tcolor, true, host.panel_ui_state())
+	ingr_sec["wrapper"].name = "IngredientsSection"
+	host.rp_content.add_child(ingr_sec["wrapper"])
+	var body := ingr_sec["body"] as VBoxContainer
+	body.add_theme_constant_override("separation", 4)
 
 	# Biomes connus d'abord (ordre canonique), inconnus ensuite.
 	const BIOME_ORDER := ["biome_montagne", "biome_foret", "biome_marecage"]

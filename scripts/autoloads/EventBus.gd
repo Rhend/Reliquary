@@ -29,6 +29,11 @@ signal entity_evolved(entity_id: String, new_tier: int)
 @warning_ignore("unused_signal")
 signal bestiary_updated(enc_id: String)
 
+# Émis à la PREMIÈRE rencontre d'une entité (création de son entrée au
+# bestiaire) — sert au suivi des découvertes d'une expédition.
+@warning_ignore("unused_signal")
+signal entity_discovered(entity_id: String)
+
 # ── Ressources & Forge ──────────────────────────────────────
 
 # Émis par AdventureSystem après un drop de butin.

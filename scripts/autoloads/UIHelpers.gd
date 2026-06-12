@@ -165,12 +165,13 @@ static func xp_panel(fill_color: Color, xp_fill: float,
 
 # Carte XP standard d'une entité — DA UNIQUE du jeu pour ce motif.
 # XPCard (fond rempli au palier courant) + en-tête « [icône] nom (gauche) |
-# palier (badge) | XP (droite) ». À réutiliser partout plutôt que reconstruire
-# l'en-tête à la main. Palier max → passer xp_max = 0 → affiche « RANG MAX ».
+# palier + XP (CENTRE) | extras (droite) ». À réutiliser partout plutôt que
+# reconstruire l'en-tête à la main. Palier max → xp_max = 0 → « RANG MAX ».
 # icon : préfixe optionnel (emoji/symbole) devant le nom (ex. récap de cycle).
 # entity_type : détermine le motif de particules de la barre (cf. XPCard.motif_for_type).
-# Retourne { card, header } : ajouter `card` au parent ; `header` (HBox) reste
-# accessible pour y greffer un élément optionnel (flèche d'accordéon, gain…).
+# Retourne { card, header } : ajouter `card` au parent ; tout élément greffé
+# ensuite sur `header` (compteur, badge de slot, gain « +X XP », flèche
+# d'accordéon…) atterrit TOUT À DROITE, après le bloc central.
 static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: float,
 		icon: String = "", entity_type: String = "") -> Dictionary:
 	var color := UIColors.tier_color(tier)
@@ -198,10 +199,13 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 
 	var name_lbl := Label.new()
 	name_lbl.text = display_name
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.add_theme_font_size_override("font_size", 13)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	header.add_child(name_lbl)
+
+	var sp1 := Control.new()
+	sp1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(sp1)
 
 	var tbadge := Label.new()
 	tbadge.text = GameData.get_tier_name(tier)
@@ -217,8 +221,11 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 		xp_lbl.text = "XP  %s / %s" % [xp_fmt(int(xp)), xp_fmt(int(xp_max))]
 		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	xp_lbl.add_theme_font_size_override("font_size", 10)
-	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	header.add_child(xp_lbl)
+
+	var sp2 := Control.new()
+	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(sp2)
 
 	return {"card": card, "header": header}
 

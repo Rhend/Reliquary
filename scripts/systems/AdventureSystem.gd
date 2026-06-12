@@ -64,6 +64,8 @@ class CycleStats:
 	var xp_entities_detail: Dictionary = {}  # entité rencontrée → XP reçue
 	var xp_equip_detail:    Dictionary = {}  # équipement porté → XP reçue
 	var loot_detail:        Dictionary = {}  # item_id → quantité totale droppée
+	var new_discoveries:    Array      = []  # entités vues pour la 1re fois CE cycle
+	var unique_beaten:      bool       = false  # créature Unique vaincue CE cycle
 
 var _stats := CycleStats.new()  # stats du cycle courant
 
@@ -80,6 +82,7 @@ func _ready() -> void:
 	_encounter_timer.timeout.connect(_on_encounter_timer)
 	add_child(_encounter_timer)
 	EventBus.combat_ended.connect(_on_combat_ended)
+	EventBus.entity_discovered.connect(_on_entity_discovered)
 	EventBus.xp_gained.connect(_on_xp_gained_tracking)
 
 # Accumule l'XP héros/biome/passifs/entités pour le résumé de cycle.
@@ -327,6 +330,12 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 # ═══════════════════════════════════════════════════════════
 
 # Reçoit le résultat de combat et continue l'aventure ou l'arrête.
+# Première rencontre d'une entité (création au bestiaire) : mémorisée dans
+# les stats du cycle pour la section « Découvertes » du résumé.
+func _on_entity_discovered(entity_id: String) -> void:
+	if is_running and entity_id not in _stats.new_discoveries:
+		_stats.new_discoveries.append(entity_id)
+
 func _on_combat_ended(result: Dictionary) -> void:
 	if not is_running:
 		return
@@ -639,6 +648,8 @@ func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 		"events_total":         _stats.events_total,
 		"positive_events":      _stats.positive_events,
 		"traps_triggered":      _stats.traps_triggered,
+		"new_discoveries":      _stats.new_discoveries.duplicate(),
+		"unique_beaten":        _stats.unique_beaten,
 	}
 
 # ═══════════════════════════════════════════════════════════
@@ -670,6 +681,7 @@ func start_unique_combat() -> void:
 func _resolve_unique_victory(enemy: Dictionary) -> void:
 	var biome := GameData.get_entity(current_biome_id)
 	biome["creature_unique_vaincue"] = true
+	_stats.unique_beaten = true
 
 	# Ingrédient unique → 1 exemplaire dans player.resources
 	var ingr_id: String = (biome.get("ingredient_unique", {}) as Dictionary).get("id", "")

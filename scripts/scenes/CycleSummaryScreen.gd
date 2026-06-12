@@ -281,48 +281,95 @@ func _fill_content(vb: VBoxContainer, data: Dictionary,
 	_section_xp(vb, data, biome_name, tcolor)
 	_section_evolutions(vb)
 
-# ── Section 1 : Découvertes (état du biome) ────────────────
+# ── Section 1 : Découvertes de CETTE expédition ────────────
+# Liste les entités vues pour la PREMIÈRE fois pendant ce cycle (et la
+# créature Unique si elle vient d'être vaincue). La progression cumulée
+# « Entités x/y » du biome vit dans le panneau Expéditions — ici on ne
+# célèbre que la nouveauté. Section ABSENTE si rien de neuf : son
+# apparition est l'événement.
 func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 		biome: Dictionary, tcolor: Color) -> void:
-	var biome_id := data.get("biome_id", "") as String
-	var btier    := biome.get("maitrise_actuelle", 0) as int
-	var pools    := MasteryRegistry.get_biome_entity_pools(biome_id)
-
-	var creatures := _filter_zone(pools["creatures"],    btier)
-	var traps     := _filter_zone(pools["traps"],        btier)
-	var benes     := _filter_zone(pools["benedictions"], btier)
+	var newd          := data.get("new_discoveries", []) as Array
+	var unique_beaten := data.get("unique_beaten", false) as bool
+	if newd.is_empty() and not unique_beaten:
+		return
 
 	var sec := UIHelpers.collapsible_section(Translations.T("cycle.section.discoveries"), tcolor)
 	vb.add_child(sec["wrapper"])
 	_fade_register(sec["wrapper"])
 	var body_dec := sec["body"] as VBoxContainer
 
-	var rows := GridContainer.new()
-	rows.columns = 2
-	rows.add_theme_constant_override("h_separation", 48)
-	rows.add_theme_constant_override("v_separation", 4)
-	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body_dec.add_child(rows)
+	for eid: String in newd:
+		var e := GameData.get_entity(eid)
+		var cat_label := ""
+		var cat_color := UIColors.CARD_NEUTRAL
+		match e.get("entity_type", ""):
+			Enums.EntityType.CREATURE:
+				cat_label = Translations.T("adv.cat.creature")
+				cat_color = UIColors.TYPE_CREATURE
+			Enums.EntityType.TRAP:
+				cat_label = Translations.T("adv.cat.trap")
+				cat_color = UIColors.TYPE_TRAP
+			Enums.EntityType.BENEDICTION:
+				cat_label = Translations.T("adv.cat.blessing")
+				cat_color = UIColors.TYPE_BENEDICTION
+		body_dec.add_child(_discovery_new_row(cat_label, cat_color,
+				Translations.entity_name(e, eid)))
 
-	_discovery_row(rows, Translations.T("cycle.encounters"), MasteryRegistry.count_discovered(creatures), creatures.size())
-	_discovery_row(rows, Translations.T("cycle.traps"),     MasteryRegistry.count_discovered(traps),     traps.size())
-	_discovery_row(rows, Translations.T("cycle.blessings"), MasteryRegistry.count_discovered(benes),     benes.size())
+	if unique_beaten:
+		var uniq_id := (biome.get("creature_unique", {}) as Dictionary).get("id", "") as String
+		var uname   := Translations.entity_name(GameData.get_entity(uniq_id), uniq_id)
+		body_dec.add_child(_unique_beaten_row(uname))
 
-	# Fragment de Mémoire du biome
-	var frag_done := false
-	for fid in GameData.entities:
-		var f := GameData.entities[fid] as Dictionary
-		if f.get("entity_type", "") == Enums.EntityType.FRAGMENT and f.get("biome_source_id", "") == biome_id:
-			frag_done = f.get("est_collecte", false)
-			break
-	_discovery_check(rows, Translations.T("cycle.discovery.fragment"), frag_done)
+# Ligne « Catégorie · Nom         NOUVEAU » d'une première rencontre.
+func _discovery_new_row(cat_label: String, cat_color: Color, nom: String) -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(cat_color, 0.06, 0.40, 1, 4))
+	_fade_register(panel)
 
-	# Créature unique : ligne ABSENTE tant qu'elle n'a pas été affrontée
-	# et que les Abysses du biome ne sont pas débloquées — ne pas trahir
-	# son existence trop tôt.
-	var unique_beaten := biome.get("creature_unique_vaincue", false) as bool
-	if unique_beaten or Balance.max_unlocked_zone(btier) >= Enums.Zone.ABYSSE:
-		_discovery_check(rows, Translations.T("cycle.discovery.unique"), unique_beaten)
+	var m := UIHelpers.margin_of(6)
+	panel.add_child(m)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 6)
+	m.add_child(hb)
+
+	if cat_label != "":
+		var cl := Label.new()
+		cl.text = cat_label + " · "
+		cl.add_theme_font_size_override("font_size", 12)
+		cl.add_theme_color_override("font_color", Color(cat_color, 0.85))
+		hb.add_child(cl)
+
+	var nl := Label.new()
+	nl.text = nom
+	nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nl.add_theme_font_size_override("font_size", 12)
+	nl.add_theme_color_override("font_color", Color.WHITE)
+	hb.add_child(nl)
+
+	var badge := Label.new()
+	badge.text = Translations.T("cycle.discovery.new")
+	badge.add_theme_font_size_override("font_size", 10)
+	badge.add_theme_color_override("font_color", UIColors.SELECTION_GOLD)
+	hb.add_child(badge)
+	return panel
+
+# Ligne « ★ Créature unique vaincue · Nom » (couleur Unique).
+func _unique_beaten_row(nom: String) -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TIER_UNIQUE, 0.08, 0.55, 1, 4))
+	_fade_register(panel)
+
+	var m := UIHelpers.margin_of(6)
+	panel.add_child(m)
+	var lbl := Label.new()
+	lbl.text = "★  %s · %s" % [Translations.T("cycle.discovery.unique_beaten"), nom]
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", UIColors.TIER_UNIQUE.lightened(0.25))
+	m.add_child(lbl)
+	return panel
 
 # ── Section 2 : Ressources collectées (puces) ──────────────
 func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
@@ -375,39 +422,46 @@ func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
 		hb.add_child(ql)
 
 # ── Section 3 : Répartition XP ─────────────────────────────
+# Section ABSENTE si aucune entité n'a gagné d'XP ce cycle.
 func _section_xp(vb: VBoxContainer, data: Dictionary,
 		biome_name: String, tcolor: Color) -> void:
-	var sec_xp := UIHelpers.collapsible_section(Translations.T("cycle.section.xp"), tcolor)
-	vb.add_child(sec_xp["wrapper"])
-	_fade_register(sec_xp["wrapper"])
-	var body_xp := sec_xp["body"] as VBoxContainer
-
+	# Collecte d'abord les lignes affichables (gain > 0, entité connue) :
+	# la section n'est construite que s'il y en a au moins une.
+	var rows: Array = []   # [icône, label, entity, gained]
 	var cid := data.get("hero_id", "") as String
-	_xp_entity(body_xp, "⚔", Translations.T("cycle.hero_label"), GameData.get_entity(cid), data.get("xp_hero", 0.0) as float)
-	_xp_entity(body_xp, "🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String),
-			data.get("xp_biome", 0.0) as float)
+	rows.append(["⚔", Translations.T("cycle.hero_label"), GameData.get_entity(cid), data.get("xp_hero", 0.0) as float])
+	rows.append(["🌿", biome_name, GameData.get_entity(data.get("biome_id", "") as String), data.get("xp_biome", 0.0) as float])
 
 	var entities_xp := data.get("xp_entities_detail", {}) as Dictionary
 	for ent_id: String in entities_xp:
 		var e := GameData.get_entity(ent_id)
-		var e_name := Translations.entity_name(e, ent_id)
 		var icon := "🐾"
 		match e.get("entity_type", ""):
 			Enums.EntityType.TRAP:        icon = "▲"
 			Enums.EntityType.BENEDICTION: icon = "✦"
-		_xp_entity(body_xp, icon, e_name, e, entities_xp[ent_id] as float)
+		rows.append([icon, Translations.entity_name(e, ent_id), e, entities_xp[ent_id] as float])
 
 	var detail := data.get("xp_passives_detail", {}) as Dictionary
 	for passive_id: String in detail:
 		var p := GameData.get_entity(passive_id)
-		var p_name := Translations.entity_name(p, passive_id)
-		_xp_entity(body_xp, "⚡", p_name, p, detail[passive_id] as float)
+		rows.append(["⚡", Translations.entity_name(p, passive_id), p, detail[passive_id] as float])
 
 	var equip_detail := data.get("xp_equip_detail", {}) as Dictionary
 	for equip_id: String in equip_detail:
 		var eq := GameData.get_entity(equip_id)
-		var eq_name := Translations.entity_name(eq, equip_id)
-		_xp_entity(body_xp, "🔨", eq_name, eq, equip_detail[equip_id] as float)
+		rows.append(["🔨", Translations.entity_name(eq, equip_id), eq, equip_detail[equip_id] as float])
+
+	var shown: Array = rows.filter(func(r: Array) -> bool:
+		return (r[3] as float) > 0.0 and not (r[2] as Dictionary).is_empty())
+	if shown.is_empty():
+		return
+
+	var sec_xp := UIHelpers.collapsible_section(Translations.T("cycle.section.xp"), tcolor)
+	vb.add_child(sec_xp["wrapper"])
+	_fade_register(sec_xp["wrapper"])
+	var body_xp := sec_xp["body"] as VBoxContainer
+	for r: Array in shown:
+		_xp_entity(body_xp, r[0] as String, r[1] as String, r[2] as Dictionary, r[3] as float)
 
 # Ajoute une ligne XP pour une entité ayant reçu de l'XP ce cycle (sinon ignorée).
 # La couleur de la carte = couleur du palier (tier) courant de l'entité.
@@ -616,57 +670,6 @@ func _animate_xp_card(xp: Dictionary, delay: float) -> void:
 # ═══════════════════════════════════════════════════════════
 #  Helpers
 # ═══════════════════════════════════════════════════════════
-
-# Garde les entrées dont la zone est débloquée (sans zone = transversal, conservé).
-func _filter_zone(pool: Array, tier: int) -> Array:
-	var mz := Balance.max_unlocked_zone(tier)
-	var out: Array = []
-	for entry: Dictionary in pool:
-		if entry.has("zone_associee") and int(entry["zone_associee"]) > mz:
-			continue
-		out.append(entry)
-	return out
-
-# Ligne "label : n / total" — vert si complet.
-func _discovery_row(parent: Container, label: String, n: int, total: int) -> void:
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 8)
-	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(hb)
-	_fade_register(hb)
-
-	var kl := Label.new()
-	kl.text = label + " :"
-	kl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	hb.add_child(kl)
-
-	var vl := Label.new()
-	vl.text = "%d / %d" % [n, total]
-	vl.add_theme_font_size_override("font_size", 14)
-	vl.add_theme_color_override("font_color",
-			UIColors.LOG_VICTORY if (total > 0 and n >= total) else UIColors.TEXT_HEADER)
-	hb.add_child(vl)
-
-# Ligne "label : ✔/—" — ✔ vert si fait, neutre sinon.
-func _discovery_check(parent: Container, label: String, done: bool) -> void:
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 8)
-	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(hb)
-	_fade_register(hb)
-
-	var kl := Label.new()
-	kl.text = label + " :"
-	kl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	hb.add_child(kl)
-
-	var vl := Label.new()
-	vl.text = "✔" if done else "—"
-	vl.add_theme_font_size_override("font_size", 14)
-	vl.add_theme_color_override("font_color", UIColors.LOG_VICTORY if done else UIColors.TEXT_MUTED)
-	hb.add_child(vl)
 
 # Seuil XP du prochain tier de l'entité (dernier seuil si au max).
 func _next_tier_threshold(entity: Dictionary) -> float:

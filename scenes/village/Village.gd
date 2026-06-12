@@ -41,7 +41,7 @@ func _birth_phrases() -> Array:
 # (filtrage uniforme dans _build_hub). Le Village éclot en T0 avec le héros
 # et les expéditions déjà disponibles ; la Forge arrive en T1, etc.
 const MENU_ITEMS: Array = [
-	["HÉRO",        "👤", 0, "_go_hero",      "hero"      ],
+	["HÉROS",       "👤", 0, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  0, "_go_adventure", "adventure" ],
 	["FORGE",       "🔨", 1, "_go_forge",     "forge"     ],
 	["SANCTUAIRE",  "✦",  2, "_go_sanctuary", "sanctuary" ],
@@ -50,7 +50,7 @@ const MENU_ITEMS: Array = [
 ]
 
 const PANEL_TITLES: Dictionary = {
-	"hero":      "HÉRO",
+	"hero":      "HÉROS",
 	"adventure": "EXPÉDITIONS",
 	"forge":     "FORGE",
 	"sanctuary": "SANCTUAIRE",

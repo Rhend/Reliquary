@@ -268,4 +268,6 @@ func _fake_cycle_data() -> void:
 		"combats_won":          9,
 		"events":               11,
 		"events_total":         12,
+		"new_discoveries":      ["creature_foret_surface", "spike_trap", "herb_find"],
+		"unique_beaten":        false,
 	}

@@ -502,7 +502,8 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 	var hall: Dictionary = player.get("bestiary", {})
 
 	# Première rencontre : création de l'entrée
-	if not hall.has(enc_id):
+	var is_new := not hall.has(enc_id)
+	if is_new:
 		var biome = get_entity(biome_id)
 		hall[enc_id] = {
 			"name":       enc_name,
@@ -535,6 +536,8 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 
 	# Pas de player["bestiary"] = hall : hall est déjà la même référence
 	EventBus.bestiary_updated.emit(enc_id)
+	if is_new:
+		EventBus.entity_discovered.emit(enc_id)
 
 # ═══════════════════════════════════════════════════════════
 #  Forge

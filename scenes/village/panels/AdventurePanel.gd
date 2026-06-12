@@ -180,57 +180,16 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	wrapper.add_theme_constant_override("separation", 2)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# ── Carte principale : nom | [palier + XP] centré | Entités x/y ──
-	# Header construit à la main (layout spécifique aux biomes : la
-	# progression au CENTRE de la carte, le compteur d'entités à droite).
-	var bcolor := UIColors.tier_color(btier)
-	var at_max := xp_max <= 0.0
-	var frac   := 0.0
-	if not at_max and xp_max > 0.0:
-		frac = clampf(xp_cur / xp_max, 0.0, 1.0)
-	var panel := UIHelpers.xp_panel(bcolor, frac, 0.07, 0.60, 1, 4,
-			XPCard.motif_for_type("biome"))
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# ── Carte principale via le template commun (nom | palier+XP CENTRÉ |
+	# extras à droite — cf. UIHelpers.entity_xp_card) ──
+	var built := UIHelpers.entity_xp_card(
+			Translations.entity_name(biome, biome_id).to_upper(), btier, xp_cur, xp_max,
+			"", "biome")
+	var panel := built["card"] as XPCard
+	var header := built["header"] as HBoxContainer
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(panel)
 	wrapper.add_child(panel)
-
-	var hm := UIHelpers.margin_of(8)
-	panel.add_child(hm)
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hm.add_child(header)
-
-	var name_lbl := Label.new()
-	name_lbl.text = Translations.entity_name(biome, biome_id).to_upper()
-	name_lbl.add_theme_font_size_override("font_size", 13)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	header.add_child(name_lbl)
-
-	var sp1 := Control.new()
-	sp1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(sp1)
-
-	# Centre : « Rare  ·  XP 120 / 360 » (ou RANG MAX).
-	var tier_lbl := Label.new()
-	tier_lbl.text = GameData.get_tier_name(btier)
-	tier_lbl.add_theme_font_size_override("font_size", 11)
-	tier_lbl.add_theme_color_override("font_color", bcolor)
-	header.add_child(tier_lbl)
-	var xp_lbl := Label.new()
-	if at_max:
-		xp_lbl.text = Translations.T("tier.max_rank")
-		xp_lbl.add_theme_color_override("font_color", bcolor)
-	else:
-		xp_lbl.text = "XP  %s / %s" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(int(xp_max))]
-		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	xp_lbl.add_theme_font_size_override("font_size", 10)
-	header.add_child(xp_lbl)
-
-	var sp2 := Control.new()
-	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(sp2)
 
 	# Surcouche de sélection : liseré or + luciole (AdventurePanel.build
 	# la rend visible quand ce biome est le biome sélectionné).
@@ -405,7 +364,9 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 
 # Lignes plates des ingrédients de biome — préfixe « Ingrédient · », nom
 # (couleur tier), plage de quantité et chance de drop. Absentes tant que
-# village_tier < 1 (Forge non débloquée).
+# village_tier < 1 (Forge non débloquée) ; un ingrédient JAMAIS obtenu
+# n'apparaît pas (même règle de révélation que les entités — la clé existe
+# dans player.resources dès le premier drop, même retombé à 0 après forge).
 static func _adv_ingredient_rows(parent: VBoxContainer, pool: Array) -> void:
 	if pool.is_empty():
 		return
@@ -414,6 +375,8 @@ static func _adv_ingredient_rows(parent: VBoxContainer, pool: Array) -> void:
 		return
 	var nc := UIColors.CARD_NEUTRAL
 	for entry: Dictionary in pool:
+		if not GameData.player["resources"].has(entry.get("id", "")):
+			continue
 		var ec := UIColors.tier_color(int(entry.get("tier", 0)))
 
 		# Même gabarit visuel que les cartes d'entités (panneau fin + marge).
@@ -436,7 +399,7 @@ static func _adv_ingredient_rows(parent: VBoxContainer, pool: Array) -> void:
 		row.add_child(cat_lbl)
 
 		var name_lbl := Label.new()
-		name_lbl.text = entry.get("name", "?")
+		name_lbl.text = Translations.entity_name(entry, entry.get("id", "?") as String)
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_lbl.add_theme_font_size_override("font_size", 11)
 		name_lbl.add_theme_color_override("font_color", ec)
