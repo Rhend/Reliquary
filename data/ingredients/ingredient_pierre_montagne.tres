@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "res_pierre_montagne"
 nom_affichage_fr = "Pierre de Montagne"
 lore_fr = "Polie par des millenaires de vents glaces. Elle vibre legerement dans la paume - comme si quelque chose y etait enferme."
+lore_en = "Polished by millennia of icy winds. It vibrates faintly in the palm - as if something were locked inside."
 nom_affichage_en = "Mountain Stone"
 biome_source_id = "biome_montagne"
 est_unique = false

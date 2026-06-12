@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "lucky_charm"
 nom_affichage_fr = "Breloque porte-bonheur"
 lore_fr = "Quelqu'un l'a perdu ici. Quelqu'un d'autre l'a trouve. La chance change de main, mais elle ne disparait jamais."
+lore_en = "Someone lost it here. Someone else found it. Luck changes hands, but it never disappears."
 nom_affichage_en = "Lucky Charm"
 biome_source_id = "biome_foret"
 effet = "xp_bonus"

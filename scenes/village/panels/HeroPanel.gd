@@ -34,7 +34,7 @@ static func build(host: Village) -> void:
 	if tier >= GameData.MAX_TIER:
 		hero_xp_max = 0.0
 	var id_card := UIHelpers.entity_xp_card(
-			c.get("nom_affichage_fr", c.get("name", "Héros")) as String, tier, xp, hero_xp_max,
+			Translations.entity_name(c), tier, xp, hero_xp_max,
 			"", c.get("entity_type", "hero") as String)
 	host.rp_content.add_child(id_card["card"] as Control)
 
@@ -89,7 +89,7 @@ static func build(host: Village) -> void:
 	if tier < GameData.MAX_TIER:
 		if can_ev:
 			stats_body.add_child(host.make_evolve_btn(
-				"hero", c.get("nom_affichage_fr", c.get("name", "hero")) as String,
+				"hero", Translations.entity_name(c, "hero"),
 				c.get("entity_type", "creature") as String, tier))
 	else:
 		var ml := Label.new()
@@ -211,7 +211,7 @@ static func _build_ingredients(host: Village, tcolor: Color) -> void:
 
 	for src: String in ordered:
 		var biome_e := GameData.get_entity(src)
-		var bname   := biome_e.get("nom_affichage_fr", src) as String if not biome_e.is_empty() else src
+		var bname   := Translations.entity_name(biome_e, src) if not biome_e.is_empty() else src
 		var btier   := int(biome_e.get("maitrise_actuelle", 0)) if not biome_e.is_empty() else 0
 		var bc      := UIColors.tier_color(btier)
 		body.add_child(_biome_header(bname, bc))
@@ -222,7 +222,7 @@ static func _build_ingredients(host: Village, tcolor: Color) -> void:
 			var ua := a["e"].get("est_unique", false) as bool
 			var ub := b["e"].get("est_unique", false) as bool
 			if ua != ub: return int(ua) < int(ub)
-			return str(a["e"].get("nom_affichage_fr", "")) < str(b["e"].get("nom_affichage_fr", ""))
+			return Translations.entity_name(a["e"], "") < Translations.entity_name(b["e"], "")
 		)
 
 		var flow := HFlowContainer.new()
@@ -259,7 +259,7 @@ static func _biome_header(bname: String, bc: Color) -> Control:
 # Chip « Nom ×N » : pilule compacte aux couleurs du biome.
 static func _ingredient_chip(e: Dictionary, qty: int, bname: String, bc: Color) -> Control:
 	var is_unique := e.get("est_unique", false) as bool
-	var nom       := e.get("nom_affichage_fr", e.get("name", "?")) as String
+	var nom       := Translations.entity_name(e)
 
 	var chip := PanelContainer.new()
 	chip.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -304,16 +304,16 @@ static func _ingredient_chip(e: Dictionary, qty: int, bname: String, bc: Color) 
 		tt += "\n✦ " + Translations.T("forge.ingr.unique")
 	UIHelpers.register_tooltip(chip, nom, tt,
 			UIColors.TIER_LEGENDAIRE if is_unique else bc,
-			e.get("lore_fr", "") as String)
+			Translations.entity_lore(e))
 	return chip
 
 
 # Convertit un passif unique vers la forme attendue par _passive_card
-# (champs nom_affichage_fr / maitrise_actuelle / xp_maitrise_actuelle).
+# (champs name localisé / maitrise_actuelle / xp_maitrise_actuelle).
 static func _normalize_unique_passive(eid: String, e: Dictionary) -> Dictionary:
 	return {
 		"id":           eid,
-		"name":         e.get("nom_affichage_fr", eid),
+		"name":         Translations.entity_name(e, eid),
 		"maitrise_actuelle": int(e.get("maitrise_actuelle", 0)),
 		"xp_maitrise_actuelle":   float(e.get("xp_maitrise_actuelle", 0.0)),
 		"tier_effects": e.get("tier_effects", []),
@@ -326,7 +326,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 	var rarity   := pdata.get("maitrise_actuelle", 0) as int
 	var has_evos := rarity < GameData.MASTERY_TIERS.size() - 1
 	var xp_cur   := pdata.get("xp_maitrise_actuelle", 0.0) as float
-	var name_txt := pdata.get("name", pdata.get("id", "?")) as String
+	var name_txt := Translations.entity_name(pdata, pdata.get("id", "?") as String)
 
 	# Seuil du palier suivant (0 si plus d'évolution → carte « RANG MAX »).
 	var xp_max := 0.0
@@ -354,7 +354,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 	var pid_ev := pdata.get("id", "") as String
 	if MasterySystem.can_evolve(pid_ev):
 		wrapper.add_child(host.make_evolve_btn(pid_ev,
-				pdata.get("name", pid_ev) as String,
+				Translations.entity_name(pdata, pid_ev),
 				pdata.get("entity_type", "passive") as String, rarity))
 
 	# ── Corps déplié (toggle) : effet courant + cascade à débloquer ──
@@ -365,7 +365,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 
 	# Description de l'effet au palier actuel
 	for effect in _tier_effects(pdata, rarity):
-		var desc := effect.get("description", "") as String
+		var desc := Translations.effect_desc(effect)
 		if desc.is_empty():
 			continue
 		var eff_lbl := Label.new()
@@ -400,7 +400,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 		if cur_eff != "":
 			tt_body += Translations.T("hero.passive.tt_effect") % cur_eff
 		UIHelpers.register_tooltip(panel, name_txt, tt_body, UIColors.tier_color(rarity),
-				pdata.get("lore_fr", "") as String)
+				Translations.entity_lore(pdata))
 		panel.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton \
 					and event.button_index == MOUSE_BUTTON_LEFT \
@@ -460,7 +460,7 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 
 	# Effets du palier
 	for effect in _tier_effects(pdata, t):
-		var desc := effect.get("description", "") as String
+		var desc := Translations.effect_desc(effect)
 		if desc.is_empty(): continue
 		var eff_lbl := Label.new()
 		eff_lbl.text = desc
@@ -475,7 +475,7 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: String,
 		slot_name: String, equip_id: String, equip: Dictionary, _tcolor: Color) -> Control:
 	var etier    := int(equip.get("maitrise_actuelle", 0))
-	var enom     := equip.get("nom_affichage_fr", equip_id) as String
+	var enom     := Translations.entity_name(equip, equip_id)
 	var ec       := UIColors.tier_color(etier)
 	var at_max   := etier >= GameData.get_max_tier_for_type("equipment")
 	var xp_cur   := float(equip.get("xp_maitrise_actuelle", 0.0))
@@ -531,7 +531,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	var tt := Translations.T("hero.equip.tt_slot") % [slot_name, GameData.get_tier_name(etier)]
 	if stat_parts.size() > 0:
 		tt += "\n" + "  ".join(stat_parts)
-	UIHelpers.register_tooltip(xpcard, enom, tt, ec, equip.get("lore_fr", "") as String)
+	UIHelpers.register_tooltip(xpcard, enom, tt, ec, Translations.entity_lore(equip))
 
 	return wrapper
 
@@ -566,7 +566,7 @@ static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Contr
 			var needed   := int(req.get("quantite", 1))
 			var ingr     := GameData.get_entity(ingr_id)
 			var have     := int(GameData.player["resources"].get(ingr_id, 0))
-			var ingr_nom := ingr.get("nom_affichage_fr", ingr_id) as String
+			var ingr_nom := Translations.entity_name(ingr, ingr_id)
 			var ok       := have >= needed
 			var ic       := UIColors.INGREDIENT_OK if ok else UIColors.INGREDIENT_MISSING
 			var row      := HBoxContainer.new()

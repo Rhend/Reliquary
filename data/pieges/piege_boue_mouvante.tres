@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "boue_mouvante"
 nom_affichage_fr = "Boue Mouvante"
 lore_fr = "Elle ressemble a de la terre ordinaire - jusqu'au moment ou elle ne l'est plus. La boue mouvante du marecage n'a aucune pitie."
+lore_en = "It looks like ordinary ground - until the moment it isn't. The swamp's quickmud knows no mercy."
 nom_affichage_en = "Quickmud"
 biome_source_id = "biome_marecage"
 degats = 20

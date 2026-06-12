@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "res_slime"
 nom_affichage_fr = "Slime Visqueux"
 lore_fr = "Difficile a tenir, impossible a ignorer. Sa composition chimique reste un mystere, mais ses proprietes adhesives sont bien connues des forgerons."
+lore_en = "Hard to hold, impossible to ignore. Its chemical makeup remains a mystery, but blacksmiths know its adhesive properties well."
 nom_affichage_en = "Viscous Slime"
 biome_source_id = "biome_marecage"
 est_unique = false

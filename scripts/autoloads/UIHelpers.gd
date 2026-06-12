@@ -277,6 +277,128 @@ static func add_hover_feedback(node: Control) -> void:
 		tw.parallel().tween_property(node, "modulate", Color(1.30, 1.30, 1.30), 0.14)
 	)
 
+# ═══════════════════════════════════════════════════════════
+#  Bouton Évoluer (juicy)
+# ═══════════════════════════════════════════════════════════
+
+# Bande de reflet diagonale (transparent → blanc → transparent) pour le
+# balayage lumineux des boutons. Construite à la demande (boutons rares).
+static func _shine_tex() -> GradientTexture2D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	g.colors  = PackedColorArray([
+		Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.30), Color(1, 1, 1, 0.0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.width  = 64
+	tex.height = 64
+	tex.fill_from = Vector2(0.15, 0.0)
+	tex.fill_to   = Vector2(0.85, 0.45)   # bande inclinée
+	return tex
+
+# Bouton d'évolution premium, coloré au tier CIBLE :
+#   • respiration au repos (échelle + lueur de bordure synchronisées) ;
+#   • reflet lumineux balayant périodique + au survol ;
+#   • hover : pop ×1.07 (TRANS_BACK) ; press : squash ×0.94 puis rebond.
+# L'appelant branche `pressed` et le tooltip (cf. Village.make_evolve_btn).
+static func evolve_button(text: String, color: Color, font_size: int = 14) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.add_theme_font_size_override("font_size", font_size)
+	btn.add_theme_color_override("font_color", color.lerp(Color.WHITE, 0.35))
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
+	btn.add_theme_color_override("font_pressed_color", Color.WHITE)
+
+	# Styleboxes dédiées — la bordure de `normal` est animée (lueur).
+	var normal_sb := card_style(color, 0.14, 0.70, 1, 5)
+	var hover_sb  := card_style(color, 0.30, 1.00, 2, 5)
+	var press_sb  := card_style(color, 0.42, 1.00, 2, 5)
+	btn.add_theme_stylebox_override("normal",  normal_sb)
+	btn.add_theme_stylebox_override("hover",   hover_sb)
+	btn.add_theme_stylebox_override("pressed", press_sb)
+	btn.add_theme_stylebox_override("focus",   StyleBoxEmpty.new())
+
+	btn.resized.connect(func() -> void:
+		btn.pivot_offset = btn.size * 0.5
+	)
+
+	# ── Reflet balayant ───────────────────────────────────────
+	btn.clip_contents = true
+	var shine := TextureRect.new()
+	shine.texture = _shine_tex()
+	shine.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shine.expand_mode  = TextureRect.EXPAND_IGNORE_SIZE
+	shine.stretch_mode = TextureRect.STRETCH_SCALE
+	shine.visible = false
+	btn.add_child(shine)
+	var sweep := func() -> void:
+		if not btn.is_visible_in_tree():
+			return
+		shine.size = Vector2(maxf(btn.size.x * 0.30, 36.0), btn.size.y)
+		shine.position = Vector2(-shine.size.x, 0.0)
+		shine.visible = true
+		var stw := btn.create_tween()
+		stw.tween_property(shine, "position:x", btn.size.x, 0.55) \
+				.set_ease(Tween.EASE_IN_OUT)
+		stw.tween_callback(func() -> void: shine.visible = false)
+
+	# ── Respiration : échelle + lueur de bordure synchronisées ──
+	# Array mutable partagé entre lambdas (évite CONFUSABLE_CAPTURE_REASSIGNMENT).
+	var idle: Array = [null]
+	var glow := func(a: float) -> void:
+		normal_sb.border_color = Color(color.r, color.g, color.b, a)
+	var start_pulse := func() -> void:
+		if is_instance_valid(idle[0]):
+			(idle[0] as Tween).kill()
+		var tw := btn.create_tween().set_loops()
+		idle[0] = tw
+		tw.set_parallel(true)
+		tw.tween_property(btn, "scale", Vector2(1.04, 1.04), 0.65).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_method(glow, 0.45, 1.0, 0.65)
+		tw.chain().tween_property(btn, "scale", Vector2.ONE, 0.65).set_ease(Tween.EASE_IN_OUT)
+		tw.parallel().tween_method(glow, 1.0, 0.45, 0.65)
+
+	# ── Hover / press ─────────────────────────────────────────
+	var hov: Array = [null]
+	btn.mouse_entered.connect(func() -> void:
+		if is_instance_valid(idle[0]): (idle[0] as Tween).kill()
+		if is_instance_valid(hov[0]):  (hov[0] as Tween).kill()
+		hov[0] = btn.create_tween()
+		(hov[0] as Tween).tween_property(btn, "scale", Vector2(1.07, 1.07), 0.14) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		sweep.call()   # petit reflet immédiat : récompense le survol
+	)
+	btn.mouse_exited.connect(func() -> void:
+		if is_instance_valid(hov[0]): (hov[0] as Tween).kill()
+		hov[0] = btn.create_tween()
+		(hov[0] as Tween).tween_property(btn, "scale", Vector2.ONE, 0.18) \
+				.set_ease(Tween.EASE_OUT)
+		(hov[0] as Tween).tween_callback(start_pulse)
+	)
+	btn.button_down.connect(func() -> void:
+		if is_instance_valid(hov[0]): (hov[0] as Tween).kill()
+		hov[0] = btn.create_tween()
+		(hov[0] as Tween).tween_property(btn, "scale", Vector2(0.94, 0.94), 0.06) \
+				.set_ease(Tween.EASE_IN)
+	)
+	btn.button_up.connect(func() -> void:
+		if is_instance_valid(hov[0]): (hov[0] as Tween).kill()
+		hov[0] = btn.create_tween()
+		(hov[0] as Tween).tween_property(btn, "scale", Vector2(1.07, 1.07), 0.16) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	)
+
+	btn.ready.connect(func() -> void:
+		start_pulse.call()
+		# Balayage périodique du reflet.
+		var loop_tw := btn.create_tween().set_loops()
+		loop_tw.tween_interval(2.6)
+		loop_tw.tween_callback(sweep)
+	)
+	return btn
+
 # Branche un tooltip JRPG sur node : hover → TooltipOverlay.show_for, exit → hide.
 static func register_tooltip(node: Control, title: String, body: String,
 		color: Color = Color.WHITE, lore: String = "") -> void:

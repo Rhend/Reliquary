@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "equipment_anneau"
 nom_affichage_fr = "Anneau de Forêt"
 lore_fr = "Forge avec des racines tressees et de la resine des arbres anciens. Il murmure parfois a l'oreille de celui qui le porte."
+lore_en = "Forged from braided roots and the resin of ancient trees. It sometimes whispers in the ear of its wearer."
 nom_affichage_en = "Forest Ring"
 slot = 1
 biome_source_id = "biome_foret"

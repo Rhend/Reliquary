@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "res_mineral_fer"
 nom_affichage_fr = "Minerai de Fer"
 lore_fr = "La montagne en regorge, mais l'extraire demande du courage. On dit que les veines suivent les cicatrices d'anciennes batailles souterraines."
+lore_en = "The mountain is full of it, but mining it takes courage. They say the veins follow the scars of ancient underground battles."
 nom_affichage_en = "Iron Ore"
 biome_source_id = "biome_foret"
 est_unique = false

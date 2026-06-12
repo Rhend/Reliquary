@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "creature_montagne_surface"
 nom_affichage_fr = "Loup des Cimes"
 lore_fr = "Les loups des cimes chassent en meutes silencieuses. Celui-ci s'est separe du groupe - peut-etre rejete, peut-etre simplement solitaire."
+lore_en = "Ridge wolves hunt in silent packs. This one has left the group - cast out, perhaps, or simply a loner."
 nom_affichage_en = "Ridge Wolf"
 est_unique = false
 zone_associee = 0

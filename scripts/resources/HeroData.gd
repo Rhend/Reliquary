@@ -13,6 +13,7 @@ extends Resource
 @export var nom_affichage_fr:           String     = ""
 @export var nom_affichage_en:           String     = ""
 @export var lore_fr:                    String     = ""
+@export var lore_en:                    String     = ""
 @export var passifs_par_palier:         Dictionary = {}
 @export var crit_chance:                float      = 0.20
 @export var crit_multiplier:            float      = 1.8

@@ -229,22 +229,15 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 		unlock_biome_equipment(entity_id)
 
 	# Rare (T2), Légendaire (T4), Unique (T5) → libération d'un Fragment
-	if new_tier in [2, 4, 5]:
-		for fid in entities:
-			var frag: Dictionary = entities[fid]
-			if frag.get("entity_type", "") != Enums.EntityType.FRAGMENT:
-				continue
-			if frag.get("biome_source_id", "") != entity_id:
-				continue
-			if frag.get("est_collecte", false):
-				continue
-			frag["est_collecte"] = true
+	if new_tier in Balance.FRAGMENT_RELEASE_TIERS:
+		var fid := uncollected_fragment_for(entity_id)
+		if fid != "":
+			entities[fid]["est_collecte"] = true
 			village["fragments_collectes"].append(fid)
 			EventBus.fragment_libere.emit(fid, entity_id)
-			break
 
 	# Légendaire (tier 4) → révélation du biome secondaire
-	if new_tier == 4:
+	if new_tier == Balance.SECONDARY_BIOME_REVEAL_TIER:
 		var secondary_id := entity.get("biome_secondaire_id", "") as String
 		if secondary_id == "":
 			return
@@ -253,6 +246,21 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 			return
 		secondary["est_decouvert"] = true
 		EventBus.biome_revele.emit(secondary_id)
+
+# Premier Fragment encore non collecté lié à ce biome ("" si tous collectés).
+# Sert à la libération (_on_entity_evolved) ET à l'UI (annonce des jalons :
+# « le prochain palier libère un Fragment » seulement s'il en reste un).
+func uncollected_fragment_for(biome_id: String) -> String:
+	for fid in entities:
+		var frag: Dictionary = entities[fid]
+		if frag.get("entity_type", "") != Enums.EntityType.FRAGMENT:
+			continue
+		if frag.get("biome_source_id", "") != biome_id:
+			continue
+		if frag.get("est_collecte", false):
+			continue
+		return fid
+	return ""
 
 # Clé de slot (player.equipped) par index `slot` des EquipmentData.
 const EQUIP_SLOT_KEYS: Array[String] = [

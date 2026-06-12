@@ -56,18 +56,21 @@ const STRINGS: Dictionary = {
 		# ── Éclosion ─────────────────────────────────────────
 		"birth.phrase_25":  "Un battement…  puis un autre.  Quelque chose remue dans le noir.",
 		"birth.phrase_50":  "Le long sommeil se déchire.  Mes souvenirs fuient comme l'eau entre mes doigts.",
-		"birth.phrase_75":  "Un village, tout proche…  et des fragments de rêve épars, alentour.",
+		"birth.phrase_75":  "Un village, tout proche…  et des fragments de mémoire épars, alentour.",
 		"birth.phrase_100": "Je ne sais plus qui je suis…\nmais je m'éveille.",
 		"birth.flavor":     "Ranimez l'étincelle…  réveillez l'âme endormie.",
 
 		# ── Hints contextuels ────────────────────────────────
-		"hint.start":        "Partez en expédition pour gagner de l'XP et faire progresser vos entités",
-		"hint.reach_rare":   "Faites atteindre Rare à un biome pour libérer un Fragment de Mémoire",
-		"hint.fragment_ok":  "Fragment collecté — continuez à progresser pour faire évoluer le Village",
-		"hint.forge_ready":  "La Forge est disponible — partez en expédition pour remplir les barres XP de vos équipements",
+		"hint.start":          "Partez en expédition pour gagner de l'XP et faire progresser vos entités",
+		"hint.reach_rare":     "Faites atteindre le rang Rare à un biome pour libérer un Fragment de Mémoire",
+		"hint.upgrade_ready":  "Le Village peut évoluer — utilisez le bouton au centre du hub",
+		"hint.forge_ready":    "La Forge est disponible — partez en expédition pour remplir les barres XP de vos équipements",
+		"hint.need_fragments": "Encore %d Fragment(s) de Mémoire — faites évoluer vos biomes (Rare, Légendaire, Unique)",
 
 		# ── Conditions Village ────────────────────────────────
 		"village.cond.fragments": "Fragments",
+		"village.frag.tt_title":  "Fragments de Mémoire",
+		"village.frag.tt_body":   "Un biome libère un Fragment quand il atteint un nouveau jalon :\nRare, puis Légendaire, puis Unique.\nPartez en expédition pour faire gagner de l'XP à vos biomes,\npuis faites-les évoluer.\n\nCollectés : %d  ·  Requis pour le prochain palier : %d",
 		"village.cond.xp":        "XP Village",
 		"village.cond.hero_xp":   "Héros à XP max",
 		"village.evolve_btn":     "Faire évoluer le Village",
@@ -81,7 +84,12 @@ const STRINGS: Dictionary = {
 		"ui.none": "Aucun",
 
 		# ── Bouton Évoluer ────────────────────────────────────
-		"btn.evolve":  "ÉVOLUER ▲",
+		"btn.evolve":           "ÉVOLUER ▲",
+		"evolve.tt_title":      "Évolution — %s",
+		"evolve.tt_body":       "Rang %s  →  Rang %s\nAction définitive — déclenche le rituel d'ascension.",
+		"village.evolve.tt_body": "Le Village atteint le rang %s —\nde nouvelles structures se débloquent autour de l'anneau.",
+		"ritual.passive_unlocked": "Passif débloqué : %s",
+		"ritual.new_tier":         "Nouveau palier atteint — Capacités améliorées",
 
 		# ── HeroPanel ────────────────────────────────────────
 		"hero.section.stats":       "◆  STATISTIQUES",
@@ -110,7 +118,7 @@ const STRINGS: Dictionary = {
 		"hero.equip.tt_slot":       "Slot : %s  ·  Rang : %s",
 
 		# ── ForgePanel ───────────────────────────────────────
-		"forge.smith_locked":    "🔨  Le Forgeron\n\n« Je ne peux pas encore\nvous aider. »\n\nLibérez un Fragment pour\nfaire évoluer le Village.",
+		"forge.smith_locked":    "🔨  Le Forgeron\n\n« Je ne peux pas encore\nvous aider. »\n\nAmenez un biome au rang Rare\npour libérer un Fragment et\nfaire évoluer le Village.",
 		"forge.section.ingr":   "◆  INGRÉDIENTS",
 		"forge.section.equip":  "◆  ÉQUIPEMENT",
 		"forge.ingr.unique":    "Ingrédient unique — une seule obtention.",
@@ -125,7 +133,7 @@ const STRINGS: Dictionary = {
 		"forge.ingr.x_of_y":        "%d / %d",
 		"forge.locked.title":       "LE FORGERON",
 		"forge.locked.quote":       "« Je ne peux pas encore vous aider. »",
-		"forge.locked.hint":        "Libérez un Fragment de Mémoire\npour faire évoluer le Village.",
+		"forge.locked.hint":        "Amenez un biome au rang Rare pour libérer\nun Fragment de Mémoire et faire évoluer le Village.",
 		"forge.recipe.tt_stock":    "En stock : %d\nRequis : %d",
 		"forge.equip.low_xp_pct":   "⧖  XP — %d %%  (continuez l'aventure)",
 		"forge.equip.forge_unavail":      "Forge indisponible",
@@ -137,16 +145,23 @@ const STRINGS: Dictionary = {
 		"adv.start_btn":          "⚔   PARTIR EN EXPÉDITION",
 		"adv.start_btn_named":    "⚔   PARTIR EN EXPÉDITION — %s",
 		"adv.section.biomes":     "◆  BIOMES DISPONIBLES",
-		"adv.section.creatures":  "CRÉATURES",
-		"adv.section.traps":      "PIÈGES",
-		"adv.section.blessings":  "BÉNÉDICTIONS",
-		"adv.section.ingredients":"INGRÉDIENTS",
+		"adv.cat.creature":       "Créature",
+		"adv.cat.trap":           "Piège",
+		"adv.cat.blessing":       "Bénédiction",
+		"adv.cat.ingredient":     "Ingrédient",
 		"adv.zone_max":           "Zone max : %s",
 		"adv.mechanic_label":     "Mécanique : %s",
 		"adv.mechanic_tt_title":  "Mécanique — %s",
 		"adv.mechanic_locked":    "%s  —  Débloquée à Rare",
 		"adv.mechanic_tt_locked": "Atteins Rare pour débloquer cette mécanique.",
 		"adv.ingr.tooltip":       "Biome : %s\nEn stock : %d",
+		"adv.next.title":         "Prochain palier — %s",
+		"adv.next.fragment":      "libère un Fragment de Mémoire",
+		"adv.next.mechanic":      "active la mécanique %s",
+		"adv.next.zone":          "débloque la zone %s",
+		"adv.next.secondary":     "révèle un nouveau biome",
+		"adv.next.equipment":     "octroie l'équipement du biome",
+		"adv.next.tt":            "Gagnez de l'XP en expédition dans ce biome,\npuis utilisez le bouton ÉVOLUER quand sa barre est pleine.",
 		"adv.trap.dmg_zones":     "Surface : 8 %% PV  ·  Profondeur : 15 %% PV  ·  Abysse : 30 %% PV",
 		"adv.trap.mastery_note":  "\nMaîtrise réduit les dégâts subis.",
 		"adv.bless.desc":         "Bonus XP et soins selon la zone.\nMaîtrise augmente l'effet reçu.",
@@ -293,18 +308,21 @@ const STRINGS: Dictionary = {
 		# ── Éclosion ─────────────────────────────────────────
 		"birth.phrase_25":  "A heartbeat… then another.  Something stirs in the dark.",
 		"birth.phrase_50":  "The long sleep tears apart.  My memories slip like water through my fingers.",
-		"birth.phrase_75":  "A village, close by…  and scattered dream fragments all around.",
+		"birth.phrase_75":  "A village, close by…  and scattered memory fragments all around.",
 		"birth.phrase_100": "I no longer know who I am…\nbut I am waking.",
 		"birth.flavor":     "Rekindle the spark…  awaken the sleeping soul.",
 
 		# ── Hints contextuels ────────────────────────────────
-		"hint.start":        "Go on an expedition to gain XP and progress your entities",
-		"hint.reach_rare":   "Bring a biome to Rare rank to free a Memory Fragment",
-		"hint.fragment_ok":  "Fragment collected — keep progressing to evolve the Village",
-		"hint.forge_ready":  "The Forge is available — go on expeditions to fill your equipment XP bars",
+		"hint.start":          "Go on an expedition to gain XP and progress your entities",
+		"hint.reach_rare":     "Bring a biome to Rare rank to free a Memory Fragment",
+		"hint.upgrade_ready":  "The Village can evolve — use the button at the center of the hub",
+		"hint.forge_ready":    "The Forge is available — go on expeditions to fill your equipment XP bars",
+		"hint.need_fragments": "%d more Memory Fragment(s) — evolve your biomes (Rare, Legendary, Unique)",
 
 		# ── Conditions Village ────────────────────────────────
 		"village.cond.fragments": "Fragments",
+		"village.frag.tt_title":  "Memory Fragments",
+		"village.frag.tt_body":   "A biome frees a Fragment when it reaches a new milestone:\nRare, then Legendary, then Unique.\nGo on expeditions to earn XP for your biomes,\nthen evolve them.\n\nCollected: %d  ·  Required for the next tier: %d",
 		"village.cond.xp":        "Village XP",
 		"village.cond.hero_xp":   "Hero at max XP",
 		"village.evolve_btn":     "Evolve the Village",
@@ -318,7 +336,12 @@ const STRINGS: Dictionary = {
 		"ui.none": "None",
 
 		# ── Bouton Évoluer ────────────────────────────────────
-		"btn.evolve":  "EVOLVE ▲",
+		"btn.evolve":           "EVOLVE ▲",
+		"evolve.tt_title":      "Evolution — %s",
+		"evolve.tt_body":       "Rank %s  →  Rank %s\nPermanent — triggers the ascension ritual.",
+		"village.evolve.tt_body": "The Village reaches %s rank —\nnew structures unlock around the ring.",
+		"ritual.passive_unlocked": "Passive unlocked: %s",
+		"ritual.new_tier":         "New rank reached — Improved abilities",
 
 		# ── HeroPanel ────────────────────────────────────────
 		"hero.section.stats":       "◆  STATISTICS",
@@ -347,7 +370,7 @@ const STRINGS: Dictionary = {
 		"hero.equip.tt_slot":       "Slot: %s  ·  Rank: %s",
 
 		# ── ForgePanel ───────────────────────────────────────
-		"forge.smith_locked":    "🔨  The Blacksmith\n\n« I can't help you\njust yet. »\n\nFree a Fragment to\nevolve the Village.",
+		"forge.smith_locked":    "🔨  The Blacksmith\n\n« I can't help you\njust yet. »\n\nBring a biome to Rare rank\nto free a Fragment and\nevolve the Village.",
 		"forge.section.ingr":   "◆  INGREDIENTS",
 		"forge.section.equip":  "◆  EQUIPMENT",
 		"forge.ingr.unique":    "Unique ingredient — only one obtainable.",
@@ -362,7 +385,7 @@ const STRINGS: Dictionary = {
 		"forge.ingr.x_of_y":        "%d / %d",
 		"forge.locked.title":       "THE BLACKSMITH",
 		"forge.locked.quote":       "« I can't help you just yet. »",
-		"forge.locked.hint":        "Free a Memory Fragment\nto evolve the Village.",
+		"forge.locked.hint":        "Bring a biome to Rare rank to free\na Memory Fragment and evolve the Village.",
 		"forge.recipe.tt_stock":    "In stock: %d\nRequired: %d",
 		"forge.equip.low_xp_pct":   "⧖  XP — %d%%  (keep adventuring)",
 		"forge.equip.forge_unavail":      "Forge unavailable",
@@ -374,16 +397,23 @@ const STRINGS: Dictionary = {
 		"adv.start_btn":          "⚔   START EXPEDITION",
 		"adv.start_btn_named":    "⚔   START EXPEDITION — %s",
 		"adv.section.biomes":     "◆  AVAILABLE BIOMES",
-		"adv.section.creatures":  "CREATURES",
-		"adv.section.traps":      "TRAPS",
-		"adv.section.blessings":  "BLESSINGS",
-		"adv.section.ingredients":"INGREDIENTS",
+		"adv.cat.creature":       "Creature",
+		"adv.cat.trap":           "Trap",
+		"adv.cat.blessing":       "Blessing",
+		"adv.cat.ingredient":     "Ingredient",
 		"adv.zone_max":           "Max zone: %s",
 		"adv.mechanic_label":     "Mechanic: %s",
 		"adv.mechanic_tt_title":  "Mechanic — %s",
 		"adv.mechanic_locked":    "%s  —  Unlocked at Rare",
 		"adv.mechanic_tt_locked": "Reach Rare to unlock this mechanic.",
 		"adv.ingr.tooltip":       "Biome: %s\nIn stock: %d",
+		"adv.next.title":         "Next rank — %s",
+		"adv.next.fragment":      "frees a Memory Fragment",
+		"adv.next.mechanic":      "activates the %s mechanic",
+		"adv.next.zone":          "unlocks the %s zone",
+		"adv.next.secondary":     "reveals a new biome",
+		"adv.next.equipment":     "grants the biome's equipment",
+		"adv.next.tt":            "Earn XP on expeditions in this biome,\nthen use the EVOLVE button when its bar is full.",
 		"adv.trap.dmg_zones":     "Surface: 8%% HP  ·  Depths: 15%% HP  ·  Abyss: 30%% HP",
 		"adv.trap.mastery_note":  "\nMastery reduces damage taken.",
 		"adv.bless.desc":         "XP bonus and healing based on zone.\nMastery increases the effect.",
@@ -527,3 +557,40 @@ func zone_tooltip(idx: int) -> String:
 # Retourne le nom d'un slot d'équipement traduit (clé = slot_key: "arme", "anneau"…).
 func equip_slot_name(slot_key: String) -> String:
 	return T("hero.equip.slot." + slot_key)
+
+# Nom d'affichage localisé d'une entité (dict GameData ou entrée de pool).
+# EN si la langue est "en" et le champ rempli, sinon FR, sinon `name`
+# (passifs), sinon `fallback`. TOUJOURS passer par ici pour afficher un nom
+# d'entité — jamais lire nom_affichage_fr directement dans l'UI.
+func entity_name(entity: Dictionary, fallback: String = "?") -> String:
+	var lang: String = GameSettings.language if GameSettings else "fr"
+	if lang == "en":
+		var en := str(entity.get("nom_affichage_en", ""))
+		if not en.is_empty():
+			return en
+	var fr := str(entity.get("nom_affichage_fr", ""))
+	if not fr.is_empty():
+		return fr
+	var n := str(entity.get("name", ""))
+	if not n.is_empty():
+		return n
+	return fallback
+
+# Lore localisé d'une entité — lore_en si langue EN et champ rempli, sinon lore_fr.
+func entity_lore(entity: Dictionary) -> String:
+	var lang: String = GameSettings.language if GameSettings else "fr"
+	if lang == "en":
+		var en := str(entity.get("lore_en", ""))
+		if not en.is_empty():
+			return en
+	return str(entity.get("lore_fr", ""))
+
+# Description localisée d'un effet de passif (dict des tier_effects) —
+# description_en si langue EN et champ rempli, sinon description (FR).
+func effect_desc(effect: Dictionary) -> String:
+	var lang: String = GameSettings.language if GameSettings else "fr"
+	if lang == "en":
+		var en := str(effect.get("description_en", ""))
+		if not en.is_empty():
+			return en
+	return str(effect.get("description", ""))

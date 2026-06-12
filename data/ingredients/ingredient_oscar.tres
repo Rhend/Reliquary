@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "ingredient_oscar"
 nom_affichage_fr = "Essence d'Oscar"
 lore_fr = "Ce qu'il reste d'Oscar une fois la malediction levee. Une lumiere doree, chaude, qui pese etrangement lourd dans la main."
+lore_en = "What remains of Oscar once the curse is lifted. A golden light, warm, and strangely heavy in the hand."
 nom_affichage_en = "Oscar's Essence"
 biome_source_id = "biome_foret"
 est_unique = true

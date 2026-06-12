@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "passif_unique_montagne"
 nom_affichage_fr = "Essence de Montagne"
 lore_fr = "La montagne ne s'incline devant rien. Cette essence transmet une fraction de son impassibilite a celui qui la porte."
+lore_en = "The mountain bows to nothing. This essence passes a fraction of its impassiveness to whoever carries it."
 nom_affichage_en = "Mountain Essence"
 biome_source_id = "biome_montagne"
 est_debloque = false

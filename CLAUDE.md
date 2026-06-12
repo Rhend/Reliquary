@@ -10,7 +10,10 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 - **Communication inter-systèmes** : uniquement via `EventBus` (aucun référencement direct).
 - **Strings magiques interdits** : types d'entités → `Enums.EntityType.*`, effets de
   bénédiction → `Enums.BlessEffect.*` (seuls effets supportés : HEAL, XP_BONUS).
-- **Noms affichés** : champ `nom_affichage_fr` (exception : les passifs utilisent `name`).
+- **Noms affichés** : TOUJOURS via `Translations.entity_name(entity)` (et le lore via
+  `Translations.entity_lore`, les effets de passifs via `Translations.effect_desc`).
+  Champs sources : `nom_affichage_fr`/`nom_affichage_en`, `lore_fr`/`lore_en`
+  (passifs : `name` + `nom_affichage_en`). Ne JAMAIS lire `nom_affichage_fr` en dur dans l'UI.
 - **Couleurs de rareté** : `UIColors.tier_color(tier)`. Toutes les couleurs dans UIColors.
 - **Textes UI** : via `Translations.T("clé")` (FR + EN) — pas de français en dur.
 - **UI 100 % en code** : factories dans `UIHelpers` (class_name statique), widgets

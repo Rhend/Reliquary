@@ -6,10 +6,12 @@
 script = ExtResource("1")
 id = "passive_combat_mastery"
 name = "Maîtrise du Combat"
+nom_affichage_en = "Combat Mastery"
 lore_fr = "Chaque combat laisse une lecon. Chaque lecon devient une arme."
+lore_en = "Every fight leaves a lesson. Every lesson becomes a weapon."
 type = "flat"
-base_stats = {"effects": [{"id": "atk_bonus", "value": 5, "description": "+5 ATK permanente"}]}
-tier_effects = [{"effects": [{"id": "atk_bonus", "value": 5, "description": "+5 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 12, "description": "+12 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 20, "description": "+20 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 30, "description": "+30 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 45, "description": "+45 ATK permanente"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 65, "description": "+65 ATK permanente"}], "conditional_effects": []}]
+base_stats = {"effects": [{"id": "atk_bonus", "value": 5, "description": "+5 ATK permanente", "description_en": "+5 permanent ATK"}]}
+tier_effects = [{"effects": [{"id": "atk_bonus", "value": 5, "description": "+5 ATK permanente", "description_en": "+5 permanent ATK"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 12, "description": "+12 ATK permanente", "description_en": "+12 permanent ATK"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 20, "description": "+20 ATK permanente", "description_en": "+20 permanent ATK"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 30, "description": "+30 ATK permanente", "description_en": "+30 permanent ATK"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 45, "description": "+45 ATK permanente", "description_en": "+45 permanent ATK"}], "conditional_effects": []}, {"effects": [{"id": "atk_bonus", "value": 65, "description": "+65 ATK permanente", "description_en": "+65 permanent ATK"}], "conditional_effects": []}]
 passive_slots = []
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

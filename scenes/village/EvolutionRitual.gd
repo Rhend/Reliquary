@@ -574,7 +574,7 @@ func _get_evolution_text() -> String:
 	var te_list: Array = entity.get("tier_effects", [])
 	if to_tier < te_list.size():
 		for eff: Dictionary in te_list[to_tier].get("effects", []):
-			var desc := eff.get("description", "") as String
+			var desc := Translations.effect_desc(eff)
 			if not desc.is_empty():
 				lines.append("✦ " + desc)
 
@@ -582,11 +582,11 @@ func _get_evolution_text() -> String:
 	if passifs.has(to_tier):
 		var pid   := str(passifs[to_tier])
 		var pdata := GameData.get_entity(pid)
-		var pname := pdata.get("nom_affichage_fr", pdata.get("name", pid)) as String
-		lines.append("Passif débloqué : " + pname)
+		var pname := Translations.entity_name(pdata, pid)
+		lines.append(Translations.T("ritual.passive_unlocked") % pname)
 
 	if lines.is_empty():
-		return "Nouveau palier atteint — Capacités améliorées"
+		return Translations.T("ritual.new_tier")
 	return "\n".join(lines)
 
 # ─── Bouton retour village ───────────────────────────────────

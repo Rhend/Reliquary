@@ -172,6 +172,14 @@ const CREATURE_CAP_PROFONDEUR: Dictionary = {
 
 const VILLAGE_FRAGMENT_COSTS: Array[int] = [1, 2, 3, 4, 5]
 
+# Paliers de Maîtrise d'un biome qui libèrent un Fragment de Mémoire (un
+# Fragment non collecté du biome par jalon atteint). Source unique de la
+# règle, utilisée par GameData (libération) et l'UI (annonce des jalons).
+const FRAGMENT_RELEASE_TIERS: Array[int] = [2, 4, 5]
+
+# Palier de Maîtrise d'un biome qui révèle son biome secondaire.
+const SECONDARY_BIOME_REVEAL_TIER: int = 4
+
 # ─── Éclosion : naissance du Village (phase préliminaire, pré-T0) ───
 # Progression requise pour faire éclore le Village en T0 et débloquer
 # les expéditions (remplace l'ancien clicker d'XP menant à T1).

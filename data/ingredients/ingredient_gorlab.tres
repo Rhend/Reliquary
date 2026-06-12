@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "ingredient_gorlab"
 nom_affichage_fr = "Cœur de Gorlab"
 lore_fr = "Le coeur d'un demon du feu continue de battre des heures apres la mort. Sa chaleur suffit a faire fondre le metal ordinaire."
+lore_en = "A fire demon's heart keeps beating for hours after death. Its heat alone can melt ordinary metal."
 nom_affichage_en = "Gorlab's Heart"
 biome_source_id = "biome_montagne"
 est_unique = true

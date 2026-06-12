@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "jellyfish"
 nom_affichage_fr = "Méduse Venimeuse"
 lore_fr = "Ses filaments sont presque invisibles dans l'eau sombre. Le contact est bref mais l'effet dure des heures."
+lore_en = "Its filaments are nearly invisible in the dark water. The contact is brief, but the effect lasts for hours."
 nom_affichage_en = "Venomous Jellyfish"
 biome_source_id = "biome_montagne"
 degats = 18

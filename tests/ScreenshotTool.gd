@@ -32,6 +32,7 @@ func _ready() -> void:
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
 		"combat":    await _shoot_combat()
+		"tooltip":   await _shoot_tooltip()
 		_:           await _shoot_summary()
 	get_tree().quit(0)
 
@@ -148,6 +149,36 @@ func _shoot_evolution() -> void:
 	_capture("res://tests/_shot_evo_reveal.png")
 	await get_tree().create_timer(2.3).timeout
 	_capture("res://tests/_shot_evo_celebrate.png")
+
+# ── Capture du TooltipOverlay (autoload racine, hors SubViewport) ──
+# Village en fond + tooltip représentatif (titre + lore + corps), langue EN
+# pour vérifier la localisation. Zoom ×2 sur la zone du tooltip.
+func _shoot_tooltip() -> void:
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	GameSettings.language = "en"
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	get_tree().root.add_child.call_deferred(village)
+	await get_tree().create_timer(1.2).timeout
+
+	var biome := GameData.get_entity("biome_foret")
+	TooltipOverlay.show_for(
+			Translations.entity_name(biome, "biome_foret"),
+			"Max zone: Surface\nMechanic: Ambush\nNext rank — Rare: frees a Memory Fragment · activates the Ambush mechanic · unlocks the Depths zone",
+			UIColors.tier_color(2),
+			Translations.entity_lore(biome))
+	await get_tree().create_timer(0.6).timeout
+	# Fige le suivi de souris et place le tooltip au centre pour la capture.
+	TooltipOverlay.set_process(false)
+	TooltipOverlay._panel.global_position = Vector2(460.0, 200.0)
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	img.save_png("res://tests/_shot_tooltip.png")
+	print("Screenshot -> res://tests/_shot_tooltip.png")
+	var crop := img.get_region(Rect2i(420, 160, 520, 400))
+	crop.resize(1040, 800, Image.INTERPOLATE_NEAREST)
+	crop.save_png("res://tests/_shot_tooltip_zoom.png")
+	print("Screenshot -> res://tests/_shot_tooltip_zoom.png")
 
 func _capture(path: String) -> void:
 	await RenderingServer.frame_post_draw

@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "miasmes"
 nom_affichage_fr = "Miasmes Toxiques"
 lore_fr = "Les gaz qui s'elevent des eaux putrides brulent les poumons et troublent l'esprit. S'y attarder est une erreur."
+lore_en = "The gases rising from the putrid waters burn the lungs and cloud the mind. Lingering there is a mistake."
 nom_affichage_en = "Toxic Miasma"
 biome_source_id = "biome_marecage"
 degats = 30

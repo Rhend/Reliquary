@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "tide_pool"
 nom_affichage_fr = "Mare Régénératrice"
 lore_fr = "L'eau y est froide et cristalline dans un endroit qui devrait etre opaque. Y plonger les mains suffit a sentir la fatigue s'evaporer."
+lore_en = "The water here is cold and crystal-clear in a place that should be murky. Dipping your hands in is enough to feel the fatigue evaporate."
 nom_affichage_en = "Regenerating Pool"
 biome_source_id = "biome_montagne"
 effet = "heal"

@@ -17,6 +17,7 @@ script = ExtResource("1")
 id = "biome_montagne"
 nom_affichage_fr = "Montagne"
 lore_fr = "La montagne est silencieuse, mais ce silence est trompeur. Les pierres elles-memes gardent la memoire de batailles que nul n'a encore ose raconter."
+lore_en = "The mountain is silent, but that silence is deceiving. The stones themselves keep the memory of battles no one has yet dared to tell."
 nom_affichage_en = "Mountain"
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0

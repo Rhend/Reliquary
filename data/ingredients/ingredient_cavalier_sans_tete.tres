@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "ingredient_cavalier_sans_tete"
 nom_affichage_fr = "Tête du Cavalier"
 lore_fr = "La tete du Cavalier Sans Tete est froide comme la mort mais ne se decompose jamais. On ne sait toujours pas pourquoi."
+lore_en = "The Headless Rider's head is cold as death but never decays. No one knows why."
 nom_affichage_en = "Rider's Head"
 biome_source_id = "biome_marecage"
 est_unique = true

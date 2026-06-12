@@ -6,9 +6,11 @@
 script = ExtResource("1")
 id = "passive_regeneration"
 name = "Régénération"
+nom_affichage_en = "Regeneration"
 lore_fr = "Le corps sait comment se reparer - il faut juste lui en laisser le temps. Ce passif donne ce temps."
-base_stats = {"effects": [{"id": "hp_regen_bonus", "value": 0.05, "description": "+5% régénération supplémentaire entre événements"}]}
-tier_effects = [{"effects": [{"id": "hp_regen_bonus", "value": 0.05, "description": "+5% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.09, "description": "+9% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.14, "description": "+14% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.20, "description": "+20% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.28, "description": "+28% régénération supplémentaire entre événements"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.40, "description": "+40% régénération supplémentaire entre événements"}]}]
+lore_en = "The body knows how to mend itself - it just needs to be given time. This passive grants that time."
+base_stats = {"effects": [{"id": "hp_regen_bonus", "value": 0.05, "description": "+5% régénération supplémentaire entre événements", "description_en": "+5% extra regeneration between events"}]}
+tier_effects = [{"effects": [{"id": "hp_regen_bonus", "value": 0.05, "description": "+5% régénération supplémentaire entre événements", "description_en": "+5% extra regeneration between events"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.09, "description": "+9% régénération supplémentaire entre événements", "description_en": "+9% extra regeneration between events"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.14, "description": "+14% régénération supplémentaire entre événements", "description_en": "+14% extra regeneration between events"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.20, "description": "+20% régénération supplémentaire entre événements", "description_en": "+20% extra regeneration between events"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.28, "description": "+28% régénération supplémentaire entre événements", "description_en": "+28% extra regeneration between events"}]}, {"effects": [{"id": "hp_regen_bonus", "value": 0.40, "description": "+40% régénération supplémentaire entre événements", "description_en": "+40% extra regeneration between events"}]}]
 passive_slots = []
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

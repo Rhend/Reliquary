@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "fragment_foret"
 nom_affichage_fr = "Fragment de Forêt"
 lore_fr = "Un eclat de memoire cristallisee, chaud comme une braise. Il contient quelque chose de la foret - ses peurs, peut-etre, ou ses regrets."
+lore_en = "A shard of crystallized memory, warm as an ember. It holds something of the forest - its fears, perhaps, or its regrets."
 nom_affichage_en = "Forest Fragment"
 biome_source_id = "biome_foret"
 est_collecte = false

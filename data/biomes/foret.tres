@@ -17,6 +17,7 @@ script = ExtResource("1")
 id = "biome_foret"
 nom_affichage_fr = "Forêt Sombre"
 lore_fr = "La foret n'a pas toujours ete plongee dans l'obscurite. Une ancienne malediction a eteint la lumiere entre ses arbres, laissant des creatures transformees par les tenebres."
+lore_en = "The forest was not always shrouded in darkness. An ancient curse snuffed out the light between its trees, leaving creatures transformed by the dark."
 nom_affichage_en = "Dark Forest"
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0

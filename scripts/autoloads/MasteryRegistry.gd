@@ -87,7 +87,7 @@ func get_mastery_display(entity_id: String) -> Dictionary:
 	var next_idx: int  = mini(tier + 1, GameData.xp_thresholds.size() - 1)
 	var xp_max: float  = float(GameData.xp_thresholds[next_idx])
 	return {
-		"name":       e.get("nom_affichage_fr", e.get("name", entity_id)),
+		"name":       Translations.entity_name(e, entity_id),
 		"tier":       tier,
 		"tier_name":  GameData.get_tier_name(tier),
 		"xp":         xp,

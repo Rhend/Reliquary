@@ -377,7 +377,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 
 	var c      := GameData.get_entity("hero")
 	var htier  := int(c.get("maitrise_actuelle", 0))
-	var hname  := (c.get("nom_affichage_fr", c.get("name", "Héros")) as String)
+	var hname  := Translations.entity_name(c)
 	_hero_name.text = hname.to_upper()
 	_hero_ring.setup(UIColors.tier_color(htier))
 	_hero_ring.set_hp(AdventureSystem.current_hp, AdventureSystem.current_hp)
@@ -394,7 +394,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 		int(hstats.get("atk", 0)) + int(heqp.get("atk", 0)),
 		int(hstats.get("def", 0)) + int(heqp.get("def", 0))]
 	UIHelpers.register_tooltip(_hero_name, hname, htt, UIColors.tier_color(htier),
-			c.get("lore_fr", "") as String)
+			Translations.entity_lore(c))
 
 	# Colonne ennemi en attente (vide) jusqu'au premier événement.
 	_enemy_name.text = "—"
@@ -428,7 +428,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
 		"trap":
 			var trap := event_data.get("trap", {}) as Dictionary
-			var tname := trap.get("nom_affichage_fr", "Piège") as String
+			var tname := Translations.entity_name(trap)
 			_enemy_name.text = tname.to_upper()
 			_enemy_ring.setup(UIColors.TYPE_TRAP)
 			_enemy_ring.set_hp(1, 1)
@@ -454,7 +454,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 						["monster", "attack", "status"])
 		"benediction":
 			var bene := event_data.get("effect", {}) as Dictionary
-			var bname := bene.get("nom_affichage_fr", "Bénédiction") as String
+			var bname := Translations.entity_name(bene)
 			_enemy_name.text = bname.to_upper()
 			_enemy_ring.setup(UIColors.TYPE_BENEDICTION)
 			_enemy_ring.set_hp(1, 1)
@@ -476,7 +476,7 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 	var c        := GameData.get_entity(hero_id)
 	var htier    := int(c.get("maitrise_actuelle", 0))
 	var hero_max := AdventureSystem.get_max_hp()
-	_hero_name.text = (c.get("nom_affichage_fr", c.get("name", "Héros")) as String).to_upper()
+	_hero_name.text = Translations.entity_name(c).to_upper()
 	_hero_ring.setup(UIColors.tier_color(htier))
 	_hero_ring.set_hp(hero_hp, hero_max)
 
@@ -498,7 +498,7 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 		int(enemy.get("def", 0))]
 	var enemy_entity := GameData.get_entity(enemy.get("id", ""))
 	UIHelpers.register_tooltip(_enemy_name, ename, ett, UIColors.tier_color(etier),
-			enemy_entity.get("lore_fr", "") as String)
+			Translations.entity_lore(enemy_entity))
 
 	_hero_ring.set_cooldown(0.0)
 	_enemy_ring.set_cooldown(0.0)
@@ -892,7 +892,7 @@ func _show_unique_indicator() -> void:
 	var unique := biome.get("creature_unique", {}) as Dictionary
 	if unique.is_empty():
 		return
-	var nom            := unique.get("nom_affichage_fr", "???") as String
+	var nom            := Translations.entity_name(unique, "???")
 	var already_beaten := biome.get("creature_unique_vaincue", false) as bool
 	var color          := UIColors.ZONE_ABYSSE
 
@@ -935,8 +935,8 @@ func _hide_unique_indicator() -> void:
 func _on_creature_unique_vaincue(_biome_id: String, ingredient_id: String, passif_id: String) -> void:
 	_hide_unique_indicator()
 	_show_unique_indicator()  # reconstruit avec état "déjà vaincu" + bouton réaffronter
-	var ingr := GameData.get_entity(ingredient_id).get("nom_affichage_fr", ingredient_id) as String
-	var passif := GameData.get_entity(passif_id).get("nom_affichage_fr", passif_id) as String
+	var ingr := Translations.entity_name(GameData.get_entity(ingredient_id), ingredient_id)
+	var passif := Translations.entity_name(GameData.get_entity(passif_id), passif_id)
 	_add_log("[color=%s]%s[/color]"
 			% [_hex(Color(1.0, 0.8, 0.2)), Translations.T("combat.unique_slain") % [ingr, passif]], ["hero"])
 
@@ -1077,6 +1077,6 @@ func _on_entity_ready_to_evolve(entity_id: String) -> void:
 	if not AdventureSystem.is_running:
 		return
 	var entity := GameData.get_entity(entity_id)
-	var nom    := entity.get("nom_affichage_fr", entity.get("name", entity_id)) as String
+	var nom    := Translations.entity_name(entity, entity_id)
 	var tier   := int(entity.get("maitrise_actuelle", 0))
 	_push_feed(Translations.T("combat.ready_evolve") % nom, UIColors.tier_color(mini(tier + 1, 5)))

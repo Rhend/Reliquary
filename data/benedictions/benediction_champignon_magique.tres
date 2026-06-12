@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "champignon_magique"
 nom_affichage_fr = "Champignon Magique"
 lore_fr = "Il pousse dans l'obscurite totale et brille faiblement. Le consommer procure une clarte inattendue, comme si le monde s'etait mis en pause."
+lore_en = "It grows in total darkness and glows faintly. Eating it brings unexpected clarity, as if the world had been put on pause."
 nom_affichage_en = "Magic Mushroom"
 biome_source_id = "biome_marecage"
 effet = "xp_bonus"

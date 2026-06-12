@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "hero"
 nom_affichage_fr = "Héros"
 lore_fr = "Tu t'eveilles sans nom et sans souvenir, mais avec la certitude que quelque chose t'a attendu ici. Le village te reconnait - meme si toi, tu ne te reconnais pas encore."
+lore_en = "You awaken with no name and no memory, yet with the certainty that something has been waiting for you here. The village recognizes you - even if you don't recognize yourself yet."
 nom_affichage_en = "Hero"
 passifs_par_palier = {}
 crit_chance = 0.20

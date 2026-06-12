@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "boue_curative"
 nom_affichage_fr = "Boue Curative"
 lore_fr = "Certaines boues du marecage ont des proprietes medicinales insoupconnees. Les creatures locales s'y roulent instinctivement apres un combat."
+lore_en = "Some of the swamp's mud has unsuspected medicinal properties. Local creatures instinctively roll in it after a fight."
 nom_affichage_en = "Healing Mud"
 biome_source_id = "biome_marecage"
 effet = "heal"

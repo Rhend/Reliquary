@@ -109,8 +109,8 @@ func _make_slot(slot_key: String, icon: String, equip_id: String,
 		if line != "":
 			tt += "\n" + line
 		UIHelpers.register_tooltip(box,
-				equip.get("nom_affichage_fr", equip_id) as String, tt, ec,
-				equip.get("lore_fr", "") as String)
+				Translations.entity_name(equip, equip_id), tt, ec,
+				Translations.entity_lore(equip))
 		UIHelpers.add_hover_feedback(box)
 	else:
 		UIHelpers.register_tooltip(box, slot_name,

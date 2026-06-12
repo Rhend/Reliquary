@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "creature_marecage_profondeur"
 nom_affichage_fr = "Serpent des Marais"
 lore_fr = "Ancien gardien des eaux profondes, son venin peut dissoudre les os en quelques heures. Il ne frappe qu'une fois - mais c'est toujours suffisant."
+lore_en = "Ancient guardian of the deep waters, its venom can dissolve bone within hours. It only strikes once - but once is always enough."
 nom_affichage_en = "Swamp Serpent"
 est_unique = false
 zone_associee = 1

@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "equipment_arme"
 nom_affichage_fr = "Lame de Pierre"
 lore_fr = "Taillee dans le basalte de la montagne, elle garde le tranchant mieux que l'acier. Les premiers habitants l'utilisaient pour des rituels dont le sens s'est perdu."
+lore_en = "Carved from mountain basalt, it holds an edge better than steel. The first inhabitants used it for rituals whose meaning is lost."
 nom_affichage_en = "Stone Blade"
 slot = 0
 biome_source_id = "biome_montagne"

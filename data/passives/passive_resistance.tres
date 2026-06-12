@@ -6,9 +6,11 @@
 script = ExtResource("1")
 id = "passive_resistance"
 name = "Résistance"
+nom_affichage_en = "Resistance"
 lore_fr = "Certains corps apprennent a ignorer ce qui les detruirait normalement. C'est une question d'adaptation."
-base_stats = {"effects": [{"id": "def_pct", "value": 5, "description": "−5 % dégâts subis"}]}
-tier_effects = [{"effects": [{"id": "def_pct", "value": 5, "description": "−5 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 8, "description": "−8 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 12, "description": "−12 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 18, "description": "−18 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 25, "description": "−25 % dégâts subis"}]}, {"effects": [{"id": "def_pct", "value": 35, "description": "−35 % dégâts subis"}]}]
+lore_en = "Some bodies learn to ignore what would normally destroy them. It's a matter of adaptation."
+base_stats = {"effects": [{"id": "def_pct", "value": 5, "description": "−5 % dégâts subis", "description_en": "−5% damage taken"}]}
+tier_effects = [{"effects": [{"id": "def_pct", "value": 5, "description": "−5 % dégâts subis", "description_en": "−5% damage taken"}]}, {"effects": [{"id": "def_pct", "value": 8, "description": "−8 % dégâts subis", "description_en": "−8% damage taken"}]}, {"effects": [{"id": "def_pct", "value": 12, "description": "−12 % dégâts subis", "description_en": "−12% damage taken"}]}, {"effects": [{"id": "def_pct", "value": 18, "description": "−18 % dégâts subis", "description_en": "−18% damage taken"}]}, {"effects": [{"id": "def_pct", "value": 25, "description": "−25 % dégâts subis", "description_en": "−25% damage taken"}]}, {"effects": [{"id": "def_pct", "value": 35, "description": "−35 % dégâts subis", "description_en": "−35% damage taken"}]}]
 passive_slots = []
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

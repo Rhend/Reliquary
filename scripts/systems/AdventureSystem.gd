@@ -478,7 +478,7 @@ func _drop_pool(pool: Array, source_name: String) -> void:
 		var res := GameData.get_entity(item_id)
 		drops.append({
 			"item_id": item_id,
-			"name":    res.get("nom_affichage_fr", res.get("name", item_id)),
+			"name":    Translations.entity_name(res, item_id),
 			"qty":     qty
 		})
 	if not drops.is_empty():
@@ -511,7 +511,7 @@ func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
 	_stats.loot_detail[ingredient_id] = _stats.loot_detail.get(ingredient_id, 0) + 1
 	_stats.loot_total += 1
 	EventBus.loot_dropped.emit(
-		[{"item_id": ingredient_id, "name": ingr.get("nom_affichage_fr", ingredient_id), "qty": 1}],
+		[{"item_id": ingredient_id, "name": Translations.entity_name(ingr, ingredient_id), "qty": 1}],
 		enemy.get("name", "?")
 	)
 
@@ -570,7 +570,7 @@ func _combat_sheet(creature: Dictionary) -> Dictionary:
 	var s    := GameData.stats_at_tier(creature, tier)
 	return {
 		"id":         creature.get("id", ""),
-		"name":       creature.get("nom_affichage_fr", ""),
+		"name":       Translations.entity_name(creature, ""),
 		"tier":       tier,
 		"atk":        s.get("atk",       10),
 		"def":        s.get("def",        0),

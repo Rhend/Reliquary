@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "creature_gorlab"
 nom_affichage_fr = "Gorlab"
 lore_fr = "Le Demon du Feu Majeur a jadis incendie trois villages en une seule nuit. La Montagne l'a emprisonne dans ses entrailles, mais sa rage y couve toujours."
+lore_en = "The Greater Fire Demon once burned three villages in a single night. The Mountain imprisoned it in its depths, but its rage still smolders."
 nom_affichage_en = "Gorlab"
 est_unique = true
 zone_associee = 2

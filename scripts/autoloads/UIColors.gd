@@ -82,6 +82,7 @@ const CARD_NEUTRAL := Color(0.42, 0.52, 0.68)   # acier-bleu sobre, ni tier ni c
 const TEXT_MUTED  := Color(0.48, 0.48, 0.52)
 const TEXT_HEADER := Color(0.75, 0.85, 1.00)
 const TEXT_BONUS  := Color(0.55, 1.00, 0.55)
+const TOOLTIP_BODY := Color(0.80, 0.82, 0.88)   # corps de tooltip — clair, lisible sur BG_DARK
 const FILTER_ON   := Color(1.00, 0.88, 0.20)
 
 # ── Dégâts flottants ────────────────────────────────────────

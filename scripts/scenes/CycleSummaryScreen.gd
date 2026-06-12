@@ -43,7 +43,7 @@ func _build_ui() -> void:
 	var tcolor := UIColors.tier_color(hero.get("maitrise_actuelle", 0) as int)
 
 	var biome      := GameData.get_entity(data.get("biome_id", "") as String)
-	var biome_name := biome.get("nom_affichage_fr", "Biome Inconnu") as String
+	var biome_name := Translations.entity_name(biome)
 
 	# Couleur + libellé du résultat — accent de tout l'écran.
 	var rcolor := UIColors.LOG_DEFEAT
@@ -329,7 +329,7 @@ func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
 	for item_id: String in loot_detail:
 		var qty       := int(loot_detail[item_id])
 		var item      := GameData.get_entity(item_id)
-		var nom       := (item.get("nom_affichage_fr", item.get("name", item_id))) as String
+		var nom       := Translations.entity_name(item, item_id)
 		var is_unique := item.get("est_unique", false) as bool
 		var ic        := UIColors.TIER_LEGENDAIRE if is_unique else UIColors.FILTER_ON
 
@@ -376,7 +376,7 @@ func _section_xp(vb: VBoxContainer, data: Dictionary,
 	var entities_xp := data.get("xp_entities_detail", {}) as Dictionary
 	for ent_id: String in entities_xp:
 		var e := GameData.get_entity(ent_id)
-		var e_name := e.get("nom_affichage_fr", e.get("name", ent_id)) as String
+		var e_name := Translations.entity_name(e, ent_id)
 		var icon := "🐾"
 		match e.get("entity_type", ""):
 			Enums.EntityType.TRAP:        icon = "▲"
@@ -386,13 +386,13 @@ func _section_xp(vb: VBoxContainer, data: Dictionary,
 	var detail := data.get("xp_passives_detail", {}) as Dictionary
 	for passive_id: String in detail:
 		var p := GameData.get_entity(passive_id)
-		var p_name := p.get("nom_affichage_fr", p.get("name", passive_id)) as String
+		var p_name := Translations.entity_name(p, passive_id)
 		_xp_entity(body_xp, "⚡", p_name, p, detail[passive_id] as float)
 
 	var equip_detail := data.get("xp_equip_detail", {}) as Dictionary
 	for equip_id: String in equip_detail:
 		var eq := GameData.get_entity(equip_id)
-		var eq_name := eq.get("nom_affichage_fr", equip_id) as String
+		var eq_name := Translations.entity_name(eq, equip_id)
 		_xp_entity(body_xp, "🔨", eq_name, eq, equip_detail[equip_id] as float)
 
 # Ajoute une ligne XP pour une entité ayant reçu de l'XP ce cycle (sinon ignorée).
@@ -448,7 +448,7 @@ func _section_evolutions(vb: VBoxContainer) -> void:
 func _evolution_card(vb: VBoxContainer, entity_id: String, entity: Dictionary) -> void:
 	var tier := entity.get("maitrise_actuelle", 0) as int
 	var nc   := UIColors.tier_color(tier + 1)
-	var nom  := entity.get("nom_affichage_fr", entity.get("name", entity_id)) as String
+	var nom  := Translations.entity_name(entity, entity_id)
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL

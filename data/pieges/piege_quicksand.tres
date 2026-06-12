@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "quicksand"
 nom_affichage_fr = "Sables Mouvants"
 lore_fr = "La montagne cache parfois des poches de sable instable la ou on attend de la roche solide. Tomber dedans est facile ; en sortir, beaucoup moins."
+lore_en = "The mountain sometimes hides pockets of loose sand where you'd expect solid rock. Falling in is easy; getting out far less so."
 nom_affichage_en = "Quicksand"
 biome_source_id = "biome_montagne"
 degats = 20

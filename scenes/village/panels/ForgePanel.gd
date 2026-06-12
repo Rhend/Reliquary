@@ -14,7 +14,7 @@
 class_name ForgePanel
 
 # Mapping biome → équipement → icône de section (ordre d'affichage).
-# Le nom affiché de la section vient des données du biome (nom_affichage_fr).
+# Le nom affiché de la section vient des données du biome (Translations.entity_name).
 const BIOME_EQUIP: Array = [
 	["biome_montagne", "equipment_arme",   "⛰"],
 	["biome_foret",    "equipment_anneau", "🌿"],
@@ -24,7 +24,7 @@ const BIOME_EQUIP: Array = [
 # Label de section d'un biome : "icône  NOM DU BIOME" depuis les données.
 static func _section_label(biome_id: String, icon: String) -> String:
 	var biome := GameData.get_entity(biome_id)
-	var nom   := biome.get("nom_affichage_fr", biome_id) as String
+	var nom   := Translations.entity_name(biome, biome_id)
 	return "%s  %s" % [icon, nom.to_upper()]
 
 static func _slot_name(slot_idx: int) -> String:
@@ -134,7 +134,7 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 		return _locked_equip_card(equip, equip_id)
 
 	var equip_tier  := int(equip.get("maitrise_actuelle", 0))
-	var nom         := equip.get("nom_affichage_fr", equip_id) as String
+	var nom         := Translations.entity_name(equip, equip_id)
 	var slot_idx    := int(equip.get("slot", 0))
 	var slot_name: String = _slot_name(slot_idx)
 	var ec          := UIColors.tier_color(equip_tier)
@@ -173,7 +173,7 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 		var stats_nxt_tt := _stats_at(equip, next_tier)
 		if not stats_nxt_tt.is_empty():
 			tt_body += Translations.T("forge.equip.tt_next") % [GameData.get_tier_name(next_tier), _stats_line(stats_nxt_tt)]
-	UIHelpers.register_tooltip(xpcard, nom, tt_body, ec, equip.get("lore_fr", "") as String)
+	UIHelpers.register_tooltip(xpcard, nom, tt_body, ec, Translations.entity_lore(equip))
 
 	# Ligne comparative « [Palier] stats ─◆─▶ [Palier+1] stats », affichée
 	# en PIED de carte (sous la recette et le bouton Forger) dans toutes
@@ -243,7 +243,7 @@ static func _locked_equip_card(equip: Dictionary, equip_id: String) -> Control:
 	var m  := UIHelpers.margin_of(10)
 	card.add_child(m)
 	var lbl := Label.new()
-	lbl.text = Translations.T("forge.equip.locked") % equip.get("nom_affichage_fr", equip_id)
+	lbl.text = Translations.T("forge.equip.locked") % Translations.entity_name(equip, equip_id)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 12)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
@@ -259,7 +259,7 @@ static func _recipe_block(recipe: Array) -> Control:
 		var needed   := int(req.get("quantite", 1))
 		var ingr     := GameData.get_entity(ingr_id)
 		var have     := int(GameData.player["resources"].get(ingr_id, 0))
-		var nom      := ingr.get("nom_affichage_fr", ingr_id) as String
+		var nom      := Translations.entity_name(ingr, ingr_id)
 		var ok       := have >= needed
 		var ic       := UIColors.INGREDIENT_OK if ok else UIColors.INGREDIENT_MISSING
 
@@ -299,7 +299,7 @@ static func _recipe_block(recipe: Array) -> Control:
 
 		UIHelpers.add_hover_feedback(card)
 
-		var ingr_lore := ingr.get("lore_fr", "") as String
+		var ingr_lore := Translations.entity_lore(ingr)
 		UIHelpers.register_tooltip(card, nom,
 				Translations.T("forge.recipe.tt_stock") % [have, needed], ic, ingr_lore)
 
@@ -340,7 +340,7 @@ static func _forge_btn(host: Village, equip_id: String, next_tier: int,
 			# Forge réussie → rituel d'ascension, comme toute évolution.
 			if GameData.forge(equip_id):
 				var e   := GameData.get_entity(equip_id)
-				var nom := e.get("nom_affichage_fr", equip_id) as String
+				var nom := Translations.entity_name(e, equip_id)
 				var nt  := int(e.get("maitrise_actuelle", 0))
 				host.launch_evolution_ritual("equipment", equip_id, nom, nt - 1, nt)
 		)

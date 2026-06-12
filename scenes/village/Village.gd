@@ -277,8 +277,10 @@ func _build_hub() -> void:
 		hint_lbl.anchor_top    = 1.0; hint_lbl.anchor_bottom = 1.0
 		hint_lbl.offset_top    = -36; hint_lbl.offset_bottom = -8
 		hint_lbl.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-		hint_lbl.add_theme_font_size_override("font_size", 11)
-		hint_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.35))
+		hint_lbl.add_theme_font_size_override("font_size", 12)
+		hint_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.70))
+		hint_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.60))
+		hint_lbl.add_theme_constant_override("shadow_offset_y", 1)
 		_hub_root.add_child(hint_lbl)
 
 	# ── HexItems : tous gated uniformément par village_maitrise ──
@@ -322,19 +324,24 @@ func _animate_hub_entrance() -> void:
 		i += 1
 
 # Retourne le texte du hint contextuel selon la progression actuelle.
+# Couvre toute la partie : démarrage → premier Fragment → évolution du
+# Village prête → Forge → Fragments manquants pour le palier suivant.
 func _current_hint(village_maitrise: int) -> String:
 	var frags := (GameData.village.get("fragments_collectes", []) as Array).size()
 	var hero_tier := int(GameData.get_entity("hero").get("maitrise_actuelle", 0))
+	if GameData.can_upgrade_village():
+		return Translations.T("hint.upgrade_ready")
 	if village_maitrise == 0 and hero_tier == 0 and frags == 0:
 		return Translations.T("hint.start")
 	if village_maitrise == 0 and frags == 0:
 		return Translations.T("hint.reach_rare")
-	if village_maitrise == 0 and frags >= 1:
-		return Translations.T("hint.fragment_ok")
 	if village_maitrise >= 1 and not GameData.can_forge("equipment_arme") \
 			and not GameData.can_forge("equipment_anneau") \
 			and not GameData.can_forge("equipment_armure"):
 		return Translations.T("hint.forge_ready")
+	if village_maitrise < Balance.VILLAGE_FRAGMENT_COSTS.size():
+		var missing := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise] - frags
+		return Translations.T("hint.need_fragments") % missing
 	return ""
 
 # ─── Conditions d'évolution du Village ────────────────────────
@@ -353,18 +360,22 @@ func _build_village_conditions(container: VBoxContainer, village_maitrise: int, 
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_font_size_override("font_size", 11)
 	row.add_theme_color_override("font_color", UIColors.LOG_VICTORY if met else UIColors.TEXT_MUTED)
+	# Les Labels ignorent la souris par défaut → STOP pour que le tooltip
+	# « comment obtenir des Fragments » soit accessible au survol.
+	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	UIHelpers.register_tooltip(row, Translations.T("village.frag.tt_title"),
+			Translations.T("village.frag.tt_body") % [frag_have, frag_need], vcolor)
 	container.add_child(row)
 
 	if GameData.can_upgrade_village():
-		var ubtn := Button.new()
-		ubtn.text = "▲  " + Translations.T("village.evolve_btn")
+		var next_color := UIColors.tier_color(village_maitrise + 1)
+		var ubtn := UIHelpers.evolve_button("▲  " + Translations.T("village.evolve_btn"),
+				next_color, 11)
 		ubtn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		ubtn.custom_minimum_size = Vector2(200.0, 26.0)
-		ubtn.add_theme_font_size_override("font_size", 11)
-		ubtn.add_theme_color_override("font_color", vcolor)
-		ubtn.add_theme_stylebox_override("normal", UIHelpers.card_style(vcolor, 0.12, 1.0, 1, 4))
-		ubtn.add_theme_stylebox_override("hover",  UIHelpers.card_style(vcolor, 0.28, 1.0, 1, 4))
-		ubtn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		UIHelpers.register_tooltip(ubtn, Translations.T("village.evolve_btn"),
+				Translations.T("village.evolve.tt_body") \
+						% GameData.get_tier_name(village_maitrise + 1), next_color)
 		ubtn.pressed.connect(func() -> void:
 			if GameData.upgrade_village():
 				_rebuild_hub()
@@ -585,7 +596,7 @@ func _rebuild_hub() -> void:
 # Fragment libéré : feedback + rebuild hub (le bouton upgrade peut apparaître).
 func _on_fragment_libere(fragment_id: String, _biome_id: String) -> void:
 	var frag: Dictionary = GameData.get_entity(fragment_id)
-	var nom  := frag.get("nom_affichage_fr", fragment_id) as String
+	var nom  := Translations.entity_name(frag, fragment_id)
 	show_banner(Translations.T("village.fragment_freed") % nom,
 			Color(0.55, 0.85, 0.55), Color(0.05, 0.05, 0.20, 0.92), 2.5, 0.5)
 	_rebuild_hub()
@@ -597,14 +608,14 @@ func _on_village_tier_change(_nouveau_tier: int) -> void:
 # Équipement de biome obtenu (biome → Peu Commun) : bannière dorée.
 func _on_equipment_unlocked(equip_id: String) -> void:
 	var e   := GameData.get_entity(equip_id)
-	var nom := e.get("nom_affichage_fr", equip_id) as String
+	var nom := Translations.entity_name(e, equip_id)
 	show_banner(Translations.T("village.equipment_unlocked") % nom,
 			Color(0.95, 0.80, 0.40), Color(0.16, 0.11, 0.02, 0.92), 2.5, 0.5)
 
 # Nouveau biome révélé : bannière + refresh du panneau Expéditions si ouvert.
 func _on_biome_revele(biome_id: String) -> void:
 	var biome := GameData.get_entity(biome_id)
-	var nom   := biome.get("nom_affichage_fr", biome_id) as String
+	var nom   := Translations.entity_name(biome, biome_id)
 	show_banner(Translations.T("village.biome_revealed") % nom,
 			Color(0.4, 0.7, 1.0), Color(0.05, 0.10, 0.25, 0.92), 3.0, 0.6)
 	if _active_panel_id == "adventure":
@@ -823,21 +834,11 @@ func _hatch_village() -> void:
 func make_evolve_btn(entity_id: String, entity_name: String,
 		entity_type: String, from_tier: int) -> Button:
 	var nc  := UIColors.tier_color(from_tier + 1)
-	var btn := Button.new()
-	btn.text = Translations.T("btn.evolve")
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.add_theme_color_override("font_color", nc)
-	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	btn.resized.connect(func() -> void:
-		btn.pivot_offset = btn.size * 0.5
-	)
-	btn.ready.connect(func() -> void:
-		var tw := btn.create_tween().set_loops()
-		tw.tween_property(btn, "scale", Vector2(1.05, 1.05), 0.6) \
-				.set_ease(Tween.EASE_IN_OUT)
-		tw.tween_property(btn, "scale", Vector2.ONE, 0.6) \
-				.set_ease(Tween.EASE_IN_OUT)
-	)
+	var btn := UIHelpers.evolve_button(Translations.T("btn.evolve"), nc)
+	UIHelpers.register_tooltip(btn,
+			Translations.T("evolve.tt_title") % entity_name,
+			Translations.T("evolve.tt_body") % [GameData.get_tier_name(from_tier),
+					GameData.get_tier_name(from_tier + 1)], nc)
 	btn.pressed.connect(func() -> void:
 		if MasterySystem.evolve_entity(entity_id):
 			SaveManager.save()

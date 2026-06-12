@@ -5,6 +5,7 @@ extends Resource
 @export var nom_affichage_fr: String = ""
 @export var nom_affichage_en: String = ""
 @export var lore_fr:          String = ""
+@export var lore_en:          String = ""
 @export var biome_source_id:  String = ""
 @export var effet:            String = ""
 @export var valeur:           int    = 0
