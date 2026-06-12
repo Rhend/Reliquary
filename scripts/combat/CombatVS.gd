@@ -12,6 +12,10 @@
 # ============================================================
 class_name CombatVS extends Control
 
+# Largeur de la bande du séparateur — les BiomeBackground splittés calent
+# la pente de leur découpe dessus (BiomeBackground.set_split).
+const BAND_WIDTH := 80.0
+
 # Couleur d'accent du biome courant (trait + liseré du badge VS).
 var accent_color: Color = UIColors.TEXT_MUTED:
 	set(value):
@@ -25,7 +29,7 @@ var _vs_style: StyleBoxFlat
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Bande centrée de largeur fixe entre les deux colonnes, pleine hauteur.
-	custom_minimum_size = Vector2(80, 0)
+	custom_minimum_size = Vector2(BAND_WIDTH, 0)
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	_vs_box = PanelContainer.new()

@@ -78,6 +78,9 @@ const ZONE_ABYSSE     := Color(0.88, 0.18, 0.12)   # rouge
 # ── Carte neutre (sans rareté native) ───────────────────────
 const CARD_NEUTRAL := Color(0.42, 0.52, 0.68)   # acier-bleu sobre, ni tier ni catégorie
 
+# ── Sélection (panneau Expéditions) ─────────────────────────
+const SELECTION_GOLD := Color(1.00, 0.84, 0.30)   # liseré or du biome sélectionné
+
 # ── Texte UI générique ──────────────────────────────────────
 const TEXT_MUTED  := Color(0.48, 0.48, 0.52)
 const TEXT_HEADER := Color(0.75, 0.85, 1.00)

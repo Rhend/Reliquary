@@ -3,9 +3,11 @@
 #
 # Affiché après victoire, défaite ou interruption volontaire.
 # Structure :
-#   1. Bannière de résultat (VICTOIRE / DÉFAITE / INTERRUPTION) + aura
+#   1. Bannière « RETOUR AU VILLAGE » + aura — l'issue est racontée par
+#      la COULEUR (vert victoire / or interruption / rouge défaite)
 #   2. Puces de stats (combats, événements, butin, XP totale) à compteurs
 #   3. Sections : Découvertes, Ressources, Répartition XP, Évolutions
+#      (sections vides absentes)
 #
 # Le panneau est une colonne centrée (PANEL_WIDTH) — pas de pleine
 # largeur : les lignes restent lisibles. La couleur d'accent vient du
@@ -15,6 +17,12 @@
 extends Control
 
 const PANEL_WIDTH := 880.0
+
+# Durée de remplissage d'une barre XP et décalage entre barres — ralentis
+# de 20 % par rapport aux valeurs d'origine (0.85 / 0.12), retour playtest :
+# la répartition allait trop vite pour être lue.
+const XP_FILL_TIME    := 1.06
+const XP_STAGGER_TIME := 0.15
 
 var _fade_nodes: Array = []   # Controls révélés en cascade
 var _xp_anims:   Array = []   # {card, xp_label, gained, before_frac, after_frac}
@@ -45,15 +53,15 @@ func _build_ui() -> void:
 	var biome      := GameData.get_entity(data.get("biome_id", "") as String)
 	var biome_name := Translations.entity_name(biome)
 
-	# Couleur + libellé du résultat — accent de tout l'écran.
+	# Couleur du résultat — accent de tout l'écran. Le titre, lui, est
+	# neutre (« Retour au village ») : seule la couleur raconte l'issue
+	# (vert victoire / or interruption / rouge défaite).
 	var rcolor := UIColors.LOG_DEFEAT
-	var rtext  := Translations.T("cycle.defeat")
 	if data.get("interrupted", false):
 		rcolor = UIColors.FILTER_ON
-		rtext  = Translations.T("cycle.interrupted")
 	elif data.get("victory", false):
 		rcolor = UIColors.LOG_VICTORY
-		rtext  = Translations.T("cycle.victory")
+	var rtext := Translations.T("cycle.banner_title")
 
 	var bg := ColorRect.new()
 	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -308,7 +316,13 @@ func _section_discoveries(vb: VBoxContainer, data: Dictionary,
 			frag_done = f.get("est_collecte", false)
 			break
 	_discovery_check(rows, Translations.T("cycle.discovery.fragment"), frag_done)
-	_discovery_check(rows, Translations.T("cycle.discovery.unique"), biome.get("creature_unique_vaincue", false) as bool)
+
+	# Créature unique : ligne ABSENTE tant qu'elle n'a pas été affrontée
+	# et que les Abysses du biome ne sont pas débloquées — ne pas trahir
+	# son existence trop tôt.
+	var unique_beaten := biome.get("creature_unique_vaincue", false) as bool
+	if unique_beaten or Balance.max_unlocked_zone(btier) >= Enums.Zone.ABYSSE:
+		_discovery_check(rows, Translations.T("cycle.discovery.unique"), unique_beaten)
 
 # ── Section 2 : Ressources collectées (puces) ──────────────
 func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
@@ -422,28 +436,25 @@ func _xp_entity(vb: VBoxContainer, icon: String, label: String, entity: Dictiona
 	})
 
 # ── Section 4 : Évolutions disponibles ─────────────────────
+# Section ABSENTE quand rien n'est prêt à évoluer : son apparition
+# signale à elle seule qu'une évolution attend le joueur.
 func _section_evolutions(vb: VBoxContainer) -> void:
-	var sec_ev := UIHelpers.collapsible_section(Translations.T("cycle.section.evolutions"), UIColors.FILTER_ON)
-	vb.add_child(sec_ev["wrapper"])
-	_fade_register(sec_ev["wrapper"])
-	var body_ev := sec_ev["body"] as VBoxContainer
-
-	var found := false
+	var evolvable: Array[String] = []
 	for eid: String in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
 		if e.get("entity_type", "") == Enums.EntityType.EQUIPMENT:
 			continue
 		if MasterySystem.can_evolve(eid):
-			found = true
-			_evolution_card(body_ev, eid, e)
+			evolvable.append(eid)
+	if evolvable.is_empty():
+		return
 
-	if not found:
-		var lbl := Label.new()
-		lbl.text = Translations.T("cycle.no_evolution")
-		lbl.add_theme_font_size_override("font_size", 13)
-		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		body_ev.add_child(lbl)
-		_fade_register(lbl)
+	var sec_ev := UIHelpers.collapsible_section(Translations.T("cycle.section.evolutions"), UIColors.FILTER_ON)
+	vb.add_child(sec_ev["wrapper"])
+	_fade_register(sec_ev["wrapper"])
+	var body_ev := sec_ev["body"] as VBoxContainer
+	for eid in evolvable:
+		_evolution_card(body_ev, eid, GameData.entities[eid] as Dictionary)
 
 func _evolution_card(vb: VBoxContainer, entity_id: String, entity: Dictionary) -> void:
 	var tier := entity.get("maitrise_actuelle", 0) as int
@@ -555,9 +566,9 @@ func _run_animation_sequence() -> void:
 				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 		ctw.tween_callback(_pop.bind(chip))
 
-	# Barres XP : départ décalé de 0.12 s chacune, toutes en parallèle.
+	# Barres XP : départs décalés, toutes en parallèle.
 	for i in _xp_anims.size():
-		_animate_xp_card(_xp_anims[i] as Dictionary, 0.45 + float(i) * 0.12)
+		_animate_xp_card(_xp_anims[i] as Dictionary, 0.45 + float(i) * XP_STAGGER_TIME)
 
 # Petit rebond d'accentuation (fin de compteur, fin de barre XP).
 func _pop(node: Control, amount: float = 1.05) -> void:
@@ -584,11 +595,11 @@ func _animate_xp_card(xp: Dictionary, delay: float) -> void:
 
 	var tw := create_tween()
 	tw.set_parallel(true)
-	tw.tween_property(card, "xp_fill", after, 0.85) \
+	tw.tween_property(card, "xp_fill", after, XP_FILL_TIME) \
 			.set_delay(delay).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.tween_method(func(v: float) -> void:
 		xp_lbl.text = "+%.0f XP" % v
-	, 0.0, gained, 0.85).set_delay(delay).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	, 0.0, gained, XP_FILL_TIME).set_delay(delay).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 
 	# Fin du remplissage : gerbe d'étincelles + petit rebond de la carte,
 	# puis fondu or → couleur du tier. set_parallel(false) : tout ce qui

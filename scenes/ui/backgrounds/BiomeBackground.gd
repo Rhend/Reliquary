@@ -97,9 +97,10 @@ static func accent_for_biome(biome_id: String) -> Color:
 
 # État désiré, mémorisé même si le material n'existe pas encore (appels avant
 # _ready, ex. quand le nœud n'est pas encore dans l'arbre). _ready() réapplique tout.
-var _preset_id  := "forest"
-var _split_side := 0
-var _zone       := 0   # valeur Enums.Zone
+var _preset_id     := "forest"
+var _split_side    := 0
+var _split_band_px := 80.0   # largeur de la bande VS (pour caler la pente)
+var _zone          := 0      # valeur Enums.Zone
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -110,6 +111,8 @@ func _ready() -> void:
 	_apply_preset_params()
 	_apply_split()
 	_apply_zone()
+	# La pente de la découpe dépend de la largeur réelle du fond.
+	resized.connect(_apply_split)
 
 # Applique une palette de biome (clé de PRESETS). Inconnu → fallback "forest".
 func apply_preset(preset_id: String) -> void:
@@ -124,13 +127,23 @@ func _apply_preset_params() -> void:
 
 # Restreint le rendu à un côté de la diagonale VS.
 #   0 = plein écran ; 1 = côté héros (gauche) ; 2 = côté créature (droite).
-func set_split(side: int) -> void:
-	_split_side = side
+# band_px = largeur de la bande du séparateur CombatVS : la diagonale du
+# shader doit parcourir EXACTEMENT cette largeur sur toute la hauteur,
+# sinon les deux fonds débordent de part et d'autre de la ligne.
+func set_split(side: int, band_px: float = 80.0) -> void:
+	_split_side    = side
+	_split_band_px = band_px
 	_apply_split()
 
 func _apply_split() -> void:
-	if material:
-		material.set_shader_parameter("split_side", _split_side)
+	if material == null:
+		return
+	material.set_shader_parameter("split_side", _split_side)
+	# Pente = bande / largeur : décalage horizontal total de la diagonale
+	# (haut → bas) égal à la largeur de la bande VS, quelle que soit la
+	# taille du fond (recalculé à chaque resize).
+	if _split_side != 0 and size.x > 0.0:
+		material.set_shader_parameter("split_tilt", _split_band_px / size.x)
 
 # Règle l'intensité d'obscurité/brouillard selon la zone (Enums.Zone).
 # Surface → clair ; Profondeur → assombri ; Abysse → très sombre + brouillard dense.

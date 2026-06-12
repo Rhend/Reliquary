@@ -33,6 +33,7 @@ func _ready() -> void:
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
 		"forge":     await _shoot_forge()
+		"adventure": await _shoot_adventure()
 		"combat":    await _shoot_combat()
 		"tooltip":   await _shoot_tooltip()
 		_:           await _shoot_summary()
@@ -148,6 +149,18 @@ func _shoot_forge() -> void:
 	village._open_panel("forge")
 	await get_tree().create_timer(1.2).timeout
 	_capture("res://tests/_shot_forge_panel.png")
+
+# ── Capture du panneau Expéditions ──────────────────────────
+# Biome sélectionné (liseré or + luciole) avec accordéon déplié :
+# header « nom | palier XP | Entités x/y », pill « ! Prochain palier ».
+func _shoot_adventure() -> void:
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	_vp.add_child(village)
+	await get_tree().create_timer(1.0).timeout
+	village.adv_selected_biome_id = "biome_foret"
+	village._open_panel("adventure")
+	await get_tree().create_timer(1.2).timeout
+	_capture("res://tests/_shot_adventure_panel.png")
 
 # ── Capture du rituel d'évolution à 3 moments clés ──────────
 func _shoot_evolution() -> void:

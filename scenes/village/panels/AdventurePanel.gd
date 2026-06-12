@@ -99,6 +99,7 @@ static func build(host: Village) -> void:
 	var contents:     Dictionary = {}   # biome_id → VBoxContainer (détail)
 	var arrows:       Dictionary = {}   # biome_id → Label (▶ / ▼)
 	var biome_names:  Dictionary = {}   # biome_id → nom affiché (pour le bouton)
+	var glows:        Dictionary = {}   # biome_id → SelectionGlow (liseré or)
 
 	for eid: String in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
@@ -114,8 +115,10 @@ static func build(host: Village) -> void:
 		var panel   := result["panel"]   as Control
 		var section := result["section"] as VBoxContainer
 		var arrow   := result["arrow"]   as Label
+		var glow    := result["glow"]    as SelectionGlow
 		contents[bid] = section
 		arrows[bid]   = arrow
+		glows[bid]    = glow
 
 		panel.gui_input.connect(func(ev: InputEvent) -> void:
 			if not (ev is InputEventMouseButton \
@@ -126,6 +129,7 @@ static func build(host: Village) -> void:
 			if bid == host.adv_selected_biome_id:
 				section.visible = not section.visible
 				arrow.text = "  ▼" if section.visible else "  ▶"
+				glow.visible = section.visible
 				if section.visible:
 					# Ré-sélection : bouton actif.
 					btn.text = Translations.T("adv.start_btn_named") % bname
@@ -141,9 +145,11 @@ static func build(host: Village) -> void:
 						and is_instance_valid(contents[host.adv_selected_biome_id]):
 					contents[host.adv_selected_biome_id].visible = false
 					arrows[host.adv_selected_biome_id].text = "  ▶"
+					(glows[host.adv_selected_biome_id] as SelectionGlow).visible = false
 				host.adv_selected_biome_id = bid
 				section.visible = true
 				arrow.text = "  ▼"
+				glow.visible = true
 				btn.text = Translations.T("adv.start_btn_named") % bname
 				placeholder.visible = false
 				btn.visible = true
@@ -174,15 +180,63 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	wrapper.add_theme_constant_override("separation", 2)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# ── Carte principale via le template commun (nom | palier | XP) ──
-	var built := UIHelpers.entity_xp_card(
-			Translations.entity_name(biome, biome_id).to_upper(), btier, xp_cur, xp_max,
-			"", "biome")
-	var panel := built["card"] as XPCard
-	var header := built["header"] as HBoxContainer
+	# ── Carte principale : nom | [palier + XP] centré | Entités x/y ──
+	# Header construit à la main (layout spécifique aux biomes : la
+	# progression au CENTRE de la carte, le compteur d'entités à droite).
+	var bcolor := UIColors.tier_color(btier)
+	var at_max := xp_max <= 0.0
+	var frac   := 0.0
+	if not at_max and xp_max > 0.0:
+		frac = clampf(xp_cur / xp_max, 0.0, 1.0)
+	var panel := UIHelpers.xp_panel(bcolor, frac, 0.07, 0.60, 1, 4,
+			XPCard.motif_for_type("biome"))
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(panel)
 	wrapper.add_child(panel)
+
+	var hm := UIHelpers.margin_of(8)
+	panel.add_child(hm)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hm.add_child(header)
+
+	var name_lbl := Label.new()
+	name_lbl.text = Translations.entity_name(biome, biome_id).to_upper()
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	header.add_child(name_lbl)
+
+	var sp1 := Control.new()
+	sp1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(sp1)
+
+	# Centre : « Rare  ·  XP 120 / 360 » (ou RANG MAX).
+	var tier_lbl := Label.new()
+	tier_lbl.text = GameData.get_tier_name(btier)
+	tier_lbl.add_theme_font_size_override("font_size", 11)
+	tier_lbl.add_theme_color_override("font_color", bcolor)
+	header.add_child(tier_lbl)
+	var xp_lbl := Label.new()
+	if at_max:
+		xp_lbl.text = Translations.T("tier.max_rank")
+		xp_lbl.add_theme_color_override("font_color", bcolor)
+	else:
+		xp_lbl.text = "XP  %s / %s" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(int(xp_max))]
+		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	xp_lbl.add_theme_font_size_override("font_size", 10)
+	header.add_child(xp_lbl)
+
+	var sp2 := Control.new()
+	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(sp2)
+
+	# Surcouche de sélection : liseré or + luciole (AdventurePanel.build
+	# la rend visible quand ce biome est le biome sélectionné).
+	var glow := SelectionGlow.new()
+	glow.visible = (host.adv_selected_biome_id == biome_id)
+	panel.add_child(glow)
 
 	# Tooltip du biome.
 	var btooltip_body := _tooltip_zone_line(btier)
@@ -197,14 +251,15 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 			btooltip_body, UIColors.tier_color(btier),
 			Translations.entity_lore(biome))
 
-	# Compteur de découverte unique du biome (toutes catégories confondues,
-	# zones débloquées uniquement) — vert quand le biome est complet.
-	var disc_total := creatures_p.size() + traps_p.size() + bless_p.size()
-	var disc_found := MasteryRegistry.count_discovered(creatures_p) \
-			+ MasteryRegistry.count_discovered(traps_p) \
-			+ MasteryRegistry.count_discovered(bless_p)
+	# Compteur d'entités du biome, POOLS COMPLETS (toutes zones, boss
+	# unique inclus) : le joueur voit qu'il reste des choses à découvrir
+	# même derrière les zones verrouillées. Vert quand tout est trouvé.
+	var full_pool: Array = (pools["creatures"] as Array) \
+			+ (pools["traps"] as Array) + (pools["benedictions"] as Array)
+	var disc_total := full_pool.size()
+	var disc_found := MasteryRegistry.count_discovered(full_pool)
 	var count_lbl := Label.new()
-	count_lbl.text = "%d / %d" % [disc_found, disc_total]
+	count_lbl.text = Translations.T("adv.entities_count") % [disc_found, disc_total]
 	count_lbl.add_theme_font_size_override("font_size", 10)
 	count_lbl.add_theme_color_override("font_color",
 			UIColors.LOG_VICTORY if disc_found >= disc_total else UIColors.TEXT_MUTED)
@@ -212,15 +267,18 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 
 	# Flèche d'accordéon, à droite de l'en-tête du template.
 	var arrow := Label.new()
-	arrow.text = "  ▶"
+	# Sélection ⇔ accordéon déplié : à la (re)construction, le biome déjà
+	# sélectionné repart déplié (même invariant que le toggle au clic).
+	var is_selected := host.adv_selected_biome_id == biome_id
+	arrow.text = "  ▼" if is_selected else "  ▶"
 	arrow.add_theme_font_size_override("font_size", 10)
 	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	header.add_child(arrow)
 
-	# ── Section catégories (repliée par défaut) ───────────────
+	# ── Section catégories (repliée par défaut, sauf biome sélectionné) ──
 	var section := VBoxContainer.new()
 	section.add_theme_constant_override("separation", 2)
-	section.visible = false
+	section.visible = is_selected
 	if MasterySystem.can_evolve(biome_id):
 		wrapper.add_child(host.make_evolve_btn(biome_id,
 				Translations.entity_name(biome, biome_id), "biome", btier))
@@ -252,40 +310,37 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 			UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES, btier, Translations.T("adv.cat.blessing"))
 	_adv_ingredient_rows(cat_vb, pools["ingredients"])
 
-	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow}
+	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow, "glow": glow}
 
-# Remplit parent avec une carte par entité du pool, même format pour tous les types.
-# Entité non découverte → nom "?", palier Commun, XP 0 / seuil (placeholder homogène).
+# Remplit parent avec une carte par entité DÉCOUVERTE du pool, même format
+# pour tous les types. Les entités non découvertes n'apparaissent PAS (leur
+# existence n'est trahie que par le compteur « Entités x/y » du header) :
+# chaque nouvelle ligne est une récompense de découverte.
 # `motif` = motif de particules de la barre d'XP (commun à toute la catégorie).
 # `cat_label` = préfixe de catégorie affiché en couleur devant le nom.
 static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, color: Color, motif: int = XPCard.Motif.BUBBLES, btier: int = 0, cat_label: String = "") -> void:
 	for entry: Dictionary in pool:
 		var entry_id := entry.get("id", "") as String
-		var is_known := MasteryRegistry.is_discovered(entry_id)
+		if not MasteryRegistry.is_discovered(entry_id):
+			continue
 
-		# Valeurs d'affichage — placeholder Commun si non découvert.
-		var disp_name   := "?"
+		var entity      := GameData.get_entity(entry_id)
+		var bentry      := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
+		var is_equip: bool = entity.get("entity_type", "") == Enums.EntityType.EQUIPMENT
+		var disp_name   := Translations.entity_name(entry)
 		var entity_tier := 0
 		var entity_xp   := 0.0
 		var at_max      := false
-		var is_equip    := false
-		var entity: Dictionary = {}
-
-		if is_known:
-			entity = GameData.get_entity(entry_id)
-			var bentry := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
-			is_equip   = entity.get("entity_type", "") == Enums.EntityType.EQUIPMENT
-			disp_name  = Translations.entity_name(entry)
-			if not entity.is_empty() and not is_equip:
-				entity_tier = entity.get("maitrise_actuelle", 0)
-				entity_xp   = entity.get("xp_maitrise_actuelle",   0.0)
-				at_max      = entity_tier >= GameData.get_max_tier_for_type(entity.get("entity_type", ""))
-			elif not bentry.is_empty():
-				entity_tier = bentry.get("tier", entry.get("tier", 0))
-				entity_xp   = bentry.get("xp",   0.0)
-				at_max      = entity_tier >= GameData.get_max_tier_for_type(entity.get("entity_type", ""))
-			else:
-				entity_tier = entry.get("tier", 0)
+		if not entity.is_empty() and not is_equip:
+			entity_tier = entity.get("maitrise_actuelle", 0)
+			entity_xp   = entity.get("xp_maitrise_actuelle",   0.0)
+			at_max      = entity_tier >= GameData.get_max_tier_for_type(entity.get("entity_type", ""))
+		elif not bentry.is_empty():
+			entity_tier = bentry.get("tier", entry.get("tier", 0))
+			entity_xp   = bentry.get("xp",   0.0)
+			at_max      = entity_tier >= GameData.get_max_tier_for_type(entity.get("entity_type", ""))
+		else:
+			entity_tier = entry.get("tier", 0)
 
 		var ec      := UIColors.tier_color(entity_tier)
 		var xp_need := 0
@@ -300,11 +355,9 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		parent.add_child(panel)
 
 		# Tooltip de l'entité.
-		if is_known:
-			var tt_title := disp_name
-			var tt_body  := _tooltip_entity_body(entry, entity, btier)
-			UIHelpers.register_tooltip(panel, tt_title, tt_body, ec,
-					Translations.entity_lore(entity))
+		UIHelpers.register_tooltip(panel, disp_name,
+				_tooltip_entity_body(entry, entity, btier), ec,
+				Translations.entity_lore(entity))
 
 		var pm := UIHelpers.margin_of(4)
 		panel.add_child(pm)
@@ -325,7 +378,7 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		name_lbl.text = disp_name
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_lbl.add_theme_font_size_override("font_size", 11)
-		name_lbl.add_theme_color_override("font_color", Color.WHITE if is_known else UIColors.TEXT_MUTED)
+		name_lbl.add_theme_color_override("font_color", Color.WHITE)
 		hb.add_child(name_lbl)
 
 		var tbadge := Label.new()
@@ -344,7 +397,7 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 			xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			hb.add_child(xp_lbl)
 
-		if is_known and MasterySystem.can_evolve(entry_id):
+		if MasterySystem.can_evolve(entry_id):
 			parent.add_child(host.make_evolve_btn(
 					entry_id, disp_name,
 					entity.get("entity_type", "creature") as String,
@@ -505,12 +558,25 @@ static func _adv_next_milestone_row(parent: VBoxContainer, biome_id: String, bio
 	hb.add_theme_constant_override("separation", 6)
 	m.add_child(hb)
 
-	var icon_lbl := Label.new()
-	icon_lbl.text = "▲"
-	icon_lbl.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	icon_lbl.add_theme_font_size_override("font_size", 11)
-	icon_lbl.add_theme_color_override("font_color", tcolor)
-	hb.add_child(icon_lbl)
+	# Icône « ! » dans un cercle : signale un déblocage à venir, plus
+	# parlant qu'un simple triangle.
+	var icon := PanelContainer.new()
+	var ist  := StyleBoxFlat.new()
+	ist.bg_color     = Color(tcolor, 0.14)
+	ist.border_color = tcolor
+	ist.set_border_width_all(1)
+	ist.set_corner_radius_all(8)   # rond pour une taille de 16 px
+	icon.add_theme_stylebox_override("panel", ist)
+	icon.custom_minimum_size  = Vector2(16, 16)
+	icon.size_flags_vertical  = Control.SIZE_SHRINK_BEGIN
+	var bang := Label.new()
+	bang.text = "!"
+	bang.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bang.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	bang.add_theme_font_size_override("font_size", 10)
+	bang.add_theme_color_override("font_color", tcolor)
+	icon.add_child(bang)
+	hb.add_child(icon)
 
 	var text_lbl := Label.new()
 	text_lbl.text = _milestone_text(ms)

@@ -23,7 +23,7 @@ uniform float anim_speed     = 1.0;
 uniform float detail_density = 1.0;
 uniform float glow_amount    = 1.0;    // intensite lucioles / fenetres (0 = aucune)
 uniform int   split_side     = 0;      // 0 = plein ecran ; 1 = cote heros (gauche) ; 2 = cote creature (droite)
-uniform float split_tilt     = 0.12;   // inclinaison de la diagonale (calee sur le separateur VS)
+uniform float split_tilt     = 0.0625; // pente diagonale = bande VS / largeur — reglee par BiomeBackground._apply_split()
 
 float hash(float x)  { return fract(sin(x * 127.1) * 43758.5453); }
 float hash2(vec2 p)  { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }

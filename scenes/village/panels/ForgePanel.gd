@@ -227,7 +227,7 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 
 	# ── Bouton Forger (libellé + aperçu de la transformation) ──
 	outer.add_child(_small_spacer(2))
-	outer.add_child(_forge_btn(host, equip_id, next_tier, next_color,
+	outer.add_child(_forge_btn(host, equip_id, next_color,
 			can_forge_it, compare_row))
 
 	return outer
@@ -312,9 +312,9 @@ static func _recipe_block(recipe: Array) -> Control:
 
 # ── Bouton Forger ─────────────────────────────────────────────
 # Le bouton ENGLOBE l'aperçu de la transformation (compare_row) : libellé
-# « Forger → Palier » au-dessus, « [Palier] stats ─◆─▶ [Palier+1] stats »
-# en dessous, le tout cliquable d'un bloc.
-static func _forge_btn(host: Village, equip_id: String, next_tier: int,
+# « Forger » au-dessus, « [Palier] stats ─◆─▶ [Palier+1] stats » en
+# dessous, le tout cliquable d'un bloc.
+static func _forge_btn(host: Village, equip_id: String,
 		next_color: Color, forgeable: bool, compare_row: Control) -> Control:
 	var btn := Button.new()
 	btn.disabled              = not forgeable
@@ -332,7 +332,8 @@ static func _forge_btn(host: Village, equip_id: String, next_tier: int,
 	# Contenu custom (un Button ne layoute pas ses enfants) : MarginContainer
 	# plein-rect + sync de la taille mini du bouton sur celle du contenu.
 	var lbl := Label.new()
-	lbl.text = Translations.T("forge.equip.forge_btn") % GameData.get_tier_name(next_tier)
+	# Juste « Forger » : l'aperçu intégré dessous explicite déjà le palier cible.
+	lbl.text = Translations.T("forge.equip.forge_btn")
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", bc)

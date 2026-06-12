@@ -126,7 +126,7 @@ func _build_combat_area() -> Control:
 	_hero_bg = BiomeBackground.new()
 	area.add_child(_hero_bg)
 	_hero_bg.apply_preset("city")
-	_hero_bg.set_split(1)
+	_hero_bg.set_split(1, CombatVS.BAND_WIDTH)
 	_hero_bg.set_zone(zone)
 
 	# Côté créature (droite) : ambiance du biome de l'expédition.
@@ -136,7 +136,7 @@ func _build_combat_area() -> Control:
 	_creature_bg = BiomeBackground.new()
 	area.add_child(_creature_bg)
 	_creature_bg.apply_preset(BiomeBackground.preset_for_biome(biome_id))
-	_creature_bg.set_split(2)
+	_creature_bg.set_split(2, CombatVS.BAND_WIDTH)
 	_creature_bg.set_zone(zone)
 
 	# Colonnes par-dessus les fonds. Héros (gauche) | séparateur 80px | Ennemi (droite).
