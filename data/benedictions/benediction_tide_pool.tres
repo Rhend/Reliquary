@@ -5,10 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "tide_pool"
-nom_affichage_fr = "Mare Régénératrice"
-lore_fr = "L'eau y est froide et cristalline dans un endroit qui devrait etre opaque. Y plonger les mains suffit a sentir la fatigue s'evaporer."
-lore_en = "The water here is cold and crystal-clear in a place that should be murky. Dipping your hands in is enough to feel the fatigue evaporate."
-nom_affichage_en = "Regenerating Pool"
+nom_affichage_fr = "Source Chaude"
+lore_fr = "L'eau jaillit brulante des entrailles de la montagne. Y plonger les mains suffit a sentir la fatigue s'evaporer."
+lore_en = "Water gushes out scalding from the mountain's depths. Dipping your hands in is enough to feel the fatigue evaporate."
+nom_affichage_en = "Hot Spring"
+noms_par_palier_fr = {0: "Source Chaude", 1: "Source Minérale", 2: "Geyser Régénérant", 3: "Bain de Pierre Chaude", 4: "Source Sacrée", 5: "Souffle du Cœur de la Montagne"}
+noms_par_palier_en = {0: "Hot Spring", 1: "Mineral Spring", 2: "Regenerating Geyser", 3: "Hot Stone Bath", 4: "Sacred Spring", 5: "Breath of the Mountain's Heart"}
 biome_source_id = "biome_montagne"
 effet = "heal"
 valeur = 15

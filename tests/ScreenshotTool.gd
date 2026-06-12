@@ -125,12 +125,6 @@ func _shoot_hero_panel() -> void:
 
 # ── Capture du rituel d'évolution à 3 moments clés ──────────
 func _shoot_evolution() -> void:
-	# Noms par palier factices : vérifie la révélation du nouveau nom au morph
-	# (runtime uniquement — n'écrit rien dans les .tres).
-	GameData.get_entity("creature_foret_surface")["noms_par_palier_fr"] = \
-			{0: "Rat des Égouts", 2: "Rat Alpha"}
-	GameData.get_entity("creature_foret_surface")["noms_par_palier_en"] = \
-			{0: "Sewer Rat", 2: "Alpha Rat"}
 	GameData.pending_evolution = {
 		"entity_type": "creature",
 		"entity_id":   "creature_foret_surface",

@@ -9,6 +9,8 @@ nom_affichage_fr = "Miasmes Toxiques"
 lore_fr = "Les gaz qui s'elevent des eaux putrides brulent les poumons et troublent l'esprit. S'y attarder est une erreur."
 lore_en = "The gases rising from the putrid waters burn the lungs and cloud the mind. Lingering there is a mistake."
 nom_affichage_en = "Toxic Miasma"
+noms_par_palier_fr = {0: "Miasmes Toxiques", 1: "Brume Empoisonnée", 2: "Vapeurs Corrosives", 3: "Nuage Pestilentiel", 4: "Souffle du Marécage", 5: "Le Linceul de Brume"}
+noms_par_palier_en = {0: "Toxic Miasma", 1: "Poisoned Mist", 2: "Corrosive Fumes", 3: "Pestilent Cloud", 4: "Breath of the Swamp", 5: "The Mist Shroud"}
 biome_source_id = "biome_marecage"
 degats = 30
 

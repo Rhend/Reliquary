@@ -5,10 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "spike_trap"
-nom_affichage_fr = "Pièges à pointes"
+nom_affichage_fr = "Piège à Pieux"
 lore_fr = "Disposes intentionnellement par quelque chose - ou quelqu'un. Ils rouillent mais restent efficaces."
 lore_en = "Laid out deliberately by something - or someone. They rust, but they stay effective."
 nom_affichage_en = "Spike Trap"
+noms_par_palier_fr = {0: "Piège à Pieux", 1: "Fosse à Pieux", 2: "Ronces Acérées", 3: "Étreinte des Ronces", 4: "Piège du Chasseur Oublié", 5: "Le Piège Vivant"}
+noms_par_palier_en = {0: "Spike Trap", 1: "Spike Pit", 2: "Razor Brambles", 3: "Bramble's Embrace", 4: "Forgotten Hunter's Snare", 5: "The Living Snare"}
 biome_source_id = "biome_foret"
 degats = 15
 

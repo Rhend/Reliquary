@@ -5,10 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "jellyfish"
-nom_affichage_fr = "Méduse Venimeuse"
-lore_fr = "Ses filaments sont presque invisibles dans l'eau sombre. Le contact est bref mais l'effet dure des heures."
-lore_en = "Its filaments are nearly invisible in the dark water. The contact is brief, but the effect lasts for hours."
-nom_affichage_en = "Venomous Jellyfish"
+nom_affichage_fr = "Chute de Pierres"
+lore_fr = "La montagne se deleste de ses pierres sans prevenir. Les anciens du village jurent qu'elle vise."
+lore_en = "The mountain sheds its stones without warning. The village elders swear it aims."
+nom_affichage_en = "Rockfall"
+noms_par_palier_fr = {0: "Chute de Pierres", 1: "Éboulement", 2: "Avalanche de Roche", 3: "Effondrement de Paroi", 4: "Colère de la Montagne", 5: "Le Cœur qui S'effondre"}
+noms_par_palier_en = {0: "Rockfall", 1: "Rockslide", 2: "Rock Avalanche", 3: "Cliff Collapse", 4: "Wrath of the Mountain", 5: "The Crumbling Heart"}
 biome_source_id = "biome_montagne"
 degats = 18
 

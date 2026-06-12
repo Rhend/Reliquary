@@ -5,10 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "sea_shell"
-nom_affichage_fr = "Coquillage Magique"
-lore_fr = "Ramasse loin de toute mer, on ne sait pas comment il est arrive la. Le tenir contre l'oreille ne fait pas entendre la mer - mais quelque chose d'autre."
-lore_en = "Picked up far from any sea, no one knows how it got here. Holding it to your ear doesn't bring the sound of waves - but something else."
-nom_affichage_en = "Magic Shell"
+nom_affichage_fr = "Géode Étincelante"
+lore_fr = "Une roche terne qui cache un coeur de cristal. La lumiere qu'elle renvoie ne vient pas toujours du soleil."
+lore_en = "A dull rock hiding a crystal heart. The light it reflects does not always come from the sun."
+nom_affichage_en = "Glittering Geode"
+noms_par_palier_fr = {0: "Géode Étincelante", 1: "Cristal de Quartz", 2: "Éclat de Gemme", 3: "Noyau Cristallin", 4: "Diamant Brut des Cimes", 5: "Lumière Figée dans la Roche"}
+noms_par_palier_en = {0: "Glittering Geode", 1: "Quartz Crystal", 2: "Gem Shard", 3: "Crystalline Core", 4: "Raw Summit Diamond", 5: "Light Frozen in Stone"}
 biome_source_id = "biome_montagne"
 effet = "xp_bonus"
 valeur = 50

@@ -9,6 +9,8 @@ nom_affichage_fr = "Boue Mouvante"
 lore_fr = "Elle ressemble a de la terre ordinaire - jusqu'au moment ou elle ne l'est plus. La boue mouvante du marecage n'a aucune pitie."
 lore_en = "It looks like ordinary ground - until the moment it isn't. The swamp's quickmud knows no mercy."
 nom_affichage_en = "Quickmud"
+noms_par_palier_fr = {0: "Boue Mouvante", 1: "Bourbier Profond", 2: "Fange Corrosive", 3: "Marais Dévorant", 4: "Gouffre de Vase", 5: "L'Abîme Putride"}
+noms_par_palier_en = {0: "Quickmud", 1: "Deep Mire", 2: "Corrosive Sludge", 3: "Devouring Bog", 4: "Sinkhole of Sludge", 5: "The Putrid Abyss"}
 biome_source_id = "biome_marecage"
 degats = 20
 
