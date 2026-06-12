@@ -10,6 +10,7 @@
 #   "summary" (défaut) — CycleSummaryScreen avec un cycle factice
 #   "village"          — hub du village avec pastilles forcées
 #   "evolution"        — EvolutionRitual avec une évolution factice
+#   "forge"            — panneau Forge (forgeable / XP basse / verrouillé)
 # ============================================================
 extends Node
 
@@ -31,6 +32,7 @@ func _ready() -> void:
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
+		"forge":     await _shoot_forge()
 		"combat":    await _shoot_combat()
 		"tooltip":   await _shoot_tooltip()
 		_:           await _shoot_summary()
@@ -122,6 +124,29 @@ func _shoot_hero_panel() -> void:
 	crop.resize(crop.get_width() * 3, crop.get_height() * 3, Image.INTERPOLATE_NEAREST)
 	crop.save_png("res://tests/_shot_hero_doll_zoom.png")
 	print("Screenshot -> res://tests/_shot_hero_doll_zoom.png")
+
+# ── Capture du panneau Forge ────────────────────────────────
+# Trois états en une capture : Anneau forgeable (bouton actif englobant
+# l'aperçu de transformation), Armure en manque d'XP/ingrédients (bouton
+# désactivé), Arme verrouillée (Montagne sous le palier Peu Commun).
+func _shoot_forge() -> void:
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	_vp.add_child(village)
+	await get_tree().create_timer(1.0).timeout
+	# Injection APRÈS le boot du Village : load_save() écraserait sinon
+	# ces états forcés avec la sauvegarde réelle du joueur.
+	GameData.village["maitrise_actuelle"] = 1
+	for bid: String in ["biome_foret", "biome_marecage", "biome_montagne"]:
+		GameData.get_entity(bid)["est_decouvert"] = true
+	for eid: String in ["equipment_anneau", "equipment_armure"]:
+		GameData.get_entity(eid)["est_debloque"] = true
+	# Anneau : XP pleine + ingrédients au complet → bouton Forger actif.
+	GameData.get_entity("equipment_anneau")["xp_maitrise_actuelle"] = 99999.0
+	for req in GameData.get_forge_recipe("equipment_anneau", 1):
+		GameData.player["resources"][req["ingredient_id"]] = int(req["quantite"])
+	village._open_panel("forge")
+	await get_tree().create_timer(1.2).timeout
+	_capture("res://tests/_shot_forge_panel.png")
 
 # ── Capture du rituel d'évolution à 3 moments clés ──────────
 func _shoot_evolution() -> void:

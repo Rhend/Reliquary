@@ -175,9 +175,9 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 			tt_body += Translations.T("forge.equip.tt_next") % [GameData.get_tier_name(next_tier), _stats_line(stats_nxt_tt)]
 	UIHelpers.register_tooltip(xpcard, nom, tt_body, ec, Translations.entity_lore(equip))
 
-	# Ligne comparative « [Palier] stats ─◆─▶ [Palier+1] stats », affichée
-	# en PIED de carte (sous la recette et le bouton Forger) dans toutes
-	# les sorties de la fonction.
+	# Ligne comparative « [Palier] stats ─◆─▶ [Palier+1] stats » : en pied
+	# de carte aux rangs max / sans recette, sinon INTÉGRÉE au bouton Forger
+	# (le joueur voit que c'est CE bouton qui produit cette transformation).
 	var next_color := UIColors.tier_color(next_tier)
 	var stats_nxt: Dictionary = {}
 	if not at_max:
@@ -225,13 +225,10 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 		xp_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		outer.add_child(xp_status)
 
-	# ── Bouton Forger ──────────────────────────────────────
+	# ── Bouton Forger (libellé + aperçu de la transformation) ──
 	outer.add_child(_small_spacer(2))
-	outer.add_child(_forge_btn(host, equip_id, next_tier, next_color, can_forge_it))
-
-	# ── [Palier actuel] ─◆─▶ [Palier suivant] sous le bouton ──
-	outer.add_child(_small_spacer(2))
-	outer.add_child(compare_row)
+	outer.add_child(_forge_btn(host, equip_id, next_tier, next_color,
+			can_forge_it, compare_row))
 
 	return outer
 
@@ -314,17 +311,17 @@ static func _recipe_block(recipe: Array) -> Control:
 	return vb
 
 # ── Bouton Forger ─────────────────────────────────────────────
+# Le bouton ENGLOBE l'aperçu de la transformation (compare_row) : libellé
+# « Forger → Palier » au-dessus, « [Palier] stats ─◆─▶ [Palier+1] stats »
+# en dessous, le tout cliquable d'un bloc.
 static func _forge_btn(host: Village, equip_id: String, next_tier: int,
-		next_color: Color, forgeable: bool) -> Control:
+		next_color: Color, forgeable: bool, compare_row: Control) -> Control:
 	var btn := Button.new()
-	btn.text                  = Translations.T("forge.equip.forge_btn") % GameData.get_tier_name(next_tier)
 	btn.disabled              = not forgeable
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.add_theme_font_size_override("font_size", 13)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
 	var bc := next_color if forgeable else UIColors.TEXT_MUTED
-	btn.add_theme_color_override("font_color", bc)
 	btn.add_theme_stylebox_override("normal",
 			UIHelpers.card_style(bc, 0.10 if forgeable else 0.06, 0.80 if forgeable else 0.25, 1, 5))
 	btn.add_theme_stylebox_override("hover",
@@ -332,9 +329,37 @@ static func _forge_btn(host: Village, equip_id: String, next_tier: int,
 	btn.add_theme_stylebox_override("disabled",
 			UIHelpers.card_style(UIColors.TEXT_MUTED, 0.04, 0.18, 1, 5))
 
+	# Contenu custom (un Button ne layoute pas ses enfants) : MarginContainer
+	# plein-rect + sync de la taille mini du bouton sur celle du contenu.
+	var lbl := Label.new()
+	lbl.text = Translations.T("forge.equip.forge_btn") % GameData.get_tier_name(next_tier)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", bc)
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 2)
+	inner.add_child(lbl)
+	inner.add_child(compare_row)
+
+	var mc := MarginContainer.new()
+	mc.add_theme_constant_override("margin_left",   8)
+	mc.add_theme_constant_override("margin_right",  8)
+	mc.add_theme_constant_override("margin_top",    5)
+	mc.add_theme_constant_override("margin_bottom", 5)
+	mc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mc.add_child(inner)
+	btn.add_child(mc)
+	_set_mouse_ignore(mc)   # le contenu ne doit jamais voler le clic au bouton
+
+	var sync_min := func() -> void:
+		btn.custom_minimum_size = mc.get_combined_minimum_size()
+	mc.minimum_size_changed.connect(sync_min)
+	sync_min.call_deferred()
+
 	if forgeable:
 		# Pulse scale quand disponible
-		btn.pivot_offset = Vector2(190, 18)
+		btn.resized.connect(func() -> void: btn.pivot_offset = btn.size * 0.5)
 		var tw := btn.create_tween()
 		tw.set_loops()
 		tw.tween_property(btn, "scale", Vector2(1.015, 1.015), 0.6) \
@@ -361,6 +386,14 @@ static func _forge_btn(host: Village, equip_id: String, next_tier: int,
 # ═══════════════════════════════════════════════════════════
 #  Helpers visuels
 # ═══════════════════════════════════════════════════════════
+
+# Rend un sous-arbre de Controls transparent à la souris (contenu décoratif
+# embarqué dans un Button : le clic doit toujours atteindre le bouton).
+static func _set_mouse_ignore(node: Node) -> void:
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		_set_mouse_ignore(child)
 
 # Ligne séparatrice horizontale colorée
 static func _hsep(color: Color, alpha: float = 0.30) -> ColorRect:
