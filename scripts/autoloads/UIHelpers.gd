@@ -203,8 +203,11 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	header.add_child(name_lbl)
 
+	# Spacers transparents à la souris : un Control nu est en STOP par
+	# défaut et volerait le clic à la carte (sélection de biome, etc.).
 	var sp1 := Control.new()
 	sp1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sp1.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(sp1)
 
 	var tbadge := Label.new()
@@ -225,6 +228,7 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 
 	var sp2 := Control.new()
 	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sp2.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(sp2)
 
 	return {"card": card, "header": header}
