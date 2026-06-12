@@ -115,6 +115,7 @@ const STRINGS: Dictionary = {
 		"hero.equip.slot.bouclier": "Bouclier",
 		"hero.equip.slot.talisman": "Talisman",
 		"hero.doll.empty":          "Emplacement libre — à découvrir.",
+		"hero.doll.locked":         "Monte %s au palier %s pour obtenir cet équipement.",
 		"hero.equip.locked_hint":   "Monte un biome au palier Peu Commun pour obtenir son équipement.",
 		"hero.forge_required":      "🔨  Forge Requise",
 		"hero.forge_ready":         "🔨  Prêt à forger :",
@@ -129,7 +130,7 @@ const STRINGS: Dictionary = {
 		"forge.section.equip":  "◆  ÉQUIPEMENT",
 		"forge.ingr.unique":    "Ingrédient unique — une seule obtention.",
 		"forge.ingr.tt_stock":  "Biome : %s\nEn stock : %d",
-		"forge.equip.locked":   "🔒  %s  —  Biome non découvert",
+		"forge.equip.locked":   "🔒  %s  —  Monte %s au palier %s pour l'obtenir",
 		"forge.equip.max_rank": "▲ RANG MAX",
 		"forge.equip.low_xp":  "⧖  XP insuffisante — continuez l'aventure",
 		"forge.equip.no_recipe":"Recette non définie",
@@ -261,6 +262,7 @@ const STRINGS: Dictionary = {
 		"settings.language":      "◆  LANGUE",
 		"settings.lang.fr":       "Français",
 		"settings.lang.en":       "English",
+		"settings.quit":          "⏻  Sauvegarder et quitter",
 
 		# ── Général ──────────────────────────────────────────
 		"nav.back":               "← Village",
@@ -373,6 +375,7 @@ const STRINGS: Dictionary = {
 		"hero.equip.slot.bouclier": "Shield",
 		"hero.equip.slot.talisman": "Talisman",
 		"hero.doll.empty":          "Empty slot — to be discovered.",
+		"hero.doll.locked":         "Raise %s to %s rank to obtain this equipment.",
 		"hero.equip.locked_hint":   "Raise a biome to Uncommon to obtain its equipment.",
 		"hero.forge_required":      "🔨  Forge Required",
 		"hero.forge_ready":         "🔨  Ready to forge:",
@@ -387,7 +390,7 @@ const STRINGS: Dictionary = {
 		"forge.section.equip":  "◆  EQUIPMENT",
 		"forge.ingr.unique":    "Unique ingredient — only one obtainable.",
 		"forge.ingr.tt_stock":  "Biome: %s\nIn stock: %d",
-		"forge.equip.locked":   "🔒  %s  —  Biome not discovered",
+		"forge.equip.locked":   "🔒  %s  —  Raise %s to %s rank to obtain it",
 		"forge.equip.max_rank": "▲ MAX RANK",
 		"forge.equip.low_xp":  "⧖  Insufficient XP — continue adventuring",
 		"forge.equip.no_recipe":"Recipe not defined",
@@ -519,6 +522,7 @@ const STRINGS: Dictionary = {
 		"settings.language":      "◆  LANGUAGE",
 		"settings.lang.fr":       "Français",
 		"settings.lang.en":       "English",
+		"settings.quit":          "⏻  Save and quit",
 
 		# ── Général ──────────────────────────────────────────
 		"nav.back":               "← Village",

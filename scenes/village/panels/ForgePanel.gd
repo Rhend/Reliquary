@@ -129,7 +129,7 @@ static func _build_biome_section(host: Village, biome_id: String,
 static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 		_tcolor: Color, can_forge_it: bool, xp_full: bool, at_max: bool) -> Control:
 
-	# ── Verrouillé (biome non découvert) ──────────────────
+	# ── Verrouillé (biome découvert mais sous le palier de déblocage) ──
 	if not equip.get("est_debloque", false):
 		return _locked_equip_card(equip, equip_id)
 
@@ -235,16 +235,23 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 
 	return outer
 
-# Carte d'équipement verrouillé (biome non découvert)
+# Carte d'équipement verrouillé : le biome est découvert (sinon la section
+# n'existe pas) mais n'a pas atteint le palier de déblocage de l'équipement.
 static func _locked_equip_card(equip: Dictionary, equip_id: String) -> Control:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel",
 			UIHelpers.card_style(UIColors.TEXT_MUTED, 0.04, 0.18, 1, 4))
 	var m  := UIHelpers.margin_of(10)
 	card.add_child(m)
+	var biome      := GameData.get_entity(equip.get("biome_source_id", "") as String)
+	var biome_name := Translations.entity_name(biome, equip.get("biome_source_id", "") as String)
+	var tier_name  := GameData.get_tier_name(Balance.EQUIPMENT_UNLOCK_BIOME_TIER)
 	var lbl := Label.new()
-	lbl.text = Translations.T("forge.equip.locked") % Translations.entity_name(equip, equip_id)
+	lbl.text = Translations.T("forge.equip.locked") \
+			% [Translations.entity_name(equip, equip_id), biome_name, tier_name]
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.add_theme_font_size_override("font_size", 12)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	m.add_child(lbl)

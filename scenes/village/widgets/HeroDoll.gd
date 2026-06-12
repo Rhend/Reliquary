@@ -113,8 +113,17 @@ func _make_slot(slot_key: String, icon: String, equip_id: String,
 				Translations.entity_lore(equip))
 		UIHelpers.add_hover_feedback(box)
 	else:
-		UIHelpers.register_tooltip(box, slot_name,
-				Translations.T("hero.doll.empty"), UIColors.TEXT_MUTED)
+		# Équipement existant dont le biome source est découvert : on explique
+		# la vraie condition (palier à atteindre). Sinon, slot encore mystère.
+		var biome_id := equip.get("biome_source_id", "") as String
+		var biome    := GameData.get_entity(biome_id)
+		var tt_body  := Translations.T("hero.doll.empty")
+		if not equip.is_empty() and biome.get("est_decouvert", false):
+			tt_body = Translations.T("hero.doll.locked") % [
+				Translations.entity_name(biome, biome_id),
+				GameData.get_tier_name(Balance.EQUIPMENT_UNLOCK_BIOME_TIER),
+			]
+		UIHelpers.register_tooltip(box, slot_name, tt_body, UIColors.TEXT_MUTED)
 
 	_items.append([box, name_lbl, side, y, anchor, ec])
 
