@@ -4,6 +4,10 @@ extends Resource
 @export var id:                         String             = ""
 @export var nom_affichage_fr:           String             = ""
 @export var nom_affichage_en:           String             = ""
+# Noms par palier de Maîtrise (clé int = palier ; palier absent → hérite du
+# palier inférieur défini le plus proche ; dict vide → nom_affichage_*).
+@export var noms_par_palier_fr:         Dictionary         = {}
+@export var noms_par_palier_en:         Dictionary         = {}
 @export var lore_fr:                    String             = ""
 @export var lore_en:                    String             = ""
 @export var est_unique:                 bool               = false

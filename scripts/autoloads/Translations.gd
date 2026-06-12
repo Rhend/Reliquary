@@ -570,12 +570,33 @@ func zone_tooltip(idx: int) -> String:
 func equip_slot_name(slot_key: String) -> String:
 	return T("hero.equip.slot." + slot_key)
 
-# Nom d'affichage localisé d'une entité (dict GameData ou entrée de pool).
-# EN si la langue est "en" et le champ rempli, sinon FR, sinon `name`
-# (passifs), sinon `fallback`. TOUJOURS passer par ici pour afficher un nom
-# d'entité — jamais lire nom_affichage_fr directement dans l'UI.
+# Nom d'affichage localisé d'une entité (dict GameData ou entrée de pool),
+# au palier de Maîtrise COURANT de l'entité. TOUJOURS passer par ici pour
+# afficher un nom d'entité — jamais lire nom_affichage_fr directement dans l'UI.
 func entity_name(entity: Dictionary, fallback: String = "?") -> String:
+	return entity_name_at(entity, int(entity.get("maitrise_actuelle", 0)), fallback)
+
+# Nom d'affichage localisé AU PALIER DONNÉ : cherche dans noms_par_palier_*
+# (palier exact, sinon le plus proche en dessous — même sémantique que
+# stats_at_tier), puis retombe sur nom_affichage_* / `name` (passifs) /
+# fallback. Sert quand le palier affiché n'est pas le palier courant
+# (ex. rituel d'ascension : nom d'avant → nom d'après).
+func entity_name_at(entity: Dictionary, tier: int, fallback: String = "?") -> String:
 	var lang: String = GameSettings.language if GameSettings else "fr"
+	var per_tier_keys: Array[String] = ["noms_par_palier_fr"]
+	if lang == "en":
+		per_tier_keys = ["noms_par_palier_en", "noms_par_palier_fr"]
+	for key in per_tier_keys:
+		var per_tier := entity.get(key, {}) as Dictionary
+		if per_tier.is_empty():
+			continue
+		var t := tier
+		while t >= 0:
+			if per_tier.has(t):
+				var n := str(per_tier[t])
+				if not n.is_empty():
+					return n
+			t -= 1
 	if lang == "en":
 		var en := str(entity.get("nom_affichage_en", ""))
 		if not en.is_empty():

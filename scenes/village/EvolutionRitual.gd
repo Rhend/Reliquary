@@ -20,6 +20,7 @@ const ECLOSION_COLOR := Color(1.0, 0.85, 0.4)  # doré chaud — naissance du Vi
 var _card:           Control           = null
 var _card_style:     StyleBoxFlat      = null
 var _from_tier_lbl:  Label             = null   # label tier à l'intérieur de la carte
+var _name_lbl:       Label             = null   # nom d'entité (peut changer au palier)
 var _tier_chip_style: StyleBoxFlat     = null   # pastille du tier dans la carte
 var _icon_lbl:       Label             = null   # icône d'entité dans la carte
 var _tier_label:     Label             = null   # grand texte palier (en haut)
@@ -136,15 +137,17 @@ func _build_entity_card() -> void:
 	_icon_lbl.add_theme_color_override("font_color", from_color.lightened(0.25))
 	vb.add_child(_icon_lbl)
 
-	var entity_name := (_params.get("entity_name", "Entité") as String).to_upper()
-	var name_lbl := Label.new()
-	name_lbl.text = entity_name
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 21)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	name_lbl.add_theme_constant_override("outline_size", 4)
-	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-	vb.add_child(name_lbl)
+	# Nom AU PALIER DE DÉPART : certaines entités changent de nom en évoluant ;
+	# le nouveau nom est révélé au morph de palier (_finish_tier_replacement).
+	var display_name := _entity_name_at(from_tier)
+	_name_lbl = Label.new()
+	_name_lbl.text = display_name.to_upper()
+	_name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_lbl.add_theme_font_size_override("font_size", 21)
+	_name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	_name_lbl.add_theme_constant_override("outline_size", 4)
+	_name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	vb.add_child(_name_lbl)
 
 	# Pastille de tier (le grand texte du palier vient s'y morpher).
 	var chip := PanelContainer.new()
@@ -477,6 +480,41 @@ func _finish_tier_replacement() -> void:
 	_from_tier_lbl.text = GameData.get_tier_name(to_tier).to_upper()
 	_from_tier_lbl.add_theme_color_override("font_color", to_color.lightened(0.20))
 	create_tween().tween_property(_from_tier_lbl, "modulate:a", 1.0, 0.15)
+	_reveal_new_name(to_tier, to_color)
+
+# Nom d'affichage de l'entité au palier donné (fallback : nom passé en
+# paramètre du rituel — éclosion, équipement forgé, outils de test).
+func _entity_name_at(tier: int) -> String:
+	var entity := GameData.get_entity(_params.get("entity_id", "") as String)
+	var fallback := _params.get("entity_name", "?") as String
+	if entity.is_empty():
+		return fallback
+	return Translations.entity_name_at(entity, tier, fallback)
+
+# Si l'entité change de nom au nouveau palier : flash + pop du nom, teinté
+# un instant à la couleur du palier — la créature « devient » autre chose.
+func _reveal_new_name(to_tier: int, to_color: Color) -> void:
+	if not is_instance_valid(_name_lbl):
+		return
+	var new_name := _entity_name_at(to_tier).to_upper()
+	if new_name == _name_lbl.text:
+		return
+	var tw := create_tween()
+	tw.tween_property(_name_lbl, "modulate:a", 0.0, 0.18).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		_name_lbl.text = new_name
+		_name_lbl.pivot_offset = _name_lbl.size * 0.5
+		_name_lbl.scale = Vector2(1.35, 1.35)
+		_name_lbl.add_theme_color_override("font_color", to_color.lightened(0.35))
+	)
+	tw.set_parallel(true)
+	tw.tween_property(_name_lbl, "modulate:a", 1.0, 0.20).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_name_lbl, "scale", Vector2.ONE, 0.35) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.chain().tween_interval(0.45)
+	tw.chain().tween_callback(func() -> void:
+		_name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	)
 
 # ─── Phase 5 : carte remonte au tiers supérieur + texte bonus surgit ────────
 func _phase5_celebration() -> void:

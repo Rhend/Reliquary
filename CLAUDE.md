@@ -14,6 +14,10 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
   `Translations.entity_lore`, les effets de passifs via `Translations.effect_desc`).
   Champs sources : `nom_affichage_fr`/`nom_affichage_en`, `lore_fr`/`lore_en`
   (passifs : `name` + `nom_affichage_en`). Ne JAMAIS lire `nom_affichage_fr` en dur dans l'UI.
+- **Noms par palier** : `noms_par_palier_fr`/`_en` (Dictionary palier→nom) dans les
+  `.tres` — palier absent → hérite du palier inférieur défini le plus proche ; dict
+  vide → `nom_affichage_*`. Nom à un palier précis : `Translations.entity_name_at(entity, tier)`
+  (utilisé par le rituel d'ascension pour révéler le nouveau nom au morph).
 - **Couleurs de rareté** : `UIColors.tier_color(tier)`. Toutes les couleurs dans UIColors.
 - **Textes UI** : via `Translations.T("clé")` (FR + EN) — pas de français en dur.
 - **UI 100 % en code** : factories dans `UIHelpers` (class_name statique), widgets
