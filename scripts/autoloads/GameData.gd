@@ -41,6 +41,11 @@ var entities: Dictionary = {}
 
 var pending_evolution: Dictionary = {}
 
+# Biome dont l'évolution vient de libérer un Fragment (transient, non sauvé).
+# Lu par EvolutionRitual pour afficher « libère un Fragment » seulement quand
+# c'est vrai (à T4/T5 le Fragment du biome peut déjà être parti à T2).
+var last_freed_fragment_biome: String = ""
+
 var village: Dictionary = {
 	"maitrise_actuelle":   0,     # 0→5 — palier de Maîtrise du Village, progressé par Fragments
 	"fragments_collectes": [],
@@ -234,6 +239,7 @@ func _on_entity_evolved(entity_id: String, new_tier: int) -> void:
 		if fid != "":
 			entities[fid]["est_collecte"] = true
 			village["fragments_collectes"].append(fid)
+			last_freed_fragment_biome = entity_id
 			EventBus.fragment_libere.emit(fid, entity_id)
 
 	# Légendaire (tier 4) → révélation du biome secondaire

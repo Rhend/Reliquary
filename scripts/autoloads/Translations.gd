@@ -90,6 +90,12 @@ const STRINGS: Dictionary = {
 		"village.evolve.tt_body": "Le Village atteint le rang %s —\nde nouvelles structures se débloquent autour de l'anneau.",
 		"ritual.passive_unlocked": "Passif débloqué : %s",
 		"ritual.new_tier":         "Nouveau palier atteint — Capacités améliorées",
+		"ritual.eclosion_title":   "ÉCLOSION",
+		"ritual.eclosion_text":    "Le Village a éclos !\nVous pouvez maintenant\npartir en expédition !",
+		"ritual.village.2":        "Le Sanctuaire est accessible !",
+		"ritual.village.3":        "La Relique est accessible !",
+		"ritual.village.4":        "Le mystère ultime s'ouvre…",
+		"ritual.village.default":  "Nouveau palier du Village !",
 
 		# ── HeroPanel ────────────────────────────────────────
 		"hero.section.stats":       "◆  STATISTIQUES",
@@ -342,6 +348,12 @@ const STRINGS: Dictionary = {
 		"village.evolve.tt_body": "The Village reaches %s rank —\nnew structures unlock around the ring.",
 		"ritual.passive_unlocked": "Passive unlocked: %s",
 		"ritual.new_tier":         "New rank reached — Improved abilities",
+		"ritual.eclosion_title":   "HATCHING",
+		"ritual.eclosion_text":    "The Village has hatched!\nYou can now\nset out on expeditions!",
+		"ritual.village.2":        "The Sanctuary is now accessible!",
+		"ritual.village.3":        "The Relic is now accessible!",
+		"ritual.village.4":        "The final mystery opens…",
+		"ritual.village.default":  "New Village tier!",
 
 		# ── HeroPanel ────────────────────────────────────────
 		"hero.section.stats":       "◆  STATISTICS",

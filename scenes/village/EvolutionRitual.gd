@@ -175,7 +175,7 @@ func _build_tier_label() -> void:
 	var accent  := _accent_color()
 
 	_tier_label = Label.new()
-	_tier_label.text                 = "ÉCLOSION" if _params.get("eclosion", false) else GameData.get_tier_name(to_tier).to_upper()
+	_tier_label.text                 = Translations.T("ritual.eclosion_title") if _params.get("eclosion", false) else GameData.get_tier_name(to_tier).to_upper()
 	_tier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tier_label.add_theme_font_size_override("font_size", 64)
 	_tier_label.add_theme_color_override("font_color", accent.lightened(0.35))
@@ -493,9 +493,11 @@ func _phase5_celebration() -> void:
 	slide.tween_property(_rays, "center_offset", Vector2(0.0, -140.0), 0.4)
 	slide.tween_property(_rays, "intensity", 0.35, 0.6)
 
-	# Panneau cadre + label bonus, 120px sous le bas de la carte
-	var bonus_text := _get_evolution_text()
-	if not bonus_text.is_empty():
+	# Panneau cadre sous la carte : lignes de stats animées (avant + gain →
+	# après) puis texte des débloquages. Hauteur libre (grandit vers le bas).
+	var stat_rows  := _stat_pairs()
+	var bonus_text := _get_evolution_text(not stat_rows.is_empty())
+	if not (stat_rows.is_empty() and bonus_text.is_empty()):
 		var to_color := _accent_color()
 
 		var panel_style := StyleBoxFlat.new()
@@ -510,53 +512,68 @@ func _phase5_celebration() -> void:
 		bonus_panel.add_theme_stylebox_override("panel", panel_style)
 		bonus_panel.anchor_left   = 0.5; bonus_panel.anchor_right  = 0.5
 		bonus_panel.anchor_top    = 0.5; bonus_panel.anchor_bottom = 0.5
-		bonus_panel.offset_left   = -250.0; bonus_panel.offset_right  = 250.0
-		bonus_panel.offset_top    =   70.0; bonus_panel.offset_bottom = 170.0  # surgit : 70→60
+		bonus_panel.offset_left   = -250.0; bonus_panel.offset_right = 250.0
+		bonus_panel.offset_top    =   80.0; bonus_panel.offset_bottom = 80.0  # surgit : 80→70
+		bonus_panel.grow_vertical = Control.GROW_DIRECTION_END  # hauteur = contenu
 		bonus_panel.modulate.a    = 0.0
 		bonus_panel.z_index       = 50
 
-		var inner_margin := UIHelpers.margin_of(12)
+		var inner_margin := UIHelpers.margin_of(14)
 		bonus_panel.add_child(inner_margin)
 
-		var bonus := Label.new()
-		bonus.text                 = bonus_text
-		bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		bonus.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-		bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
-		bonus.add_theme_font_size_override("font_size", 20)
-		bonus.add_theme_color_override("font_color", Color.WHITE)
-		bonus.add_theme_constant_override("outline_size", 3)
-		bonus.add_theme_constant_override("line_spacing", 6)
-		bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-		inner_margin.add_child(bonus)
+		var content := VBoxContainer.new()
+		content.alignment = BoxContainer.ALIGNMENT_CENTER
+		content.add_theme_constant_override("separation", 6)
+		inner_margin.add_child(content)
+
+		var built_rows: Array = []
+		for data: Dictionary in stat_rows:
+			var r := _build_stat_row(data)
+			content.add_child(r["row"] as Control)
+			built_rows.append(r)
+
+		if not bonus_text.is_empty():
+			var bonus := Label.new()
+			bonus.text                 = bonus_text
+			bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
+			bonus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			bonus.add_theme_font_size_override("font_size", 17)
+			bonus.add_theme_color_override("font_color", Color.WHITE)
+			bonus.add_theme_constant_override("outline_size", 3)
+			bonus.add_theme_constant_override("line_spacing", 6)
+			bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+			content.add_child(bonus)
 		add_child(bonus_panel)
 
 		# Fade in + légère remontée simultanés, après délai de 0.35 s
 		var bonus_tw := create_tween().set_parallel(true)
-		bonus_tw.tween_property(bonus_panel, "modulate:a",     1.0, 0.3).set_delay(0.35)
-		bonus_tw.tween_property(bonus_panel, "offset_top",    60.0, 0.3) \
-			.set_delay(0.35).set_ease(Tween.EASE_OUT)
-		bonus_tw.tween_property(bonus_panel, "offset_bottom", 160.0, 0.3) \
+		bonus_tw.tween_property(bonus_panel, "modulate:a", 1.0, 0.3).set_delay(0.35)
+		bonus_tw.tween_property(bonus_panel, "offset_top", 70.0, 0.3) \
 			.set_delay(0.35).set_ease(Tween.EASE_OUT)
 
-# Retourne le texte explicatif du passage au nouveau palier,
-# selon l'entité et le tier cible.
-func _get_evolution_text() -> String:
+		# Puis les gains se déversent dans les valeurs, ligne après ligne.
+		for i in built_rows.size():
+			_animate_stat_row(built_rows[i] as Dictionary, 0.85 + 0.45 * float(i))
+
+# Retourne le texte explicatif du passage au nouveau palier, selon l'entité
+# et le tier cible. has_stat_rows = des lignes de stats animées sont déjà
+# affichées au-dessus → pas de texte générique de remplissage.
+func _get_evolution_text(has_stat_rows: bool = false) -> String:
 	var entity_type := _params.get("entity_type", "") as String
 	var entity_id   := _params.get("entity_id", "")   as String
+	var from_tier   := _params.get("from_tier", 0)     as int
 	var to_tier     := _params.get("to_tier", 1)       as int
 
 	# Éclosion du Village (phase préliminaire) → ouverture des expéditions.
 	if _params.get("eclosion", false):
-		return "Le Village a éclos !\nVous pouvez maintenant\npartir en expédition !"
+		return Translations.T("ritual.eclosion_text")
 
 	# Village — jalons du hub par palier du héros (gates décalés d'un rang).
 	if entity_type == "village":
-		match to_tier:
-			2: return "Le Sanctuaire est accessible !"
-			3: return "La Relique est accessible !"
-			4: return "Le mystère ultime s'ouvre…"
-			_: return "Nouveau palier du Village !"
+		if to_tier in [2, 3, 4]:
+			return Translations.T("ritual.village." + str(to_tier))
+		return Translations.T("ritual.village.default")
 
 	# Entités génériques — lire tier_effects + passifs_par_palier
 	var entity := GameData.get_entity(entity_id)
@@ -564,19 +581,28 @@ func _get_evolution_text() -> String:
 
 	var lines: Array[String] = []
 
-	# Équipement forgé — afficher les stats du nouveau palier.
-	if entity_type == "equipment":
-		var spp        := entity.get("stats_par_palier", {}) as Dictionary
-		var stats_line := ForgePanel._stats_line(spp.get(to_tier, {}) as Dictionary)
-		if not stats_line.is_empty():
-			lines.append("✦ " + stats_line)
+	# Biome — liste ce que CE palier vient de débloquer (Fragment, mécanique,
+	# zone, équipement, biome secondaire), mêmes clés que le panneau Expéditions.
+	if entity_type == "biome":
+		lines.append_array(_biome_unlock_lines(entity_id, entity, to_tier))
 
+	# Effets de passifs : rappel de l'ancien effet → nouvel effet.
 	var te_list: Array = entity.get("tier_effects", [])
 	if to_tier < te_list.size():
-		for eff: Dictionary in te_list[to_tier].get("effects", []):
-			var desc := Translations.effect_desc(eff)
-			if not desc.is_empty():
-				lines.append("✦ " + desc)
+		var prev_effects: Array = []
+		if from_tier < te_list.size():
+			prev_effects = te_list[from_tier].get("effects", []) as Array
+		var effects: Array = te_list[to_tier].get("effects", [])
+		for i in effects.size():
+			var desc := Translations.effect_desc(effects[i] as Dictionary)
+			if desc.is_empty():
+				continue
+			var line := "✦ " + desc
+			if i < prev_effects.size():
+				var old := Translations.effect_desc(prev_effects[i] as Dictionary)
+				if not old.is_empty() and old != desc:
+					line = "✦ %s  →  %s" % [old, desc]
+			lines.append(line)
 
 	var passifs := entity.get("passifs_par_palier", {}) as Dictionary
 	if passifs.has(to_tier):
@@ -586,15 +612,154 @@ func _get_evolution_text() -> String:
 		lines.append(Translations.T("ritual.passive_unlocked") % pname)
 
 	if lines.is_empty():
-		return Translations.T("ritual.new_tier")
+		return "" if has_stat_rows else Translations.T("ritual.new_tier")
 	return "\n".join(lines)
+
+# Ce que le passage du biome au palier t vient de débloquer — mêmes règles
+# (Balance/BiomeMechanics) et mêmes clés que « Prochain palier » du panneau
+# Expéditions. Le Fragment n'est cité que s'il vient VRAIMENT d'être libéré.
+func _biome_unlock_lines(biome_id: String, biome: Dictionary, t: int) -> Array[String]:
+	var out: Array[String] = []
+	if t == Balance.EQUIPMENT_UNLOCK_BIOME_TIER:
+		out.append("✦ " + Translations.T("adv.next.equipment"))
+	if GameData.last_freed_fragment_biome == biome_id:
+		GameData.last_freed_fragment_biome = ""
+		out.append("✦ " + Translations.T("adv.next.fragment"))
+	var mech_id := biome.get("mecanique_forte_id", "") as String
+	if t == BiomeMechanics.UNLOCK_TIER and mech_id != "":
+		out.append("✦ " + Translations.T("adv.next.mechanic") % Translations.mech_name(mech_id))
+	if Balance.max_unlocked_zone(t) > Balance.max_unlocked_zone(t - 1):
+		out.append("✦ " + Translations.T("adv.next.zone") % Translations.zone_name(Balance.max_unlocked_zone(t)))
+	if t == Balance.SECONDARY_BIOME_REVEAL_TIER and str(biome.get("biome_secondaire_id", "")) != "":
+		out.append("✦ " + Translations.T("adv.next.secondary"))
+	return out
+
+# ─── Stats avant / après évolution ───────────────────────────
+
+# Paires de stats avant/après pour les types qui en ont (héros, créature,
+# équipement). L'entité est DÉJÀ au nouveau palier quand le rituel démarre :
+# les valeurs « avant » sont relues dans les tables, pas dans l'état vivant.
+func _stat_pairs() -> Array:
+	var entity_type := _params.get("entity_type", "") as String
+	var entity_id   := _params.get("entity_id", "")   as String
+	var from_tier   := _params.get("from_tier", 0)    as int
+	var to_tier     := _params.get("to_tier", 1)      as int
+	var entity      := GameData.get_entity(entity_id)
+
+	var before: Dictionary = {}
+	var after:  Dictionary = {}
+	match entity_type:
+		"hero":
+			var f := clampi(from_tier, 0, Balance.HERO_HP_PER_TIER.size() - 1)
+			var t := clampi(to_tier,   0, Balance.HERO_HP_PER_TIER.size() - 1)
+			before = {"hp": Balance.HERO_HP_PER_TIER[f], "atk": Balance.HERO_ATK_PER_TIER[f], "def": Balance.HERO_DEF_PER_TIER[f]}
+			after  = {"hp": Balance.HERO_HP_PER_TIER[t], "atk": Balance.HERO_ATK_PER_TIER[t], "def": Balance.HERO_DEF_PER_TIER[t]}
+		"creature":
+			if entity.is_empty(): return []
+			before = GameData.stats_at_tier(entity, from_tier)
+			after  = GameData.stats_at_tier(entity, to_tier)
+		"equipment":
+			if entity.is_empty(): return []
+			var spp := entity.get("stats_par_palier", {}) as Dictionary
+			before = spp.get(from_tier, {}) as Dictionary
+			after  = spp.get(to_tier,   {}) as Dictionary
+		_:
+			return []
+
+	# [clé stat, libellé, couleur, suffixe d'affichage]
+	var defs: Array = [
+		["hp",  Translations.T("hero.stat.hp"),  UIColors.STAT_HP,   ""],
+		["atk", Translations.T("hero.stat.atk"), UIColors.STAT_ATK,  ""],
+		["def", Translations.T("hero.stat.def"), UIColors.STAT_DEF,  ""],
+		["vit", Translations.T("hero.stat.vit"), UIColors.FILTER_ON, ""],
+		["attack_speed_pct", Translations.T("hero.stat.vit"), UIColors.FILTER_ON, " %"],
+	]
+	var rows: Array = []
+	for d: Array in defs:
+		var b := int(before.get(d[0], 0))
+		var a := int(after.get(d[0], 0))
+		if a > b:
+			rows.append({"label": d[1], "color": d[2], "before": b, "after": a, "suffix": d[3]})
+	return rows
+
+# Ligne « ATK   10   +4 » — valeur et bonus animés ensuite par _animate_stat_row.
+func _build_stat_row(data: Dictionary) -> Dictionary:
+	var color := data["color"] as Color
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+
+	var name_lbl := Label.new()
+	name_lbl.text = str(data["label"])
+	name_lbl.custom_minimum_size  = Vector2(70.0, 0.0)
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	name_lbl.add_theme_font_size_override("font_size", 16)
+	name_lbl.add_theme_color_override("font_color", color)
+	row.add_child(name_lbl)
+
+	var value_lbl := Label.new()
+	value_lbl.text = str(int(data["before"])) + str(data["suffix"])
+	value_lbl.custom_minimum_size  = Vector2(76.0, 0.0)
+	value_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value_lbl.add_theme_font_size_override("font_size", 22)
+	value_lbl.add_theme_color_override("font_color", Color.WHITE)
+	value_lbl.add_theme_constant_override("outline_size", 3)
+	value_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	row.add_child(value_lbl)
+
+	var bonus_lbl := Label.new()
+	bonus_lbl.text = "+%d%s" % [int(data["after"]) - int(data["before"]), data["suffix"]]
+	bonus_lbl.custom_minimum_size = Vector2(70.0, 0.0)
+	bonus_lbl.add_theme_font_size_override("font_size", 17)
+	bonus_lbl.add_theme_color_override("font_color", UIColors.TEXT_BONUS)
+	row.add_child(bonus_lbl)
+
+	return {"row": row, "value": value_lbl, "bonus": bonus_lbl,
+			"before": int(data["before"]), "after": int(data["after"]),
+			"suffix": str(data["suffix"])}
+
+# Le gain se déverse dans la valeur : « 10  +4 » → « 11  +3 » → … → « 14 ».
+# Pop discret à chaque tick, puis flash vert de la valeur finale.
+func _animate_stat_row(r: Dictionary, delay: float) -> void:
+	var value_lbl := r["value"] as Label
+	var bonus_lbl := r["bonus"] as Label
+	var before: int = r["before"]
+	var after:  int = r["after"]
+	var suffix: String = r["suffix"]
+	var gain := after - before
+	var dur  := clampf(0.12 * float(gain), 0.5, 1.2)
+	var last: Array = [before]   # mutable partagé avec la lambda
+
+	var tw := create_tween()
+	tw.tween_interval(delay)
+	tw.tween_method(func(v: float) -> void:
+		var cur := int(floor(v))
+		if cur == last[0]:
+			return
+		last[0] = cur
+		value_lbl.text = str(cur) + suffix
+		var left := after - cur
+		bonus_lbl.text = ("+%d%s" % [left, suffix]) if left > 0 else ""
+		value_lbl.pivot_offset = value_lbl.size * 0.5
+		value_lbl.scale = Vector2(1.22, 1.22)
+		value_lbl.create_tween().tween_property(value_lbl, "scale", Vector2.ONE, 0.10)
+	, float(before), float(after), dur).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_callback(func() -> void:
+		value_lbl.text = str(after) + suffix
+		bonus_lbl.text = ""
+		value_lbl.add_theme_color_override("font_color", UIColors.TEXT_BONUS)
+	)
+	tw.tween_interval(0.30)
+	tw.tween_callback(func() -> void:
+		value_lbl.add_theme_color_override("font_color", Color.WHITE)
+	)
 
 # ─── Bouton retour village ───────────────────────────────────
 func _show_return_button() -> void:
 	var to_color := _accent_color()
 
 	var btn := Button.new()
-	btn.text = "🏠  REVENIR AU VILLAGE"
+	btn.text = Translations.T("cycle.back_village")
 	btn.add_theme_stylebox_override("normal",   UIHelpers.card_style(to_color, 0.10, 0.70, 1, 8))
 	btn.add_theme_stylebox_override("hover",    UIHelpers.card_style(to_color, 0.22, 1.00, 1, 8))
 	btn.add_theme_stylebox_override("pressed",  UIHelpers.card_style(to_color, 0.40, 1.00, 1, 8))
