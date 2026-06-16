@@ -3,6 +3,7 @@
 
 # Export / build
 export/
+build/
 *.import
 
 # Captures de l'outil dev ScreenshotTool
