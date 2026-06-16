@@ -334,11 +334,16 @@ func reconcile_equipment_unlocks() -> void:
 					and str(player["equipped"].get(EQUIP_SLOT_KEYS[slot_idx], "")) == eid:
 				player["equipped"][EQUIP_SLOT_KEYS[slot_idx]] = ""
 
+# Palier max du Village : nombre de paliers payables en Fragments, borné par le
+# plafond DUR global (Balance.GLOBAL_MAX_TIER) — garde-fou « Palier Max atteint ».
+func village_max_tier() -> int:
+	return mini(Balance.VILLAGE_FRAGMENT_COSTS.size(), Balance.GLOBAL_MAX_TIER)
+
 # Retourne true si le Village peut passer au palier de Maîtrise suivant.
 # Condition unique : Fragments collectés ≥ coût du palier courant (Balance.VILLAGE_FRAGMENT_COSTS).
 func can_upgrade_village() -> bool:
 	var current := int(village.get("maitrise_actuelle", 0))
-	if current >= Balance.VILLAGE_FRAGMENT_COSTS.size():
+	if current >= village_max_tier():
 		return false
 	var req := Balance.VILLAGE_FRAGMENT_COSTS[current]
 	return village.get("fragments_collectes", []).size() >= req
@@ -365,9 +370,12 @@ func get_tier_name(tier: int) -> String:
 		return Translations.T("tier.unknown")
 	return Translations.T("tier." + str(tier))
 
-# Palier maximum d'un type d'entité (créatures → Légendaire 4 ; reste → Unique 5).
+# Palier maximum d'un type d'entité (créatures → Légendaire 4 ; reste → Unique 5),
+# borné par le plafond DUR global (Balance.GLOBAL_MAX_TIER) — garde-fou empêchant
+# toute entité de dépasser ce palier.
 func get_max_tier_for_type(entity_type: String) -> int:
-	return int(Balance.ENTITY_MAX_TIER.get(entity_type, Balance.DEFAULT_MAX_TIER))
+	var type_max := int(Balance.ENTITY_MAX_TIER.get(entity_type, Balance.DEFAULT_MAX_TIER))
+	return mini(type_max, Balance.GLOBAL_MAX_TIER)
 
 # Coût d'XP pour franchir le palier suivant (courbe Balance), ou 0.0 si palier max
 # de type atteint / hors courbe. Sert à alimenter xp_maitrise_palier_suivant.
@@ -539,9 +547,13 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 	# mais le kill n'est confirmé qu'à la victoire (xp>0).
 	if xp_reward > 0.0:
 		entry["count"] += 1
-		entry["xp"]    += xp_reward
+		# Garde-fou plafond DUR global : au palier max absolu, l'entrée du Hall
+		# n'accumule plus d'XP (« Palier Max atteint »). Le compteur de rencontres
+		# continue lui d'avancer.
 		var tier: int = entry.get("tier", 0)
-		while tier < MAX_TIER:
+		if tier < Balance.GLOBAL_MAX_TIER:
+			entry["xp"] += xp_reward
+		while tier < Balance.GLOBAL_MAX_TIER:
 			var next_idx: int = tier + 1
 			if next_idx >= xp_thresholds.size():
 				break

@@ -237,7 +237,7 @@ func _build_hub() -> void:
 	_ring.tier        = village_maitrise
 	# Progression de l'anneau : fragments collectés / coût du palier courant
 	var frag_count: int = (GameData.village.get("fragments_collectes", []) as Array).size()
-	if village_maitrise < Balance.VILLAGE_FRAGMENT_COSTS.size():
+	if village_maitrise < GameData.village_max_tier():
 		var frag_cost := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise]
 		_ring.fill_fraction = minf(1.0, float(frag_count) / float(frag_cost))
 	else:
@@ -281,9 +281,18 @@ func _build_hub() -> void:
 	tier_row.add_child(ltier)
 	tier_row.add_child(_ornament_line(tcolor))
 
-	# Conditions d'évolution du Village (tant que le palier max n'est pas atteint)
-	if village_maitrise < Balance.VILLAGE_FRAGMENT_COSTS.size():
+	# Conditions d'évolution du Village (tant que le palier max n'est pas atteint),
+	# sinon mention « Palier Max atteint » (garde-fou plafond DUR global).
+	if village_maitrise < GameData.village_max_tier():
 		_build_village_conditions(center_box, village_maitrise, tcolor)
+	else:
+		var max_lbl := Label.new()
+		max_lbl.text = Translations.T("tier.max_rank")
+		max_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		max_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		max_lbl.add_theme_font_size_override("font_size", 12)
+		max_lbl.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.40))
+		center_box.add_child(max_lbl)
 
 	# ── Hint contextuel (objectif courant) ───────────────────────
 	var hint := _current_hint(village_maitrise)
@@ -357,7 +366,7 @@ func _current_hint(village_maitrise: int) -> String:
 			and not GameData.can_forge("equipment_anneau") \
 			and not GameData.can_forge("equipment_armure"):
 		return Translations.T("hint.forge_ready")
-	if village_maitrise < Balance.VILLAGE_FRAGMENT_COSTS.size():
+	if village_maitrise < GameData.village_max_tier():
 		var missing := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise] - frags
 		return Translations.T("hint.need_fragments") % missing
 	return ""

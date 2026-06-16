@@ -80,6 +80,12 @@ func add_xp_to_entity(entity_id: String, base_xp: float, event_tier: int) -> voi
 	if entity.is_empty():
 		return
 	var receiver_tier := int(entity.get("maitrise_actuelle", 0))
+	# Garde-fou plafond DUR global : au palier max absolu, on n'accumule plus d'XP
+	# (« Palier Max atteint »). Avant ce plafond on continue d'accumuler même si
+	# l'entité est temporairement bloquée par le plafond de son biome (l'XP stockée
+	# sert quand le biome monte).
+	if receiver_tier >= Balance.GLOBAL_MAX_TIER:
+		return
 	var coef          := float(Balance.ENTITY_XP_COEF.get(entity.get("entity_type", ""), Balance.DEFAULT_XP_COEF))
 	var xp_gained     := calculate_xp(base_xp, event_tier, receiver_tier) * coef
 	if xp_gained <= 0.0:

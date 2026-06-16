@@ -37,6 +37,9 @@ func _ready() -> void:
 		"adventure": await _shoot_adventure()
 		"combat":    await _shoot_combat()
 		"tooltip":   await _shoot_tooltip()
+		"maxtier_hero":    await _shoot_maxtier_hero()
+		"maxtier_forge":   await _shoot_maxtier_forge()
+		"maxtier_village": await _shoot_maxtier_village()
 		_:           await _shoot_summary()
 	get_tree().quit(0)
 
@@ -226,6 +229,47 @@ func _shoot_tooltip() -> void:
 	crop.resize(1040, 800, Image.INTERPOLATE_NEAREST)
 	crop.save_png("res://tests/_shot_tooltip_zoom.png")
 	print("Screenshot -> res://tests/_shot_tooltip_zoom.png")
+
+# ── Garde-fou « Palier Max atteint » (plafond dur T2) ───────
+# Trois modes indépendants (un process chacun) : héros / forge / hub Village
+# forcés au plafond global pour visualiser la mention de palier max.
+
+func _shoot_maxtier_hero() -> void:
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	_vp.add_child(village)
+	await get_tree().create_timer(1.0).timeout
+	GameData.get_entity("hero")["maitrise_actuelle"] = Balance.GLOBAL_MAX_TIER
+	for eid: String in ["equipment_anneau", "equipment_armure"]:
+		var eq := GameData.get_entity(eid)
+		eq["est_debloque"] = true
+		eq["maitrise_actuelle"] = Balance.GLOBAL_MAX_TIER
+	village._open_panel("hero")
+	await get_tree().create_timer(1.2).timeout
+	_capture("res://tests/_shot_maxtier_hero.png")
+
+func _shoot_maxtier_forge() -> void:
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	_vp.add_child(village)
+	await get_tree().create_timer(1.0).timeout
+	GameData.village["maitrise_actuelle"] = Balance.GLOBAL_MAX_TIER
+	for bid: String in ["biome_foret", "biome_marecage", "biome_montagne"]:
+		GameData.get_entity(bid)["est_decouvert"] = true
+	for eid: String in ["equipment_anneau", "equipment_armure"]:
+		var eq := GameData.get_entity(eid)
+		eq["est_debloque"] = true
+		eq["maitrise_actuelle"] = Balance.GLOBAL_MAX_TIER
+	village._open_panel("forge")
+	await get_tree().create_timer(1.2).timeout
+	_capture("res://tests/_shot_maxtier_forge.png")
+
+func _shoot_maxtier_village() -> void:
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	_vp.add_child(village)
+	await get_tree().create_timer(1.0).timeout
+	GameData.village["maitrise_actuelle"] = Balance.GLOBAL_MAX_TIER
+	village._rebuild_hub()
+	await get_tree().create_timer(1.2).timeout
+	_capture("res://tests/_shot_maxtier_village.png")
 
 func _capture(path: String) -> void:
 	await RenderingServer.frame_post_draw

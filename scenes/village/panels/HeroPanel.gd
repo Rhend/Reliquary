@@ -16,12 +16,13 @@ const EQUIP_SLOTS: Array = [
 
 # Point d'entrée : peuple host.rp_content avec la fiche du héros actif.
 static func build(host: Village) -> void:
-	var c      := GameData.get_entity("hero")
-	var tier   := c.get("maitrise_actuelle", 0) as int
+	var c        := GameData.get_entity("hero")
+	var tier     := c.get("maitrise_actuelle", 0) as int
+	var hero_max := GameData.get_max_tier_for_type(c.get("entity_type", Enums.EntityType.HERO) as String)
 	var xp     := c.get("xp_maitrise_actuelle",   0.0) as float
 	var ni     := mini(tier + 1, GameData.xp_thresholds.size() - 1)
 	var xpmax  := float(GameData.xp_thresholds[ni])
-	var can_ev := tier < GameData.MAX_TIER and xp >= xpmax
+	var can_ev := tier < hero_max and xp >= xpmax
 	var tcolor := UIColors.tier_color(tier)
 
 	# ── Bonhomme d'équipement : 6 slots anatomiques ───────────
@@ -31,7 +32,7 @@ static func build(host: Village) -> void:
 	# ── Carte d'identité + XP (DA commune — UIHelpers.entity_xp_card) ──
 	# Palier max → xp_max = 0 → la carte affiche « RANG MAX ».
 	var hero_xp_max := xpmax
-	if tier >= GameData.MAX_TIER:
+	if tier >= hero_max:
 		hero_xp_max = 0.0
 	var id_card := UIHelpers.entity_xp_card(
 			Translations.entity_name(c), tier, xp, hero_xp_max,
@@ -86,7 +87,7 @@ static func build(host: Village) -> void:
 		detail.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		grp.add_child(detail)
 
-	if tier < GameData.MAX_TIER:
+	if tier < hero_max:
 		if can_ev:
 			stats_body.add_child(host.make_evolve_btn(
 				"hero", Translations.entity_name(c, "hero"),
@@ -307,7 +308,8 @@ static func _normalize_unique_passive(eid: String, e: Dictionary) -> Dictionary:
 # corps avec effet courant + cascade des paliers à débloquer.
 static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> Control:
 	var rarity   := pdata.get("maitrise_actuelle", 0) as int
-	var has_evos := rarity < GameData.MASTERY_TIERS.size() - 1
+	var pass_max := GameData.get_max_tier_for_type(pdata.get("entity_type", Enums.EntityType.PASSIVE) as String)
+	var has_evos := rarity < pass_max
 	var xp_cur   := pdata.get("xp_maitrise_actuelle", 0.0) as float
 	var name_txt := Translations.entity_name(pdata, pdata.get("id", "?") as String)
 
@@ -368,7 +370,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 		unlock_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		body.add_child(unlock_hdr)
 
-		for t in range(rarity + 1, GameData.MASTERY_TIERS.size()):
+		for t in range(rarity + 1, pass_max + 1):
 			body.add_child(_evo_row(t, rarity, pdata))
 
 	# Toggle uniquement si le corps a du contenu à révéler
@@ -399,7 +401,7 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	var tn      := GameData.get_tier_name(t)
 	var indent  := (t - base_rarity) * 14
 	var xp_cur  : float = pdata.get("xp_maitrise_actuelle", 0.0) as float
-	var is_max  : bool  = t >= GameData.MAX_TIER
+	var is_max  : bool  = t >= GameData.get_max_tier_for_type(pdata.get("entity_type", Enums.EntityType.PASSIVE) as String)
 	var xp_need : int   = 0
 	if not is_max and t + 1 < GameData.xp_thresholds.size():
 		xp_need = int(GameData.xp_thresholds[t + 1])

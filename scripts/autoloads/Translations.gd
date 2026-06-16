@@ -18,8 +18,8 @@ const STRINGS: Dictionary = {
 		"tier.4":        "Légendaire",
 		"tier.5":        "Unique",
 		"tier.unknown":  "Inconnu",
-		"tier.max_rank": "RANG MAX",
-		"tier.max_level":"▲ NIVEAU MAXIMUM",
+		"tier.max_rank": "Palier Max atteint",
+		"tier.max_level":"▲ Palier Max atteint",
 
 		# ── Zones ────────────────────────────────────────────
 		"zone.0": "Surface",
@@ -136,7 +136,7 @@ const STRINGS: Dictionary = {
 		"forge.ingr.unique":    "Ingrédient unique — une seule obtention.",
 		"forge.ingr.tt_stock":  "Biome : %s\nEn stock : %d",
 		"forge.equip.locked":   "🔒  %s  —  Monte %s au palier %s pour l'obtenir",
-		"forge.equip.max_rank": "▲ RANG MAX",
+		"forge.equip.max_rank": "▲ Palier Max atteint",
 		"forge.equip.low_xp":  "⧖  XP insuffisante — continuez l'aventure",
 		"forge.equip.no_recipe":"Recette non définie",
 		"forge.equip.forge_btn":"Forger",
@@ -284,8 +284,8 @@ const STRINGS: Dictionary = {
 		"tier.4":        "Legendary",
 		"tier.5":        "Unique",
 		"tier.unknown":  "Unknown",
-		"tier.max_rank": "MAX RANK",
-		"tier.max_level":"▲ MAXIMUM LEVEL",
+		"tier.max_rank": "Max Tier Reached",
+		"tier.max_level":"▲ Max Tier Reached",
 
 		# ── Zones ────────────────────────────────────────────
 		"zone.0": "Surface",
@@ -402,7 +402,7 @@ const STRINGS: Dictionary = {
 		"forge.ingr.unique":    "Unique ingredient — only one obtainable.",
 		"forge.ingr.tt_stock":  "Biome: %s\nIn stock: %d",
 		"forge.equip.locked":   "🔒  %s  —  Raise %s to %s rank to obtain it",
-		"forge.equip.max_rank": "▲ MAX RANK",
+		"forge.equip.max_rank": "▲ Max Tier Reached",
 		"forge.equip.low_xp":  "⧖  Insufficient XP — continue adventuring",
 		"forge.equip.no_recipe":"Recipe not defined",
 		"forge.equip.forge_btn":"Forge",

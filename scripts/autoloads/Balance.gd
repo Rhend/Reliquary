@@ -148,6 +148,14 @@ const ENTITY_MAX_TIER: Dictionary = {
 	Enums.EntityType.EQUIPMENT: 2,
 }
 
+# Plafond DUR global, toutes entités confondues : aucune entité ne peut franchir
+# ce palier (Rare). Une fois atteint → « Palier Max atteint » et plus aucune XP de
+# Maîtrise n'est accumulée. Garde-fou appliqué par GameData.get_max_tier_for_type
+# (donc effective_max_tier / can_evolve / coût de palier / UI) et par
+# MasterySystem.add_xp_to_entity (arrêt de l'XP). Mettre à DEFAULT_MAX_TIER pour
+# rendre la progression complète.
+const GLOBAL_MAX_TIER: int = 2
+
 # ═══════════════════════════════════════════════════════════
 #  Plafond de Maîtrise des créatures selon le palier du biome
 # ═══════════════════════════════════════════════════════════
