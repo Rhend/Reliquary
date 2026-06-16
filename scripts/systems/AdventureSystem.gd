@@ -454,19 +454,14 @@ func _roll_encounter_type() -> String:
 	else:
 		return Enums.EntityType.TRAP
 
-# Tire le modificateur de cycle par tirage pondéré.
+# Modificateur de cycle DÉSACTIVÉ (choix de design : pas d'effet aléatoire
+# imposé au joueur d'un cycle à l'autre). current_modifier reste vide → tous
+# les usages retombent sur leurs valeurs neutres via .get(clé, défaut) :
+# XP ×1.0, pièges actifs, régénération par défaut, aucun bonus ATK/DEF.
+# Le pool Balance.CYCLE_MODIFIERS est conservé (dormant) : pour réactiver le
+# système, rétablir le tirage pondéré (cf. historique git).
 func _pick_modifier() -> void:
-	var total_weight: int = 0
-	for m in Balance.CYCLE_MODIFIERS:
-		total_weight += int(m.get("weight", 1))
-
-	var roll       = randi() % total_weight
-	var cumulative = 0
-	for m in Balance.CYCLE_MODIFIERS:
-		cumulative += int(m.get("weight", 1))
-		if roll < cumulative:
-			current_modifier = m
-			break
+	current_modifier = {}
 	EventBus.modifier_activated.emit(current_modifier)
 
 # Roule un drop depuis un pool d'entrées.
