@@ -18,6 +18,7 @@ config/name="IdleEvolution"
 run/main_scene="res://scenes/village/village.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
+config/windows_native_icon="res://icon.ico"
 config/main_scene="res://scenes/village/village.tscn"
 
 [autoload]

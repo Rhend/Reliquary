@@ -8,6 +8,9 @@ export/
 # Captures de l'outil dev ScreenshotTool
 tests/_shot_*.png
 
+# Aperçu généré par tools/make_icon.gd (l'icône finale = icon.ico, versionnée)
+tools/_icon_preview.png
+
 # Claude Code — local machine settings
 .claude/settings.local.json
 
