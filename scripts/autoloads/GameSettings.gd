@@ -17,6 +17,9 @@ var fullscreen:     bool   = true   # défaut aligné sur window/size/mode=4
 var volume_music:   float  = 1.0   # 0.0–1.0
 var volume_sfx:     float  = 1.0   # 0.0–1.0
 var language:       String = "fr"  # "fr" ou "en"
+# Message d'accueil (WelcomeOverlay) : tant que false, il s'affiche à chaque
+# démarrage. Coché « ne plus voir » → passe à true et ne réapparaît plus.
+var welcome_dismissed: bool = false
 
 func _ready() -> void:
 	_ensure_audio_buses()
@@ -43,6 +46,10 @@ func set_volume_music(value: float) -> void:
 func set_volume_sfx(value: float) -> void:
 	volume_sfx = clampf(value, 0.0, 1.0)
 	_apply_volume_sfx(volume_sfx)
+	_save()
+
+func set_welcome_dismissed(value: bool) -> void:
+	welcome_dismissed = value
 	_save()
 
 func set_language(lang: String) -> void:
@@ -91,6 +98,7 @@ func _save() -> void:
 		"volume_music":  volume_music,
 		"volume_sfx":    volume_sfx,
 		"language":      language,
+		"welcome_dismissed": welcome_dismissed,
 	}, "\t"))
 	file.close()
 
@@ -108,4 +116,5 @@ func _load() -> void:
 		volume_music  = float(data.get("volume_music",  1.0))
 		volume_sfx    = float(data.get("volume_sfx",    1.0))
 		language      = str(data.get("language",        "fr"))
+		welcome_dismissed = bool(data.get("welcome_dismissed", false))
 	file.close()

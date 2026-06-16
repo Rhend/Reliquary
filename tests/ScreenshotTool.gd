@@ -29,6 +29,7 @@ func _ready() -> void:
 	if mode == "":
 		mode = "summary"
 	match mode:
+		"welcome":   await _shoot_welcome()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -61,6 +62,13 @@ func _shoot_summary() -> void:
 	_capture("res://tests/_shot_summary_mid.png")
 	await get_tree().create_timer(7.0).timeout
 	_capture("res://tests/_shot_summary_end.png")
+
+# ── Capture du message d'accueil (WelcomeOverlay) ───────────
+func _shoot_welcome() -> void:
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	_vp.add_child(village)
+	await get_tree().create_timer(0.8).timeout
+	_capture("res://tests/_shot_welcome.png")
 
 # ── Capture du village avec pastilles de notification ───────
 func _shoot_village() -> void:

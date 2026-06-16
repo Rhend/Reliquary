@@ -109,6 +109,11 @@ func _ready() -> void:
 	EventBus.adventure_stopped.connect(_update_badges)
 	GameSettings.language_changed.connect(_on_language_changed)
 
+	# Message d'accueil : au-dessus de tout, avant toute interaction. Réaffiché
+	# à chaque démarrage tant que le joueur n'a pas coché « ne plus voir ».
+	if not GameSettings.welcome_dismissed:
+		add_child(WelcomeOverlay.new())
+
 # Échap ouvre/ferme le panneau Paramètres (les popups modaux — FileDialog —
 # consomment Échap avant nous, donc pas de conflit).
 func _unhandled_key_input(event: InputEvent) -> void:
