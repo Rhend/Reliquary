@@ -18,18 +18,26 @@ extends Control
 
 const PANEL_WIDTH := 880.0
 
-# Durée de remplissage d'une barre XP et décalage entre barres — ralentis
-# de 20 % par rapport aux valeurs d'origine (0.85 / 0.12), retour playtest :
-# la répartition allait trop vite pour être lue.
+# Durée de remplissage d'une barre XP (lecture confortable).
 const XP_FILL_TIME    := 1.06
-const XP_STAGGER_TIME := 0.15
 
-var _fade_nodes: Array = []   # Controls révélés en cascade
+# Révélation séquentielle du résumé : chaque élément apparaît ~1 s après le
+# précédent (retour playtest : on veut savourer le récap). Double-clic souris =
+# tout afficher d'un coup (_skip_to_end). REVEAL_STAGGER = cadence entre éléments.
+const REVEAL_STAGGER := 0.9
+const FADE_IN_TIME   := 0.5
+
+var _fade_nodes: Array = []   # Controls révélés un par un (ordre de construction)
 var _xp_anims:   Array = []   # {card, xp_label, gained, before_frac, after_frac}
 var _counters:   Array = []   # {label, chip, to, fmt} — compteurs des puces de stats
 var _banner_box: Control
 var _aura:       TextureRect
 var _banner_fx:  SummaryFX    # shine + burst au-dessus de la bannière
+
+# ─── Pilotage de la séquence (révélation lente + skip) ───────
+var _running_tweens: Array      = []      # tweens à tuer au skip (aura exclue)
+var _seq_done:       bool       = false   # séquence terminée OU sautée
+var _xp_by_card:     Dictionary = {}      # XPCard → données d'anim (déclenché au reveal)
 
 # ═══════════════════════════════════════════════════════════
 func _ready() -> void:
@@ -578,51 +586,110 @@ func _fade_register(node: Control) -> void:
 	node.modulate.a = 0.0
 	_fade_nodes.append(node)
 
-# Tout part presque en même temps : bannière en punch, cascade rapide des
-# sections, compteurs des puces, puis barres XP en parallèle décalé.
-# (L'ancienne version remplissait les barres une par une : ~9 s d'attente.)
+# Révélation LENTE et séquentielle : bannière en punch, puis chaque élément
+# (puces, séparateur, sections, lignes, cartes XP, bouton) apparaît l'un après
+# l'autre toutes les REVEAL_STAGGER s. Le joueur peut tout afficher d'un coup
+# par un double-clic souris (_skip_to_end).
 func _run_animation_sequence() -> void:
 	await get_tree().process_frame
 	if _banner_box == null:
 		return
 
+	# Carte XP → ses données d'anim, déclenchées au reveal de la carte.
+	for xp: Dictionary in _xp_anims:
+		_xp_by_card[xp["card"]] = xp
+
 	# Bannière : punch-in (scale TRANS_BACK) + fondu + burst d'étincelles.
 	_banner_box.pivot_offset = _banner_box.size * 0.5
 	_banner_box.scale = Vector2(1.35, 1.35)
-	var tw := create_tween().set_parallel(true)
-	tw.tween_property(_banner_box, "modulate:a", 1.0, 0.22).set_ease(Tween.EASE_OUT)
+	var tw := _track(create_tween()).set_parallel(true)
+	tw.tween_property(_banner_box, "modulate:a", 1.0, 0.30).set_ease(Tween.EASE_OUT)
 	tw.tween_property(_banner_box, "scale", Vector2.ONE, 0.55) \
 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_callback(_banner_fx.fire_burst).set_delay(0.18)
 
-	# Aura : respiration continue derrière le titre.
+	# Aura : respiration continue derrière le titre (NON suivie → survit au skip).
 	var pa := create_tween().set_loops()
 	pa.tween_property(_aura, "modulate:a", 0.42, 1.2) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	pa.tween_property(_aura, "modulate:a", 0.20, 1.2) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
-	# Cascade rapide des sections.
-	var d := 0.12
-	for node: Control in _fade_nodes:
-		tw.tween_property(node, "modulate:a", 1.0, 0.18).set_delay(d).set_ease(Tween.EASE_OUT)
-		d += 0.04
+	# Révélation un élément à la fois, ~REVEAL_STAGGER s d'intervalle.
+	var master := _track(create_tween())
+	for i in _fade_nodes.size():
+		master.tween_interval(REVEAL_STAGGER)
+		master.tween_callback(_reveal_node.bind(i))
+	master.tween_callback(func() -> void: _seq_done = true)
 
-	# Compteurs des puces de stats — chaque puce « pop » à la fin du sien.
+# Révèle l'élément i en fondu, et déclenche l'anim qui lui est rattachée
+# (compteurs des puces pour le 1er élément, remplissage pour une carte XP).
+func _reveal_node(i: int) -> void:
+	if _seq_done:
+		return
+	var node := _fade_nodes[i] as Control
+	if not is_instance_valid(node):
+		return
+	var tw := _track(create_tween())
+	tw.tween_property(node, "modulate:a", 1.0, FADE_IN_TIME).set_ease(Tween.EASE_OUT)
+
+	if i == 0:                       # puces de stats (1er nœud enregistré)
+		_start_counters()
+	if _xp_by_card.has(node):        # carte de répartition XP
+		_animate_xp_card(_xp_by_card[node] as Dictionary, 0.0)
+
+# Compteurs des puces de stats — chaque puce « pop » à la fin du sien.
+func _start_counters() -> void:
 	for c: Dictionary in _counters:
 		var lbl  := c["label"] as Label
 		var fmt  := c["fmt"] as Callable
 		var chip := c["chip"] as Control
-		var ctw := create_tween()
-		ctw.tween_interval(0.25)
+		var ctw := _track(create_tween())
 		ctw.tween_method(func(v: float) -> void: lbl.text = fmt.call(v),
 				0.0, c["to"] as float, 0.80) \
 				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 		ctw.tween_callback(_pop.bind(chip))
 
-	# Barres XP : départs décalés, toutes en parallèle.
-	for i in _xp_anims.size():
-		_animate_xp_card(_xp_anims[i] as Dictionary, 0.45 + float(i) * XP_STAGGER_TIME)
+func _track(tw: Tween) -> Tween:
+	_running_tweens.append(tw)
+	return tw
+
+# Double-clic souris : stoppe la séquence et affiche tout dans son état final.
+func _input(event: InputEvent) -> void:
+	if _seq_done:
+		return
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed and mb.double_click:
+			_skip_to_end()
+			get_viewport().set_input_as_handled()
+
+func _skip_to_end() -> void:
+	if _seq_done:
+		return
+	_seq_done = true
+	for t in _running_tweens:
+		if t is Tween and (t as Tween).is_valid():
+			(t as Tween).kill()
+	if is_instance_valid(_banner_box):
+		_banner_box.modulate.a = 1.0
+		_banner_box.scale      = Vector2.ONE
+	for node: Control in _fade_nodes:
+		if is_instance_valid(node):
+			node.modulate.a = 1.0
+	for c: Dictionary in _counters:
+		var lbl := c["label"] as Label
+		if is_instance_valid(lbl):
+			lbl.text = (c["fmt"] as Callable).call(c["to"] as float)
+	for xp: Dictionary in _xp_anims:
+		var card := xp["card"] as XPCard
+		var xlbl := xp["xp_label"] as Label
+		if is_instance_valid(card):
+			card.xp_fill    = xp["after_frac"]
+			card.gain_start = -1.0
+			card.gain_t     = 0.0
+		if is_instance_valid(xlbl):
+			xlbl.text = "+%.0f XP" % (xp["gained"] as float)
 
 # Petit rebond d'accentuation (fin de compteur, fin de barre XP).
 func _pop(node: Control, amount: float = 1.05) -> void:
@@ -647,7 +714,7 @@ func _animate_xp_card(xp: Dictionary, delay: float) -> void:
 	card.gain_t     = 1.0
 	xp_lbl.text     = "+0 XP"
 
-	var tw := create_tween()
+	var tw := _track(create_tween())
 	tw.set_parallel(true)
 	tw.tween_property(card, "xp_fill", after, XP_FILL_TIME) \
 			.set_delay(delay).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)

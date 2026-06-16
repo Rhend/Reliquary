@@ -183,6 +183,10 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 	var card := xp_panel(color, frac, 0.07, 0.60, 1, 4, XPCard.motif_for_type(entity_type))
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
+	# COUCHE 1 — flux normal : nom (+icône) à gauche, extras de l'appelant à
+	# droite. Pilote la hauteur de la carte. left_box en EXPAND_FILL pousse les
+	# extras contre le bord droit. Boîtes en IGNORE : leurs zones vides laissent
+	# passer le clic vers la carte (sélection de biome, etc.).
 	var m := margin_of(8)
 	card.add_child(m)
 	var header := HBoxContainer.new()
@@ -190,31 +194,52 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	m.add_child(header)
 
+	var left_box := HBoxContainer.new()
+	left_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_box.add_theme_constant_override("separation", 8)
+	left_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(left_box)
+
+	var right_box := HBoxContainer.new()
+	right_box.alignment = BoxContainer.ALIGNMENT_END
+	right_box.add_theme_constant_override("separation", 8)
+	right_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(right_box)
+
 	if not icon.is_empty():
 		var icon_lbl := Label.new()
 		icon_lbl.text = icon
 		icon_lbl.add_theme_font_size_override("font_size", 14)
 		icon_lbl.add_theme_color_override("font_color", color)
-		header.add_child(icon_lbl)
+		left_box.add_child(icon_lbl)
 
 	var name_lbl := Label.new()
 	name_lbl.text = display_name
 	name_lbl.add_theme_font_size_override("font_size", 13)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	header.add_child(name_lbl)
+	left_box.add_child(name_lbl)
 
-	# Spacers transparents à la souris : un Control nu est en STOP par
-	# défaut et volerait le clic à la carte (sélection de biome, etc.).
-	var sp1 := Control.new()
-	sp1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sp1.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	header.add_child(sp1)
+	# COUCHE 2 — bloc central (palier + XP) SUPERPOSÉ et centré sur la carte.
+	# XPCard est un PanelContainer : il empile ses enfants en plein cadre, donc
+	# ce CenterContainer occupe la même zone que la couche 1 et centre son
+	# contenu à largeur/2 — position INDÉPENDANTE de la longueur du nom à gauche,
+	# donc identique (pixel-perfect) d'une carte à l'autre. margin_of pose des
+	# marges égales → la couche 1 est aussi centrée verticalement : les deux
+	# couches restent sur la même ligne.
+	var center_overlay := CenterContainer.new()
+	center_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(center_overlay)
+
+	var center_box := HBoxContainer.new()
+	center_box.add_theme_constant_override("separation", 8)
+	center_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center_overlay.add_child(center_box)
 
 	var tbadge := Label.new()
 	tbadge.text = GameData.get_tier_name(tier)
 	tbadge.add_theme_font_size_override("font_size", 11)
 	tbadge.add_theme_color_override("font_color", color)
-	header.add_child(tbadge)
+	center_box.add_child(tbadge)
 
 	var xp_lbl := Label.new()
 	if at_max:
@@ -224,14 +249,12 @@ static func entity_xp_card(display_name: String, tier: int, xp: float, xp_max: f
 		xp_lbl.text = "XP  %s / %s" % [xp_fmt(int(xp)), xp_fmt(int(xp_max))]
 		xp_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	xp_lbl.add_theme_font_size_override("font_size", 10)
-	header.add_child(xp_lbl)
+	center_box.add_child(xp_lbl)
 
-	var sp2 := Control.new()
-	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sp2.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	header.add_child(sp2)
-
-	return {"card": card, "header": header}
+	# `header` renvoyé = colonne DROITE : tout extra greffé par l'appelant
+	# (compteur, badge de slot, gain « +X XP », flèche d'accordéon) atterrit là,
+	# aligné à droite, sans déséquilibrer le centrage du bloc central.
+	return {"card": card, "header": right_box}
 
 # Formate un entier XP avec séparateur de milliers (ex: 1 234).
 static func xp_fmt(xp: int) -> String:

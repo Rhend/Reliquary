@@ -831,7 +831,9 @@ func _birth_awaken_flash() -> void:
 func _hatch_village() -> void:
 	GameData.village["eclos"] = true
 	SaveManager.save()
-	launch_evolution_ritual(Enums.EntityType.VILLAGE, "hero", "Village", 0, 0, {"eclosion": true})
+	# entity_id volontairement "village" (absent du catalogue d'entités) : le rituel
+	# retombe alors sur le nom passé ("Village"). Passer "hero" affichait "Héros".
+	launch_evolution_ritual(Enums.EntityType.VILLAGE, "village", "Village", 0, 0, {"eclosion": true})
 
 # ─── Bouton ÉVOLUER pulsant ──────────────────────────────────
 # Fabrique un bouton ÉVOLUER avec pulsation scale 1.0→1.05→1.0 en boucle.

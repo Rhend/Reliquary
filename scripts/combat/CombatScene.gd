@@ -306,14 +306,10 @@ func _build_bottom_bar() -> Control:
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
 
-	_xp_label = Label.new()
-	_xp_label.text = Translations.T("combat.xp_label")
-	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_xp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_xp_label.add_theme_font_size_override("font_size", 15)
-	_xp_label.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	vbox.add_child(_xp_label)
-
+	# Le compteur « XP ce cycle » a été retiré (l'espace est rendu à la zone de
+	# combat, qui descend désormais jusqu'au bouton). _xp_label reste null :
+	# _update_xp_label() est inerte (garde de nullité). Le total d'XP du cycle
+	# reste affiché dans le résumé de fin d'expédition.
 	var tcolor := _hero_tier_color()
 	_flee_btn = Button.new()
 	_flee_btn.text = Translations.T("combat.end_btn")
