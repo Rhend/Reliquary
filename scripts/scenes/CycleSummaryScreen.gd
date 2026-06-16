@@ -233,14 +233,9 @@ func _build_stat_chips(col: VBoxContainer, data: Dictionary, rcolor: Color) -> v
 	row.add_theme_constant_override("separation", 12)
 	m.add_child(row)
 
-	var events       := int(data.get("events", 0))
-	var events_total := int(data.get("events_total", 0))
 	_stat_chip(row, "⚔", float(data.get("combats_won", 0)),
 			Translations.T("cycle.stat.combats"), UIColors.LOG_COMBAT,
 			func(v: float) -> String: return "%d" % int(v))
-	_stat_chip(row, "✦", float(events),
-			Translations.T("cycle.stat.events"), UIColors.LOG_EVENT,
-			func(v: float) -> String: return "%d / %d" % [int(v), events_total])
 	# Puce Ingrédients absente s'il n'y a rien drappé (cohérent avec la section
 	# « Ressources collectées », elle aussi masquée quand le butin est vide).
 	if int(data.get("loot_total", 0)) > 0:
