@@ -185,8 +185,8 @@ const SECONDARY_BIOME_REVEAL_TIER: int = 4
 # les expéditions (remplace l'ancien clicker d'XP menant à T1).
 const ECLOSION_CLICS: int = 100
 # Progression ajoutée par clic. Valeur normale : 1 (≈ 100 clics).
-# Réglée à 25 pour accélérer les tests (4 clics → paliers d'éveil 25/50/75/100).
-const ECLOSION_CLIC_VALUE: int = 25
+# (Peut être réglée temporairement à 25 pour accélérer les tests.)
+const ECLOSION_CLIC_VALUE: int = 1
 
 # ═══════════════════════════════════════════════════════════
 #  Régénération
