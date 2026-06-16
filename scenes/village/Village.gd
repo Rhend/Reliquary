@@ -28,6 +28,12 @@ const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
 # ─── Éveil (phase d'éclosion) ─────────────────────────────────
 # L'orbe se réchauffe vers cette couleur à mesure que l'âme s'éveille.
 const ECLOSION_AWAKEN_COLOR := Color(1.0, 0.86, 0.55)
+
+# Probabilité, à chaque clic d'éclosion, de faire surgir un court chuchotement
+# d'ambiance (fragment narratif) à une position aléatoire de l'écran.
+const BIRTH_WHISPER_CHANCE := 0.22
+const BIRTH_WHISPER_COUNT  := 10   # nombre de clés birth.whisper.N dans Translations
+
 # Phrases d'éveil : seuils fixes, textes lus depuis Translations au moment de l'affichage.
 func _birth_phrases() -> Array:
 	return [
@@ -35,6 +41,13 @@ func _birth_phrases() -> Array:
 		[0.50, Translations.T("birth.phrase_50")],
 		[0.75, Translations.T("birth.phrase_75")],
 	]
+
+# Pool des chuchotements d'ambiance (courts) tirés au hasard pendant les clics.
+func _birth_whispers() -> Array:
+	var out: Array = []
+	for i in range(1, BIRTH_WHISPER_COUNT + 1):
+		out.append(Translations.T("birth.whisper." + str(i)))
+	return out
 
 # [label, icon, tier_min, callback_name, panel_id]
 # tier_min = palier de Maîtrise du VILLAGE requis pour afficher l'hexagone
@@ -770,6 +783,11 @@ func _on_birth_click() -> void:
 		_show_birth_phrase(bp[_birth_phrase_idx][1], false)
 		_birth_phrase_idx += 1
 
+	# Chuchotements d'ambiance : fragments narratifs courts qui surgissent au
+	# hasard durant les clics, à une position aléatoire, en fondu entrant/sortant.
+	if not _birth_hatching and randf() < BIRTH_WHISPER_CHANCE:
+		_show_birth_whisper()
+
 	if clics >= needed:
 		# Éveil final : phrase forte + voile chaud, puis éclosion après un battement.
 		_birth_hatching = true
@@ -813,6 +831,57 @@ func _show_birth_phrase(text: String, final: bool) -> void:
 		t_out.tween_interval(2.9)
 		t_out.tween_property(lbl, "modulate:a", 0.0, 0.9)
 		t_out.tween_callback(lbl.queue_free)
+
+# Chuchotement d'ambiance : court fragment narratif tiré au hasard, posé à une
+# position aléatoire de l'écran (périphérie, hors de l'orbe et des phrases),
+# fondu entrant PUIS sortant symétriques avant de se libérer.
+func _show_birth_whisper() -> void:
+	var pool := _birth_whispers()
+	if pool.is_empty():
+		return
+
+	var lbl := Label.new()
+	lbl.text = pool[randi() % pool.size()] as String
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, 0.45))
+	lbl.add_theme_constant_override("outline_size", 3)
+	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	lbl.modulate.a    = 0.0
+	lbl.mouse_filter  = Control.MOUSE_FILTER_IGNORE   # ne vole pas le clic de l'orbe
+	lbl.z_index       = 50
+
+	var w := 300.0
+	var h := 40.0
+	lbl.position = _random_whisper_pos(get_viewport_rect().size, w, h)
+	lbl.size     = Vector2(w, h)
+	add_child(lbl)
+
+	# Fondu entrant puis sortant SYMÉTRIQUES (même durée, même courbe), avec un
+	# court palier visible entre les deux.
+	var fade := 0.9
+	var tw := lbl.create_tween()   # lié à `lbl` → auto-tué si libéré
+	tw.tween_property(lbl, "modulate:a", 0.9, fade).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	tw.tween_interval(0.8)
+	tw.tween_property(lbl, "modulate:a", 0.0, fade).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
+	tw.tween_callback(lbl.queue_free)
+
+# Position aléatoire bornée aux marges de l'écran, en évitant un rectangle
+# central (orbe + compteur + phrases d'éveil) pour ne pas brouiller la lecture.
+func _random_whisper_pos(vp: Vector2, w: float, h: float) -> Vector2:
+	var margin := 50.0
+	var min_x := margin
+	var max_x := maxf(vp.x - w - margin, min_x)
+	var min_y := margin
+	var max_y := maxf(vp.y - h - margin, min_y)
+	var exclusion := Rect2(vp.x * 0.5 - 280.0, vp.y * 0.5 - 200.0, 560.0, 400.0)
+	for _i in 12:
+		var p := Vector2(randf_range(min_x, max_x), randf_range(min_y, max_y))
+		if not exclusion.intersects(Rect2(p, Vector2(w, h))):
+			return p
+	return Vector2(min_x, min_y)   # repli (écran trop petit) : coin haut-gauche
 
 # Bref voile chaud sur tout l'écran au moment de l'éveil final.
 func _birth_awaken_flash() -> void:

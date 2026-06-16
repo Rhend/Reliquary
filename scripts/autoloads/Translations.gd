@@ -59,6 +59,16 @@ const STRINGS: Dictionary = {
 		"birth.phrase_75":  "Un village, tout proche…  et des fragments de mémoire épars, alentour.",
 		"birth.phrase_100": "Je ne sais plus qui je suis…\nmais je m'éveille.",
 		"birth.flavor":     "Ranimez l'étincelle…  réveillez l'âme endormie.",
+		"birth.whisper.1":  "Une lueur, là, tout au fond…",
+		"birth.whisper.2":  "Des voix anciennes murmurent mon nom.",
+		"birth.whisper.3":  "Le froid recule.  Quelque chose respire.",
+		"birth.whisper.4":  "Des ombres glissent au bord du rêve.",
+		"birth.whisper.5":  "Un souvenir affleure, puis se dérobe.",
+		"birth.whisper.6":  "La terre frémit sous le long silence.",
+		"birth.whisper.7":  "Quelqu'un m'attend tout près, je le sens.",
+		"birth.whisper.8":  "Des braises rougeoient encore sous la cendre.",
+		"birth.whisper.9":  "Le vide se peuple de chuchotements.",
+		"birth.whisper.10": "Mes paupières pèsent comme des siècles.",
 
 		# ── Hints contextuels ────────────────────────────────
 		"hint.start":          "Partez en expédition pour gagner de l'XP et faire progresser vos entités",
@@ -315,6 +325,16 @@ const STRINGS: Dictionary = {
 		"birth.phrase_75":  "A village, close by…  and scattered memory fragments all around.",
 		"birth.phrase_100": "I no longer know who I am…\nbut I am waking.",
 		"birth.flavor":     "Rekindle the spark…  awaken the sleeping soul.",
+		"birth.whisper.1":  "A glimmer, there, deep down below…",
+		"birth.whisper.2":  "Ancient voices murmur my forgotten name.",
+		"birth.whisper.3":  "The cold recedes.  Something breathes nearby.",
+		"birth.whisper.4":  "Shadows drift at the dream's edge.",
+		"birth.whisper.5":  "A memory surfaces, then slips away.",
+		"birth.whisper.6":  "The earth trembles beneath long silence.",
+		"birth.whisper.7":  "Someone awaits me, close — I feel it.",
+		"birth.whisper.8":  "Embers still glow beneath the ash.",
+		"birth.whisper.9":  "The void fills with soft whispers.",
+		"birth.whisper.10": "My eyelids weigh like passing centuries.",
 
 		# ── Hints contextuels ────────────────────────────────
 		"hint.start":          "Go on an expedition to gain XP and progress your entities",
