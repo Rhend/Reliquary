@@ -186,9 +186,9 @@ func _process_encounter() -> void:
 	_stats.events_total += 1
 
 	match enc_type:
-		"creature":    _handle_creature_encounter("hero", enc_data)
-		"benediction": _handle_benediction_encounter("hero", enc_data)
-		"trap":        _handle_trap_encounter("hero", enc_data)
+		Enums.EntityType.CREATURE:    _handle_creature_encounter("hero", enc_data)
+		Enums.EntityType.BENEDICTION: _handle_benediction_encounter("hero", enc_data)
+		Enums.EntityType.TRAP:        _handle_trap_encounter("hero", enc_data)
 
 # ─── Rencontre Créature ───────────────────────────────────────
 
@@ -268,7 +268,7 @@ func _distribute_mastery_xp(event_id: String, event_base: float) -> void:
 	var event_tier   := int(event_entity.get("maitrise_actuelle", 0))
 
 	# Pas d'XP à l'entité si créature Unique d'Abysse (statique tier 5)
-	if not (event_entity.get("est_unique", false) and int(event_entity.get("zone_associee", -1)) == 2):
+	if not (event_entity.get("est_unique", false) and int(event_entity.get("zone_associee", -1)) == Enums.Zone.ABYSSE):
 		MasterySystem.add_xp_to_entity(event_id, base, event_tier)
 	MasterySystem.add_xp_to_entity("hero", base, event_tier)                                         # héros
 	MasterySystem.add_xp_to_entity(current_biome_id, base, event_tier)                               # biome
@@ -435,19 +435,19 @@ func _roll_encounter_type() -> String:
 	# Distribution standard pour toutes les zones (Surface, Profondeur, Abysse).
 	var biome      = GameData.get_entity(current_biome_id)
 	var base_table = biome.get("event_table", {
-		"creature": 0.70, "benediction": 0.15, "trap": 0.15
+		Enums.EntityType.CREATURE: 0.70, Enums.EntityType.BENEDICTION: 0.15, Enums.EntityType.TRAP: 0.15
 	})
 
-	var creature_chance    = float(base_table.get("creature",    0.70))
-	var benediction_chance = float(base_table.get("benediction", 0.15))
+	var creature_chance    = float(base_table.get(Enums.EntityType.CREATURE,    0.70))
+	var benediction_chance = float(base_table.get(Enums.EntityType.BENEDICTION, 0.15))
 
 	var roll = randf()
 	if roll < creature_chance:
-		return "creature"
+		return Enums.EntityType.CREATURE
 	elif roll < creature_chance + benediction_chance:
-		return "benediction"
+		return Enums.EntityType.BENEDICTION
 	else:
-		return "trap"
+		return Enums.EntityType.TRAP
 
 # Tire le modificateur de cycle par tirage pondéré.
 func _pick_modifier() -> void:

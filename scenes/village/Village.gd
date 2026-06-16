@@ -826,7 +826,7 @@ func _birth_awaken_flash() -> void:
 func _hatch_village() -> void:
 	GameData.village["eclos"] = true
 	SaveManager.save()
-	launch_evolution_ritual("village", "hero", "Village", 0, 0, {"eclosion": true})
+	launch_evolution_ritual(Enums.EntityType.VILLAGE, "hero", "Village", 0, 0, {"eclosion": true})
 
 # ─── Bouton ÉVOLUER pulsant ──────────────────────────────────
 # Fabrique un bouton ÉVOLUER avec pulsation scale 1.0→1.05→1.0 en boucle.

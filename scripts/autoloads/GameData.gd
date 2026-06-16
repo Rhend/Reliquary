@@ -540,19 +540,6 @@ func record_encounter(enc_id: String, enc_name: String, enc_type: String,
 		EventBus.entity_discovered.emit(enc_id)
 
 # ═══════════════════════════════════════════════════════════
-#  Forge
-# ═══════════════════════════════════════════════════════════
-
-# Liste toutes les recettes de forge disponibles dans le catalogue.
-func get_forge_recipes() -> Array:
-	var result: Array = []
-	for id in entities:
-		if entities[id].get("entity_type") == Enums.EntityType.RECIPE:
-			result.append(entities[id])
-	return result
-
-
-# ═══════════════════════════════════════════════════════════
 #  Ressources
 # ═══════════════════════════════════════════════════════════
 

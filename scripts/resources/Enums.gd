@@ -17,6 +17,9 @@ class EntityType:
 	const FRAGMENT      := "fragment"
 	const RESOURCE      := "resource"
 	const RECIPE        := "recipe"
+	# Pseudo-type : le Village n'est pas dans GameData.entities, mais son
+	# évolution transite par le rituel d'ascension avec ce type.
+	const VILLAGE       := "village"
 
 # ─── Effets de bénédiction (champ effet des BenedictionData) ──
 # Seuls effets supportés par AdventureSystem._apply_benediction_effect.

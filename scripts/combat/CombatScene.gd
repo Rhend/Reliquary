@@ -426,7 +426,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 
 func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
-		"trap":
+		Enums.EntityType.TRAP:
 			var trap := event_data.get("trap", {}) as Dictionary
 			var tname := Translations.entity_name(trap)
 			_enemy_name.text = tname.to_upper()
@@ -452,7 +452,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 				_add_log("[color=%s]%s[/color] inflige [color=%s]-%d[/color]"
 						% [_hex(UIColors.TIER_EPIQUE), tname, _hex(UIColors.LOG_DEFEAT), tdmg],
 						["monster", "attack", "status"])
-		"benediction":
+		Enums.EntityType.BENEDICTION:
 			var bene := event_data.get("effect", {}) as Dictionary
 			var bname := Translations.entity_name(bene)
 			_enemy_name.text = bname.to_upper()

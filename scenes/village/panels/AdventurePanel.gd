@@ -184,7 +184,7 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	# extras à droite — cf. UIHelpers.entity_xp_card) ──
 	var built := UIHelpers.entity_xp_card(
 			Translations.entity_name(biome, biome_id).to_upper(), btier, xp_cur, xp_max,
-			"", "biome")
+			"", Enums.EntityType.BIOME)
 	var panel := built["card"] as XPCard
 	var header := built["header"] as HBoxContainer
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -240,7 +240,7 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	section.visible = is_selected
 	if MasterySystem.can_evolve(biome_id):
 		wrapper.add_child(host.make_evolve_btn(biome_id,
-				Translations.entity_name(biome, biome_id), "biome", btier))
+				Translations.entity_name(biome, biome_id), Enums.EntityType.BIOME, btier))
 	wrapper.add_child(section)
 
 	var indent := MarginContainer.new()
@@ -359,7 +359,7 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		if MasterySystem.can_evolve(entry_id):
 			parent.add_child(host.make_evolve_btn(
 					entry_id, disp_name,
-					entity.get("entity_type", "creature") as String,
+					entity.get("entity_type", Enums.EntityType.CREATURE) as String,
 					entity_tier))
 
 # Lignes plates des ingrédients de biome — préfixe « Ingrédient · », nom
@@ -569,14 +569,14 @@ static func _tooltip_entity_body(entry: Dictionary, entity: Dictionary, btier: i
 	var tier     := int(entity.get("maitrise_actuelle", 0))
 	var _zone_max := Balance.max_unlocked_zone(btier)
 	match etype:
-		"creature":
+		Enums.EntityType.CREATURE:
 			var z    := int(entry.get("zone_associee", 0))
 			return Translations.T("adv.creature.tt") % [Translations.zone_name(z), GameData.get_tier_name(tier)]
-		"trap":
+		Enums.EntityType.TRAP:
 			return Translations.T("adv.trap.dmg_zones") + Translations.T("adv.trap.mastery_note")
-		"benediction":
+		Enums.EntityType.BENEDICTION:
 			return Translations.T("adv.bless.desc")
-		"ingredient":
+		Enums.EntityType.INGREDIENT:
 			var biome_id := entity.get("biome_source_id", "") as String
 			var biome_e  := GameData.get_entity(biome_id)
 			var bname    := Translations.entity_name(biome_e, biome_id)

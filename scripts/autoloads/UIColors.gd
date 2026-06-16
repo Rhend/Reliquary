@@ -115,35 +115,19 @@ func enemy_hp(pct: float) -> Color:
 # Couleur d'un tier de maîtrise (0 = Commun … 5 = Unique).
 func tier_color(tier: int) -> Color:
 	match tier:
-		0: return TIER_COMMUN
-		1: return TIER_PEU_COMMUN
-		2: return TIER_RARE
-		3: return TIER_EPIQUE
-		4: return TIER_LEGENDAIRE
-		5: return TIER_UNIQUE
-		_: return Color.WHITE
+		Enums.Maitrise.COMMUN:     return TIER_COMMUN
+		Enums.Maitrise.PEU_COMMUN: return TIER_PEU_COMMUN
+		Enums.Maitrise.RARE:       return TIER_RARE
+		Enums.Maitrise.EPIQUE:     return TIER_EPIQUE
+		Enums.Maitrise.LEGENDAIRE: return TIER_LEGENDAIRE
+		Enums.Maitrise.UNIQUE:     return TIER_UNIQUE
+		_:                         return Color.WHITE
 
 # Couleur d'une zone d'enfoncement (0 = Surface, 1 = Profondeur, 2 = Abysse).
 func zone_color(zone: int) -> Color:
 	match zone:
-		0: return ZONE_SURFACE
-		1: return ZONE_PROFONDEUR
-		2: return ZONE_ABYSSE
-		_: return ZONE_SURFACE
+		Enums.Zone.SURFACE:    return ZONE_SURFACE
+		Enums.Zone.PROFONDEUR: return ZONE_PROFONDEUR
+		Enums.Zone.ABYSSE:     return ZONE_ABYSSE
+		_:                     return ZONE_SURFACE
 
-# Couleur d'une entrée du Hall des Évolutions selon son type.
-func encounter(enc_type: String) -> Color:
-	match enc_type:
-		"Créature":   return TYPE_CREATURE
-		"Piège":      return TYPE_TRAP
-		"Bénédiction": return TYPE_BENEDICTION
-		"Biome":      return TYPE_BIOME
-		_:            return Color.WHITE
-
-# Préfixe icône + couleur pour le bandeau d'événement.
-func event_banner(event_type: String) -> Array:
-	match event_type:
-		"creature":    return ["⚔ ", LOG_COMBAT]
-		"benediction": return ["✦ ", LOG_EVENT]
-		"trap":        return ["▲ ", LOG_TRAP]
-		_:             return ["", Color.WHITE]

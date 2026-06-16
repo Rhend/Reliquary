@@ -150,7 +150,7 @@ static func _equip_card(host: Village, equip_id: String, equip: Dictionary,
 	# ── XPCard ─────────────────────────────────────────────
 	var icon_slot := _slot_icon(slot_idx)
 	var built     := UIHelpers.entity_xp_card(nom, equip_tier, xp_cur,
-			xp_nxt if not at_max else 0.0, icon_slot, "equipment")
+			xp_nxt if not at_max else 0.0, icon_slot, Enums.EntityType.EQUIPMENT)
 	var xpcard    := built["card"] as Control
 	xpcard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	outer.add_child(xpcard)
@@ -375,7 +375,7 @@ static func _forge_btn(host: Village, equip_id: String,
 				var e   := GameData.get_entity(equip_id)
 				var nom := Translations.entity_name(e, equip_id)
 				var nt  := int(e.get("maitrise_actuelle", 0))
-				host.launch_evolution_ritual("equipment", equip_id, nom, nt - 1, nt)
+				host.launch_evolution_ritual(Enums.EntityType.EQUIPMENT, equip_id, nom, nt - 1, nt)
 		)
 	else:
 		UIHelpers.register_tooltip(btn, Translations.T("forge.equip.forge_unavail"),

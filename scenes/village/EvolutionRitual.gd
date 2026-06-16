@@ -87,15 +87,15 @@ func _entity_icon() -> String:
 	if _params.get("eclosion", false):
 		return "🏠"
 	match _params.get("entity_type", "") as String:
-		"creature":                 return "🐾"
-		"trap":                     return "▲"
-		"benediction":              return "✦"
-		"biome":                    return "🌿"
-		"equipment":                return "🔨"
-		"hero":                     return "⚔"
-		"village":                  return "🏠"
-		"passive", "passif_unique": return "⚡"
-		_:                          return "✦"
+		Enums.EntityType.CREATURE:                                return "🐾"
+		Enums.EntityType.TRAP:                                    return "▲"
+		Enums.EntityType.BENEDICTION:                             return "✦"
+		Enums.EntityType.BIOME:                                   return "🌿"
+		Enums.EntityType.EQUIPMENT:                               return "🔨"
+		Enums.EntityType.HERO:                                    return "⚔"
+		Enums.EntityType.VILLAGE:                                 return "🏠"
+		Enums.EntityType.PASSIVE, Enums.EntityType.PASSIF_UNIQUE: return "⚡"
+		_:                                                        return "✦"
 
 func _build_entity_card() -> void:
 	var from_tier  := _params.get("from_tier", 0) as int
@@ -608,7 +608,7 @@ func _get_evolution_text(has_stat_rows: bool = false) -> String:
 		return Translations.T("ritual.eclosion_text")
 
 	# Village — jalons du hub par palier du héros (gates décalés d'un rang).
-	if entity_type == "village":
+	if entity_type == Enums.EntityType.VILLAGE:
 		if to_tier in [2, 3, 4]:
 			return Translations.T("ritual.village." + str(to_tier))
 		return Translations.T("ritual.village.default")
@@ -621,7 +621,7 @@ func _get_evolution_text(has_stat_rows: bool = false) -> String:
 
 	# Biome — liste ce que CE palier vient de débloquer (Fragment, mécanique,
 	# zone, équipement, biome secondaire), mêmes clés que le panneau Expéditions.
-	if entity_type == "biome":
+	if entity_type == Enums.EntityType.BIOME:
 		lines.append_array(_biome_unlock_lines(entity_id, entity, to_tier))
 
 	# Effets de passifs : rappel de l'ancien effet → nouvel effet.
@@ -687,16 +687,16 @@ func _stat_pairs() -> Array:
 	var before: Dictionary = {}
 	var after:  Dictionary = {}
 	match entity_type:
-		"hero":
+		Enums.EntityType.HERO:
 			var f := clampi(from_tier, 0, Balance.HERO_HP_PER_TIER.size() - 1)
 			var t := clampi(to_tier,   0, Balance.HERO_HP_PER_TIER.size() - 1)
 			before = {"hp": Balance.HERO_HP_PER_TIER[f], "atk": Balance.HERO_ATK_PER_TIER[f], "def": Balance.HERO_DEF_PER_TIER[f]}
 			after  = {"hp": Balance.HERO_HP_PER_TIER[t], "atk": Balance.HERO_ATK_PER_TIER[t], "def": Balance.HERO_DEF_PER_TIER[t]}
-		"creature":
+		Enums.EntityType.CREATURE:
 			if entity.is_empty(): return []
 			before = GameData.stats_at_tier(entity, from_tier)
 			after  = GameData.stats_at_tier(entity, to_tier)
-		"equipment":
+		Enums.EntityType.EQUIPMENT:
 			if entity.is_empty(): return []
 			var spp := entity.get("stats_par_palier", {}) as Dictionary
 			before = spp.get(from_tier, {}) as Dictionary

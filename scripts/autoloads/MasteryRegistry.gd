@@ -8,12 +8,6 @@
 # ============================================================
 extends Node
 
-# Types d'entités soumises à la Maîtrise (le Héros est exclu).
-const MASTERY_TYPES := [
-	Enums.EntityType.CREATURE, Enums.EntityType.BIOME, Enums.EntityType.PASSIVE,
-	Enums.EntityType.EQUIPMENT, Enums.EntityType.TRAP, Enums.EntityType.BENEDICTION,
-]
-
 # ═══════════════════════════════════════════════════════════
 #  Requêtes publiques
 # ═══════════════════════════════════════════════════════════
@@ -31,26 +25,6 @@ func is_discovered(entity_id: String) -> bool:
 		if entity_id in GameData.player.get("equipped", {}).values():
 			return true
 	return false
-
-# Retourne toutes les entités soumises à la Maîtrise.
-# Résultat : Array de Dictionaries issus de GameData.entities.
-func get_all_mastery_entities() -> Array:
-	var result: Array = []
-	for eid in GameData.entities:
-		var e = GameData.entities[eid]
-		if e.get("entity_type", "") in MASTERY_TYPES:
-			result.append(e)
-	return result
-
-# Retourne les entités d'un type donné, triées par tier décroissant.
-func get_entities_by_type(entity_type: String) -> Array:
-	var result: Array = []
-	for eid in GameData.entities:
-		var e = GameData.entities[eid]
-		if e.get("entity_type", "") == entity_type:
-			result.append(e)
-	result.sort_custom(func(a, b): return a.get("maitrise_actuelle", 0) > b.get("maitrise_actuelle", 0))
-	return result
 
 # Retourne les entités associées à un biome spécifique.
 # Inclut ennemis, pièges, événements positifs issus de la définition JSON du biome.

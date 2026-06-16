@@ -30,10 +30,6 @@ func _input(event: InputEvent) -> void:
 			and event.keycode == KEY_F11:
 		set_fullscreen(not fullscreen)
 
-func set_combat_speed(multiplier: float) -> void:
-	combat_speed = multiplier
-	_save()
-
 func set_fullscreen(value: bool) -> void:
 	fullscreen = value
 	_apply_fullscreen()

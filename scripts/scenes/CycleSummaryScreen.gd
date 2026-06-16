@@ -551,7 +551,7 @@ func _evolution_card(vb: VBoxContainer, entity_id: String, entity: Dictionary) -
 	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(nc, 0.15, 1.0, 1, 4))
 	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(nc, 0.30, 1.0, 1, 4))
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	var etype := entity.get("entity_type", "creature") as String
+	var etype := entity.get("entity_type", Enums.EntityType.CREATURE) as String
 	btn.pressed.connect(_launch_evolution.bind(entity_id, nom, etype, tier))
 	hb.add_child(btn)
 

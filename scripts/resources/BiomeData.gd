@@ -24,4 +24,4 @@ extends Resource
 @export var benedictions:               Array[BenedictionData] = []
 @export var ingredients_drop:           Array[IngredientData]  = []
 @export var ingredient_unique:          IngredientData       = null
-@export var event_table:                Dictionary           = {"creature": 0.7, "benediction": 0.15, "trap": 0.15}
+@export var event_table:                Dictionary           = {Enums.EntityType.CREATURE: 0.7, Enums.EntityType.BENEDICTION: 0.15, Enums.EntityType.TRAP: 0.15}

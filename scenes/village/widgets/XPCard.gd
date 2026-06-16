@@ -60,14 +60,14 @@ const _BASE_SPEED: Dictionary = {
 # Motif associé au type d'entité d'une barre d'XP (source de vérité du mapping).
 static func motif_for_type(entity_type: String) -> int:
 	match entity_type:
-		"trap":                     return Motif.LIGHTNING
-		"biome":                    return Motif.DIAMONDS
-		"equipment":                return Motif.DIAMONDS
-		"benediction":              return Motif.CROSSES
-		"creature":                 return Motif.PAWS
-		"hero":                     return Motif.STARS
-		"passive", "passif_unique": return Motif.BUBBLES
-		_:                          return Motif.BUBBLES
+		Enums.EntityType.TRAP:                                   return Motif.LIGHTNING
+		Enums.EntityType.BIOME:                                  return Motif.DIAMONDS
+		Enums.EntityType.EQUIPMENT:                              return Motif.DIAMONDS
+		Enums.EntityType.BENEDICTION:                            return Motif.CROSSES
+		Enums.EntityType.CREATURE:                               return Motif.PAWS
+		Enums.EntityType.HERO:                                   return Motif.STARS
+		Enums.EntityType.PASSIVE, Enums.EntityType.PASSIF_UNIQUE: return Motif.BUBBLES
+		_:                                                       return Motif.BUBBLES
 
 # Génère le set de particules unique de cette carte (aléatoire contrôlé) :
 #   • 7 à 12 éléments,

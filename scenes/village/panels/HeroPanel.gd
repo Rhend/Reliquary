@@ -35,7 +35,7 @@ static func build(host: Village) -> void:
 		hero_xp_max = 0.0
 	var id_card := UIHelpers.entity_xp_card(
 			Translations.entity_name(c), tier, xp, hero_xp_max,
-			"", c.get("entity_type", "hero") as String)
+			"", c.get("entity_type", Enums.EntityType.HERO) as String)
 	host.rp_content.add_child(id_card["card"] as Control)
 
 	# ── STATISTIQUES ──────────────────────────────────────────
@@ -90,7 +90,7 @@ static func build(host: Village) -> void:
 		if can_ev:
 			stats_body.add_child(host.make_evolve_btn(
 				"hero", Translations.entity_name(c, "hero"),
-				c.get("entity_type", "creature") as String, tier))
+				c.get("entity_type", Enums.EntityType.CREATURE) as String, tier))
 	else:
 		var ml := Label.new()
 		ml.text = Translations.T("tier.max_level")
@@ -300,7 +300,7 @@ static func _normalize_unique_passive(eid: String, e: Dictionary) -> Dictionary:
 		"maitrise_actuelle": int(e.get("maitrise_actuelle", 0)),
 		"xp_maitrise_actuelle":   float(e.get("xp_maitrise_actuelle", 0.0)),
 		"tier_effects": e.get("tier_effects", []),
-		"entity_type":  "passif_unique",
+		"entity_type":  Enums.EntityType.PASSIF_UNIQUE,
 	}
 
 # Retourne une carte dépliable pour un passif : en-tête (nom | palier | XP),
@@ -322,7 +322,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 
 	# ── Carte principale via le template commun (nom | palier | XP) ──
 	var built := UIHelpers.entity_xp_card(name_txt, rarity, xp_cur, xp_max,
-			"", pdata.get("entity_type", "passive") as String)
+			"", pdata.get("entity_type", Enums.EntityType.PASSIVE) as String)
 	var panel := built["card"] as XPCard
 	var header := built["header"] as HBoxContainer
 	wrapper.add_child(panel)
@@ -338,7 +338,7 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 	if MasterySystem.can_evolve(pid_ev):
 		wrapper.add_child(host.make_evolve_btn(pid_ev,
 				Translations.entity_name(pdata, pid_ev),
-				pdata.get("entity_type", "passive") as String, rarity))
+				pdata.get("entity_type", Enums.EntityType.PASSIVE) as String, rarity))
 
 	# ── Corps déplié (toggle) : effet courant + cascade à débloquer ──
 	var body := VBoxContainer.new()
@@ -460,7 +460,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	var etier    := int(equip.get("maitrise_actuelle", 0))
 	var enom     := Translations.entity_name(equip, equip_id)
 	var ec       := UIColors.tier_color(etier)
-	var at_max   := etier >= GameData.get_max_tier_for_type("equipment")
+	var at_max   := etier >= GameData.get_max_tier_for_type(Enums.EntityType.EQUIPMENT)
 	var xp_cur   := float(equip.get("xp_maitrise_actuelle", 0.0))
 	var next_idx := etier + 1
 	var xp_max   := float(GameData.xp_thresholds[next_idx]) if not at_max and next_idx < GameData.xp_thresholds.size() else 0.0
@@ -481,7 +481,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	# ── Carte XP unifiée (DA commune) ─────────────────────────
 	# Les stats sont injectées à l'intérieur de la carte, sous le header,
 	# en reparentant le header dans un VBox pour y ajouter une 2e ligne.
-	var built  := UIHelpers.entity_xp_card(enom, etier, xp_cur, xp_max, slot_icon, "equipment")
+	var built  := UIHelpers.entity_xp_card(enom, etier, xp_cur, xp_max, slot_icon, Enums.EntityType.EQUIPMENT)
 	var xpcard := built["card"] as XPCard
 	var hdr    := built["header"] as HBoxContainer
 	wrapper.add_child(xpcard)

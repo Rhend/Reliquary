@@ -240,14 +240,6 @@ static func xp_fmt(xp: int) -> String:
 		return s.left(s.length() - 3) + " " + s.right(3)
 	return str(xp)
 
-# Retourne un Label "Aucun" en TEXT_MUTED — état vide pour les listes.
-static func none_label(font_size: int = 13) -> Label:
-	var lbl := Label.new()
-	lbl.text = Translations.T("ui.none")
-	lbl.add_theme_font_size_override("font_size", font_size)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	return lbl
-
 # Attache le feedback hover/press juice standard à n'importe quel Control cliquable.
 # Hover  : scale ×1.03 (TRANS_BACK) + modulate ×1.30.
 # Press  : squash ×0.95 + flash ×1.55, spring-back vers état hover.
