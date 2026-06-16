@@ -103,6 +103,18 @@ func _load_all_entities() -> void:
 	_load_tres_folder("res://data/passives/",    Enums.EntityType.PASSIVE)
 	_load_tres_folder("res://data/equipements/", Enums.EntityType.EQUIPMENT)
 
+# Ramène un nom de fichier listé par DirAccess à son chemin source.
+# En éditeur : « foret.tres » → « foret.tres » (inchangé).
+# En build exporté : « foret.tres.remap »/« foo.json.import » → « foret.tres »/« foo.json »
+# (l'export convertit/duplique les ressources ; load() et _read_json() acceptent
+# le chemin source d'origine).
+func _strip_export_suffix(file_name: String) -> String:
+	if file_name.ends_with(".remap"):
+		return file_name.trim_suffix(".remap")
+	if file_name.ends_with(".import"):
+		return file_name.trim_suffix(".import")
+	return file_name
+
 # Charge tous les .tres d'un dossier dans le catalogue d'entités.
 # with_mastery = true → initialise les champs de progression de Maîtrise
 # (maitrise_actuelle, xp_maitrise_actuelle, unlocked_passives, coût du palier suivant).
@@ -114,8 +126,12 @@ func _load_tres_folder(path: String, entity_type: String, with_mastery: bool = t
 	dir.list_dir_begin()
 	var file_name := dir.get_next()
 	while file_name != "":
-		if file_name.ends_with(".tres"):
-			var res := load(path + file_name)
+		# En build exporté, les ressources texte sont converties en binaire :
+		# le dossier liste « foret.tres.remap » (et « .import »), pas « foret.tres ».
+		# On normalise vers le chemin source, qui reste chargeable via le remap.
+		var src_name := _strip_export_suffix(file_name)
+		if src_name.ends_with(".tres"):
+			var res := load(path + src_name)
 			var id_val = res.get("id") if res != null else null
 			if id_val != null and id_val != "":
 				var data := _resource_to_dict(res)
@@ -162,8 +178,9 @@ func _load_data_from_folder(path: String, entity_type: String) -> void:
 	dir.list_dir_begin()
 	var file_name = dir.get_next()
 	while file_name != "":
-		if file_name.ends_with(".json"):
-			var data = _read_json(path + file_name)
+		var src_name := _strip_export_suffix(file_name)
+		if src_name.ends_with(".json"):
+			var data = _read_json(path + src_name)
 			if not data.is_empty() and data.has("id"):
 				data["entity_type"] = entity_type
 				entities[data["id"]] = data
