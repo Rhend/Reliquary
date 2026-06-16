@@ -202,7 +202,7 @@ static func _make_hero_step(atk: float, target_def: float, target_hp: float,
 	var new_hp   := maxf(target_hp - damage, 0.0)
 
 	var step := CombatStep.new()
-	step.attacker        = "hero"
+	step.attacker        = Enums.Actor.HERO
 	step.damage          = int(damage)
 	step.target_hp_after = int(new_hp)
 	step.is_killing_blow = (new_hp <= 0.0)
@@ -224,7 +224,7 @@ static func _make_enemy_step(atk: float, target_def: float,
 	var new_hp    := maxf(target_hp - actual_dmg, 0.0)
 
 	var step := CombatStep.new()
-	step.attacker        = "enemy"
+	step.attacker        = Enums.Actor.ENEMY
 	step.damage          = int(actual_dmg)   # dégâts réels reçus par les HP
 	step.target_hp_after = int(new_hp)
 	step.is_killing_blow = (new_hp <= 0.0)

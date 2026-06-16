@@ -136,7 +136,7 @@ func _play_next() -> void:
 
 	if step.is_poison or step.is_passive_poison:
 		_current_enemy_hp = float(step.target_hp_after)
-	elif step.attacker == "hero":
+	elif step.attacker == Enums.Actor.HERO:
 		_current_enemy_hp = float(step.target_hp_after)
 	else:
 		_current_hero_hp = float(step.target_hp_after)
@@ -154,15 +154,15 @@ func _on_timer() -> void:
 func _finish(winner: String) -> void:
 	combat_finished.emit(winner)
 	EventBus.combat_ended.emit({
-		"victory":           winner == "hero",
+		"victory":           winner == Enums.Actor.HERO,
 		"remaining_hero_hp": _current_hero_hp,
 		"enemy":             _enemy_dict
 	})
 
 func _determine_winner() -> String:
 	if _steps.is_empty():
-		return "hero"
+		return Enums.Actor.HERO
 	var last: CombatStep = _steps.back()
 	if last.is_killing_blow:
-		return "hero" if (last.attacker == "hero" or last.is_poison or last.is_passive_poison) else "enemy"
-	return "hero" if _current_enemy_hp <= _current_hero_hp else "enemy"
+		return Enums.Actor.HERO if (last.attacker == Enums.Actor.HERO or last.is_poison or last.is_passive_poison) else Enums.Actor.ENEMY
+	return Enums.Actor.HERO if _current_enemy_hp <= _current_hero_hp else Enums.Actor.ENEMY

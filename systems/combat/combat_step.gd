@@ -6,7 +6,7 @@
 # ============================================================
 class_name CombatStep extends Resource
 
-@export var attacker:        String = "hero"  # "hero" | "enemy" — qui attaque ce tour
+@export var attacker:        String = "hero"  # Enums.Actor.HERO | .ENEMY — qui attaque ce tour
 @export var damage:          int    = 0        # dégâts infligés (ATK - DEF, minimum 1)
 @export var target_hp_after: int    = 0        # PV de la cible après ce coup
 @export var is_killing_blow: bool   = false    # vrai si ce coup amène la cible à 0 PV
