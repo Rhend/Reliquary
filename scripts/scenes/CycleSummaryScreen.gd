@@ -241,9 +241,12 @@ func _build_stat_chips(col: VBoxContainer, data: Dictionary, rcolor: Color) -> v
 	_stat_chip(row, "✦", float(events),
 			Translations.T("cycle.stat.events"), UIColors.LOG_EVENT,
 			func(v: float) -> String: return "%d / %d" % [int(v), events_total])
-	_stat_chip(row, "🎒", float(data.get("loot_total", 0)),
-			Translations.T("cycle.stat.loot"), UIColors.LOG_LOOT,
-			func(v: float) -> String: return "%d" % int(v))
+	# Puce Ingrédients absente s'il n'y a rien drappé (cohérent avec la section
+	# « Ressources collectées », elle aussi masquée quand le butin est vide).
+	if int(data.get("loot_total", 0)) > 0:
+		_stat_chip(row, "🎒", float(data.get("loot_total", 0)),
+				Translations.T("cycle.stat.loot"), UIColors.LOG_LOOT,
+				func(v: float) -> String: return "%d" % int(v))
 	_stat_chip(row, "✨", float(data.get("xp_total", 0.0)),
 			Translations.T("cycle.stat.xp"), rcolor,
 			func(v: float) -> String: return UIHelpers.xp_fmt(int(v)))

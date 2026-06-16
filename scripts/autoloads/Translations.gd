@@ -236,7 +236,7 @@ const STRINGS: Dictionary = {
 		"cycle.hero_label":          "Héros",
 		"cycle.stat.combats":        "Combats",
 		"cycle.stat.events":         "Événements",
-		"cycle.stat.loot":           "Butin",
+		"cycle.stat.loot":           "Ingrédients",
 		"cycle.stat.xp":             "XP totale",
 
 		# ── Settings ─────────────────────────────────────────
@@ -492,7 +492,7 @@ const STRINGS: Dictionary = {
 		"cycle.hero_label":          "Hero",
 		"cycle.stat.combats":        "Battles",
 		"cycle.stat.events":         "Events",
-		"cycle.stat.loot":           "Loot",
+		"cycle.stat.loot":           "Ingredients",
 		"cycle.stat.xp":             "Total XP",
 
 		# ── Settings ─────────────────────────────────────────

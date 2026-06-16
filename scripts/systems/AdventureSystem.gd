@@ -297,6 +297,12 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	enc_data["trap"]   = trap
 	_distribute_mastery_xp(trap.get("id", ""), Balance.XP_BASE_TRAP)
 
+	# Dégâts du piège = pourcentage du PV max selon la zone (le champ `degats`
+	# du .tres n'est pas utilisé). Stocké dans enc_data pour que l'affichage du
+	# combat montre EXACTEMENT les PV perdus (sinon il lisait une clé absente → 0).
+	var trap_dmg := int(round(get_max_hp() * _trap_dmg_pct()))
+	enc_data["trap_damage"] = trap_dmg
+
 	if current_modifier.get("ignore_traps", false):
 		enc_data["ignored"] = true
 		GameData.record_encounter(
@@ -308,8 +314,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 	else:
 		_stats.events          += 1
 		_stats.traps_triggered += 1
-		var max_hp := get_max_hp()
-		current_hp  = maxf(current_hp - max_hp * _trap_dmg_pct(), 0.0)
+		current_hp  = maxf(current_hp - float(trap_dmg), 0.0)
 		if trap.get("inflict_saignement", false):
 			_bleed_remaining = Balance.BLEED_DURATION
 			enc_data["saignement"] = true

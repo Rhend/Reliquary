@@ -431,7 +431,10 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_enemy_ring.enter_combat()
 			_present_name(_enemy_name_chip, _enemy_name_style, UIColors.TYPE_TRAP)
 			_hide_action(_enemy_action)
-			var tdmg := int(trap.get("damage", 0))
+			# PV réellement perdus, calculés par AdventureSystem (pourcentage du
+			# PV max selon la zone). L'ancien code lisait trap["damage"] (clé
+			# inexistante : le champ .tres est `degats`) → affichait toujours 0.
+			var tdmg := int(event_data.get("trap_damage", 0))
 			var trap_tt := Translations.T("combat.trap_tt") % tdmg
 			var ignored := event_data.get("ignored", false) as bool
 			if ignored:
