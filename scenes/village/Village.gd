@@ -22,7 +22,7 @@ const HEX_SIZE     := Vector2(152.0, 152.0)
 # d'énergie au bout du lien : là où flotte la boule cliquable, et d'où naît le
 # quartier. Plus grand = quartiers plus éloignés du village → l'espace respire,
 # maintenant qu'on peut se balader librement autour de la place centrale.
-const DISTRICT_LINK_REACH := 300.0
+const DISTRICT_LINK_REACH := 225.0
 # Départ du lien, juste hors du cercle de l'owner (sinon masqué par l'hexagone).
 const DISTRICT_LINK_START := 72.0
 # Écart entre l'extrémité du lien et le bord du cercle du quartier.
