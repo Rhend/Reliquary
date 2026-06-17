@@ -101,7 +101,7 @@ var _backdrop             : VillageBackdrop    # fond d'ambiance (halo + poussi�
 # du Village pour juger l'évolution visuelle du hub sans jouer.
 # ⚠ Modifie réellement GameData.village (peut finir dans la sauvegarde).
 # Mettre à false avant une release.
-const DEBUG_TIER_BUTTONS := false
+const DEBUG_TIER_BUTTONS := true
 var _debug_tier_lbl: Label = null
 
 # ─── Init ─────────────────────────────────────────────────────
