@@ -16,6 +16,9 @@ extends Resource
 @export var noms_par_palier_en:         Dictionary = {}
 @export var lore_fr:                    String     = ""
 @export var lore_en:                    String     = ""
+# Lore par palier de Maîtrise (sinon hérite du palier inférieur ; vide → lore_*).
+@export var lore_par_palier_fr:         Dictionary = {}
+@export var lore_par_palier_en:         Dictionary = {}
 @export var passifs_par_palier:         Dictionary = {}
 @export var crit_chance:                float      = 0.20
 @export var crit_multiplier:            float      = 1.8

@@ -10,6 +10,10 @@ extends Resource
 @export var noms_par_palier_en:         Dictionary         = {}
 @export var lore_fr:                    String             = ""
 @export var lore_en:                    String             = ""
+# Lore par palier de Maîtrise (clé int = palier ; palier absent → hérite du
+# palier inférieur défini le plus proche ; dict vide → lore_fr/lore_en).
+@export var lore_par_palier_fr:         Dictionary         = {}
+@export var lore_par_palier_en:         Dictionary         = {}
 @export var est_unique:                 bool               = false
 @export var zone_associee:              Enums.Zone         = Enums.Zone.SURFACE
 @export var biome_id:                   String             = ""

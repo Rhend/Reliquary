@@ -8,6 +8,9 @@ extends Resource
 @export var noms_par_palier_en: Dictionary = {}
 @export var lore_fr:          String = ""
 @export var lore_en:          String = ""
+# Lore par palier de Maîtrise (sinon hérite du palier inférieur ; vide → lore_*).
+@export var lore_par_palier_fr: Dictionary = {}
+@export var lore_par_palier_en: Dictionary = {}
 @export var biome_source_id:  String = ""
 @export var degats:           int    = 0
 @export var inflict_saignement:         bool  = false

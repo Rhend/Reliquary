@@ -11,6 +11,9 @@ extends Resource
 @export var noms_par_palier_en:         Dictionary = {}
 @export var lore_fr:                    String     = ""
 @export var lore_en:                    String     = ""
+# Lore par palier de Maîtrise (sinon hérite du palier inférieur ; vide → lore_*).
+@export var lore_par_palier_fr:         Dictionary = {}
+@export var lore_par_palier_en:         Dictionary = {}
 @export var type:                       String     = ""
 @export var base_stats:                 Dictionary = {}
 @export var tier_effects:               Array      = []

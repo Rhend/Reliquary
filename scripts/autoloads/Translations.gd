@@ -148,7 +148,7 @@ const STRINGS: Dictionary = {
 		"forge.locked.hint":        "Amenez un biome au rang Rare pour libérer\nun Fragment de Mémoire et faire évoluer le Village.",
 		"forge.recipe.tt_stock":    "En stock : %d\nRequis : %d",
 		"forge.equip.low_xp_pct":   "⧖  XP — %d %%  (continuez l'aventure)",
-		"forge.equip.forge_unavail":      "Forge indisponible",
+		"forge.equip.forge_unavail":      "Équipement pas encore prêt",
 		"forge.equip.forge_tt_unavail":   "Remplissez la barre XP et réunissez les ingrédients.",
 
 		# ── AdventurePanel ───────────────────────────────────
@@ -184,7 +184,7 @@ const STRINGS: Dictionary = {
 		"mech.ambush.name":       "Embuscade",
 		"mech.ambush.desc":       "La créature attaque en premier.",
 		"mech.poison.name":       "Empoisonnement",
-		"mech.poison.desc":       "Chaque frappe du héros empoisonne l'ennemi (3 max).",
+		"mech.poison.desc":       "Le marais toxique empoisonne le héros à chaque coup ennemi (3 max).",
 		"mech.endurcissement.name": "Endurcissement",
 		"mech.endurcissement.desc": "Dégâts du héros réduits de 20 % contre les créatures du biome.",
 
@@ -236,6 +236,7 @@ const STRINGS: Dictionary = {
 		"cycle.title":            "EXPÉDITION TERMINÉE  —  %s",
 		"cycle.banner_title":     "Retour au village",
 		"cycle.back_village":     "🏠  RETOUR AU VILLAGE",
+		"cycle.back_biome":       "⚔  RETOURNER DANS LE BIOME",
 		"cycle.section.discoveries": "◆  DÉCOUVERTES",
 		"cycle.section.resources":   "◆  RESSOURCES COLLECTÉES",
 		"cycle.section.xp":          "◆  RÉPARTITION XP",
@@ -414,7 +415,7 @@ const STRINGS: Dictionary = {
 		"forge.locked.hint":        "Bring a biome to Rare rank to free\na Memory Fragment and evolve the Village.",
 		"forge.recipe.tt_stock":    "In stock: %d\nRequired: %d",
 		"forge.equip.low_xp_pct":   "⧖  XP — %d%%  (keep adventuring)",
-		"forge.equip.forge_unavail":      "Forge unavailable",
+		"forge.equip.forge_unavail":      "Equipment not ready yet",
 		"forge.equip.forge_tt_unavail":   "Fill the XP bar and gather the required ingredients.",
 
 		# ── AdventurePanel ───────────────────────────────────
@@ -450,7 +451,7 @@ const STRINGS: Dictionary = {
 		"mech.ambush.name":       "Ambush",
 		"mech.ambush.desc":       "The creature strikes first.",
 		"mech.poison.name":       "Poisoning",
-		"mech.poison.desc":       "Each hero hit poisons the enemy (max 3).",
+		"mech.poison.desc":       "The toxic swamp poisons the hero on each enemy hit (max 3).",
 		"mech.endurcissement.name": "Hardening",
 		"mech.endurcissement.desc": "Hero's damage reduced by 20% against biome creatures.",
 
@@ -502,6 +503,7 @@ const STRINGS: Dictionary = {
 		"cycle.title":            "EXPEDITION ENDED  —  %s",
 		"cycle.banner_title":     "Back to the village",
 		"cycle.back_village":     "🏠  BACK TO VILLAGE",
+		"cycle.back_biome":       "⚔  RETURN TO BIOME",
 		"cycle.section.discoveries": "◆  DISCOVERIES",
 		"cycle.section.resources":   "◆  COLLECTED RESOURCES",
 		"cycle.section.xp":          "◆  XP BREAKDOWN",
@@ -625,9 +627,29 @@ func entity_name_at(entity: Dictionary, tier: int, fallback: String = "?") -> St
 		return n
 	return fallback
 
-# Lore localisé d'une entité — lore_en si langue EN et champ rempli, sinon lore_fr.
+# Lore localisé d'une entité, au palier de Maîtrise COURANT (comme entity_name).
 func entity_lore(entity: Dictionary) -> String:
+	return entity_lore_at(entity, int(entity.get("maitrise_actuelle", 0)))
+
+# Lore localisé AU PALIER DONNÉ : cherche dans lore_par_palier_* (palier exact,
+# sinon le plus proche en dessous — même sémantique que entity_name_at), puis
+# retombe sur lore_en/lore_fr. Permet un texte narratif différent par évolution.
+func entity_lore_at(entity: Dictionary, tier: int) -> String:
 	var lang: String = GameSettings.language if GameSettings else "fr"
+	var per_tier_keys: Array[String] = ["lore_par_palier_fr"]
+	if lang == "en":
+		per_tier_keys = ["lore_par_palier_en", "lore_par_palier_fr"]
+	for key in per_tier_keys:
+		var per_tier := entity.get(key, {}) as Dictionary
+		if per_tier.is_empty():
+			continue
+		var t := tier
+		while t >= 0:
+			if per_tier.has(t):
+				var l := str(per_tier[t])
+				if not l.is_empty():
+					return l
+			t -= 1
 	if lang == "en":
 		var en := str(entity.get("lore_en", ""))
 		if not en.is_empty():

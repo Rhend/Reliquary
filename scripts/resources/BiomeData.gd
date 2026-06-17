@@ -8,6 +8,10 @@ extends Resource
 @export var noms_par_palier_en:         Dictionary           = {}
 @export var lore_fr:                    String               = ""
 @export var lore_en:                    String               = ""
+# Lore par palier de Maîtrise (clé int = palier ; sinon hérite du palier
+# inférieur défini le plus proche ; dict vide → lore_fr/lore_en).
+@export var lore_par_palier_fr:         Dictionary           = {}
+@export var lore_par_palier_en:         Dictionary           = {}
 @export var maitrise_actuelle:          Enums.Maitrise       = Enums.Maitrise.COMMUN
 @export var xp_maitrise_actuelle:       float                = 0.0
 @export var xp_maitrise_palier_suivant: float                = 0.0
