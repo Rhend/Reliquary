@@ -23,6 +23,9 @@ const HEX_SIZE     := Vector2(152.0, 152.0)
 # restant — le village entier doit y tenir (contenu utile ≈ 860 px).
 const PANEL_FRACTION   := 0.5
 const HUB_PANEL_SCALE  := 0.72
+# Échelle du hub au repos (sans panneau). < 1 : on « dézoome » légèrement pour
+# laisser respirer l'espace autour du village (préfigure l'espace explorable).
+const HUB_BASE_SCALE   := 0.85
 const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
 
 # ─── Éveil (phase d'éclosion) ─────────────────────────────────
@@ -89,6 +92,19 @@ var _rp_scroll       : ScrollContainer    # zone de scroll du panneau droit — 
 var _panel_ui_states : Dictionary = {}    # panel_id → état UI persistant (sections ouvertes…)
 var _active_panel_id      := ""           # id du panneau ouvert ("hero", "adventure", …)
 var _hex_items            : Dictionary = {}   # panel_id → HexItem, pour gérer l'état sélectionné
+
+# ─── Espace explorable (dézoom + pan libre autour de la place centrale) ──
+var _pan                  := Vector2.ZERO      # décalage de déplacement du hub (drag souris)
+var _panning              := false             # vrai pendant un glisser-déposer de l'espace
+# ─── Dimension Village : quartiers (graphe de cercles) ──────────
+var _hero_district_open   := false             # le Quartier du Héros a-t-il été révélé ?
+var _district_root        : Control            # conteneur des nœuds du Quartier du Héros (null si fermé)
+var _district_center      := Vector2.ZERO      # centre du quartier (coords _hub_root) pour le recadrage
+var _district_rooms       : Dictionary = {}    # panel_id → HexItem de pièce (pour l'état sélectionné)
+var _hero_link            : EnergyLink         # filament d'énergie du héros (persiste, ne se reconstruit pas à la fermeture)
+var _hero_boule           : Control            # boule cliquable au bout du lien (null quand le quartier est ouvert)
+var _hero_link_outward    := Vector2.ZERO      # axe radial du héros
+var _hero_link_diffuse_end := Vector2.ZERO     # extrémité du lien à l'état diffus (= position de la boule)
 var _birth_orb            : ClickOrb           # orbe d'éclosion (juice d'éveil)
 var _birth_phrase         : Label              # phrase d'éveil affichée actuellement
 var _birth_phrase_idx     := 0                 # index de la prochaine phrase d'éveil à montrer
@@ -101,7 +117,7 @@ var _backdrop             : VillageBackdrop    # fond d'ambiance (halo + poussi�
 # du Village pour juger l'évolution visuelle du hub sans jouer.
 # ⚠ Modifie réellement GameData.village (peut finir dans la sauvegarde).
 # Mettre à false avant une release.
-const DEBUG_TIER_BUTTONS := true
+const DEBUG_TIER_BUTTONS := false
 var _debug_tier_lbl: Label = null
 
 # ─── Init ─────────────────────────────────────────────────────
@@ -315,13 +331,259 @@ func _build_hub() -> void:
 		return (d[2] as int) <= village_maitrise
 	)
 	var n := unlocked.size()
+
+	# Filament d'énergie : relie le cercle du Héros à un point flottant dans
+	# l'espace, radialement vers l'EXTÉRIEUR du hub (cohérent avec la position
+	# de l'hexagone du héros). Ajouté avant les hexagones → dessiné dessous.
+	_build_hero_energy_link(unlocked, n, vp, tcolor)
+
 	for i in n:
 		var ang := -PI * 0.5 + i * TAU / n
 		var pos := Vector2(cos(ang), sin(ang)) * RING_RADIUS
 		var d: Array = unlocked[i]
 		_make_hex(Translations.T("menu." + (d[4] as String)), d[1], tcolor, pos, Callable(self, d[3]), d[4])
 
+	# Dézoom de repos : hub réduit, centré (pivot au milieu du canvas) et
+	# décalé du pan courant (l'espace reste là où le joueur l'a laissé).
+	_hub_root.pivot_offset = vp * 0.5
+	_hub_root.scale = Vector2.ONE * HUB_BASE_SCALE
+	_hub_root.position = _pan
+
 	_animate_hub_entrance()
+
+# Crée le filament d'énergie du Héros. Calcule la position de l'hexagone héros
+# (même formule que la boucle des hexagones) et tend un lien quasi transparent
+# vers un point d'énergie situé plus loin sur le même axe radial (vers
+# l'extérieur du hub) — d'où la cohérence avec l'emplacement du héros.
+func _build_hero_energy_link(unlocked: Array, n: int, vp: Vector2, tcolor: Color) -> void:
+	if n <= 0:
+		return
+	var hero_idx := -1
+	for i in n:
+		if (unlocked[i] as Array)[4] == "hero":
+			hero_idx = i
+			break
+	if hero_idx < 0:
+		return
+
+	var ang := -PI * 0.5 + hero_idx * TAU / n
+	var outward := Vector2(cos(ang), sin(ang))         # direction radiale du héros
+	var center := vp * 0.5
+	var hero_center := center + outward * RING_RADIUS
+
+	var link := EnergyLink.new()
+	link.size  = vp
+	# Teinte lumineuse douce (énergie) dérivée de la couleur du palier : reste
+	# cohérent avec le hub tout en restant visible même aux paliers ternes.
+	link.accent = tcolor.lerp(Color(0.70, 0.85, 1.0), 0.45)
+	# Départ JUSTE HORS du cercle du héros (sinon masqué par l'hexagone) ;
+	# arrivée plus loin sur le même axe radial, dans l'espace.
+	link.start_point = hero_center + outward * 72.0
+	link.end_point   = hero_center + outward * 165.0
+	_hub_root.add_child(link)
+
+	_hero_link             = link
+	_hero_link_outward     = outward
+	_hero_link_diffuse_end = link.end_point
+
+	if _hero_district_open:
+		# Quartier déjà ouvert (reconstruction du hub) : on le rebâtit tel quel,
+		# sans ré-animer ni recentrer la vue (et sans boule, consommée).
+		_reveal_hero_district(link, null, outward, link.accent, vp, false)
+	else:
+		_spawn_hero_boule()
+
+# (Re)crée la boule d'énergie CLIQUABLE au bout du lien diffus du héros.
+# Réutilisé à la construction du hub ET à la fermeture du quartier (le lien
+# redevient diffus sans reconstruire le hub).
+func _spawn_hero_boule() -> void:
+	if not is_instance_valid(_hero_link):
+		return
+	const BOULE_SIZE := 64.0
+	var boule := EnergyBoule.new()
+	boule.accent   = _hero_link.accent
+	boule.size     = Vector2(BOULE_SIZE, BOULE_SIZE)
+	boule.position = _hero_link.end_point - Vector2(BOULE_SIZE, BOULE_SIZE) * 0.5
+	UIHelpers.register_tooltip(boule, Translations.T("district.reveal.tt_title"),
+			Translations.T("district.reveal.tt_body"), _hero_link.accent)
+	boule.clicked.connect(func() -> void:
+		_reveal_hero_district(_hero_link, _hero_boule, _hero_link_outward,
+				_hero_link.accent, get_viewport_rect().size, true)
+	)
+	_hub_root.add_child(boule)
+	_hero_boule = boule
+
+# Révèle le Quartier du Héros : le lien devient consistant, la boule est
+# consommée, un cercle « Quartier du Héros » apparaît au bout du lien avec
+# 3 ronds (Maison / Jardin / Salle d'entraînement) reliés. Avec `animate`,
+# la vue se recentre en douceur sur le nouveau quartier.
+func _reveal_hero_district(link: EnergyLink, boule: Control, outward: Vector2,
+		color: Color, vp: Vector2, animate: bool) -> void:
+	_hero_district_open = true
+	link.solid = true
+	if is_instance_valid(boule):
+		boule.queue_free()
+	_hero_boule = null
+	if _district_root and is_instance_valid(_district_root):
+		_district_root.queue_free()
+
+	# MÊME présentation que le Village : un mini-hub (CircleRing au même palier
+	# et même couleur que la place centrale + pièces cliquables SUR l'anneau).
+	var vtier  := int(GameData.village.get("maitrise_actuelle", 0))
+	var rcolor := UIColors.tier_color(vtier)
+	var qradius := RING_RADIUS
+	var qdiam   := qradius * 2.0 + 80.0
+
+	# Centre du quartier, au-delà du lien ; le lien va JUSQU'AU bord du cercle.
+	var dc := link.end_point + outward * (20.0 + qradius)
+	_district_center = dc
+	_district_rooms.clear()
+	link.end_point = dc - outward * qradius
+	link.queue_redraw()
+
+	_district_root = Control.new()
+	_district_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hub_root.add_child(_district_root)
+
+	# Anneau (visuel) — non bloquant pour laisser passer le pan sur l'espace.
+	var ring := CircleRing.new()
+	ring.ring_color    = rcolor
+	ring.ring_radius   = qradius
+	ring.tier          = vtier
+	ring.fill_fraction = 0.0
+	ring.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+	ring.size          = Vector2(qdiam, qdiam)
+	ring.position      = dc - Vector2(qdiam, qdiam) * 0.5
+	_district_root.add_child(ring)
+
+	# Libellé central « Quartier du Héros ».
+	var label_box := Control.new()
+	label_box.size = Vector2(260.0, 64.0)
+	label_box.position = dc - Vector2(130.0, 32.0)
+	label_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_district_root.add_child(label_box)
+	var title := Label.new()
+	title.text = Translations.T("district.hero.title")
+	title.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", rcolor.lerp(Color.WHITE, 0.30))
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	label_box.add_child(title)
+
+	# Zone centrale CLIQUABLE : un clic au centre referme le quartier.
+	var closer := Control.new()
+	var crad := 78.0
+	closer.size = Vector2(crad * 2.0, crad * 2.0)
+	closer.position = dc - Vector2(crad, crad)
+	closer.mouse_filter = Control.MOUSE_FILTER_STOP
+	closer.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	closer.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton \
+				and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT \
+				and (ev as InputEventMouseButton).pressed:
+			_collapse_hero_district()
+	)
+	_district_root.add_child(closer)
+
+	# Pièces : bulles cliquables SUR l'anneau (comme les hexagones du Village),
+	# chacune ouvre un panneau (vide pour l'instant).
+	var rooms: Array = [
+		["district_house",    "👤"],
+		["district_garden",   "🌿"],
+		["district_training", "⚔"],
+	]
+	for i in rooms.size():
+		var ang := -PI * 0.5 + float(i) * TAU / float(rooms.size())
+		var rpos := dc + Vector2(cos(ang), sin(ang)) * qradius
+		var pid: String = rooms[i][0]
+		var room := HexItem.new()
+		room.label_text  = Translations.T("panel." + pid)
+		room.tier_color  = rcolor
+		room.tier        = maxi(vtier, 1)            # 1-2 → bulle ronde
+		room.outward_dir = Vector2(cos(ang), sin(ang))
+		room.callback    = _open_panel.bind(pid)
+		room.size        = HEX_SIZE
+		room.position    = rpos - HEX_SIZE * 0.5
+		room.pivot_offset = HEX_SIZE * 0.5
+		room.is_selected = (_active_panel_id == pid)
+		_district_root.add_child(room)
+		_district_rooms[pid] = room
+
+	# Pivot au centre du quartier → le jiggle s'anime « en place ».
+	_district_root.pivot_offset = dc
+
+	# Naviguer vers le quartier : centrer `dc` à l'écran (cf. transform du hub).
+	if animate:
+		# Apparition douce : fade-in + jiggle élastique du quartier.
+		_district_root.modulate.a = 0.0
+		_district_root.scale = Vector2(0.7, 0.7)
+		var at := create_tween().set_parallel(true)
+		at.tween_property(_district_root, "modulate:a", 1.0, 0.25).set_ease(Tween.EASE_OUT)
+		at.tween_property(_district_root, "scale", Vector2.ONE, 0.6) \
+				.set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+		_pan = HUB_BASE_SCALE * (vp * 0.5 - dc)
+		var pt := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		pt.tween_property(_hub_root, "position", _pan, 0.6)
+
+# Referme le Quartier du Héros : fondu de sortie du quartier, PUIS reconstruction
+# du hub (le lien diffus et la boule cliquable reviennent) et recentrage sur la
+# place centrale. La garde évite un double déclenchement (clics répétés).
+func _collapse_hero_district() -> void:
+	if not _hero_district_open:
+		return
+	_hero_district_open = false
+	var dr := _district_root
+	_district_root = null
+	_district_rooms.clear()
+
+	# Le lien redevient diffus et la boule cliquable revient — SANS reconstruire
+	# le hub : le cercle du village et ses hexagones restent intacts (ils ne
+	# doivent pas « se recréer »).
+	if is_instance_valid(_hero_link):
+		_hero_link.solid = false
+		_hero_link.end_point = _hero_link_diffuse_end
+		_hero_link.queue_redraw()
+	_spawn_hero_boule()
+
+	# Fondu de sortie du quartier, puis libération.
+	if dr and is_instance_valid(dr):
+		dr.pivot_offset = _district_center
+		var ft := create_tween().set_parallel(true)
+		ft.tween_property(dr, "modulate:a", 0.0, 0.30).set_ease(Tween.EASE_IN)
+		ft.tween_property(dr, "scale", Vector2(0.82, 0.82), 0.30).set_ease(Tween.EASE_IN)
+		ft.chain().tween_callback(dr.queue_free)
+
+	# Caméra : glisse en douceur jusqu'à la place centrale (aucune téléportation,
+	# aucune reconstruction du hub).
+	_pan = Vector2.ZERO
+	if _hub_root:
+		var ct := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		ct.tween_property(_hub_root, "position", Vector2.ZERO, 0.5)
+
+# Déplacement libre de l'espace : CLIC-GLISSER à la souris déplace la place
+# centrale, les liens et les quartiers ensemble. Géré dans _input (reçu avant
+# l'UI) SANS consommer l'événement → les clics d'hexagones/boutons marchent
+# toujours. Inactif avant l'éclosion (pas de hub), et tant qu'un panneau ou les
+# Paramètres sont ouverts (la dimension UI prime).
+func _input(event: InputEvent) -> void:
+	# Les boutons sont TOUJOURS traités (sinon un relâché ignoré pendant
+	# l'ouverture d'un panneau laisserait _panning bloqué à true → pan fantôme).
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			# On ne DÉMARRE un pan que sur l'espace libre (hub présent, aucun
+			# panneau ni Paramètres ouverts). Le relâché coupe toujours le pan.
+			_panning = mb.pressed and _hub_root != null \
+					and _rp_root == null and _settings_overlay == null
+	elif event is InputEventMouseMotion and _panning \
+			and _hub_root != null and _rp_root == null:
+		_pan += (event as InputEventMouseMotion).relative
+		_hub_root.position = _pan
 
 # Fine ligne horizontale décorative (ornement du nom de palier).
 func _ornament_line(color: Color) -> ColorRect:
@@ -432,13 +694,19 @@ func _open_panel(panel_id: String) -> void:
 	# Réduire le hub : le village ENTIER reste visible, réduit
 	# homothétiquement et RECENTRÉ au milieu de l'espace restant à gauche.
 	# Pivot au centre du canvas + décalage x : le centre du hub glisse de
-	# 50 % de l'écran au centre de la zone libre.
-	var hub_center := (1.0 - PANEL_FRACTION) * 0.5
+	# 50 % de l'écran au centre de la zone libre. On centre le POINT D'INTÉRÊT :
+	# la place centrale par défaut, ou le quartier si on ouvre une de ses pièces
+	# (sinon l'ouverture recadrerait sur le village et masquerait le quartier).
+	var focus := vp * 0.5
+	if panel_id.begins_with("district_") and _hero_district_open:
+		focus = _district_center
+	var free_center := Vector2(vp.x * (1.0 - PANEL_FRACTION) * 0.5, vp.y * 0.5)
+	var target_pos := free_center - vp * 0.5 - HUB_PANEL_SCALE * (focus - vp * 0.5)
 	_hub_root.pivot_offset = vp * 0.5
 	var ht := create_tween().set_parallel(true) \
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	ht.tween_property(_hub_root, "scale", Vector2.ONE * HUB_PANEL_SCALE, 0.35)
-	ht.tween_property(_hub_root, "position:x", vp.x * (hub_center - 0.5), 0.35)
+	ht.tween_property(_hub_root, "position", target_pos, 0.35)
 
 	# Créer le panneau hors écran à droite
 	_rp_root = Control.new()
@@ -473,8 +741,9 @@ func _close_panel() -> void:
 
 	var ht := create_tween().set_parallel(true) \
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	ht.tween_property(_hub_root, "scale", Vector2.ONE, 0.25)
-	ht.tween_property(_hub_root, "position:x", 0.0, 0.25)
+	ht.tween_property(_hub_root, "scale", Vector2.ONE * HUB_BASE_SCALE, 0.25)
+	# Retour à l'espace exploré (pan conservé).
+	ht.tween_property(_hub_root, "position", _pan, 0.25)
 
 # Met à jour l'état is_selected de tous les HexItems selon le panneau ouvert.
 func _update_hex_selection(active_id: String) -> void:
@@ -482,6 +751,15 @@ func _update_hex_selection(active_id: String) -> void:
 		var item := _hex_items[pid] as HexItem
 		item.is_selected = (pid == active_id)
 		item.queue_redraw()
+	# Pièces du Quartier du Héros (même animation de sélection que le village).
+	# Validité AVANT le cast : après une reconstruction du hub, le dict peut
+	# encore référencer des HexItem libérés (« cast a freed object » sinon).
+	for pid in _district_rooms:
+		var node: Variant = _district_rooms[pid]
+		if is_instance_valid(node):
+			var room := node as HexItem
+			room.is_selected = (pid == active_id)
+			room.queue_redraw()
 
 # Vide rp_content et réinjecte le contenu pour panel_id (panneau déjà ouvert).
 func _swap_panel_content(panel_id: String) -> void:
