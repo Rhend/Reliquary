@@ -74,6 +74,26 @@ const PANEL_TITLES: Dictionary = {
 	"tbd":       "?",
 }
 
+# ─── Quartiers explorables ────────────────────────────────────
+# Chaque élément de la place centrale (« owner » = son panel_id dans MENU_ITEMS)
+# peut révéler son propre quartier : un mini-hub (widget District) aux pièces
+# PROPRES — ids/icônes/libellés distincts d'un quartier à l'autre.
+#   owner_id → { "title_key": clé i18n du titre, "rooms": [ [room_panel_id, icon], … ] }
+# Ajouter un quartier = une entrée ici + les clés i18n (le title_key et un
+# panel.<room_pid> par pièce) + le contenu des panneaux des pièces. Le lien
+# d'énergie n'apparaît que lorsque l'owner est débloqué (présent sur l'anneau).
+# Aucune plomberie supplémentaire (liens/boules/caméra sont génériques).
+const DISTRICTS: Dictionary = {
+	"hero": {
+		"title_key": "district.hero.title",
+		"rooms": [
+			["district_house",    "👤"],
+			["district_garden",   "🌿"],
+			["district_training", "⚔"],
+		],
+	},
+}
+
 # ─── API publique pour les panels (HeroPanel / Adventure / Forge) ──
 # Les modules de scenes/village/panels/ reçoivent ce nœud (host) et ne
 # doivent utiliser QUE ces membres publics (+ village_tier(),
@@ -97,14 +117,15 @@ var _hex_items            : Dictionary = {}   # panel_id → HexItem, pour gére
 var _pan                  := Vector2.ZERO      # décalage de déplacement du hub (drag souris)
 var _panning              := false             # vrai pendant un glisser-déposer de l'espace
 # ─── Dimension Village : quartiers (graphe de cercles) ──────────
-var _hero_district_open   := false             # le Quartier du Héros a-t-il été révélé ?
-var _district_root        : Control            # conteneur des nœuds du Quartier du Héros (null si fermé)
-var _district_center      := Vector2.ZERO      # centre du quartier (coords _hub_root) pour le recadrage
-var _district_rooms       : Dictionary = {}    # panel_id → HexItem de pièce (pour l'état sélectionné)
-var _hero_link            : EnergyLink         # filament d'énergie du héros (persiste, ne se reconstruit pas à la fermeture)
-var _hero_boule           : Control            # boule cliquable au bout du lien (null quand le quartier est ouvert)
-var _hero_link_outward    := Vector2.ZERO      # axe radial du héros
-var _hero_link_diffuse_end := Vector2.ZERO     # extrémité du lien à l'état diffus (= position de la boule)
+# Tout est indexé par owner_id (cf. DISTRICTS) pour supporter N quartiers.
+# _district_open survit aux reconstructions du hub (source de vérité « ouvert ? ») ;
+# les autres dicts référencent des nœuds vivants, recréés à chaque _build_hub.
+var _district_open    : Dictionary = {}   # owner_id → bool (persiste au rebuild)
+var _districts        : Dictionary = {}   # owner_id → District (node vivant, absent si fermé)
+var _links            : Dictionary = {}   # owner_id → EnergyLink (filament, persiste tant que le hub vit)
+var _boules           : Dictionary = {}   # owner_id → EnergyBoule cliquable (absent quand le quartier est ouvert)
+var _link_outward     : Dictionary = {}   # owner_id → Vector2 (axe radial de l'owner)
+var _link_diffuse_end : Dictionary = {}   # owner_id → Vector2 (extrémité du lien à l'état diffus)
 var _birth_orb            : ClickOrb           # orbe d'éclosion (juice d'éveil)
 var _birth_phrase         : Label              # phrase d'éveil affichée actuellement
 var _birth_phrase_idx     := 0                 # index de la prochaine phrase d'éveil à montrer
@@ -332,10 +353,10 @@ func _build_hub() -> void:
 	)
 	var n := unlocked.size()
 
-	# Filament d'énergie : relie le cercle du Héros à un point flottant dans
-	# l'espace, radialement vers l'EXTÉRIEUR du hub (cohérent avec la position
-	# de l'hexagone du héros). Ajouté avant les hexagones → dessiné dessous.
-	_build_hero_energy_link(unlocked, n, vp, tcolor)
+	# Filaments d'énergie : un lien par owner de quartier débloqué, relié à un
+	# point flottant dans l'espace radialement vers l'EXTÉRIEUR du hub (cohérent
+	# avec la position de son hexagone). Ajoutés avant les hexagones → dessous.
+	_build_district_links(unlocked, n, vp, tcolor)
 
 	for i in n:
 		var ang := -PI * 0.5 + i * TAU / n
@@ -351,208 +372,150 @@ func _build_hub() -> void:
 
 	_animate_hub_entrance()
 
-# Crée le filament d'énergie du Héros. Calcule la position de l'hexagone héros
-# (même formule que la boucle des hexagones) et tend un lien quasi transparent
-# vers un point d'énergie situé plus loin sur le même axe radial (vers
-# l'extérieur du hub) — d'où la cohérence avec l'emplacement du héros.
-func _build_hero_energy_link(unlocked: Array, n: int, vp: Vector2, tcolor: Color) -> void:
+# Crée un filament d'énergie par owner de quartier débloqué (présent sur
+# l'anneau). Chaque lien part JUSTE hors du cercle de l'owner et flotte vers un
+# point d'énergie plus loin sur le même axe radial (vers l'extérieur du hub).
+func _build_district_links(unlocked: Array, n: int, vp: Vector2, tcolor: Color) -> void:
 	if n <= 0:
 		return
-	var hero_idx := -1
-	for i in n:
-		if (unlocked[i] as Array)[4] == "hero":
-			hero_idx = i
-			break
-	if hero_idx < 0:
-		return
+	for owner_id in DISTRICTS:
+		var idx := -1
+		for i in n:
+			if (unlocked[i] as Array)[4] == owner_id:
+				idx = i
+				break
+		if idx < 0:
+			continue  # owner pas encore débloqué → pas de lien
+		_build_one_link(owner_id, idx, n, vp, tcolor)
 
-	var ang := -PI * 0.5 + hero_idx * TAU / n
-	var outward := Vector2(cos(ang), sin(ang))         # direction radiale du héros
-	var center := vp * 0.5
-	var hero_center := center + outward * RING_RADIUS
+# Tend le lien d'un owner donné, puis rétablit son état (boule cliquable, ou
+# quartier déjà ouvert si on reconstruit le hub).
+func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Color) -> void:
+	var ang := -PI * 0.5 + idx * TAU / n
+	var outward := Vector2(cos(ang), sin(ang))         # direction radiale de l'owner
+	var owner_center := vp * 0.5 + outward * RING_RADIUS
 
 	var link := EnergyLink.new()
 	link.size  = vp
 	# Teinte lumineuse douce (énergie) dérivée de la couleur du palier : reste
 	# cohérent avec le hub tout en restant visible même aux paliers ternes.
 	link.accent = tcolor.lerp(Color(0.70, 0.85, 1.0), 0.45)
-	# Départ JUSTE HORS du cercle du héros (sinon masqué par l'hexagone) ;
+	# Départ JUSTE HORS du cercle de l'owner (sinon masqué par l'hexagone) ;
 	# arrivée plus loin sur le même axe radial, dans l'espace.
-	link.start_point = hero_center + outward * 72.0
-	link.end_point   = hero_center + outward * 165.0
+	link.start_point = owner_center + outward * 72.0
+	link.end_point   = owner_center + outward * 165.0
 	_hub_root.add_child(link)
 
-	_hero_link             = link
-	_hero_link_outward     = outward
-	_hero_link_diffuse_end = link.end_point
+	_links[owner_id]            = link
+	_link_outward[owner_id]     = outward
+	_link_diffuse_end[owner_id] = link.end_point
 
-	if _hero_district_open:
+	if _district_open.get(owner_id, false):
 		# Quartier déjà ouvert (reconstruction du hub) : on le rebâtit tel quel,
 		# sans ré-animer ni recentrer la vue (et sans boule, consommée).
-		_reveal_hero_district(link, null, outward, link.accent, vp, false)
+		_reveal_district(owner_id, false)
 	else:
-		_spawn_hero_boule()
+		_spawn_boule(owner_id)
 
-# (Re)crée la boule d'énergie CLIQUABLE au bout du lien diffus du héros.
+# (Re)crée la boule d'énergie CLIQUABLE au bout du lien diffus d'un owner.
 # Réutilisé à la construction du hub ET à la fermeture du quartier (le lien
 # redevient diffus sans reconstruire le hub).
-func _spawn_hero_boule() -> void:
-	if not is_instance_valid(_hero_link):
+func _spawn_boule(owner_id: String) -> void:
+	var link: EnergyLink = _links.get(owner_id)
+	if not is_instance_valid(link):
 		return
 	const BOULE_SIZE := 64.0
 	var boule := EnergyBoule.new()
-	boule.accent   = _hero_link.accent
+	boule.accent   = link.accent
 	boule.size     = Vector2(BOULE_SIZE, BOULE_SIZE)
-	boule.position = _hero_link.end_point - Vector2(BOULE_SIZE, BOULE_SIZE) * 0.5
+	boule.position = link.end_point - Vector2(BOULE_SIZE, BOULE_SIZE) * 0.5
+	var title := Translations.T(DISTRICTS[owner_id]["title_key"] as String)
 	UIHelpers.register_tooltip(boule, Translations.T("district.reveal.tt_title"),
-			Translations.T("district.reveal.tt_body"), _hero_link.accent)
-	boule.clicked.connect(func() -> void:
-		_reveal_hero_district(_hero_link, _hero_boule, _hero_link_outward,
-				_hero_link.accent, get_viewport_rect().size, true)
-	)
+			Translations.T("district.reveal.tt_body") % title, link.accent)
+	boule.clicked.connect(func() -> void: _reveal_district(owner_id, true))
 	_hub_root.add_child(boule)
-	_hero_boule = boule
+	_boules[owner_id] = boule
 
-# Révèle le Quartier du Héros : le lien devient consistant, la boule est
-# consommée, un cercle « Quartier du Héros » apparaît au bout du lien avec
-# 3 ronds (Maison / Jardin / Salle d'entraînement) reliés. Avec `animate`,
-# la vue se recentre en douceur sur le nouveau quartier.
-func _reveal_hero_district(link: EnergyLink, boule: Control, outward: Vector2,
-		color: Color, vp: Vector2, animate: bool) -> void:
-	_hero_district_open = true
+# Révèle le quartier d'un owner : le lien devient consistant, la boule est
+# consommée, et un widget District (mini-hub aux pièces propres de DISTRICTS)
+# apparaît au bout du lien. Avec `animate`, la vue se recentre en douceur dessus.
+func _reveal_district(owner_id: String, animate: bool) -> void:
+	var link: EnergyLink = _links.get(owner_id)
+	if not is_instance_valid(link):
+		return
+	_district_open[owner_id] = true
 	link.solid = true
+
+	# Consommer la boule de cet owner.
+	var boule: Variant = _boules.get(owner_id)
 	if is_instance_valid(boule):
 		boule.queue_free()
-	_hero_boule = null
-	if _district_root and is_instance_valid(_district_root):
-		_district_root.queue_free()
+	_boules.erase(owner_id)
+	# Libérer un éventuel ancien node (reconstruction du hub).
+	var old: Variant = _districts.get(owner_id)
+	if is_instance_valid(old):
+		old.queue_free()
 
-	# MÊME présentation que le Village : un mini-hub (CircleRing au même palier
-	# et même couleur que la place centrale + pièces cliquables SUR l'anneau).
+	var outward: Vector2 = _link_outward[owner_id]
 	var vtier  := int(GameData.village.get("maitrise_actuelle", 0))
-	var rcolor := UIColors.tier_color(vtier)
 	var qradius := RING_RADIUS
-	var qdiam   := qradius * 2.0 + 80.0
-
 	# Centre du quartier, au-delà du lien ; le lien va JUSQU'AU bord du cercle.
 	var dc := link.end_point + outward * (20.0 + qradius)
-	_district_center = dc
-	_district_rooms.clear()
 	link.end_point = dc - outward * qradius
 	link.queue_redraw()
 
-	_district_root = Control.new()
-	_district_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hub_root.add_child(_district_root)
-
-	# Anneau (visuel) — non bloquant pour laisser passer le pan sur l'espace.
-	var ring := CircleRing.new()
-	ring.ring_color    = rcolor
-	ring.ring_radius   = qradius
-	ring.tier          = vtier
-	ring.fill_fraction = 0.0
-	ring.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-	ring.size          = Vector2(qdiam, qdiam)
-	ring.position      = dc - Vector2(qdiam, qdiam) * 0.5
-	_district_root.add_child(ring)
-
-	# Libellé central « Quartier du Héros ».
-	var label_box := Control.new()
-	label_box.size = Vector2(260.0, 64.0)
-	label_box.position = dc - Vector2(130.0, 32.0)
-	label_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_district_root.add_child(label_box)
-	var title := Label.new()
-	title.text = Translations.T("district.hero.title")
-	title.set_anchors_preset(Control.PRESET_FULL_RECT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", rcolor.lerp(Color.WHITE, 0.30))
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
-	title.add_theme_constant_override("shadow_offset_y", 2)
-	label_box.add_child(title)
-
-	# Zone centrale CLIQUABLE : un clic au centre referme le quartier.
-	var closer := Control.new()
-	var crad := 78.0
-	closer.size = Vector2(crad * 2.0, crad * 2.0)
-	closer.position = dc - Vector2(crad, crad)
-	closer.mouse_filter = Control.MOUSE_FILTER_STOP
-	closer.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	closer.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton \
-				and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT \
-				and (ev as InputEventMouseButton).pressed:
-			_collapse_hero_district()
-	)
-	_district_root.add_child(closer)
-
-	# Pièces : bulles cliquables SUR l'anneau (comme les hexagones du Village),
-	# chacune ouvre un panneau (vide pour l'instant).
-	var rooms: Array = [
-		["district_house",    "👤"],
-		["district_garden",   "🌿"],
-		["district_training", "⚔"],
-	]
-	for i in rooms.size():
-		var ang := -PI * 0.5 + float(i) * TAU / float(rooms.size())
-		var rpos := dc + Vector2(cos(ang), sin(ang)) * qradius
-		var pid: String = rooms[i][0]
-		var room := HexItem.new()
-		room.label_text  = Translations.T("panel." + pid)
-		room.tier_color  = rcolor
-		room.tier        = maxi(vtier, 1)            # 1-2 → bulle ronde
-		room.outward_dir = Vector2(cos(ang), sin(ang))
-		room.callback    = _open_panel.bind(pid)
-		room.size        = HEX_SIZE
-		room.position    = rpos - HEX_SIZE * 0.5
-		room.pivot_offset = HEX_SIZE * 0.5
-		room.is_selected = (_active_panel_id == pid)
-		_district_root.add_child(room)
-		_district_rooms[pid] = room
-
-	# Pivot au centre du quartier → le jiggle s'anime « en place ».
-	_district_root.pivot_offset = dc
+	var def: Dictionary = DISTRICTS[owner_id]
+	var district := District.new()
+	district.center      = dc
+	district.radius      = qradius
+	district.ring_color  = UIColors.tier_color(vtier)
+	district.tier        = vtier
+	district.title_text  = Translations.T(def["title_key"] as String)
+	district.rooms       = def["rooms"]
+	district.active_panel_id = _active_panel_id
+	district.room_clicked.connect(_open_panel)
+	district.close_requested.connect(_collapse_district.bind(owner_id))
+	_hub_root.add_child(district)
+	district.build()
+	_districts[owner_id] = district
 
 	# Naviguer vers le quartier : centrer `dc` à l'écran (cf. transform du hub).
 	if animate:
 		# Apparition douce : fade-in + jiggle élastique du quartier.
-		_district_root.modulate.a = 0.0
-		_district_root.scale = Vector2(0.7, 0.7)
+		district.modulate.a = 0.0
+		district.scale = Vector2(0.7, 0.7)
 		var at := create_tween().set_parallel(true)
-		at.tween_property(_district_root, "modulate:a", 1.0, 0.25).set_ease(Tween.EASE_OUT)
-		at.tween_property(_district_root, "scale", Vector2.ONE, 0.6) \
+		at.tween_property(district, "modulate:a", 1.0, 0.25).set_ease(Tween.EASE_OUT)
+		at.tween_property(district, "scale", Vector2.ONE, 0.6) \
 				.set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
+		var vp := get_viewport_rect().size
 		_pan = HUB_BASE_SCALE * (vp * 0.5 - dc)
 		var pt := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 		pt.tween_property(_hub_root, "position", _pan, 0.6)
 
-# Referme le Quartier du Héros : fondu de sortie du quartier, PUIS reconstruction
-# du hub (le lien diffus et la boule cliquable reviennent) et recentrage sur la
-# place centrale. La garde évite un double déclenchement (clics répétés).
-func _collapse_hero_district() -> void:
-	if not _hero_district_open:
+# Referme le quartier d'un owner : le lien redevient diffus, la boule revient
+# et le quartier se fond — SANS reconstruire le hub (le cercle du village et
+# ses hexagones restent intacts). La garde évite un double déclenchement.
+func _collapse_district(owner_id: String) -> void:
+	if not _district_open.get(owner_id, false):
 		return
-	_hero_district_open = false
-	var dr := _district_root
-	_district_root = null
-	_district_rooms.clear()
+	_district_open[owner_id] = false
+	var d: Variant = _districts.get(owner_id)
+	_districts.erase(owner_id)
 
-	# Le lien redevient diffus et la boule cliquable revient — SANS reconstruire
-	# le hub : le cercle du village et ses hexagones restent intacts (ils ne
-	# doivent pas « se recréer »).
-	if is_instance_valid(_hero_link):
-		_hero_link.solid = false
-		_hero_link.end_point = _hero_link_diffuse_end
-		_hero_link.queue_redraw()
-	_spawn_hero_boule()
+	# Le lien redevient diffus et la boule cliquable revient.
+	var link: EnergyLink = _links.get(owner_id)
+	if is_instance_valid(link):
+		link.solid = false
+		link.end_point = _link_diffuse_end[owner_id]
+		link.queue_redraw()
+	_spawn_boule(owner_id)
 
 	# Fondu de sortie du quartier, puis libération.
-	if dr and is_instance_valid(dr):
-		dr.pivot_offset = _district_center
+	if is_instance_valid(d):
+		var dr := d as District
+		dr.pivot_offset = dr.center
 		var ft := create_tween().set_parallel(true)
 		ft.tween_property(dr, "modulate:a", 0.0, 0.30).set_ease(Tween.EASE_IN)
 		ft.tween_property(dr, "scale", Vector2(0.82, 0.82), 0.30).set_ease(Tween.EASE_IN)
@@ -564,6 +527,14 @@ func _collapse_hero_district() -> void:
 	if _hub_root:
 		var ct := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 		ct.tween_property(_hub_root, "position", Vector2.ZERO, 0.5)
+
+# Owner du quartier auquel appartient une pièce (room_panel_id), "" si aucune.
+func _owner_of_room(panel_id: String) -> String:
+	for owner_id in DISTRICTS:
+		for r: Array in DISTRICTS[owner_id]["rooms"]:
+			if r[0] == panel_id:
+				return owner_id
+	return ""
 
 # Déplacement libre de l'espace : CLIC-GLISSER à la souris déplace la place
 # centrale, les liens et les quartiers ensemble. Géré dans _input (reçu avant
@@ -698,8 +669,11 @@ func _open_panel(panel_id: String) -> void:
 	# la place centrale par défaut, ou le quartier si on ouvre une de ses pièces
 	# (sinon l'ouverture recadrerait sur le village et masquerait le quartier).
 	var focus := vp * 0.5
-	if panel_id.begins_with("district_") and _hero_district_open:
-		focus = _district_center
+	var room_owner := _owner_of_room(panel_id)
+	if room_owner != "" and _district_open.get(room_owner, false):
+		var d: Variant = _districts.get(room_owner)
+		if is_instance_valid(d):
+			focus = (d as District).center
 	var free_center := Vector2(vp.x * (1.0 - PANEL_FRACTION) * 0.5, vp.y * 0.5)
 	var target_pos := free_center - vp * 0.5 - HUB_PANEL_SCALE * (focus - vp * 0.5)
 	_hub_root.pivot_offset = vp * 0.5
@@ -751,15 +725,13 @@ func _update_hex_selection(active_id: String) -> void:
 		var item := _hex_items[pid] as HexItem
 		item.is_selected = (pid == active_id)
 		item.queue_redraw()
-	# Pièces du Quartier du Héros (même animation de sélection que le village).
-	# Validité AVANT le cast : après une reconstruction du hub, le dict peut
-	# encore référencer des HexItem libérés (« cast a freed object » sinon).
-	for pid in _district_rooms:
-		var node: Variant = _district_rooms[pid]
+	# Pièces des quartiers ouverts (même animation de sélection que le village).
+	# Validité AVANT usage : après une reconstruction du hub, le dict peut
+	# encore référencer des District libérés (« cast a freed object » sinon).
+	for owner_id in _districts:
+		var node: Variant = _districts[owner_id]
 		if is_instance_valid(node):
-			var room := node as HexItem
-			room.is_selected = (pid == active_id)
-			room.queue_redraw()
+			(node as District).set_room_selected(active_id)
 
 # Vide rp_content et réinjecte le contenu pour panel_id (panneau déjà ouvert).
 func _swap_panel_content(panel_id: String) -> void:
@@ -893,6 +865,14 @@ func _rebuild_hub() -> void:
 	_rp_title  = null
 	_rp_scroll = null
 	_hex_items.clear()
+	# Les quartiers/liens/boules sont enfants du hub libéré : on purge les refs
+	# de nœuds (recréées par _build_hub). _district_open est CONSERVÉ : un
+	# quartier ouvert se rebâtit automatiquement après la reconstruction.
+	_districts.clear()
+	_links.clear()
+	_boules.clear()
+	_link_outward.clear()
+	_link_diffuse_end.clear()
 	_active_panel_id = ""
 	if GameData.village.get("eclos", false):
 		_build_hub()
