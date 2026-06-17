@@ -92,6 +92,15 @@ const DISTRICTS: Dictionary = {
 			["district_training", "⚔"],
 		],
 	},
+	"forge": {
+		"title_key": "district.forge.title",
+		"rooms": [
+			["district_armurier",  "🛡"],
+			["district_forgeron",  "⚒"],
+			["district_joaillier", "💍"],
+			["district_couturier", "🧵"],
+		],
+	},
 }
 
 # ─── API publique pour les panels (HeroPanel / Adventure / Forge) ──
@@ -831,6 +840,11 @@ func _fill_panel_content(panel_id: String) -> void:
 		"sanctuary": _panel_soon("SANCTUAIRE")
 		"relic":     _panel_soon("RELIQUE")
 		"tbd":       _panel_soon("?")
+		_:
+			# Pièce de quartier : panneau placeholder (contenu à venir), titré
+			# au nom de la pièce. Tout autre id inconnu reste sans contenu.
+			if _owner_of_room(panel_id) != "":
+				_panel_soon(Translations.panel_title(panel_id))
 
 # Lance l'aventure sur le biome sélectionné et bascule vers CombatScene.
 func start_selected_expedition() -> void:
