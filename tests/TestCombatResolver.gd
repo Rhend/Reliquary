@@ -117,17 +117,20 @@ func _test_endurcissement() -> void:
 	_assert(int((hero_steps[0] as CombatStep).damage) == 80,
 			"dégâts héros ×0.8", "damage=%d" % (hero_steps[0] as CombatStep).damage)
 
-# Poison biome (Marécage) : des ticks is_poison apparaissent après les coups ennemis.
+# Poison biome (Marécage) : mécanique HOSTILE — le marais empoisonne le HÉROS.
+# Des ticks is_poison (portés par l'ennemi) rongent les PV du héros.
 func _test_poison_biome() -> void:
 	print("\n[TEST] Poison de biome (Marécage)")
 	var steps := CombatResolver.resolve(
-			_hero({"atk": 10.0}), _enemy({"hp": 500.0, "atk": 1.0}), {"poison": true})
+			_hero({"atk": 10.0, "hp": 600.0}), _enemy({"hp": 5000.0, "atk": 20.0}), {"poison": true})
 	var poison_steps := steps.filter(func(s): return (s as CombatStep).is_poison)
 	_assert(not poison_steps.is_empty(), "des ticks de poison sont produits")
-	# 1er tick = 1 stack = ATK héros × BIOME_POISON_DMG_PCT (10 × 0.05 = 0.5 → arrondi min 1)
-	var expected := int(maxf(roundf(10.0 * Balance.BIOME_POISON_DMG_PCT), 1.0))
-	_assert(int((poison_steps[0] as CombatStep).damage) == expected,
-			"dégâts du 1er tick = 1 stack", "damage=%d" % (poison_steps[0] as CombatStep).damage)
+	var first_p := poison_steps[0] as CombatStep
+	_assert(first_p.attacker == "enemy", "le poison de biome frappe le héros (porté par l'ennemi)")
+	# 1er tick = 1 stack = ATK ENNEMI × BIOME_POISON_DMG_PCT (20 × 0.05 = 1)
+	var expected := int(maxf(roundf(20.0 * Balance.BIOME_POISON_DMG_PCT), 1.0))
+	_assert(int(first_p.damage) == expected,
+			"dégâts du 1er tick = 1 stack (ATK ennemi)", "damage=%d" % first_p.damage)
 
 # Bouclier d'urgence : proc une seule fois sous le seuil de PV, absorbe les dégâts.
 func _test_bouclier() -> void:

@@ -134,8 +134,10 @@ func _play_next() -> void:
 
 	var step: CombatStep = _steps[_index]
 
-	if step.is_poison or step.is_passive_poison:
-		_current_enemy_hp = float(step.target_hp_after)
+	if step.is_passive_poison:
+		_current_enemy_hp = float(step.target_hp_after)   # Contact Venimeux : ronge l'ennemi
+	elif step.is_poison:
+		_current_hero_hp = float(step.target_hp_after)    # poison de biome : ronge le héros
 	elif step.attacker == Enums.Actor.HERO:
 		_current_enemy_hp = float(step.target_hp_after)
 	else:
@@ -164,5 +166,7 @@ func _determine_winner() -> String:
 		return Enums.Actor.HERO
 	var last: CombatStep = _steps.back()
 	if last.is_killing_blow:
-		return Enums.Actor.HERO if (last.attacker == Enums.Actor.HERO or last.is_poison or last.is_passive_poison) else Enums.Actor.ENEMY
+		# Coup fatal porté par le héros OU poison passif (qui ronge l'ennemi) → victoire.
+		# Le poison de biome porte attacker = ENEMY (il tue le héros) → défaite.
+		return Enums.Actor.HERO if (last.attacker == Enums.Actor.HERO or last.is_passive_poison) else Enums.Actor.ENEMY
 	return Enums.Actor.HERO if _current_enemy_hp <= _current_hero_hp else Enums.Actor.ENEMY

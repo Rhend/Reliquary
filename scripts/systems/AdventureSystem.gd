@@ -575,6 +575,13 @@ func _build_available_creatures(biome_id: String) -> void:
 # Les stats sont lues au palier de Maîtrise courant de la créature, en
 # descendant au palier inférieur le plus proche si absent (GameData.stats_at_tier).
 func _combat_sheet(creature: Dictionary) -> Dictionary:
+	# La créature imbriquée dans le biome est une COPIE FIGÉE au chargement
+	# (palier/stats/nom T0). La source de vérité à jour est GameData.entities,
+	# mise à jour par MasterySystem à chaque évolution → on re-résout l'entité
+	# vivante par son id, sinon on combattrait toujours la version T0.
+	var live := GameData.get_entity(creature.get("id", ""))
+	if not live.is_empty():
+		creature = live
 	var tier := int(creature.get("maitrise_actuelle", 0))
 	var s    := GameData.stats_at_tier(creature, tier)
 	return {

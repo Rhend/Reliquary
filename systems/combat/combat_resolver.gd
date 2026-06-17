@@ -48,9 +48,12 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	var use_endurcissement:   bool  = options.get("endurcissement", false)
 	var endurcissement_mult:  float = (1.0 - Balance.MONTAGNE_ENDURCISSEMENT_REDUCTION) if use_endurcissement else 1.0
 
-	# Poison biome (Marécage Putride)
+	# Poison biome (Marécage Putride) — mécanique HOSTILE : le marais toxique
+	# empoisonne le HÉROS (et non l'inverse). Chaque coup ennemi renouvelle le
+	# venin ; les ticks rongent ensuite les PV du héros. Dégâts basés sur l'ATK
+	# de l'ennemi (sa morsure venimeuse).
 	var use_poison:           bool  = options.get("poison", false)
-	var poison_dmg_per_stack: float = h_atk * Balance.BIOME_POISON_DMG_PCT
+	var poison_dmg_per_stack: float = e_atk * Balance.BIOME_POISON_DMG_PCT
 	var poison_stacks:        int   = 0
 	var poison_turns_left:    int   = 0
 
@@ -108,11 +111,6 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 			e_hp = float(step.target_hp_after)
 			steps.append(step)
 
-			# Poison biome : chaque coup héros incrémente les stacks (max BIOME_POISON_MAX_STACKS)
-			if use_poison and e_hp > 0.0:
-				poison_stacks     = mini(poison_stacks + 1, Balance.BIOME_POISON_MAX_STACKS)
-				poison_turns_left = Balance.BIOME_POISON_DURATION
-
 			# Poison passif : roll de proc sur chaque coup héros
 			if use_passive_poison and e_hp > 0.0 and pp_chance > 0.0:
 				if randf() < pp_chance:
@@ -139,25 +137,31 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 					step.is_shield_proc = true
 					step.shield_value   = int(h_shield)
 
-			# Tick poison biome après coup ennemi
-			if use_poison and poison_stacks > 0 and e_hp > 0.0:
+			# Poison biome (Marécage) : le coup ennemi envenime le héros, puis le
+			# venin lui inflige des dégâts (DoT). La cible est le HÉROS — c'est une
+			# mécanique HOSTILE, pas un avantage. Le poison ignore le bouclier.
+			if use_poison and h_hp > 0.0:
+				poison_stacks     = mini(poison_stacks + 1, Balance.BIOME_POISON_MAX_STACKS)
+				poison_turns_left = Balance.BIOME_POISON_DURATION
+
 				var pdmg     := float(poison_stacks) * poison_dmg_per_stack
-				var new_e_hp := maxf(e_hp - pdmg, 0.0)
+				var new_h_hp := maxf(h_hp - pdmg, 0.0)
 				var p_step   := CombatStep.new()
 				p_step.is_poison       = true
+				p_step.attacker        = Enums.Actor.ENEMY   # dégâts subis par le héros
 				p_step.damage          = int(maxf(roundf(pdmg), 1.0))
-				p_step.target_hp_after = int(roundf(new_e_hp))
-				p_step.is_killing_blow = (new_e_hp <= 0.0)
+				p_step.target_hp_after = int(roundf(new_h_hp))
+				p_step.is_killing_blow = (new_h_hp <= 0.0)
 				p_step.tick_time       = current_tick
 				steps.append(p_step)
-				e_hp = new_e_hp
+				h_hp = new_h_hp
 
 				poison_turns_left -= 1
 				if poison_turns_left <= 0:
 					poison_stacks     = 0
 					poison_turns_left = 0
 
-				if e_hp <= 0.0:
+				if h_hp <= 0.0:
 					break
 
 			# Tick de tous les poisons passifs actifs après coup ennemi
