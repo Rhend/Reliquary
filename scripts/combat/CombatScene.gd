@@ -44,6 +44,15 @@ var _enemy_action: Label
 var _hero_states: HBoxContainer
 var _enemy_states: HBoxContainer
 
+# ─── Encadrés de caractéristiques (coins de la zone de combat) ──
+# Héros en haut à gauche (visible toute l'expédition), créature en haut à
+# droite (visible seulement en combat de créature). Masqués pour les
+# pièges/bénédictions, dont l'effet est déjà annoncé au centre (stinger).
+var _hero_stats_panel:  PanelContainer
+var _hero_stats_rows:   VBoxContainer
+var _enemy_stats_panel: PanelContainer
+var _enemy_stats_rows:  VBoxContainer
+
 # ─── Feed passifs ────────────────────────────────────────────
 var _feed_box: HBoxContainer
 
@@ -151,7 +160,127 @@ func _build_combat_area() -> Control:
 	hbox.add_child(vs)
 	hbox.add_child(_build_column(false))
 	area.add_child(hbox)
+
+	# Encadrés de caractéristiques dans les coins (par-dessus les colonnes).
+	_hero_stats_panel = _make_stats_panel(true)
+	area.add_child(_hero_stats_panel)
+	_enemy_stats_panel = _make_stats_panel(false)
+	area.add_child(_enemy_stats_panel)
 	return area
+
+# Encadré de stats ancré dans un coin haut de la zone de combat (gauche =
+# héros, droite = créature). Auto-dimensionné, transparent à la souris,
+# masqué jusqu'à ce qu'on le remplisse.
+func _make_stats_panel(is_hero: bool) -> PanelContainer:
+	var panel := PanelContainer.new()
+	# Style « plaque JRPG » du jeu, re-teinté au palier dans _style_mini_panel.
+	_style_mini_panel(panel, UIColors.CARD_NEUTRAL)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.visible = false
+	# Coin haut, auto-dimensionné : on pose un rect de taille nulle dans le coin
+	# et on laisse grow_* l'agrandir vers le contenu (motif Godot standard).
+	# offset_top = 36 : juste sous la bande des labels Zone (centre) et
+	# Mécanique forte (coin haut-droite), pour ne pas les recouvrir.
+	panel.anchor_top = 0.0
+	panel.anchor_bottom = 0.0
+	panel.offset_top = 36
+	panel.offset_bottom = 36
+	panel.grow_vertical = Control.GROW_DIRECTION_END
+	if is_hero:
+		panel.anchor_left = 0.0
+		panel.anchor_right = 0.0
+		panel.grow_horizontal = Control.GROW_DIRECTION_END
+		panel.offset_left = 10
+		panel.offset_right = 10
+	else:
+		panel.anchor_left = 1.0
+		panel.anchor_right = 1.0
+		panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		panel.offset_left = -10
+		panel.offset_right = -10
+
+	var m := UIHelpers.margin_of(8)
+	panel.add_child(m)
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 2)
+	rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	m.add_child(rows)
+	if is_hero:
+		_hero_stats_rows = rows
+	else:
+		_enemy_stats_rows = rows
+	return panel
+
+# Style « mini plaque » dans la DA du jeu : fond sombre translucide (lisible
+# par-dessus le fond animé) + bordure teintée au palier + coins arrondis + ombre.
+func _style_mini_panel(panel: PanelContainer, color: Color) -> void:
+	var st := StyleBoxFlat.new()
+	st.bg_color     = Color(0.04, 0.05, 0.09, 0.90)
+	st.border_color = Color(color.r, color.g, color.b, 0.70)
+	st.set_border_width_all(1)
+	st.set_corner_radius_all(8)
+	st.shadow_color = Color(0, 0, 0, 0.35)
+	st.shadow_size  = 6
+	panel.add_theme_stylebox_override("panel", st)
+
+# (Re)remplit un encadré de stats : titre palier coloré + filet + PV/ATK/DEF/VIT.
+# Re-teinte aussi le cadre à la couleur du palier (DA cohérente avec les cartes).
+func _fill_stats_panel(panel: PanelContainer, rows: VBoxContainer, color: Color,
+		tier: int, pv: int, atk: int, def: int, vit: int) -> void:
+	_style_mini_panel(panel, color)
+	for c in rows.get_children():
+		c.free()
+	var tier_lbl := Label.new()
+	tier_lbl.text = GameData.get_tier_name(tier).to_upper()
+	tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tier_lbl.add_theme_font_size_override("font_size", 10)
+	tier_lbl.add_theme_color_override("font_color", color)
+	rows.add_child(tier_lbl)
+	# Filet séparateur teinté sous le titre.
+	var sep := ColorRect.new()
+	sep.custom_minimum_size   = Vector2(0, 1)
+	sep.color                 = Color(color.r, color.g, color.b, 0.35)
+	sep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_child(sep)
+	_add_stat_row(rows, Translations.T("hero.stat.hp"),  pv,  UIColors.STAT_HP)
+	_add_stat_row(rows, Translations.T("hero.stat.atk"), atk, UIColors.STAT_ATK)
+	_add_stat_row(rows, Translations.T("hero.stat.def"), def, UIColors.STAT_DEF)
+	_add_stat_row(rows, Translations.T("hero.stat.vit"), vit, UIColors.FILTER_ON)
+
+# Calcule les stats effectives du héros (mêmes sources que combat_player :
+# base + équipement, VIT accélérée par attack_speed_pct) et remplit/affiche
+# son encadré (haut-gauche).
+func _refresh_hero_stats(htier: int) -> void:
+	if _hero_stats_rows == null:
+		return
+	var hstats := GameData.get_effective_stats("hero")
+	var heqp   := GameData.get_equipment_bonuses()
+	var vit := int(round(float(hstats.get("vit", 20)) \
+			* (1.0 + float(heqp.get("attack_speed_pct", 0.0)) / 100.0)))
+	_fill_stats_panel(_hero_stats_panel, _hero_stats_rows, UIColors.tier_color(htier), htier,
+			int(AdventureSystem.get_max_hp()),
+			int(hstats.get("atk", 0)) + int(heqp.get("atk", 0)),
+			int(hstats.get("def", 0)) + int(heqp.get("def", 0)),
+			vit)
+	_hero_stats_panel.visible = true
+
+func _add_stat_row(rows: VBoxContainer, label: String, value: int, color: Color) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var l := Label.new()
+	l.text = label
+	l.custom_minimum_size = Vector2(34, 0)
+	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_color_override("font_color", color)
+	row.add_child(l)
+	var v := Label.new()
+	v.text = str(value)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.horizontal_alignment  = HORIZONTAL_ALIGNMENT_RIGHT
+	v.add_theme_font_size_override("font_size", 11)
+	v.add_theme_color_override("font_color", Color.WHITE)
+	row.add_child(v)
+	rows.add_child(row)
 
 # Construit une colonne combattant ; renseigne les références membres.
 func _build_column(is_hero: bool) -> Control:
@@ -392,6 +521,9 @@ func _on_adventure_started(_biome_id: String) -> void:
 	UIHelpers.register_tooltip(_hero_name, hname, htt, UIColors.tier_color(htier),
 			Translations.entity_lore(c))
 
+	# Encadré de stats du héros (haut-gauche), visible toute l'expédition.
+	_refresh_hero_stats(htier)
+
 	# Colonne ennemi en attente (vide) jusqu'au premier événement.
 	_enemy_name.text = "—"
 	_enemy_ring.setup(UIColors.TEXT_MUTED)
@@ -423,6 +555,8 @@ func _on_adventure_started(_biome_id: String) -> void:
 func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
 		Enums.EntityType.TRAP:
+			# Piège : effet annoncé au centre (stinger) → pas d'encadré de stats.
+			_enemy_stats_panel.visible = false
 			var trap := event_data.get("trap", {}) as Dictionary
 			var tname := Translations.entity_name(trap)
 			_enemy_name.text = tname.to_upper()
@@ -452,6 +586,8 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 						% [_hex(UIColors.TIER_EPIQUE), tname, _hex(UIColors.LOG_DEFEAT), tdmg],
 						["monster", "attack", "status"])
 		Enums.EntityType.BENEDICTION:
+			# Bénédiction : effet annoncé au centre (stinger) → pas d'encadré de stats.
+			_enemy_stats_panel.visible = false
 			var bene := event_data.get("effect", {}) as Dictionary
 			var bname := Translations.entity_name(bene)
 			_enemy_name.text = bname.to_upper()
@@ -499,6 +635,15 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 	UIHelpers.register_tooltip(_enemy_name, ename, ett, UIColors.tier_color(etier),
 			Translations.entity_lore(enemy_entity))
 
+	# Encadrés de caractéristiques : héros (gauche) rafraîchi + créature (droite).
+	_refresh_hero_stats(htier)
+	_fill_stats_panel(_enemy_stats_panel, _enemy_stats_rows, UIColors.tier_color(etier), etier,
+			int(enemy_hp),
+			int(enemy.get("atk", 0)),
+			int(enemy.get("def", 0)),
+			int(enemy.get("vit", 0)))
+	_enemy_stats_panel.visible = true
+
 	_hero_ring.set_cooldown(0.0)
 	_enemy_ring.set_cooldown(0.0)
 	_hide_action(_hero_action)
@@ -534,15 +679,26 @@ func _on_step_started(step: CombatStep) -> void:
 # Fin du cooldown : l'attaque atterrit. On applique les dégâts/soins/états,
 # on réinitialise les anneaux et on masque les pills d'action.
 func _on_step_ended(step: CombatStep) -> void:
-	if step.is_poison or step.is_passive_poison:
+	if step.is_passive_poison:
+		# Contact Venimeux : le venin du héros ronge l'ENNEMI.
 		_enemy_ring.update_hp(float(step.target_hp_after))
 		_enemy_ring.poison(step.damage)
-		var poison_tag := Translations.T("combat.poison") if step.is_poison else Translations.T("combat.venom")
 		_add_log("[color=%s]%s[/color] [color=%s]-%d[/color]"
-				% [_hex(UIColors.TIER_EPIQUE), poison_tag, _hex(UIColors.LOG_DEFEAT), step.damage],
+				% [_hex(UIColors.TIER_EPIQUE), Translations.T("combat.venom"), _hex(UIColors.LOG_DEFEAT), step.damage],
 				["status", "attack"])
 		if step.is_killing_blow:
 			_kill_impact(_enemy_ring)
+	elif step.is_poison:
+		# Poison de biome (Marécage) : le marais toxique ronge le HÉROS.
+		_hero_ring.update_hp(float(step.target_hp_after))
+		_hero_ring.poison(step.damage)
+		_add_log("[color=%s]%s[/color] [color=%s]-%d[/color]"
+				% [_hex(UIColors.TIER_EPIQUE), Translations.T("combat.poison"), _hex(UIColors.LOG_DEFEAT), step.damage],
+				["status", "attack"])
+		if step.is_killing_blow:
+			_kill_impact(_hero_ring)
+		else:
+			_check_danger_pulse()
 	elif step.attacker == "hero":
 		_enemy_ring.update_hp(float(step.target_hp_after))
 		_enemy_ring.damage(step.damage, step.is_crit)
