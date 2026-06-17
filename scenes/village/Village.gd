@@ -27,6 +27,8 @@ const DISTRICT_LINK_REACH := 200.0
 const DISTRICT_LINK_START := 72.0
 # Écart entre l'extrémité du lien et le bord du cercle du quartier.
 const DISTRICT_RING_GAP   := 20.0
+# Durée de la montée de l'étincelle le long du fil avant l'éclosion du quartier.
+const BOULE_TRAVEL_DUR    := 1.0
 # Panneau droit : fraction de l'écran qu'il occupe quand il est ouvert.
 # Le hub est réduit (HUB_PANEL_SCALE) et recentré au milieu de l'espace
 # restant — le village entier doit y tenir (contenu utile ≈ 860 px).
@@ -144,6 +146,7 @@ var _links            : Dictionary = {}   # owner_id → EnergyLink (filament, p
 var _boules           : Dictionary = {}   # owner_id → EnergyBoule cliquable (absent quand le quartier est ouvert)
 var _link_outward     : Dictionary = {}   # owner_id → Vector2 (axe radial de l'owner)
 var _link_diffuse_end : Dictionary = {}   # owner_id → Vector2 (extrémité du lien à l'état diffus)
+var _spark_traveling  : Dictionary = {}   # owner_id → bool (étincelle en cours de montée : anti double-clic)
 var _birth_orb            : ClickOrb           # orbe d'éclosion (juice d'éveil)
 var _birth_phrase         : Label              # phrase d'éveil affichée actuellement
 var _birth_phrase_idx     := 0                 # index de la prochaine phrase d'éveil à montrer
@@ -450,9 +453,42 @@ func _spawn_boule(owner_id: String) -> void:
 	var title := Translations.T(DISTRICTS[owner_id]["title_key"] as String)
 	UIHelpers.register_tooltip(boule, Translations.T("district.reveal.tt_title"),
 			Translations.T("district.reveal.tt_body") % title, link.accent)
-	boule.clicked.connect(func() -> void: _reveal_district(owner_id, true))
+	boule.clicked.connect(func() -> void: _animate_boule_travel(owner_id))
 	_hub_root.add_child(boule)
 	_boules[owner_id] = boule
+
+# Clic sur la boule : une étincelle jaune remonte le fil en BOULE_TRAVEL_DUR s,
+# et CE N'EST QU'À SON ARRIVÉE (au niveau de la boule) que le quartier éclot
+# (fade-in + jiggle, géré par _reveal_district). La boule reste visible le temps
+# de la montée, puis est consommée par la révélation.
+func _animate_boule_travel(owner_id: String) -> void:
+	if _spark_traveling.get(owner_id, false):
+		return  # montée déjà en cours
+	var link: EnergyLink = _links.get(owner_id)
+	if not is_instance_valid(link):
+		return
+	_spark_traveling[owner_id] = true
+
+	const SPARK_SIZE := 30.0
+	var spark := EnergySpark.new()
+	spark.size = Vector2(SPARK_SIZE, SPARK_SIZE)
+	spark.position = link.point_at(0.0) - Vector2(SPARK_SIZE, SPARK_SIZE) * 0.5
+	_hub_root.add_child(spark)
+
+	var tw := create_tween().set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	tw.tween_method(func(t: float) -> void:
+		if is_instance_valid(spark) and is_instance_valid(link):
+			spark.position = link.point_at(t) - Vector2(SPARK_SIZE, SPARK_SIZE) * 0.5
+	, 0.0, 1.0, BOULE_TRAVEL_DUR)
+	tw.tween_callback(func() -> void:
+		if is_instance_valid(spark):
+			spark.queue_free()
+		_spark_traveling.erase(owner_id)
+		# Si le hub a été reconstruit pendant la montée, le lien capturé est
+		# libéré → on n'éclôt pas (la boule a déjà été respawnée telle quelle).
+		if is_instance_valid(link):
+			_reveal_district(owner_id, true)
+	)
 
 # Révèle le quartier d'un owner : le lien devient consistant, la boule est
 # consommée, et un widget District (mini-hub aux pièces propres de DISTRICTS)
@@ -892,6 +928,7 @@ func _rebuild_hub() -> void:
 	_boules.clear()
 	_link_outward.clear()
 	_link_diffuse_end.clear()
+	_spark_traveling.clear()
 	_active_panel_id = ""
 	if GameData.village.get("eclos", false):
 		_build_hub()

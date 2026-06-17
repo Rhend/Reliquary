@@ -28,6 +28,21 @@ const GLOW_PASSES := [
 
 var _phase: float = 0.0
 
+# Position le long du fil au paramètre t (0 = départ, 1 = point d'énergie),
+# en suivant l'arc de base (sans l'ondulation animée) pour une montée fluide.
+# Utilisé par EnergySpark pour remonter le filament.
+func point_at(t: float) -> Vector2:
+	var delta := end_point - start_point
+	var dist := delta.length()
+	if dist < 1.0:
+		return start_point
+	var n := delta / dist
+	var perp := Vector2(-n.y, n.x)
+	var base := start_point.lerp(end_point, t)
+	var env := sin(t * PI)
+	var bend := env * dist * 0.10
+	return base + perp * bend
+
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_process(true)
