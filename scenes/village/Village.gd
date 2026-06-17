@@ -18,6 +18,15 @@ extends Control
 # ─── Constantes ───────────────────────────────────────────────
 const RING_RADIUS  := 165.0
 const HEX_SIZE     := Vector2(152.0, 152.0)
+# Distance (depuis le centre de l'hexagone owner, vers l'extérieur) du point
+# d'énergie au bout du lien : là où flotte la boule cliquable, et d'où naît le
+# quartier. Plus grand = quartiers plus éloignés du village → l'espace respire,
+# maintenant qu'on peut se balader librement autour de la place centrale.
+const DISTRICT_LINK_REACH := 300.0
+# Départ du lien, juste hors du cercle de l'owner (sinon masqué par l'hexagone).
+const DISTRICT_LINK_START := 72.0
+# Écart entre l'extrémité du lien et le bord du cercle du quartier.
+const DISTRICT_RING_GAP   := 20.0
 # Panneau droit : fraction de l'écran qu'il occupe quand il est ouvert.
 # Le hub est réduit (HUB_PANEL_SCALE) et recentré au milieu de l'espace
 # restant — le village entier doit y tenir (contenu utile ≈ 860 px).
@@ -411,8 +420,8 @@ func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Co
 	link.accent = tcolor.lerp(Color(0.70, 0.85, 1.0), 0.45)
 	# Départ JUSTE HORS du cercle de l'owner (sinon masqué par l'hexagone) ;
 	# arrivée plus loin sur le même axe radial, dans l'espace.
-	link.start_point = owner_center + outward * 72.0
-	link.end_point   = owner_center + outward * 165.0
+	link.start_point = owner_center + outward * DISTRICT_LINK_START
+	link.end_point   = owner_center + outward * DISTRICT_LINK_REACH
 	_hub_root.add_child(link)
 
 	_links[owner_id]            = link
@@ -469,7 +478,7 @@ func _reveal_district(owner_id: String, animate: bool) -> void:
 	var vtier  := int(GameData.village.get("maitrise_actuelle", 0))
 	var qradius := RING_RADIUS
 	# Centre du quartier, au-delà du lien ; le lien va JUSQU'AU bord du cercle.
-	var dc := link.end_point + outward * (20.0 + qradius)
+	var dc := link.end_point + outward * (DISTRICT_RING_GAP + qradius)
 	link.end_point = dc - outward * qradius
 	link.queue_redraw()
 
@@ -604,10 +613,6 @@ func _current_hint(village_maitrise: int) -> String:
 		return Translations.T("hint.start")
 	if village_maitrise == 0 and frags == 0:
 		return Translations.T("hint.reach_rare")
-	if village_maitrise >= 1 and not GameData.can_forge("equipment_arme") \
-			and not GameData.can_forge("equipment_anneau") \
-			and not GameData.can_forge("equipment_armure"):
-		return Translations.T("hint.forge_ready")
 	if village_maitrise < GameData.village_max_tier():
 		var missing := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise] - frags
 		return Translations.T("hint.need_fragments") % missing

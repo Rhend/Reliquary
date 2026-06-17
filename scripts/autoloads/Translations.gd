@@ -74,7 +74,6 @@ const STRINGS: Dictionary = {
 		"hint.start":          "Partez en expédition pour gagner de l'XP et faire progresser vos entités",
 		"hint.reach_rare":     "Faites atteindre le rang Rare à un biome pour libérer un Fragment de Mémoire",
 		"hint.upgrade_ready":  "Le Village peut évoluer — utilisez le bouton au centre du hub",
-		"hint.forge_ready":    "La Forge est disponible — partez en expédition pour remplir les barres XP de vos équipements",
 		"hint.need_fragments": "Encore %d Fragment(s) de Mémoire — faites évoluer vos biomes (Rare, Légendaire, Unique)",
 
 		# ── Conditions Village ────────────────────────────────
@@ -352,7 +351,6 @@ const STRINGS: Dictionary = {
 		"hint.start":          "Go on an expedition to gain XP and progress your entities",
 		"hint.reach_rare":     "Bring a biome to Rare rank to free a Memory Fragment",
 		"hint.upgrade_ready":  "The Village can evolve — use the button at the center of the hub",
-		"hint.forge_ready":    "The Forge is available — go on expeditions to fill your equipment XP bars",
 		"hint.need_fragments": "%d more Memory Fragment(s) — evolve your biomes (Rare, Legendary, Unique)",
 
 		# ── Conditions Village ────────────────────────────────
