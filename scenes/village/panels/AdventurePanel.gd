@@ -67,12 +67,18 @@ static func build(host: Village) -> void:
 	placeholder.add_child(ph_lbl)
 	host.rp_content.add_child(placeholder)
 
-	# Bouton actif (biome sélectionné) — masqué si expédition en cours
+	# Bouton actif (biome sélectionné) — masqué si expédition en cours.
+	# Volontairement plus imposant que les cartes alentour (hauteur, fond
+	# saturé, liseré épais, pulsation) : c'est l'action principale du panneau,
+	# elle ne doit pas se noyer dans la liste des biomes.
 	var btn := Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size   = Vector2(0, 52)
-	btn.add_theme_font_size_override("font_size", 17)
-	btn.add_theme_color_override("font_color", tcolor)
+	btn.custom_minimum_size   = Vector2(0, 64)
+	btn.add_theme_font_size_override("font_size", 20)
+	btn.add_theme_color_override("font_color", tcolor.lightened(0.35))
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
+	btn.add_theme_constant_override("outline_size", 5)
+	btn.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	btn.visible = not no_biome_selected and not AdventureSystem.is_running
 	if not no_biome_selected:
 		var bname: String = Translations.entity_name(
@@ -80,11 +86,19 @@ static func build(host: Village) -> void:
 		btn.text = Translations.T("adv.start_btn_named") % bname
 	else:
 		btn.text = Translations.T("adv.start_btn")
-	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
-	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.30, 1.0, 3, 8))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.48, 1.0, 3, 8))
 	btn.pressed.connect(host.start_selected_expedition)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(btn)
+	# Pulsation continue pour attirer l'œil (même procédé que le bouton Forger).
+	btn.resized.connect(func() -> void: btn.pivot_offset = btn.size * 0.5)
+	var pulse := btn.create_tween()
+	pulse.set_loops()
+	pulse.tween_property(btn, "scale", Vector2(1.02, 1.02), 0.7) \
+			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	pulse.tween_property(btn, "scale", Vector2.ONE, 0.7) \
+			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 	host.rp_content.add_child(btn)
 
 	# ── Séparateur ────────────────────────────────────────────
@@ -277,7 +291,7 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 # chaque nouvelle ligne est une récompense de découverte.
 # `motif` = motif de particules de la barre d'XP (commun à toute la catégorie).
 # `cat_label` = préfixe de catégorie affiché en couleur devant le nom.
-static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, color: Color, motif: int = XPCard.Motif.BUBBLES, btier: int = 0, cat_label: String = "") -> void:
+static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, color: Color, _motif: int = XPCard.Motif.BUBBLES, btier: int = 0, cat_label: String = "") -> void:
 	for entry: Dictionary in pool:
 		var entry_id := entry.get("id", "") as String
 		if not MasteryRegistry.is_discovered(entry_id):
@@ -286,7 +300,6 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		var entity      := GameData.get_entity(entry_id)
 		var bentry      := GameData.player.get("bestiary", {}).get(entry_id, {}) as Dictionary
 		var is_equip: bool = entity.get("entity_type", "") == Enums.EntityType.EQUIPMENT
-		var disp_name   := Translations.entity_name(entry)
 		var entity_tier := 0
 		var entity_xp   := 0.0
 		var at_max      := false
@@ -301,60 +314,42 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		else:
 			entity_tier = entry.get("tier", 0)
 
+		# Nom AU PALIER COURANT (noms par palier) : seule l'entité vivante porte
+		# les noms_par_palier_* ; le pool statique ne sert que de repli. Corrige
+		# le « Loup des Cimes » figé alors que la créature est montée en rareté.
+		var name_src := entity if not entity.is_empty() else entry
+		var disp_name := Translations.entity_name_at(name_src, entity_tier)
+
 		var ec      := UIColors.tier_color(entity_tier)
 		var xp_need := 0
-		var xp_fill := 0.0
 		if not at_max and not is_equip and entity_tier + 1 < GameData.xp_thresholds.size():
 			xp_need = int(GameData.xp_thresholds[entity_tier + 1])
-			if xp_need > 0:
-				xp_fill = clampf(entity_xp / float(xp_need), 0.0, 1.0)
 
-		var panel := UIHelpers.xp_panel(ec, xp_fill, 0.06, 0.38, 1, 3, motif)
+		# Carte XP UNIFIÉE — exactement la même DA que les biomes (palier + XP
+		# CENTRÉS, fond rempli, motif choisi par type). Remplace l'ancien layout
+		# maison où rareté et XP étaient alignés à droite.
+		var xp_max_card := float(xp_need) if (not at_max and not is_equip and xp_need > 0) else 0.0
+		var built  := UIHelpers.entity_xp_card(disp_name, entity_tier, entity_xp,
+				xp_max_card, "", entity.get("entity_type", "") as String)
+		var panel  := built["card"] as XPCard
+		var header := built["header"] as HBoxContainer
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		parent.add_child(panel)
+
+		# Préfixe de catégorie (« Créature »…) en couleur, greffé à droite de
+		# l'en-tête pour ne pas déséquilibrer le bloc central.
+		if cat_label != "":
+			var cat_lbl := Label.new()
+			cat_lbl.text = cat_label
+			cat_lbl.add_theme_font_size_override("font_size", 10)
+			cat_lbl.add_theme_color_override("font_color",
+					Color(color.r, color.g, color.b, 0.85))
+			header.add_child(cat_lbl)
 
 		# Tooltip de l'entité.
 		UIHelpers.register_tooltip(panel, disp_name,
 				_tooltip_entity_body(entry, entity, btier), ec,
 				Translations.entity_lore(entity))
-
-		var pm := UIHelpers.margin_of(4)
-		panel.add_child(pm)
-
-		var hb := HBoxContainer.new()
-		hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pm.add_child(hb)
-
-		if cat_label != "":
-			var cat_lbl := Label.new()
-			cat_lbl.text = cat_label + " · "
-			cat_lbl.add_theme_font_size_override("font_size", 11)
-			cat_lbl.add_theme_color_override("font_color",
-					Color(color.r, color.g, color.b, 0.85))
-			hb.add_child(cat_lbl)
-
-		var name_lbl := Label.new()
-		name_lbl.text = disp_name
-		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_lbl.add_theme_font_size_override("font_size", 11)
-		name_lbl.add_theme_color_override("font_color", Color.WHITE)
-		hb.add_child(name_lbl)
-
-		var tbadge := Label.new()
-		tbadge.text = GameData.get_tier_name(entity_tier)
-		tbadge.add_theme_font_size_override("font_size", 10)
-		tbadge.add_theme_color_override("font_color", ec)
-		hb.add_child(tbadge)
-
-		if not is_equip:
-			var xp_text := Translations.T("tier.max_rank") if at_max \
-					else "%s / %s XP" % [UIHelpers.xp_fmt(int(entity_xp)), UIHelpers.xp_fmt(xp_need)]
-			var xp_lbl := Label.new()
-			xp_lbl.text = xp_text
-			xp_lbl.add_theme_font_size_override("font_size", 9)
-			xp_lbl.add_theme_color_override("font_color", ec if at_max else UIColors.TEXT_MUTED)
-			xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			hb.add_child(xp_lbl)
 
 		if MasterySystem.can_evolve(entry_id):
 			parent.add_child(host.make_evolve_btn(

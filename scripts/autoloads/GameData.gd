@@ -349,10 +349,19 @@ func can_upgrade_village() -> bool:
 	return village.get("fragments_collectes", []).size() >= req
 
 # Passe le Village au palier de Maîtrise suivant. Retourne false si impossible.
+# Les Fragments dépensés (VILLAGE_FRAGMENT_COSTS[palier courant]) sont CONSOMMÉS :
+# ils sont retirés de fragments_collectes (compteur de Fragments en réserve). Le
+# flag est_collecte du Fragment, lui, reste à true → aucune re-libération possible
+# (uncollected_fragment_for se base sur est_collecte, pas sur cette liste).
 func upgrade_village() -> bool:
 	if not can_upgrade_village():
 		return false
-	village["maitrise_actuelle"] = int(village.get("maitrise_actuelle", 0)) + 1
+	var current := int(village.get("maitrise_actuelle", 0))
+	var cost: int = Balance.VILLAGE_FRAGMENT_COSTS[current]
+	var collectes: Array = village.get("fragments_collectes", [])
+	for _i in mini(cost, collectes.size()):
+		collectes.pop_front()
+	village["maitrise_actuelle"] = current + 1
 	EventBus.village_tier_change.emit(village["maitrise_actuelle"])
 	return true
 

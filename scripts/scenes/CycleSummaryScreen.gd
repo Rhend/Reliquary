@@ -147,7 +147,7 @@ func _build_ui() -> void:
 
 	_fill_content(vb, data, biome, biome_name, tcolor)
 
-	# ── Footer : Retour au village uniquement ────────────────
+	# ── Footer : Retour au village + Retourner dans le biome ──
 	var btn_m := MarginContainer.new()
 	btn_m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_m.add_theme_constant_override("margin_left", 18)
@@ -156,20 +156,41 @@ func _build_ui() -> void:
 	btn_m.add_theme_constant_override("margin_bottom", 14)
 	col.add_child(btn_m)
 
+	var btn_row := HBoxContainer.new()
+	btn_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_row.add_theme_constant_override("separation", 12)
+	btn_m.add_child(btn_row)
+
+	var btn := _footer_button(Translations.T("cycle.back_village"), rcolor)
+	btn.pressed.connect(_go_to_village)
+	btn_row.add_child(btn)
+
+	# Relance la MÊME expédition (même biome → même zone, déterminée par le
+	# palier du biome). Absent si le biome n'existe plus.
+	var biome_id := data.get("biome_id", "") as String
+	if not biome_id.is_empty() and not GameData.get_entity(biome_id).is_empty():
+		var bcolor := UIColors.tier_color(GameData.get_entity(biome_id).get("maitrise_actuelle", 0) as int)
+		var btn_again := _footer_button(Translations.T("cycle.back_biome"), bcolor)
+		btn_again.pressed.connect(_replay_biome.bind(biome_id))
+		btn_row.add_child(btn_again)
+
+	_fade_register(btn_m)
+
+# Bouton de pied de page (même DA pour « Retour au village » et « Retourner
+# dans le biome ») : pleine largeur partagée, couleur d'accent paramétrable.
+func _footer_button(text: String, color: Color) -> Button:
 	var btn := Button.new()
-	btn.text = Translations.T("cycle.back_village")
+	btn.text = text
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size   = Vector2(0, 50)
 	btn.add_theme_font_size_override("font_size", 16)
-	btn.add_theme_color_override("font_color", rcolor.lightened(0.20))
-	btn.add_theme_color_override("font_hover_color", rcolor.lightened(0.45))
-	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(rcolor, 0.10, 0.70, 1, 8))
-	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(rcolor, 0.22, 1.0, 1, 8))
-	btn.pressed.connect(_go_to_village)
+	btn.add_theme_color_override("font_color", color.lightened(0.20))
+	btn.add_theme_color_override("font_hover_color", color.lightened(0.45))
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(color, 0.10, 0.70, 1, 8))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(color, 0.22, 1.0, 1, 8))
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(btn)
-	btn_m.add_child(btn)
-	_fade_register(btn_m)
+	return btn
 
 # ── Bannière de résultat : aura radiale + titre + sous-titre ──
 func _build_banner(col: VBoxContainer, rtext: String, rcolor: Color,
@@ -769,3 +790,15 @@ func _xp_card(icon: String, label: String, tier: int,
 
 func _go_to_village() -> void:
 	UIHelpers.fade_to_scene(self, "res://scenes/village/village.tscn")
+
+# Relance immédiatement une expédition sur le même biome — donc la même zone,
+# qui est déterminée par le palier du biome (cf. AdventureSystem._get_max_zone).
+# Réplique le flux de Village.start_selected_expedition (start_adventure puis
+# bascule vers CombatScene), seul chemin de lancement éprouvé.
+func _replay_biome(biome_id: String) -> void:
+	if biome_id.is_empty() or GameData.get_entity(biome_id).is_empty():
+		_go_to_village()
+		return
+	GameData.player["active_biome_id"] = biome_id
+	AdventureSystem.start_adventure(biome_id)
+	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
