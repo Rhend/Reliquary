@@ -420,7 +420,7 @@ func _build_combatant_bars() -> Control:
 	var hero_col := VBoxContainer.new()
 	hero_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hero_col.size_flags_stretch_ratio = 1.0
-	hero_col.add_theme_constant_override("separation", 3)
+	hero_col.add_theme_constant_override("separation", 0)
 	_hero_bar = CombatBar.new()
 	_hero_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hero_col.add_child(_hero_bar)
@@ -439,7 +439,7 @@ func _build_combatant_bars() -> Control:
 	var enemy_col := VBoxContainer.new()
 	enemy_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	enemy_col.size_flags_stretch_ratio = 1.0
-	enemy_col.add_theme_constant_override("separation", 3)
+	enemy_col.add_theme_constant_override("separation", 0)
 	_enemy_bar = CombatBar.new()
 	_enemy_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_enemy_bar.mirrored = true
@@ -452,14 +452,13 @@ func _build_combatant_bars() -> Control:
 	_enemy_name = _enemy_bar.name_label
 	return m
 
-# Rangée de pills d'état sous une barre. Hauteur minimale réservée pour que
-# l'apparition/disparition d'un bonus/malus ne fasse pas sauter la barre.
-# `align_right` cale les pills sous le bord droit (créature miroir).
+# Rangée de pills d'état juste sous la barre ATB. Aucune hauteur réservée :
+# tant qu'aucun bonus/malus n'est présent, la rangée est vide donc plate (zéro
+# place prise). `align_right` cale les pills sous le bord droit (créature miroir).
 func _make_states_row(align_right: bool) -> HBoxContainer:
 	var states := HBoxContainer.new()
 	states.alignment = BoxContainer.ALIGNMENT_END if align_right else BoxContainer.ALIGNMENT_BEGIN
 	states.add_theme_constant_override("separation", 4)
-	states.custom_minimum_size = Vector2(0, 20)
 	states.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return states
 
