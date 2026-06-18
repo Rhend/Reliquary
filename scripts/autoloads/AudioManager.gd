@@ -85,6 +85,14 @@ func _build_library() -> void:
 	_streams["benediction_appear"] = _gen_arpeggio(                       # arpège majeur joyeux
 			[523.25, 659.25, 783.99], 0.10, 7.0)
 
+	# Résumé de cycle :
+	_streams["summary_victory"]    = _gen_arpeggio(                       # fanfare ascendante
+			[523.25, 659.25, 783.99, 1046.50], 0.11, 5.0)
+	_streams["summary_defeat"]     = _gen_arpeggio(                       # chute sombre
+			[349.23, 277.18, 207.65], 0.18, 3.5)
+	_streams["reveal_pop"]         = _gen_blip(523.25, 0.06)              # apparition d'un élément
+	_streams["xp_gain"]            = _gen_bell(1568.0, 0.30, 14.0)        # étincelle d'XP
+
 # Stream nommé, pour un appelant qui gère son propre player (son séquencé /
 # pitché, ex. le rituel d'évolution). null si inconnu.
 func stream(sound_name: String) -> AudioStream:
