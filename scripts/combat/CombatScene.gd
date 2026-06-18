@@ -122,6 +122,7 @@ var _hero_haste_pill:    Control = null   # pill « Hâte » héros (rail de vit
 var _enemy_haste_pill:   Control = null   # pill « Hâte » créature
 var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
 var _stinger:            Control = null   # bandeau d'événement piège/bénédiction
+var _evolve_chime: AudioStreamPlayer = null  # carillon « prête à évoluer »
 
 # ═══════════════════════════════════════════════════════════
 func _ready() -> void:
@@ -173,6 +174,43 @@ func _build_ui() -> void:
 	_xp_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_xp_fx_layer.z_index = 50
 	add_child(_xp_fx_layer)
+
+	_build_audio()
+
+# ── Audio : carillon « prête à évoluer » ────────────────────
+# Son généré procéduralement (même famille que le crystal du rituel d'évolution)
+# mais plus court et plus sec — une cloche/notification brève.
+func _build_audio() -> void:
+	_evolve_chime = AudioStreamPlayer.new()
+	_evolve_chime.volume_db = -5.0
+	# Pas de bus dédié dans ce projet : on garde "Master" (défaut) plutôt que
+	# "SFX" (inexistant → erreur runtime).
+	_evolve_chime.stream    = _generate_chime_wav()
+	add_child(_evolve_chime)
+
+# Cloche brillante (fondamentale + harmoniques inharmoniques) à décroissance
+# rapide : attaque sèche, ~0,5 s mais éteinte bien avant. Mono 16 bits.
+func _generate_chime_wav() -> AudioStreamWAV:
+	var sr        := 22050
+	var freq      := 1318.5            # mi aigu — clair, type notification
+	var n_samples := int(sr * 0.5)
+	var data      := PackedByteArray()
+	data.resize(n_samples * 2)
+	for i: int in n_samples:
+		var t        := float(i) / float(sr)
+		var envelope := exp(-t * 13.0)
+		var sample_f := (sin(t * freq * TAU) * 0.60
+					   + sin(t * freq * 2.01 * TAU) * 0.26
+					   + sin(t * freq * 3.02 * TAU) * 0.12) * envelope
+		var v := clampi(int(sample_f * 0.55 * 32767.0), -32768, 32767)
+		data[i * 2 + 0] = v & 0xFF
+		data[i * 2 + 1] = (v >> 8) & 0xFF
+	var wav := AudioStreamWAV.new()
+	wav.format   = AudioStreamWAV.FORMAT_16_BITS
+	wav.stereo   = false
+	wav.mix_rate = sr
+	wav.data     = data
+	return wav
 
 # ── Zone de combat : fonds animés + 2 colonnes + séparateur diagonal ──
 # Les fonds (Ville côté héros, biome côté créature) sont CONFINÉS à cette zone
@@ -669,6 +707,7 @@ func _connect_signals() -> void:
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.loot_dropped.connect(_on_loot_dropped)
 	EventBus.heal_applied.connect(_on_heal_applied)
+	EventBus.bleed_ticked.connect(_on_bleed_ticked)
 	EventBus.adventure_cycle_ended.connect(_on_cycle_ended)
 	EventBus.adventure_stopped.connect(_on_adventure_stopped)
 	EventBus.entity_ready_to_evolve.connect(_on_entity_ready_to_evolve)
@@ -1074,8 +1113,19 @@ func _on_combat_ended(result: Dictionary) -> void:
 func _on_heal_applied(amount: float, new_hp: float) -> void:
 	_hero_bar.update_hp(new_hp)
 	_hero_bar.heal(int(amount))
-	_push_feed(Translations.T("combat.regen") % int(amount), UIColors.HEAL_COLOR)
+	# Toast de régénération sous la barre du héros (et non au centre de l'écran).
+	_push_under_bar_pill(_hero_states, "♥ " + Translations.T("combat.regen") % int(amount), UIColors.HEAL_COLOR)
 	_add_log("[color=%s]%s[/color]" % [_hex(UIColors.HEAL_COLOR), Translations.T("combat.regen") % int(amount)], ["heal"])
+	_check_danger_pulse()
+
+# Tick de saignement/poison infligé par un piège (ex. Baies empoisonnées) : ronge
+# le héros entre les rencontres. Sans retour visuel, le joueur ne « voyait » pas
+# l'état poison → chiffre flottant vert sur la barre + pill poison transitoire.
+func _on_bleed_ticked(damage: float, new_hp: float, _remaining: int) -> void:
+	if is_instance_valid(_hero_bar):
+		_hero_bar.update_hp(new_hp)
+		_hero_bar.poison(int(damage))
+	_push_under_bar_pill(_hero_states, "☠ -%d" % int(damage), Color(0.62, 0.15, 0.78))
 	_check_danger_pulse()
 
 func _on_cycle_ended(result: Dictionary) -> void:
@@ -1150,9 +1200,12 @@ func _spawn_loot_pellet(item_id: String, item_name: String, qty: int) -> void:
 	const D := 33   # +25 % vs taille du bandeau, pour bien la voir jaillir
 	var half := Vector2(D, D) * 0.5
 
-	# Origine : centre de l'anneau créature (fallback : centre-droit de l'écran).
+	# Origine : centre de la boule d'énergie de la créature (là où elle « lâche »
+	# l'ingrédient), pas sa barre ATB. Fallbacks : barre créature, puis centre-droit.
 	var start_c := size * Vector2(0.72, 0.40)
-	if _enemy_bar and is_instance_valid(_enemy_bar):
+	if _enemy_fighter and is_instance_valid(_enemy_fighter) and _enemy_fighter.visible:
+		start_c = _enemy_fighter.global_position + _enemy_fighter.size * 0.5
+	elif _enemy_bar and is_instance_valid(_enemy_bar):
 		start_c = _enemy_bar.global_position + _enemy_bar.size * 0.5
 	# Cible : tiers gauche du bandeau (fallback : coin bas-gauche).
 	var end_c := size * Vector2(0.10, 0.95)
@@ -1725,6 +1778,26 @@ func _make_state_pill_node(text: String, color: Color) -> Control:
 	box.add_child(lbl)
 	return box
 
+# Pill transitoire (toast) ajouté SOUS la barre d'un combattant : pop-in, puis
+# fondu et disparition après ~2 s. Pour les événements ponctuels (régénération,
+# tick de poison) — affichés au même endroit que les états persistants, plutôt
+# qu'au centre de l'écran.
+func _push_under_bar_pill(states: HBoxContainer, text: String, color: Color) -> void:
+	if not states or not is_instance_valid(states):
+		return
+	var pill := _make_state_pill_node(text, color)
+	states.add_child(pill)
+	pill.scale = Vector2(0.5, 0.5)
+	pill.resized.connect(func() -> void:
+		pill.pivot_offset = pill.size * 0.5
+	, CONNECT_ONE_SHOT)
+	var tw := create_tween()
+	tw.tween_property(pill, "scale", Vector2.ONE, 0.25) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.6)
+	tw.tween_property(pill, "modulate:a", 0.0, 0.4)
+	get_tree().create_timer(2.4).timeout.connect(pill.queue_free)
+
 # ═══════════════════════════════════════════════════════════
 #  Polish combat — item 9 (notification d'évolution)
 # ═══════════════════════════════════════════════════════════
@@ -1739,6 +1812,10 @@ func _on_entity_ready_to_evolve(entity_id: String) -> void:
 	var tier   := int(entity.get("maitrise_actuelle", 0))
 	var target := UIColors.tier_color(mini(tier + 1, 5))
 	_push_feed(Translations.T("combat.ready_evolve") % nom, target)
+	# Carillon court et sec (même famille que le crystal du rituel d'évolution) :
+	# marque le coup quand une entité devient éligible.
+	if is_instance_valid(_evolve_chime):
+		_evolve_chime.play()
 	# Tâche B — flash de palier : halo de la couleur du palier cible, ancré sur
 	# l'entité concernée (héros / créature) ou au centre de l'arène.
 	if is_instance_valid(_xp_fx_layer):
