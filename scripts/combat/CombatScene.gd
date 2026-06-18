@@ -359,9 +359,11 @@ func _add_stat_row(rows: VBoxContainer, label: String, value: int, color: Color)
 	row.add_child(v)
 	rows.add_child(row)
 
-# Construit une colonne de l'arène (bande centrale) : intention d'action +
-# pills d'état, calées vers le HAUT de la moitié pour laisser le centre à la
-# boule d'énergie (centrée verticalement). Plus d'anneau ni de plaque de nom.
+# Construit une colonne de l'arène (bande centrale) : intention d'action,
+# calée vers le HAUT de la moitié pour laisser le centre à la boule d'énergie
+# (centrée verticalement). Les pills d'état (bonus/malus) vivent désormais SOUS
+# la barre du combattant (cf. _build_combatant_bars), pas ici. Plus d'anneau
+# ni de plaque de nom.
 func _build_column(is_hero: bool) -> Control:
 	var col := VBoxContainer.new()
 	col.alignment = BoxContainer.ALIGNMENT_BEGIN
@@ -390,21 +392,19 @@ func _build_column(is_hero: bool) -> Control:
 	action_center.add_child(action_box)
 	col.add_child(action_center)
 
-	var states := HBoxContainer.new()
-	states.alignment = BoxContainer.ALIGNMENT_CENTER
-	states.add_theme_constant_override("separation", 4)
-	col.add_child(states)
-
 	if is_hero:
-		_hero_action = action; _hero_states = states
+		_hero_action = action
 	else:
-		_enemy_action = action; _enemy_states = states
+		_enemy_action = action
 	return col
 
 # ── Bande basse de l'arène : deux barres JRPG ────────────────
 # Héros calé à GAUCHE, créature calée à DROITE (barre miroir : se remplit depuis
 # le bord droit). Un espaceur central élastique creuse l'écart pour ne pas que
 # les barres se rejoignent au centre (et libère la place pour la boule à venir).
+# Chaque barre est coiffée par-dessous d'une rangée de pills d'état (bonus/malus :
+# bouclier, venin, hâte) alignée sous le bord du combattant (gauche pour le héros,
+# droite pour la créature miroir).
 # Les labels de nom vivent DANS les barres (_hero_name/_enemy_name : .text + tooltips).
 func _build_combatant_bars() -> Control:
 	var m := MarginContainer.new()
@@ -416,10 +416,17 @@ func _build_combatant_bars() -> Control:
 	band.add_theme_constant_override("separation", 0)
 	m.add_child(band)
 
+	# Colonne héros : barre + rangée d'états dessous (alignée à gauche).
+	var hero_col := VBoxContainer.new()
+	hero_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hero_col.size_flags_stretch_ratio = 1.0
+	hero_col.add_theme_constant_override("separation", 3)
 	_hero_bar = CombatBar.new()
 	_hero_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_hero_bar.size_flags_stretch_ratio = 1.0
-	band.add_child(_hero_bar)
+	hero_col.add_child(_hero_bar)
+	_hero_states = _make_states_row(false)
+	hero_col.add_child(_hero_states)
+	band.add_child(hero_col)
 
 	# Espaceur central (~le tiers d'une barre) : écarte les deux barres du centre.
 	var spacer := Control.new()
@@ -428,15 +435,33 @@ func _build_combatant_bars() -> Control:
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	band.add_child(spacer)
 
+	# Colonne créature : barre miroir + rangée d'états dessous (alignée à droite).
+	var enemy_col := VBoxContainer.new()
+	enemy_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	enemy_col.size_flags_stretch_ratio = 1.0
+	enemy_col.add_theme_constant_override("separation", 3)
 	_enemy_bar = CombatBar.new()
 	_enemy_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_enemy_bar.size_flags_stretch_ratio = 1.0
 	_enemy_bar.mirrored = true
-	band.add_child(_enemy_bar)
+	enemy_col.add_child(_enemy_bar)
+	_enemy_states = _make_states_row(true)
+	enemy_col.add_child(_enemy_states)
+	band.add_child(enemy_col)
 
 	_hero_name  = _hero_bar.name_label
 	_enemy_name = _enemy_bar.name_label
 	return m
+
+# Rangée de pills d'état sous une barre. Hauteur minimale réservée pour que
+# l'apparition/disparition d'un bonus/malus ne fasse pas sauter la barre.
+# `align_right` cale les pills sous le bord droit (créature miroir).
+func _make_states_row(align_right: bool) -> HBoxContainer:
+	var states := HBoxContainer.new()
+	states.alignment = BoxContainer.ALIGNMENT_END if align_right else BoxContainer.ALIGNMENT_BEGIN
+	states.add_theme_constant_override("separation", 4)
+	states.custom_minimum_size = Vector2(0, 20)
+	states.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return states
 
 # ── Feed passifs ───────────────────────────────────────────
 func _build_feed() -> Control:
