@@ -36,6 +36,10 @@ var _creature_bg: BiomeBackground   # fond ambiance biome (côté créature, dro
 # libéré (futur : boule d'énergie + personnages).
 var _hero_bar:    CombatBar
 var _enemy_bar:   CombatBar
+# Boules d'énergie (centre de chaque moitié) : proxys de combattant teintés à la
+# rareté, animés par les steps de combat. Remplaçables par les persos dessinés.
+var _hero_fighter:  CombatFighter
+var _enemy_fighter: CombatFighter
 var _hero_name:   Label           # = _hero_bar.name_label (réf. pour .text + tooltip)
 var _enemy_name:  Label
 var _hero_action: Label
@@ -102,6 +106,13 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_connect_signals()
+	# La scène est chargée APRÈS l'émission de adventure_started (le Village démarre
+	# l'aventure puis change de scène) : ce signal est donc raté. On rejoue l'init
+	# côté héros si une expédition est déjà en cours — sinon la boule et la barre
+	# du héros restent muettes jusqu'au premier combat de créature (et n'apparaissent
+	# pas du tout si la 1re rencontre est un piège/bénédiction).
+	if AdventureSystem.is_running:
+		_on_adventure_started(AdventureSystem.current_biome_id)
 
 # ═══════════════════════════════════════════════════════════
 #  Construction de l'UI
@@ -172,6 +183,14 @@ func _build_combat_area() -> Control:
 	_creature_bg.set_split(2, CombatVS.BAND_WIDTH)
 	_creature_bg.set_zone(zone)
 
+	# Boules d'énergie : au centre de chaque moitié, par-dessus les fonds mais
+	# sous les colonnes (la pill d'action reste lisible). Masquées tant qu'aucun
+	# combattant n'occupe la moitié (le héros est révélé au départ d'expédition).
+	_hero_fighter = _make_fighter(1.0, 0.25)
+	area.add_child(_hero_fighter)
+	_enemy_fighter = _make_fighter(-1.0, 0.75)
+	area.add_child(_enemy_fighter)
+
 	# Colonnes par-dessus les fonds. Héros (gauche) | séparateur 80px | Ennemi (droite).
 	# Le séparateur VS prend la couleur d'accent du biome exploré (ambiance).
 	var vs := CombatVS.new()
@@ -191,6 +210,19 @@ func _build_combat_area() -> Control:
 	_enemy_stats_panel = _make_stats_panel(false)
 	area.add_child(_enemy_stats_panel)
 	return area
+
+# Crée une boule de combattant, centrée sur la fraction horizontale `cx` de
+# l'arène (0.25 = milieu de la moitié gauche, 0.75 = moitié droite), masquée.
+func _make_fighter(facing: float, cx: float) -> CombatFighter:
+	const FS := 150.0
+	var f := CombatFighter.new()
+	f.facing_dir = facing
+	f.anchor_left = cx; f.anchor_right = cx
+	f.anchor_top = 0.5;  f.anchor_bottom = 0.5
+	f.offset_left = -FS * 0.5; f.offset_right = FS * 0.5
+	f.offset_top  = -FS * 0.5; f.offset_bottom = FS * 0.5
+	f.visible = false
+	return f
 
 # Encadré de stats ancré dans un coin haut de la zone de combat (gauche =
 # héros, droite = créature). Auto-dimensionné, transparent à la souris,
@@ -307,13 +339,18 @@ func _add_stat_row(rows: VBoxContainer, label: String, value: int, color: Color)
 	rows.add_child(row)
 
 # Construit une colonne de l'arène (bande centrale) : intention d'action +
-# pills d'état, centrées dans la moitié. Plus d'anneau ni de plaque de nom —
-# le centre est laissé libre (futur : boule d'énergie + personnages).
+# pills d'état, calées vers le HAUT de la moitié pour laisser le centre à la
+# boule d'énergie (centrée verticalement). Plus d'anneau ni de plaque de nom.
 func _build_column(is_hero: bool) -> Control:
 	var col := VBoxContainer.new()
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.alignment = BoxContainer.ALIGNMENT_BEGIN
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 8)
+
+	# Décolle du bord haut (sous la bande zone/mécanique/stats).
+	var top_pad := Control.new()
+	top_pad.custom_minimum_size = Vector2(0, 44)
+	col.add_child(top_pad)
 
 	# Pill d'action : PanelContainer + Label (on garde la référence au Label).
 	# Masquée par défaut — aucune capsule visible hors d'une action chargée.
@@ -566,6 +603,11 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_hero_bar.set_hp(AdventureSystem.current_hp, AdventureSystem.current_hp)
 	_hero_bar.enter_combat()
 	_hide_action(_hero_action)
+	# Boule du héros révélée et vivante ; celle de la créature reste masquée
+	# jusqu'à la première rencontre.
+	_hero_fighter.setup(UIColors.tier_color(htier))
+	_hero_fighter.play_idle()
+	_enemy_fighter.visible = false
 
 	# Tooltip JRPG sur le héros (stats effectives avec équipement)
 	var hstats := GameData.get_effective_stats("hero")
@@ -613,7 +655,9 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
 		Enums.EntityType.TRAP:
 			# Piège : effet annoncé au centre (stinger) → pas d'encadré de stats.
+			# Pas de combattant adverse : la boule créature reste masquée.
 			_enemy_stats_panel.visible = false
+			_enemy_fighter.visible = false
 			var trap := event_data.get("trap", {}) as Dictionary
 			var tname := Translations.entity_name(trap)
 			_enemy_name.text = tname.to_upper()
@@ -637,6 +681,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			if not ignored:
 				_hero_bar.update_hp(AdventureSystem.current_hp)
 				_hero_bar.damage(tdmg, false)
+				_hero_fighter.play_hit()
 				_check_danger_pulse()
 				_add_log("[color=%s]%s[/color] inflige [color=%s]-%d[/color]"
 						% [_hex(UIColors.TIER_EPIQUE), tname, _hex(UIColors.LOG_DEFEAT), tdmg],
@@ -644,6 +689,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 		Enums.EntityType.BENEDICTION:
 			# Bénédiction : effet annoncé au centre (stinger) → pas d'encadré de stats.
 			_enemy_stats_panel.visible = false
+			_enemy_fighter.visible = false
 			var bene := event_data.get("effect", {}) as Dictionary
 			var bname := Translations.entity_name(bene)
 			_enemy_name.text = bname.to_upper()
@@ -678,6 +724,12 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 	_enemy_bar.set_hp(enemy_hp, enemy_hp)
 	# Arrivée de la rencontre : pop élastique de la barre.
 	_enemy_bar.enter_combat()
+
+	# Boules des deux combattants : (re)teintées au palier, vivantes (idle).
+	_hero_fighter.setup(UIColors.tier_color(htier))
+	_hero_fighter.play_idle()
+	_enemy_fighter.setup(UIColors.tier_color(etier))
+	_enemy_fighter.play_idle()
 
 	# Tooltip JRPG sur le nom de l'ennemi : rang + stats
 	var ett := Translations.T("combat.tt_stats") % [
@@ -730,8 +782,16 @@ func _on_step_started(step: CombatStep) -> void:
 	var tw := create_tween()
 	tw.tween_method(ring.set_atb, 0.0, 1.0, CombatPlayer.step_duration).set_ease(Tween.EASE_IN)
 
+# Joue la réaction d'un combattant touché : mort si coup fatal, sinon recul.
+func _fighter_take(target: CombatFighter, killing: bool) -> void:
+	if killing:
+		target.play_death()
+	else:
+		target.play_hit()
+
 # Fin du cooldown : l'attaque atterrit. On applique les dégâts/soins/états,
-# on réinitialise les anneaux et on masque les pills d'action.
+# on réinitialise les jauges ATB et on masque les pills d'action. Les boules
+# d'énergie réagissent (attaque de l'acteur, recul/mort de la cible).
 func _on_step_ended(step: CombatStep) -> void:
 	if step.is_passive_poison:
 		# Contact Venimeux : le venin du héros ronge l'ENNEMI.
@@ -742,6 +802,7 @@ func _on_step_ended(step: CombatStep) -> void:
 				["status", "attack"])
 		if step.is_killing_blow:
 			_kill_impact(_enemy_bar)
+		_fighter_take(_enemy_fighter, step.is_killing_blow)
 	elif step.is_poison:
 		# Poison de biome (Marécage) : le marais toxique ronge le HÉROS.
 		_hero_bar.update_hp(float(step.target_hp_after))
@@ -753,18 +814,22 @@ func _on_step_ended(step: CombatStep) -> void:
 			_kill_impact(_hero_bar)
 		else:
 			_check_danger_pulse()
+		_fighter_take(_hero_fighter, step.is_killing_blow)
 	elif step.attacker == "hero":
+		_hero_fighter.play_attack()
 		_enemy_bar.update_hp(float(step.target_hp_after))
 		_enemy_bar.damage(step.damage, step.is_crit)
 		if step.is_crit:
 			_screen_shake(1.7)
 		if step.is_killing_blow:
 			_kill_impact(_enemy_bar)
+		_fighter_take(_enemy_fighter, step.is_killing_blow)
 		_log_attack(_hero_name.text, step.damage, step.is_crit, ["hero", "attack"])
 		if step.passive_poison_proc:
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TIER_EPIQUE), Translations.T("combat.venom_contact")], ["status"])
 			_update_poison_pill(true)
 	else:
+		_enemy_fighter.play_attack()
 		if step.shield_absorbed > 0:
 			_hero_shield = maxf(_hero_shield - float(step.shield_absorbed), 0.0)
 			_update_shield_pill(int(_hero_shield))
@@ -777,6 +842,7 @@ func _on_step_ended(step: CombatStep) -> void:
 				_screen_shake(1.7)
 			if step.is_killing_blow:
 				_kill_impact(_hero_bar)
+			_fighter_take(_hero_fighter, step.is_killing_blow)
 			_check_danger_pulse()
 		elif step.shield_absorbed > 0:
 			_hero_bar.update_hp(float(step.target_hp_after))
@@ -1012,18 +1078,21 @@ func _flush_xp() -> void:
 	_xp_accum.clear()
 	if entries.is_empty() or not is_instance_valid(_xp_fx_layer):
 		return
-	# Cascade verticale lisible : un type par ligne, préfixé du nom du type pour
-	# qu'on sache À QUI va l'XP. Durée de vie allongée (montée douce + maintien).
+	# L'XP pop dans le coin HAUT-DROIT de la section du héros (moitié gauche de
+	# l'arène, près du séparateur VS), puisque c'est le héros qui mène l'expédition.
+	# Cascade verticale, un type par ligne préfixé du nom du type. Montée lente
+	# (vie 3,0 s) pour laisser le temps de lire.
+	var corner_x := size.x * 0.5 - CombatVS.BAND_WIDTH * 0.5 - 150.0
 	var tw := create_tween()
 	for i in entries.size():
 		var etype := String(entries[i][0])
 		var color := UIColors.entity_type_color(etype)
-		var pos   := Vector2(size.x * 0.5 - 72.0, size.y * 0.40 + i * 26.0)
+		var pos   := Vector2(corner_x, 44.0 + i * 24.0)
 		var amount := Translations.T("combat.xp_float") % int(entries[i][1])
 		var label  := Translations.entity_type_label(etype)
 		var txt    := ("%s  %s" % [label, amount]) if label != "" else amount
 		tw.tween_callback(func() -> void:
-			UIHelpers.float_text(_xp_fx_layer, txt, 16, color, pos, 44.0, false, 2.4))
+			UIHelpers.float_text(_xp_fx_layer, txt, 16, color, pos, 36.0, false, 3.0))
 		tw.tween_interval(0.10)
 
 # Position d'ancrage du halo de palier selon le type de l'entité.
