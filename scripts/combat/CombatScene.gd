@@ -441,9 +441,9 @@ func _build_column(is_hero: bool) -> Control:
 # Héros calé à GAUCHE, créature calée à DROITE (barre miroir : se remplit depuis
 # le bord droit). Un espaceur central élastique creuse l'écart pour ne pas que
 # les barres se rejoignent au centre (et libère la place pour la boule à venir).
-# Chaque barre est coiffée par-dessous d'une rangée de pills d'état (bonus/malus :
-# bouclier, venin, hâte) alignée sous le bord du combattant (gauche pour le héros,
-# droite pour la créature miroir).
+# Les pills d'état (bonus/malus : bouclier, venin, hâte, régén, poison) vivent
+# DANS le cadre de chaque barre, sous la jauge ATB (cf. CombatBar.states_row) ;
+# le cadre grandit pour les englober et ne réserve la place que s'il y en a.
 # Les labels de nom vivent DANS les barres (_hero_name/_enemy_name : .text + tooltips).
 func _build_combatant_bars() -> Control:
 	var m := MarginContainer.new()
@@ -455,17 +455,13 @@ func _build_combatant_bars() -> Control:
 	band.add_theme_constant_override("separation", 0)
 	m.add_child(band)
 
-	# Colonne héros : barre + rangée d'états dessous (alignée à gauche).
-	var hero_col := VBoxContainer.new()
-	hero_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hero_col.size_flags_stretch_ratio = 1.0
-	hero_col.add_theme_constant_override("separation", 0)
+	# Barres top-alignées (SHRINK_BEGIN) : si l'une grandit (états), l'autre reste
+	# courte et les jauges PV/ATB des deux restent alignées en haut.
 	_hero_bar = CombatBar.new()
 	_hero_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hero_col.add_child(_hero_bar)
-	_hero_states = _make_states_row(false)
-	hero_col.add_child(_hero_states)
-	band.add_child(hero_col)
+	_hero_bar.size_flags_vertical   = Control.SIZE_SHRINK_BEGIN
+	_hero_bar.size_flags_stretch_ratio = 1.0
+	band.add_child(_hero_bar)
 
 	# Espaceur central (~le tiers d'une barre) : écarte les deux barres du centre.
 	var spacer := Control.new()
@@ -474,32 +470,19 @@ func _build_combatant_bars() -> Control:
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	band.add_child(spacer)
 
-	# Colonne créature : barre miroir + rangée d'états dessous (alignée à droite).
-	var enemy_col := VBoxContainer.new()
-	enemy_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	enemy_col.size_flags_stretch_ratio = 1.0
-	enemy_col.add_theme_constant_override("separation", 0)
 	_enemy_bar = CombatBar.new()
 	_enemy_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_enemy_bar.size_flags_vertical   = Control.SIZE_SHRINK_BEGIN
+	_enemy_bar.size_flags_stretch_ratio = 1.0
 	_enemy_bar.mirrored = true
-	enemy_col.add_child(_enemy_bar)
-	_enemy_states = _make_states_row(true)
-	enemy_col.add_child(_enemy_states)
-	band.add_child(enemy_col)
+	band.add_child(_enemy_bar)
 
 	_hero_name  = _hero_bar.name_label
 	_enemy_name = _enemy_bar.name_label
+	# Les rangées d'états sont fournies par les barres elles-mêmes (dans le cadre).
+	_hero_states  = _hero_bar.states_row
+	_enemy_states = _enemy_bar.states_row
 	return m
-
-# Rangée de pills d'état juste sous la barre ATB. Aucune hauteur réservée :
-# tant qu'aucun bonus/malus n'est présent, la rangée est vide donc plate (zéro
-# place prise). `align_right` cale les pills sous le bord droit (créature miroir).
-func _make_states_row(align_right: bool) -> HBoxContainer:
-	var states := HBoxContainer.new()
-	states.alignment = BoxContainer.ALIGNMENT_END if align_right else BoxContainer.ALIGNMENT_BEGIN
-	states.add_theme_constant_override("separation", 4)
-	states.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return states
 
 # ── Feed passifs ───────────────────────────────────────────
 # Masqué tant qu'aucun toast n'est affiché : le VBox racine ne lui alloue alors
