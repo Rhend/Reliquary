@@ -291,34 +291,11 @@ func _spawn_number(text: String, font_size: int, color: Color,
 		offset: Vector2 = Vector2.ZERO, punch: bool = false) -> void:
 	_spawn_number_at(text, font_size, color, offset, punch)
 
+# Chiffre flottant ancré en haut de l'anneau. Délègue le mécanisme (montée +
+# fondu) à UIHelpers.float_text, mutualisé avec l'XP flottante de la scène.
 func _spawn_number_at(text: String, font_size: int, color: Color,
 		offset: Vector2, punch: bool = false) -> void:
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", font_size)
-	lbl.add_theme_color_override("font_color", color)
-	lbl.add_theme_constant_override("outline_size", 6 if punch else 3)
-	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.75))
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var sx := _center.x + randf_range(-18.0, 18.0) - 20.0 + offset.x
 	var sy := _center.y - _hp_radius() - 6.0 + offset.y
-	lbl.position = Vector2(sx, sy)
-	_fx_layer.add_child(lbl)
-
-	# Critique : le chiffre claque (scale 1.6 → 1.0 élastique, pivot centré).
-	if punch:
-		lbl.scale = Vector2(1.6, 1.6)
-		lbl.resized.connect(func() -> void:
-			lbl.pivot_offset = lbl.size * 0.5
-		, CONNECT_ONE_SHOT)
-		var ptw := create_tween()
-		ptw.tween_property(lbl, "scale", Vector2.ONE, 0.35) \
-				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
 	var rise := 75.0 if punch else 60.0
-	var tw := create_tween()
-	tw.tween_property(lbl, "position:y", sy - rise, 1.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	tw.parallel().tween_property(lbl, "modulate:a", 0.0, 0.7).set_delay(0.3)
-	# Suppression garantie via un SceneTreeTimer indépendant du Tween :
-	# fiable même si le signal `finished` du Tween parallèle ne se déclenche pas.
-	get_tree().create_timer(1.2).timeout.connect(lbl.queue_free)
+	UIHelpers.float_text(_fx_layer, text, font_size, color, Vector2(sx, sy), rise, punch)

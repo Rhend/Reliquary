@@ -78,6 +78,15 @@ const ZONE_ABYSSE     := Color(0.88, 0.18, 0.12)   # rouge
 # ── Carte neutre (sans rareté native) ───────────────────────
 const CARD_NEUTRAL := Color(0.42, 0.52, 0.68)   # acier-bleu sobre, ni tier ni catégorie
 
+# ── Butin (pastilles placeholder, en attendant les icônes) ──
+const LOOT_NEUTRAL := Color(0.55, 0.62, 0.72)   # ingrédient sans teinte propre
+
+# ── XP flottante par type d'entité réceptrice (combat) ──────
+# Créature → TYPE_CREATURE, Biome → TYPE_BIOME (déjà définis plus haut).
+const XP_HERO      := Color(0.55, 0.36, 0.97)   # violet (cohérent avec ⚔ du héros)
+const XP_PASSIVE   := Color(0.45, 0.90, 0.75)   # vert d'eau
+const XP_EQUIPMENT := Color(0.55, 0.75, 1.00)   # bleu clair (cf. RESULT_SLOT)
+
 # ── Sélection (panneau Expéditions) ─────────────────────────
 const SELECTION_GOLD := Color(1.00, 0.84, 0.30)   # liseré or du biome sélectionné
 
@@ -122,6 +131,24 @@ func tier_color(tier: int) -> Color:
 		Enums.Maitrise.LEGENDAIRE: return TIER_LEGENDAIRE
 		Enums.Maitrise.UNIQUE:     return TIER_UNIQUE
 		_:                         return Color.WHITE
+
+# Couleur d'XP flottante selon le type d'entité réceptrice (combat).
+func entity_type_color(entity_type: String) -> Color:
+	match entity_type:
+		Enums.EntityType.HERO:      return XP_HERO
+		Enums.EntityType.CREATURE:  return TYPE_CREATURE
+		Enums.EntityType.BIOME:     return TYPE_BIOME
+		Enums.EntityType.PASSIVE, Enums.EntityType.PASSIF_UNIQUE: return XP_PASSIVE
+		Enums.EntityType.EQUIPMENT: return XP_EQUIPMENT
+		_:                          return TEXT_HEADER
+
+# Couleur placeholder d'une pastille de butin : teinte stable dérivée de
+# l'item_id (variété visuelle en attendant les icônes), neutre si vide.
+func loot_color(item_id: String) -> Color:
+	if item_id == "":
+		return LOOT_NEUTRAL
+	var hue := float(absi(item_id.hash()) % 360) / 360.0
+	return Color.from_hsv(hue, 0.50, 0.92)
 
 # Couleur d'une zone d'enfoncement (0 = Surface, 1 = Profondeur, 2 = Abysse).
 func zone_color(zone: int) -> Color:

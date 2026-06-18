@@ -189,6 +189,14 @@ const STRINGS: Dictionary = {
 
 		# ── CombatScene ──────────────────────────────────────
 		"combat.end_btn":         "Mettre fin à l'expédition",
+		"combat.loot.title":      "Butin",
+		"combat.loot.empty":      "rien pour l'instant",
+		"combat.xp_float":        "+%d XP",
+		"combat.xp_type.hero":      "Héros",
+		"combat.xp_type.biome":     "Biome",
+		"combat.xp_type.creature":  "Créature",
+		"combat.xp_type.passive":   "Passif",
+		"combat.xp_type.equipment": "Équipement",
 		"combat.xp_label":        "XP ce cycle — 0",
 		"combat.victory":         "— Victoire —",
 		"combat.defeat":          "— Défaite —",
@@ -466,6 +474,14 @@ const STRINGS: Dictionary = {
 
 		# ── CombatScene ──────────────────────────────────────
 		"combat.end_btn":         "End expedition",
+		"combat.loot.title":      "Loot",
+		"combat.loot.empty":      "nothing yet",
+		"combat.xp_float":        "+%d XP",
+		"combat.xp_type.hero":      "Hero",
+		"combat.xp_type.biome":     "Biome",
+		"combat.xp_type.creature":  "Creature",
+		"combat.xp_type.passive":   "Passive",
+		"combat.xp_type.equipment": "Equipment",
 		"combat.xp_label":        "XP this cycle — 0",
 		"combat.victory":         "— Victory —",
 		"combat.defeat":          "— Defeat —",
@@ -587,6 +603,17 @@ func log_tabs() -> PackedStringArray:
 # Retourne le titre d'un panel (clé "hero", "adventure", etc.).
 func panel_title(panel_id: String) -> String:
 	return T("panel." + panel_id)
+
+# Libellé court du type d'entité réceptrice (XP flottante de combat).
+# Passif unique regroupé avec les passifs. Vide pour un type non pertinent.
+func entity_type_label(entity_type: String) -> String:
+	match entity_type:
+		Enums.EntityType.HERO:      return T("combat.xp_type.hero")
+		Enums.EntityType.BIOME:     return T("combat.xp_type.biome")
+		Enums.EntityType.CREATURE:  return T("combat.xp_type.creature")
+		Enums.EntityType.PASSIVE, Enums.EntityType.PASSIF_UNIQUE: return T("combat.xp_type.passive")
+		Enums.EntityType.EQUIPMENT: return T("combat.xp_type.equipment")
+		_:                          return ""
 
 # Retourne le nom d'une mécanique forte traduit.
 func mech_name(mech_id: String) -> String:

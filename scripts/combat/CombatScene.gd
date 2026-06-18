@@ -30,15 +30,14 @@ var _shaker: Control          # conteneur décalé pour le shake d'écran
 var _hero_bg:     BiomeBackground   # fond ambiance Ville (côté héros, gauche)
 var _creature_bg: BiomeBackground   # fond ambiance biome (côté créature, droite)
 
-# ─── Colonnes combattants ────────────────────────────────────
-var _hero_ring:   CombatRing
-var _enemy_ring:  CombatRing
-var _hero_name:   Label
+# ─── Combattants ─────────────────────────────────────────────
+# Barres JRPG (bande basse de l'arène) : nom + PV chiffrés + jauge ATB.
+# Remplacent le double anneau (CombatRing). L'espace central de l'arène est
+# libéré (futur : boule d'énergie + personnages).
+var _hero_bar:    CombatBar
+var _enemy_bar:   CombatBar
+var _hero_name:   Label           # = _hero_bar.name_label (réf. pour .text + tooltip)
 var _enemy_name:  Label
-var _hero_name_style:  StyleBoxFlat   # bordure de la plaque de nom (teintée)
-var _enemy_name_style: StyleBoxFlat
-var _hero_name_chip:   Control
-var _enemy_name_chip:  Control
 var _hero_action: Label
 var _enemy_action: Label
 var _hero_states: HBoxContainer
@@ -65,6 +64,22 @@ var _tab_buttons: Dictionary = {}     # nom → Button
 # ─── Barre de bas ────────────────────────────────────────────
 var _xp_label: Label
 var _flee_btn: Button
+
+# ─── Bandeau de butin du cycle (barre de bas, à gauche) ──────
+# Les pastilles d'ingrédients volent depuis la créature et s'y empilent.
+# Aucune logique de drop ici : on ne fait qu'écouter EventBus.loot_dropped.
+var _loot_banner:  PanelContainer        # cible « qui encaisse »
+var _loot_row:     HBoxContainer         # rangée de pastilles empilées
+var _loot_hint:    Label                 # libellé affiché quand le bandeau est vide
+var _loot_pellets: Dictionary = {}       # item_id → {box: Control, count: Label, qty: int}
+
+# ─── XP flottante par entité (couche FX + agrégation) ────────
+# EventBus.xp_gained arrive ~6 fois quasi simultanément par combat : on agrège
+# par type d'entité réceptrice sur une courte fenêtre, puis on affiche en
+# cascade légère pour éviter le spam. Affichage seul — aucune logique d'XP ici.
+var _xp_fx_layer:    Control                # couche plein écran pour l'XP + halos
+var _xp_accum:       Dictionary = {}        # entity_type → float (fenêtre courante)
+var _xp_flush_timer: SceneTreeTimer = null  # débounce d'agrégation
 
 # ─── Overlays (zone + Unique) ────────────────────────────────
 var _zone_label:   Label   = null
@@ -109,6 +124,7 @@ func _build_ui() -> void:
 	_shaker.add_child(root)
 
 	root.add_child(_build_combat_area())
+	root.add_child(_build_combatant_bars())
 	root.add_child(_build_feed())
 	if LOG_ENABLED:
 		root.add_child(_build_log())
@@ -116,6 +132,14 @@ func _build_ui() -> void:
 
 	_build_zone_label()
 	_build_mechanic_label()
+
+	# Couche FX pour l'XP flottante et les halos de palier : par-dessus la zone
+	# de combat, sous les stingers (z 90+). Transparente à la souris.
+	_xp_fx_layer = Control.new()
+	_xp_fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_xp_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_xp_fx_layer.z_index = 50
+	add_child(_xp_fx_layer)
 
 # ── Zone de combat : fonds animés + 2 colonnes + séparateur diagonal ──
 # Les fonds (Ville côté héros, biome côté créature) sont CONFINÉS à cette zone
@@ -282,51 +306,14 @@ func _add_stat_row(rows: VBoxContainer, label: String, value: int, color: Color)
 	row.add_child(v)
 	rows.add_child(row)
 
-# Construit une colonne combattant ; renseigne les références membres.
+# Construit une colonne de l'arène (bande centrale) : intention d'action +
+# pills d'état, centrées dans la moitié. Plus d'anneau ni de plaque de nom —
+# le centre est laissé libre (futur : boule d'énergie + personnages).
 func _build_column(is_hero: bool) -> Control:
 	var col := VBoxContainer.new()
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 8)
-
-	# Respiration : décolle la plaque de nom du bord haut de la zone.
-	var top_pad := Control.new()
-	top_pad.custom_minimum_size = Vector2(0, 16)
-	col.add_child(top_pad)
-
-	# Plaque de nom : capsule sombre bordée à la couleur du combattant —
-	# lisible quel que soit le fond animé derrière.
-	var name_center := CenterContainer.new()
-	col.add_child(name_center)
-	var name_chip := PanelContainer.new()
-	var chip_style := StyleBoxFlat.new()
-	chip_style.bg_color     = Color(0.04, 0.05, 0.09, 0.88)
-	chip_style.border_color = Color(1, 1, 1, 0.15)
-	chip_style.set_border_width_all(1)
-	chip_style.set_corner_radius_all(9)
-	name_chip.add_theme_stylebox_override("panel", chip_style)
-	name_center.add_child(name_chip)
-	var name_m := MarginContainer.new()
-	name_m.add_theme_constant_override("margin_left", 14)
-	name_m.add_theme_constant_override("margin_right", 14)
-	name_m.add_theme_constant_override("margin_top", 4)
-	name_m.add_theme_constant_override("margin_bottom", 5)
-	name_chip.add_child(name_m)
-
-	var name_lbl := Label.new()
-	name_lbl.text = "—"
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 18)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	name_lbl.add_theme_constant_override("outline_size", 3)
-	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-	name_m.add_child(name_lbl)
-
-	# L'anneau absorbe la hauteur disponible de la colonne : sans le journal,
-	# la zone de combat est plus haute et l'anneau s'agrandit (rayons adaptatifs).
-	var ring := CombatRing.new()
-	ring.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(ring)
 
 	# Pill d'action : PanelContainer + Label (on garde la référence au Label).
 	# Masquée par défaut — aucune capsule visible hors d'une action chargée.
@@ -351,24 +338,47 @@ func _build_column(is_hero: bool) -> Control:
 	col.add_child(states)
 
 	if is_hero:
-		_hero_name = name_lbl; _hero_ring = ring; _hero_action = action; _hero_states = states
-		_hero_name_style = chip_style; _hero_name_chip = name_chip
+		_hero_action = action; _hero_states = states
 	else:
-		_enemy_name = name_lbl; _enemy_ring = ring; _enemy_action = action; _enemy_states = states
-		_enemy_name_style = chip_style; _enemy_name_chip = name_chip
+		_enemy_action = action; _enemy_states = states
 	return col
 
-# Teinte la bordure d'une plaque de nom à la couleur du combattant
-# et fait « pop » la plaque (nouvelle rencontre).
-func _present_name(chip: Control, style: StyleBoxFlat, color: Color) -> void:
-	style.border_color = Color(color.r, color.g, color.b, 0.75)
-	chip.pivot_offset = chip.size * 0.5
-	chip.scale = Vector2(0.7, 0.7)
-	chip.modulate.a = 0.0
-	var tw := create_tween().set_parallel(true)
-	tw.tween_property(chip, "modulate:a", 1.0, 0.15).set_ease(Tween.EASE_OUT)
-	tw.tween_property(chip, "scale", Vector2.ONE, 0.35) \
-			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+# ── Bande basse de l'arène : deux barres JRPG ────────────────
+# Héros calé à GAUCHE, créature calée à DROITE (barre miroir : se remplit depuis
+# le bord droit). Un espaceur central élastique creuse l'écart pour ne pas que
+# les barres se rejoignent au centre (et libère la place pour la boule à venir).
+# Les labels de nom vivent DANS les barres (_hero_name/_enemy_name : .text + tooltips).
+func _build_combatant_bars() -> Control:
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_left",  12)
+	m.add_theme_constant_override("margin_right", 12)
+	m.add_theme_constant_override("margin_bottom", 2)
+
+	var band := HBoxContainer.new()
+	band.add_theme_constant_override("separation", 0)
+	m.add_child(band)
+
+	_hero_bar = CombatBar.new()
+	_hero_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hero_bar.size_flags_stretch_ratio = 1.0
+	band.add_child(_hero_bar)
+
+	# Espaceur central (~le tiers d'une barre) : écarte les deux barres du centre.
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spacer.size_flags_stretch_ratio = 0.42
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.add_child(spacer)
+
+	_enemy_bar = CombatBar.new()
+	_enemy_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_enemy_bar.size_flags_stretch_ratio = 1.0
+	_enemy_bar.mirrored = true
+	band.add_child(_enemy_bar)
+
+	_hero_name  = _hero_bar.name_label
+	_enemy_name = _enemy_bar.name_label
+	return m
 
 # ── Feed passifs ───────────────────────────────────────────
 func _build_feed() -> Control:
@@ -431,19 +441,21 @@ func _build_log() -> Control:
 	return outer
 
 # ── Barre de bas ───────────────────────────────────────────
+# Bandeau de butin (gauche) ↔ bouton fin d'expédition (droite).
 func _build_bottom_bar() -> Control:
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 4)
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 8)
+
+	# Bandeau de butin du cycle : encaisse les pastilles venues de la créature.
+	bar.add_child(_build_loot_banner())
 
 	# Le compteur « XP ce cycle » a été retiré (l'espace est rendu à la zone de
-	# combat, qui descend désormais jusqu'au bouton). _xp_label reste null :
-	# _update_xp_label() est inerte (garde de nullité). Le total d'XP du cycle
-	# reste affiché dans le résumé de fin d'expédition.
+	# combat). _xp_label reste null : _update_xp_label() est inerte (garde de
+	# nullité). Le total d'XP du cycle reste affiché dans le résumé.
 	var tcolor := _hero_tier_color()
 	_flee_btn = Button.new()
 	_flee_btn.text = Translations.T("combat.end_btn")
-	_flee_btn.custom_minimum_size = Vector2(0, 42)
-	_flee_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_flee_btn.custom_minimum_size = Vector2(240, 42)
 	_flee_btn.add_theme_font_size_override("font_size", 15)
 	_flee_btn.add_theme_color_override("font_color", tcolor)
 	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
@@ -453,13 +465,55 @@ func _build_bottom_bar() -> Control:
 	_flee_btn.pressed.connect(_on_flee_pressed)
 
 	var flee_margin := MarginContainer.new()
-	flee_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	flee_margin.add_theme_constant_override("margin_left",  5)
 	flee_margin.add_theme_constant_override("margin_right", 5)
 	flee_margin.add_theme_constant_override("margin_bottom", 4)
 	flee_margin.add_child(_flee_btn)
-	vbox.add_child(flee_margin)
-	return vbox
+	bar.add_child(flee_margin)
+	return bar
+
+# Bandeau de butin : titre + rangée de pastilles. Sa propre case « encaisse »
+# (impact) à chaque ingrédient qui s'y empile. Vidé à chaque début d'expédition.
+func _build_loot_banner() -> Control:
+	var wrap := MarginContainer.new()
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wrap.add_theme_constant_override("margin_left",   5)
+	wrap.add_theme_constant_override("margin_bottom", 4)
+
+	_loot_banner = PanelContainer.new()
+	_loot_banner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_loot_banner.custom_minimum_size = Vector2(0, 42)
+	_loot_banner.add_theme_stylebox_override("panel",
+			UIHelpers.card_style(UIColors.LOG_LOOT, 0.06, 0.45, 1, 6))
+	wrap.add_child(_loot_banner)
+
+	# Marge serrée (6 px) pour laisser un maximum de hauteur aux pastilles.
+	var m := UIHelpers.margin_of(6)
+	_loot_banner.add_child(m)
+
+	var inner := HBoxContainer.new()
+	inner.add_theme_constant_override("separation", 8)
+	inner.alignment = BoxContainer.ALIGNMENT_BEGIN
+	m.add_child(inner)
+
+	var title := Label.new()
+	title.text = Translations.T("combat.loot.title")
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_color_override("font_color", UIColors.LOG_LOOT)
+	inner.add_child(title)
+
+	_loot_row = HBoxContainer.new()
+	_loot_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_loot_row.add_theme_constant_override("separation", 6)
+	inner.add_child(_loot_row)
+
+	_loot_hint = Label.new()
+	_loot_hint.text = Translations.T("combat.loot.empty")
+	_loot_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_loot_hint.add_theme_font_size_override("font_size", 12)
+	_loot_hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	_loot_row.add_child(_loot_hint)
+	return wrap
 
 # ── Helpers UI ─────────────────────────────────────────────
 
@@ -481,6 +535,8 @@ func _connect_signals() -> void:
 	EventBus.creature_unique_vaincue.connect(_on_creature_unique_vaincue)
 	EventBus.combat_started.connect(_on_combat_started)
 	EventBus.combat_ended.connect(_on_combat_ended)
+	EventBus.loot_dropped.connect(_on_loot_dropped)
+	EventBus.xp_gained.connect(_on_xp_gained)
 	EventBus.heal_applied.connect(_on_heal_applied)
 	EventBus.adventure_cycle_ended.connect(_on_cycle_ended)
 	EventBus.adventure_stopped.connect(_on_adventure_stopped)
@@ -496,6 +552,8 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_flee_btn.disabled = false
 	_cycle_xp = 0.0
 	_update_xp_label()
+	_reset_loot_banner()
+	_xp_accum.clear()
 	_update_zone_label(AdventureSystem.zone_courante)
 	if AdventureSystem.zone_courante == Enums.Zone.ABYSSE:
 		_show_unique_indicator()
@@ -504,10 +562,9 @@ func _on_adventure_started(_biome_id: String) -> void:
 	var htier  := int(c.get("maitrise_actuelle", 0))
 	var hname  := Translations.entity_name(c)
 	_hero_name.text = hname.to_upper()
-	_hero_ring.setup(UIColors.tier_color(htier))
-	_hero_ring.set_hp(AdventureSystem.current_hp, AdventureSystem.current_hp)
-	_hero_ring.enter_combat()
-	_present_name(_hero_name_chip, _hero_name_style, UIColors.tier_color(htier))
+	_hero_bar.setup(UIColors.tier_color(htier))
+	_hero_bar.set_hp(AdventureSystem.current_hp, AdventureSystem.current_hp)
+	_hero_bar.enter_combat()
 	_hide_action(_hero_action)
 
 	# Tooltip JRPG sur le héros (stats effectives avec équipement)
@@ -526,8 +583,8 @@ func _on_adventure_started(_biome_id: String) -> void:
 
 	# Colonne ennemi en attente (vide) jusqu'au premier événement.
 	_enemy_name.text = "—"
-	_enemy_ring.setup(UIColors.TEXT_MUTED)
-	_enemy_ring.set_hp(0, 1)
+	_enemy_bar.setup(UIColors.TEXT_MUTED)
+	_enemy_bar.set_hp(0, 1)
 	_hide_action(_enemy_action)
 
 	if _mechanic_label:
@@ -560,10 +617,9 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			var trap := event_data.get("trap", {}) as Dictionary
 			var tname := Translations.entity_name(trap)
 			_enemy_name.text = tname.to_upper()
-			_enemy_ring.setup(UIColors.TYPE_TRAP)
-			_enemy_ring.set_hp(1, 1)
-			_enemy_ring.enter_combat()
-			_present_name(_enemy_name_chip, _enemy_name_style, UIColors.TYPE_TRAP)
+			_enemy_bar.setup(UIColors.TYPE_TRAP)
+			_enemy_bar.set_hp(1, 1)
+			_enemy_bar.enter_combat()
 			_hide_action(_enemy_action)
 			# PV réellement perdus, calculés par AdventureSystem (pourcentage du
 			# PV max selon la zone). L'ancien code lisait trap["damage"] (clé
@@ -579,8 +635,8 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			_show_event_stinger(Translations.T("combat.stinger.trap"), tname,
 					trap_detail, UIColors.TYPE_TRAP, not ignored)
 			if not ignored:
-				_hero_ring.update_hp(AdventureSystem.current_hp)
-				_hero_ring.damage(tdmg, false)
+				_hero_bar.update_hp(AdventureSystem.current_hp)
+				_hero_bar.damage(tdmg, false)
 				_check_danger_pulse()
 				_add_log("[color=%s]%s[/color] inflige [color=%s]-%d[/color]"
 						% [_hex(UIColors.TIER_EPIQUE), tname, _hex(UIColors.LOG_DEFEAT), tdmg],
@@ -591,10 +647,9 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			var bene := event_data.get("effect", {}) as Dictionary
 			var bname := Translations.entity_name(bene)
 			_enemy_name.text = bname.to_upper()
-			_enemy_ring.setup(UIColors.TYPE_BENEDICTION)
-			_enemy_ring.set_hp(1, 1)
-			_enemy_ring.enter_combat()
-			_present_name(_enemy_name_chip, _enemy_name_style, UIColors.TYPE_BENEDICTION)
+			_enemy_bar.setup(UIColors.TYPE_BENEDICTION)
+			_enemy_bar.set_hp(1, 1)
+			_enemy_bar.enter_combat()
 			_hide_action(_enemy_action)
 			var beff   := bene.get("effet", "") as String
 			var bval   := int(bene.get("valeur", 0))
@@ -612,18 +667,17 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 	var htier    := int(c.get("maitrise_actuelle", 0))
 	var hero_max := AdventureSystem.get_max_hp()
 	_hero_name.text = Translations.entity_name(c).to_upper()
-	_hero_ring.setup(UIColors.tier_color(htier))
-	_hero_ring.set_hp(hero_hp, hero_max)
+	_hero_bar.setup(UIColors.tier_color(htier))
+	_hero_bar.set_hp(hero_hp, hero_max)
 
 	var ename      := enemy.get("name", "Ennemi") as String
 	var etier      := int(enemy.get("tier", 0))
 	var etier_name := GameData.get_tier_name(etier)
 	_enemy_name.text = ename.to_upper()
-	_enemy_ring.setup(UIColors.tier_color(etier))
-	_enemy_ring.set_hp(enemy_hp, enemy_hp)
-	# Arrivée de la rencontre : pop élastique de l'anneau + de la plaque.
-	_enemy_ring.enter_combat()
-	_present_name(_enemy_name_chip, _enemy_name_style, UIColors.tier_color(etier))
+	_enemy_bar.setup(UIColors.tier_color(etier))
+	_enemy_bar.set_hp(enemy_hp, enemy_hp)
+	# Arrivée de la rencontre : pop élastique de la barre.
+	_enemy_bar.enter_combat()
 
 	# Tooltip JRPG sur le nom de l'ennemi : rang + stats
 	var ett := Translations.T("combat.tt_stats") % [
@@ -644,8 +698,8 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 			int(enemy.get("vit", 0)))
 	_enemy_stats_panel.visible = true
 
-	_hero_ring.set_cooldown(0.0)
-	_enemy_ring.set_cooldown(0.0)
+	_hero_bar.set_atb(0.0)
+	_enemy_bar.set_atb(0.0)
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 	_hero_shield = 0.0
@@ -665,47 +719,47 @@ func _on_step_started(step: CombatStep) -> void:
 		return
 
 	var is_hero := step.attacker == "hero"
-	var ring := _hero_ring if is_hero else _enemy_ring
+	var ring := _hero_bar if is_hero else _enemy_bar
 	var lbl  := _hero_action if is_hero else _enemy_action
 	var base_col := UIColors.STAT_ATK if is_hero else UIColors.TYPE_TRAP
 	_show_action(lbl, Translations.T("combat.action.crit") if step.is_crit else Translations.T("combat.action.attack"),
 			UIColors.FILTER_ON if step.is_crit else base_col)
-	ring.set_cooldown(0.0)
+	ring.set_atb(0.0)
 	# La charge de l'anneau dure exactement un step côté CombatPlayer :
 	# l'attaque atterrit visuellement quand l'anneau est plein.
 	var tw := create_tween()
-	tw.tween_method(ring.set_cooldown, 0.0, 1.0, CombatPlayer.step_duration).set_ease(Tween.EASE_IN)
+	tw.tween_method(ring.set_atb, 0.0, 1.0, CombatPlayer.step_duration).set_ease(Tween.EASE_IN)
 
 # Fin du cooldown : l'attaque atterrit. On applique les dégâts/soins/états,
 # on réinitialise les anneaux et on masque les pills d'action.
 func _on_step_ended(step: CombatStep) -> void:
 	if step.is_passive_poison:
 		# Contact Venimeux : le venin du héros ronge l'ENNEMI.
-		_enemy_ring.update_hp(float(step.target_hp_after))
-		_enemy_ring.poison(step.damage)
+		_enemy_bar.update_hp(float(step.target_hp_after))
+		_enemy_bar.poison(step.damage)
 		_add_log("[color=%s]%s[/color] [color=%s]-%d[/color]"
 				% [_hex(UIColors.TIER_EPIQUE), Translations.T("combat.venom"), _hex(UIColors.LOG_DEFEAT), step.damage],
 				["status", "attack"])
 		if step.is_killing_blow:
-			_kill_impact(_enemy_ring)
+			_kill_impact(_enemy_bar)
 	elif step.is_poison:
 		# Poison de biome (Marécage) : le marais toxique ronge le HÉROS.
-		_hero_ring.update_hp(float(step.target_hp_after))
-		_hero_ring.poison(step.damage)
+		_hero_bar.update_hp(float(step.target_hp_after))
+		_hero_bar.poison(step.damage)
 		_add_log("[color=%s]%s[/color] [color=%s]-%d[/color]"
 				% [_hex(UIColors.TIER_EPIQUE), Translations.T("combat.poison"), _hex(UIColors.LOG_DEFEAT), step.damage],
 				["status", "attack"])
 		if step.is_killing_blow:
-			_kill_impact(_hero_ring)
+			_kill_impact(_hero_bar)
 		else:
 			_check_danger_pulse()
 	elif step.attacker == "hero":
-		_enemy_ring.update_hp(float(step.target_hp_after))
-		_enemy_ring.damage(step.damage, step.is_crit)
+		_enemy_bar.update_hp(float(step.target_hp_after))
+		_enemy_bar.damage(step.damage, step.is_crit)
 		if step.is_crit:
 			_screen_shake(1.7)
 		if step.is_killing_blow:
-			_kill_impact(_enemy_ring)
+			_kill_impact(_enemy_bar)
 		_log_attack(_hero_name.text, step.damage, step.is_crit, ["hero", "attack"])
 		if step.passive_poison_proc:
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TIER_EPIQUE), Translations.T("combat.venom_contact")], ["status"])
@@ -717,15 +771,15 @@ func _on_step_ended(step: CombatStep) -> void:
 			_add_log("[color=%s]%s[/color]"
 					% [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_absorb") % step.shield_absorbed], ["defense", "status"])
 		if step.damage > 0:
-			_hero_ring.update_hp(float(step.target_hp_after))
-			_hero_ring.damage(step.damage, step.is_crit)
+			_hero_bar.update_hp(float(step.target_hp_after))
+			_hero_bar.damage(step.damage, step.is_crit)
 			if step.is_crit:
 				_screen_shake(1.7)
 			if step.is_killing_blow:
-				_kill_impact(_hero_ring)
+				_kill_impact(_hero_bar)
 			_check_danger_pulse()
 		elif step.shield_absorbed > 0:
-			_hero_ring.update_hp(float(step.target_hp_after))
+			_hero_bar.update_hp(float(step.target_hp_after))
 		if step.is_shield_proc:
 			_hero_shield = float(step.shield_value)
 			_push_feed(Translations.T("combat.shield_pill") % step.shield_value, Color(0.3, 0.7, 1.0))
@@ -733,36 +787,35 @@ func _on_step_ended(step: CombatStep) -> void:
 			_add_log("[color=%s]%s[/color]" % [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_proc")], ["defense", "status"])
 		_log_attack(_enemy_name.text, step.damage, step.is_crit, ["monster", "attack"])
 
-	_hero_ring.set_cooldown(0.0)
-	_enemy_ring.set_cooldown(0.0)
+	_hero_bar.set_atb(0.0)
+	_enemy_bar.set_atb(0.0)
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 
 func _on_combat_ended(result: Dictionary) -> void:
-	_hero_ring.set_cooldown(0.0)
-	_enemy_ring.set_cooldown(0.0)
+	_hero_bar.set_atb(0.0)
+	_enemy_bar.set_atb(0.0)
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 	_stop_danger_pulse()
 	_clear_state_pills()
 	if result.get("victory", false):
-		_hero_ring.celebrate()
-		_enemy_ring.fade_defeated()
-		# La plaque du vaincu s'éteint avec lui (la prochaine rencontre la ravive).
-		create_tween().tween_property(_enemy_name_chip, "modulate:a", 0.35, 0.5)
+		# La barre du vaincu s'éteint avec lui (fade_defeated dim la barre entière,
+		# nom compris ; la prochaine rencontre la ravive via setup/enter_combat).
+		_hero_bar.celebrate()
+		_enemy_bar.fade_defeated()
 		_cycle_xp = AdventureSystem.get_cycle_xp()
 		_update_xp_label()
 		_add_log("[color=%s]%s[/color]" % [_hex(UIColors.LOG_VICTORY), Translations.T("combat.victory")], ["hero"])
 	else:
-		_enemy_ring.celebrate()
-		_hero_ring.fade_defeated()
-		create_tween().tween_property(_hero_name_chip, "modulate:a", 0.35, 0.5)
+		_enemy_bar.celebrate()
+		_hero_bar.fade_defeated()
 		_add_log("[color=%s]%s[/color]" % [_hex(Color(1.0, 0.5, 0.2)), Translations.T("combat.defeat")], ["monster"])
 
 
 func _on_heal_applied(amount: float, new_hp: float) -> void:
-	_hero_ring.update_hp(new_hp)
-	_hero_ring.heal(int(amount))
+	_hero_bar.update_hp(new_hp)
+	_hero_bar.heal(int(amount))
 	_push_feed(Translations.T("combat.regen") % int(amount), UIColors.HEAL_COLOR)
 	_add_log("[color=%s]%s[/color]" % [_hex(UIColors.HEAL_COLOR), Translations.T("combat.regen") % int(amount)], ["heal"])
 	_check_danger_pulse()
@@ -778,6 +831,209 @@ func _on_adventure_stopped() -> void:
 
 func _on_flee_pressed() -> void:
 	AdventureSystem.stop_adventure()
+
+# ═══════════════════════════════════════════════════════════
+#  Bandeau de butin du cycle
+#  Écoute EventBus.loot_dropped (drops déjà calculés par AdventureSystem) et
+#  ne fait que LE PRÉSENTER : une pastille jaillit de la créature, décrit un
+#  arc et s'empile dans le bandeau en bas à gauche.
+# ═══════════════════════════════════════════════════════════
+
+# Vide le bandeau (nouveau cycle) : pastilles retirées, indice « vide » rétabli.
+func _reset_loot_banner() -> void:
+	if not _loot_row:
+		return
+	for child in _loot_row.get_children():
+		if child != _loot_hint:
+			child.queue_free()
+	_loot_pellets.clear()
+	if _loot_hint:
+		_loot_hint.visible = true
+
+# drops : Array de { item_id, name, qty }. source_name non utilisé ici.
+func _on_loot_dropped(drops: Array, _source_name: String) -> void:
+	for d in drops:
+		var item_id := String(d.get("item_id", ""))
+		if item_id == "":
+			continue
+		var ingr := GameData.get_entity(item_id)
+		var nom  := Translations.entity_name(ingr, String(d.get("name", item_id)))
+		_spawn_loot_pellet(item_id, nom, int(d.get("qty", 1)))
+
+# Badge rond placeholder (en attendant les icônes de Christophe) :
+# pastille colorée + initiale du nom.
+func _make_loot_badge(color: Color, initial: String, diameter: int) -> Control:
+	var badge := PanelContainer.new()
+	badge.custom_minimum_size = Vector2(diameter, diameter)
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var st := StyleBoxFlat.new()
+	st.bg_color     = Color(color.r, color.g, color.b, 0.92)
+	st.border_color = color.lightened(0.35)
+	st.set_border_width_all(1)
+	st.set_corner_radius_all(int(diameter / 2))
+	st.shadow_color = Color(0, 0, 0, 0.40)
+	st.shadow_size  = 4
+	badge.add_theme_stylebox_override("panel", st)
+	var lbl := Label.new()
+	lbl.text = initial
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.add_theme_font_size_override("font_size", int(diameter * 0.5))
+	lbl.add_theme_color_override("font_color", Color(0.06, 0.06, 0.09))
+	badge.add_child(lbl)
+	return badge
+
+# Une pastille jaillit de l'anneau de la créature (centre-droit de l'arène),
+# fait un pop sur place, puis vole en arc vers le bandeau et s'y empile.
+func _spawn_loot_pellet(item_id: String, item_name: String, qty: int) -> void:
+	var color   := UIColors.loot_color(item_id)
+	var initial := item_name.substr(0, 1).to_upper() if item_name != "" else "?"
+	const D := 33   # +25 % vs taille du bandeau, pour bien la voir jaillir
+	var half := Vector2(D, D) * 0.5
+
+	# Origine : centre de l'anneau créature (fallback : centre-droit de l'écran).
+	var start_c := size * Vector2(0.72, 0.40)
+	if _enemy_bar and is_instance_valid(_enemy_bar):
+		start_c = _enemy_bar.global_position + _enemy_bar.size * 0.5
+	# Cible : tiers gauche du bandeau (fallback : coin bas-gauche).
+	var end_c := size * Vector2(0.10, 0.95)
+	if _loot_banner and is_instance_valid(_loot_banner):
+		end_c = _loot_banner.global_position + _loot_banner.size * Vector2(0.15, 0.5)
+
+	var pellet := _make_loot_badge(color, initial, D)
+	pellet.z_index = 120
+	add_child(pellet)
+	pellet.pivot_offset    = half
+	pellet.global_position = start_c - half
+	pellet.scale           = Vector2(0.3, 0.3)
+
+	var arc_h := 60.0 + absf(end_c.x - start_c.x) * 0.10
+
+	var tw := create_tween()
+	# Jaillissement : pop élastique sur place.
+	tw.tween_property(pellet, "scale", Vector2(1.05, 1.05), 0.16) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# Vol en arc vers le bandeau (apex via sinus). Lambda mono-ligne : un corps
+	# multi-ligne en argument non-final casse l'indentation côté GDScript.
+	tw.tween_method(func(t: float) -> void: pellet.set("global_position",
+			start_c.lerp(end_c, t) - Vector2(0.0, arc_h * sin(PI * t)) - half),
+			0.0, 1.0, 0.46).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	# Léger rétrécissement en approche (s'écrase dans le bandeau).
+	tw.parallel().tween_property(pellet, "scale", Vector2(0.7, 0.7), 0.46) \
+			.set_ease(Tween.EASE_IN)
+	# Atterrissage : empilement + impact du bandeau.
+	tw.tween_callback(func() -> void:
+		pellet.queue_free()
+		_loot_land(item_id, item_name, qty, color, initial)
+	)
+
+# La pastille atterrit : crée son entrée dans le bandeau, ou incrémente le
+# compteur de l'entrée existante (×2, ×3…) avec un punch. Le bandeau encaisse.
+func _loot_land(item_id: String, item_name: String, qty: int, color: Color, initial: String) -> void:
+	if _loot_hint:
+		_loot_hint.visible = false
+	_punch(_loot_banner, 1.03)
+
+	if _loot_pellets.has(item_id):
+		var entry: Dictionary = _loot_pellets[item_id]
+		entry["qty"] = int(entry["qty"]) + qty
+		var cl: Label = entry["count"]
+		cl.text    = "×%d" % int(entry["qty"])
+		cl.visible = int(entry["qty"]) > 1
+		_punch(entry["box"], 1.25)
+		return
+
+	var box := HBoxContainer.new()
+	box.add_theme_constant_override("separation", 5)
+	# Badge dimensionné au max de la hauteur utile du bandeau (≈ 42 − 2×6).
+	box.add_child(_make_loot_badge(color, initial, 30))
+	var nm := Label.new()
+	nm.text = item_name
+	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	nm.add_theme_font_size_override("font_size", 14)
+	nm.add_theme_color_override("font_color", Color.WHITE)
+	box.add_child(nm)
+	var cnt := Label.new()
+	cnt.text    = "×%d" % qty
+	cnt.visible = qty > 1
+	cnt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cnt.add_theme_font_size_override("font_size", 14)
+	cnt.add_theme_color_override("font_color", UIColors.LOG_LOOT)
+	box.add_child(cnt)
+	_loot_row.add_child(box)
+	_loot_pellets[item_id] = {"box": box, "count": cnt, "qty": qty}
+
+	# Pop d'apparition (pivot connu une fois la taille calculée).
+	box.scale = Vector2(0.6, 0.6)
+	box.resized.connect(func() -> void:
+		box.pivot_offset = box.size * 0.5
+	, CONNECT_ONE_SHOT)
+	create_tween().tween_property(box, "scale", Vector2.ONE, 0.26) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+# Petit « punch » de mise à l'échelle (impact d'encaissement).
+func _punch(node: Control, amount: float) -> void:
+	if not node or not is_instance_valid(node):
+		return
+	node.pivot_offset = node.size * 0.5
+	var tw := create_tween()
+	tw.tween_property(node, "scale", Vector2(amount, amount), 0.08) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(node, "scale", Vector2.ONE, 0.16) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+# ═══════════════════════════════════════════════════════════
+#  XP flottante par entité (Tâche A)
+#  EventBus.xp_gained est émis ~6× par combat (héros, biome, créature, passifs,
+#  équipement). On agrège par type sur une courte fenêtre puis on affiche un
+#  seul « +X XP » coloré par type, en cascade légère. Affichage seul.
+# ═══════════════════════════════════════════════════════════
+
+func _on_xp_gained(entity_id: String, amount: float) -> void:
+	if amount <= 0.0 or not AdventureSystem.is_running:
+		return
+	var etype := String(GameData.get_entity(entity_id).get("entity_type", ""))
+	_xp_accum[etype] = float(_xp_accum.get(etype, 0.0)) + amount
+	# Débounce : une seule fenêtre d'agrégation active à la fois.
+	if _xp_flush_timer == null:
+		_xp_flush_timer = get_tree().create_timer(0.22)
+		_xp_flush_timer.timeout.connect(_flush_xp)
+
+# Vide l'agrégat : un label par type, échelonné via un tween du nœud
+# (auto-libéré avec la scène → pas de callback orphelin après navigation).
+func _flush_xp() -> void:
+	_xp_flush_timer = null
+	var entries: Array = []
+	for etype: String in _xp_accum.keys():
+		var total := int(round(float(_xp_accum[etype])))
+		if total > 0:
+			entries.append([etype, total])
+	_xp_accum.clear()
+	if entries.is_empty() or not is_instance_valid(_xp_fx_layer):
+		return
+	# Cascade verticale lisible : un type par ligne, préfixé du nom du type pour
+	# qu'on sache À QUI va l'XP. Durée de vie allongée (montée douce + maintien).
+	var tw := create_tween()
+	for i in entries.size():
+		var etype := String(entries[i][0])
+		var color := UIColors.entity_type_color(etype)
+		var pos   := Vector2(size.x * 0.5 - 72.0, size.y * 0.40 + i * 26.0)
+		var amount := Translations.T("combat.xp_float") % int(entries[i][1])
+		var label  := Translations.entity_type_label(etype)
+		var txt    := ("%s  %s" % [label, amount]) if label != "" else amount
+		tw.tween_callback(func() -> void:
+			UIHelpers.float_text(_xp_fx_layer, txt, 16, color, pos, 44.0, false, 2.4))
+		tw.tween_interval(0.10)
+
+# Position d'ancrage du halo de palier selon le type de l'entité.
+func _evolve_anchor(entity: Dictionary) -> Vector2:
+	var etype := String(entity.get("entity_type", ""))
+	if etype == Enums.EntityType.HERO and _hero_bar and is_instance_valid(_hero_bar):
+		return _hero_bar.global_position + _hero_bar.size * 0.5
+	if etype == Enums.EntityType.CREATURE and _enemy_bar and is_instance_valid(_enemy_bar):
+		return _enemy_bar.global_position + _enemy_bar.size * 0.5
+	return size * Vector2(0.5, 0.40)
 
 # ═══════════════════════════════════════════════════════════
 #  Animation cooldown / shake / feed
@@ -1154,24 +1410,24 @@ func _start_danger_pulse() -> void:
 	if _danger_pulse_tween:
 		_danger_pulse_tween.kill()
 	_danger_pulse_tween = create_tween().set_loops()
-	_danger_pulse_tween.tween_property(_hero_ring, "modulate:a", 0.45, 0.35).set_trans(Tween.TRANS_SINE)
-	_danger_pulse_tween.tween_property(_hero_ring, "modulate:a", 1.0,  0.35).set_trans(Tween.TRANS_SINE)
+	_danger_pulse_tween.tween_property(_hero_bar, "modulate:a", 0.45, 0.35).set_trans(Tween.TRANS_SINE)
+	_danger_pulse_tween.tween_property(_hero_bar, "modulate:a", 1.0,  0.35).set_trans(Tween.TRANS_SINE)
 
 func _stop_danger_pulse() -> void:
 	if _danger_pulse_tween:
 		_danger_pulse_tween.kill()
 		_danger_pulse_tween = null
-	if _hero_ring:
-		_hero_ring.modulate.a = 1.0
+	if _hero_bar:
+		_hero_bar.modulate.a = 1.0
 
 # ═══════════════════════════════════════════════════════════
 #  Polish combat — item 6 (flash coup fatal)
 # ═══════════════════════════════════════════════════════════
 
-func _kill_impact(ring: CombatRing) -> void:
+func _kill_impact(bar: CombatBar) -> void:
 	var tw := create_tween()
-	tw.tween_property(ring, "modulate", Color(2.2, 2.2, 2.2, 1.0), 0.06)
-	tw.tween_property(ring, "modulate", Color.WHITE, 0.40).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tw.tween_property(bar, "modulate", Color(2.2, 2.2, 2.2, 1.0), 0.06)
+	tw.tween_property(bar, "modulate", Color.WHITE, 0.40).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 
 # ═══════════════════════════════════════════════════════════
 #  Polish combat — item 8 (pills d'état colorées)
@@ -1234,4 +1490,9 @@ func _on_entity_ready_to_evolve(entity_id: String) -> void:
 	var entity := GameData.get_entity(entity_id)
 	var nom    := Translations.entity_name(entity, entity_id)
 	var tier   := int(entity.get("maitrise_actuelle", 0))
-	_push_feed(Translations.T("combat.ready_evolve") % nom, UIColors.tier_color(mini(tier + 1, 5)))
+	var target := UIColors.tier_color(mini(tier + 1, 5))
+	_push_feed(Translations.T("combat.ready_evolve") % nom, target)
+	# Tâche B — flash de palier : halo de la couleur du palier cible, ancré sur
+	# l'entité concernée (héros / créature) ou au centre de l'arène.
+	if is_instance_valid(_xp_fx_layer):
+		UIHelpers.tier_halo_burst(_xp_fx_layer, _evolve_anchor(entity), target)

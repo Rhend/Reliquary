@@ -73,6 +73,69 @@ static func radial_glow_tex(px: int, offsets: Array[float],
 	return tex
 
 # ═══════════════════════════════════════════════════════════
+#  Effets flottants (chiffres / textes qui montent + fondu)
+# ═══════════════════════════════════════════════════════════
+
+# Texte flottant générique : monte verticalement et se fond, sur la couche FX
+# `host` (Control). Mutualise le mécanisme historique de CombatRing (dégâts /
+# soins / poison) pour qu'il serve aussi à l'XP flottante en scène de combat.
+# `punch` : gros détourage + claquement d'échelle (réservé aux temps forts).
+static func float_text(host: Control, text: String, font_size: int, color: Color,
+		start_pos: Vector2, rise: float = 60.0, punch: bool = false,
+		life: float = 1.2) -> Label:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", font_size)
+	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_constant_override("outline_size", 6 if punch else 3)
+	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.75))
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.position = start_pos
+	host.add_child(lbl)
+
+	if punch:
+		lbl.scale = Vector2(1.6, 1.6)
+		lbl.resized.connect(func() -> void:
+			lbl.pivot_offset = lbl.size * 0.5
+		, CONNECT_ONE_SHOT)
+		host.create_tween().tween_property(lbl, "scale", Vector2.ONE, 0.35) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	var tw := host.create_tween()
+	tw.tween_property(lbl, "position:y", start_pos.y - rise, life * 0.83) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.parallel().tween_property(lbl, "modulate:a", 0.0, life * 0.58).set_delay(life * 0.25)
+	# Suppression garantie via un timer indépendant du Tween.
+	host.get_tree().create_timer(life).timeout.connect(lbl.queue_free)
+	return lbl
+
+# Halo de palier : anneau lumineux qui jaillit (expansion + fondu) à `center`,
+# teinté `color`. Sert à marquer « palier atteignable » de façon impossible à
+# rater. Le TextureRect et son tween appartiennent à `host` (auto-libérés avec).
+static func tier_halo_burst(host: Control, center: Vector2, color: Color,
+		final_radius: float = 110.0) -> void:
+	# Anneau : creux au centre, crête à mi-rayon, éteint au bord.
+	var tex := radial_glow_tex(128, [0.0, 0.5, 1.0], [0.0, 0.85, 0.0])
+	var d := final_radius * 2.0
+	var tr := TextureRect.new()
+	tr.texture        = tex
+	tr.expand_mode    = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode   = TextureRect.STRETCH_SCALE
+	tr.size           = Vector2(d, d)
+	tr.pivot_offset   = Vector2(d, d) * 0.5
+	tr.position       = center - Vector2(d, d) * 0.5
+	tr.modulate       = Color(color.r, color.g, color.b, 0.95)
+	tr.mouse_filter   = Control.MOUSE_FILTER_IGNORE
+	host.add_child(tr)
+
+	tr.scale = Vector2(0.25, 0.25)
+	var tw := host.create_tween().set_parallel(true)
+	tw.tween_property(tr, "scale", Vector2(1.0, 1.0), 0.55) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(tr, "modulate:a", 0.0, 0.55).set_ease(Tween.EASE_IN)
+	host.get_tree().create_timer(0.7).timeout.connect(tr.queue_free)
+
+# ═══════════════════════════════════════════════════════════
 #  Composants
 # ═══════════════════════════════════════════════════════════
 
