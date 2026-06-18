@@ -686,7 +686,8 @@ func _track(tw: Tween) -> Tween:
 	_running_tweens.append(tw)
 	return tw
 
-# Double-clic souris : stoppe la séquence et affiche tout dans son état final.
+# Double-clic souris OU touche Échap : stoppe la séquence et affiche tout dans
+# son état final.
 func _input(event: InputEvent) -> void:
 	if _seq_done:
 		return
@@ -695,6 +696,9 @@ func _input(event: InputEvent) -> void:
 		if mb.pressed and mb.double_click:
 			_skip_to_end()
 			get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel"):
+		_skip_to_end()
+		get_viewport().set_input_as_handled()
 
 func _skip_to_end() -> void:
 	if _seq_done:

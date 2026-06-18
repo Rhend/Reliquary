@@ -57,7 +57,8 @@ var _enemy_stats_panel: PanelContainer
 var _enemy_stats_rows:  VBoxContainer
 
 # ─── Feed passifs ────────────────────────────────────────────
-var _feed_box: HBoxContainer
+var _feed_box:  HBoxContainer
+var _feed_wrap: CenterContainer   # masqué quand vide → ne réserve aucune place
 
 # ─── Journal ─────────────────────────────────────────────────
 var _log_vbox:    VBoxContainer
@@ -463,15 +464,28 @@ func _make_states_row(align_right: bool) -> HBoxContainer:
 	return states
 
 # ── Feed passifs ───────────────────────────────────────────
+# Masqué tant qu'aucun toast n'est affiché : le VBox racine ne lui alloue alors
+# ni hauteur ni séparation → plus d'espace vide entre les barres et le butin.
 func _build_feed() -> Control:
-	var feed_wrap := CenterContainer.new()
-	feed_wrap.custom_minimum_size = Vector2(0, 28)
+	_feed_wrap = CenterContainer.new()
+	_feed_wrap.visible = false
 	_feed_box = HBoxContainer.new()
 	_feed_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_feed_box.add_theme_constant_override("separation", 6)
 	_feed_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	feed_wrap.add_child(_feed_box)
-	return feed_wrap
+	_feed_wrap.add_child(_feed_box)
+	return _feed_wrap
+
+# Replie le feed dès qu'il ne reste plus aucun toast vivant (ignore ceux en
+# cours de libération). Branché sur tree_exited de chaque toast.
+func _update_feed_visibility() -> void:
+	if not is_instance_valid(_feed_wrap):
+		return
+	for c in _feed_box.get_children():
+		if c is Control and not (c as Node).is_queued_for_deletion():
+			_feed_wrap.visible = true
+			return
+	_feed_wrap.visible = false
 
 # ── Journal à onglets ──────────────────────────────────────
 func _build_log() -> Control:
@@ -1371,6 +1385,10 @@ func _push_feed(text: String, color: Color) -> void:
 	lbl.add_theme_color_override("font_color", color.lightened(0.30))
 	box.add_child(lbl)
 	_feed_box.add_child(box)
+	# Déplie le feed (replié à vide) et le replie quand ce toast disparaît.
+	if is_instance_valid(_feed_wrap):
+		_feed_wrap.visible = true
+	box.tree_exited.connect(_update_feed_visibility)
 	# Pop-in (pivot connu une fois la taille calculée).
 	box.scale = Vector2(0.5, 0.5)
 	box.resized.connect(func() -> void:
