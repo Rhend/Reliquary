@@ -32,6 +32,12 @@ var _enemy_dict:       Dictionary = {}
 var _hero_atb_interval:  float = 1.0
 var _enemy_atb_interval: float = 1.0
 
+# Fenêtre de hâte (modificateur de vitesse temporaire accélérant) de chaque
+# combattant, en secondes de LECTURE : Vector2(début, fin). ZERO = aucune.
+# Permet à la scène d'afficher le feedback « Hâte » (pill + jauge teintée).
+var _hero_haste:  Vector2 = Vector2.ZERO
+var _enemy_haste: Vector2 = Vector2.ZERO
+
 var is_playing: bool:
 	get: return _timer != null and not _timer.is_stopped()
 
@@ -39,6 +45,10 @@ var hero_atb_interval: float:
 	get: return _hero_atb_interval
 var enemy_atb_interval: float:
 	get: return _enemy_atb_interval
+var hero_haste_window: Vector2:
+	get: return _hero_haste
+var enemy_haste_window: Vector2:
+	get: return _enemy_haste
 
 func _ready() -> void:
 	_timer          = Timer.new()
@@ -113,13 +123,17 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	_index            = 0
 	_prev_time_sec    = 0.0
 
-	# Intervalle d'affichage de chaque jauge ATB = (1 / aps) / combat_speed.
-	# combat_speed > 1 → lecture plus rapide (délais plus courts). aps = vit / VIT_PER_APS.
-	var speed   := maxf(GameSettings.combat_speed, 0.01)
-	var h_aps   := maxf(h_vit / Balance.VIT_PER_APS, Balance.APS_MIN)
-	var e_aps   := maxf(float(enemy.get("vit", 20)) / Balance.VIT_PER_APS, Balance.APS_MIN)
-	_hero_atb_interval  = maxf((1.0 / h_aps) / speed, MIN_STEP_DURATION)
-	_enemy_atb_interval = maxf((1.0 / e_aps) / speed, MIN_STEP_DURATION)
+	# Intervalle initial de chaque jauge ATB = temps de LECTURE jusqu'au PREMIER
+	# coup du combattant (honnête : embuscade → jauge ennemie déjà pleine donc
+	# coup à t≈0 ; hâte → premier coup plus tôt). Les coups suivants utilisent
+	# gap_to_next_attack(). combat_speed > 1 → lecture plus rapide.
+	var speed := maxf(GameSettings.combat_speed, 0.01)
+	_hero_atb_interval  = _first_attack_playback(Enums.Actor.HERO,  speed)
+	_enemy_atb_interval = _first_attack_playback(Enums.Actor.ENEMY, speed)
+
+	# Fenêtres de hâte (feedback visuel) en secondes de lecture.
+	_hero_haste  = _haste_window(extended_options.get("hero_speed_mods",  []), speed)
+	_enemy_haste = _haste_window(extended_options.get("enemy_speed_mods", []), speed)
 
 	# Enregistrer le cooldown du bouclier si il a procé pendant la résolution
 	var shield_cfg := extended_options.get("passive_shield", {}) as Dictionary
@@ -132,6 +146,46 @@ func start_combat(enemy: Dictionary, current_hp: float,
 
 	EventBus.combat_started.emit("hero", enemy, current_hp, e_hp)
 	_play_next()
+
+# Temps de lecture (s) jusqu'au premier coup d'attaque du combattant `actor`
+# (ignore les ticks de poison). Plancher MIN_STEP_DURATION ; combattant qui ne
+# frappe jamais → plancher.
+func _first_attack_playback(actor: String, speed: float) -> float:
+	for s in _steps:
+		var st := s as CombatStep
+		if st.is_poison or st.is_passive_poison:
+			continue
+		if st.attacker == actor:
+			return maxf(st.time_sec / speed, MIN_STEP_DURATION)
+	return MIN_STEP_DURATION
+
+# Temps de lecture (s) jusqu'à la PROCHAINE attaque du combattant donné, à partir
+# du step courant (_index). Sert à remplir honnêtement la jauge ATB : pendant la
+# hâte, les coups se rapprochent → la jauge monte plus vite.
+func gap_to_next_attack(is_hero: bool) -> float:
+	var speed := maxf(GameSettings.combat_speed, 0.01)
+	var actor := Enums.Actor.HERO if is_hero else Enums.Actor.ENEMY
+	if _index >= _steps.size():
+		return _hero_atb_interval if is_hero else _enemy_atb_interval
+	var from_t := (_steps[_index] as CombatStep).time_sec
+	for j in range(_index + 1, _steps.size()):
+		var s := _steps[j] as CombatStep
+		if s.is_poison or s.is_passive_poison:
+			continue
+		if s.attacker == actor:
+			return maxf((s.time_sec - from_t) / speed, MIN_STEP_DURATION)
+	return _hero_atb_interval if is_hero else _enemy_atb_interval
+
+# Première fenêtre de modificateur de vitesse TEMPORAIRE et accélérant
+# (factor > 1 ou additive > 0), convertie en secondes de lecture. ZERO si aucune.
+func _haste_window(mods: Array, speed: float) -> Vector2:
+	for m: Dictionary in mods:
+		var dur: float = float(m.get("duration", -1.0))
+		var accel := float(m.get("factor", 1.0)) > 1.0 or float(m.get("additive", 0.0)) > 0.0
+		if dur >= 0.0 and accel:
+			var start: float = float(m.get("start", 0.0))
+			return Vector2(start / speed, (start + dur) / speed)
+	return Vector2.ZERO
 
 func stop() -> void:
 	if _timer:

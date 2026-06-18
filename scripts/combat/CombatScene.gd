@@ -109,11 +109,16 @@ var _hero_shield: float = 0.0
 # le combattant frappe, puis se vide et redémarre.
 var _hero_atb_tween:  Tween = null
 var _enemy_atb_tween: Tween = null
+# Fenêtre de hâte (rail de vitesse) : tween d'ordonnancement on/off du feedback.
+var _hero_haste_tween:  Tween = null
+var _enemy_haste_tween: Tween = null
 
 # ─── Polish combat ──────────────────────────────────────────
 var _danger_pulse_tween: Tween   = null   # pulse PV critique (item 5)
 var _shield_state_pill:  Control = null   # pill bouclier bleue  (item 8)
 var _poison_state_pill:  Control = null   # pill venin violette  (item 8)
+var _hero_haste_pill:    Control = null   # pill « Hâte » héros (rail de vitesse)
+var _enemy_haste_pill:   Control = null   # pill « Hâte » créature
 var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
 var _stinger:            Control = null   # bandeau d'événement piège/bénédiction
 
@@ -812,6 +817,11 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 	_hero_shield = 0.0
 	_stop_danger_pulse()
 	_clear_state_pills()
+	_clear_haste()
+	# Feedback de hâte (rail de vitesse) : pill + jauge teintée pendant la fenêtre
+	# (APRÈS _clear_state_pills, qui vide les pills d'états).
+	_setup_haste(true,  CombatPlayer.hero_haste_window)
+	_setup_haste(false, CombatPlayer.enemy_haste_window)
 	_flee_btn.disabled = false
 	_add_log(Translations.T("combat.appears") \
 			% ("[color=%s]%s[/color]" % [_hex(Color(1.0, 0.8, 0.2)), ename]), ["monster"])
@@ -857,6 +867,63 @@ func _stop_atb() -> void:
 		_hero_atb_tween.kill()
 	if _enemy_atb_tween and _enemy_atb_tween.is_valid():
 		_enemy_atb_tween.kill()
+
+# ─── Feedback de hâte (rail de vitesse temporaire) ──────────
+# Programme l'activation puis la coupure du feedback « Hâte » d'un combattant sur
+# la fenêtre `window` = (début, fin) en secondes de lecture. ZERO → rien.
+func _setup_haste(is_hero: bool, window: Vector2) -> void:
+	if window == Vector2.ZERO or window.y <= window.x:
+		return
+	var tw := create_tween()
+	if window.x > 0.001:
+		tw.tween_interval(window.x)
+	tw.tween_callback(_set_haste_active.bind(is_hero, true))
+	tw.tween_interval(maxf(window.y - maxf(window.x, 0.0), 0.05))
+	tw.tween_callback(_set_haste_active.bind(is_hero, false))
+	if is_hero:
+		_hero_haste_tween = tw
+	else:
+		_enemy_haste_tween = tw
+
+# Active/coupe le feedback hâte : jauge ATB teintée + pill « Hâte ».
+func _set_haste_active(is_hero: bool, active: bool) -> void:
+	var bar := _hero_bar if is_hero else _enemy_bar
+	if is_instance_valid(bar):
+		bar.set_haste(active)
+	if active:
+		var states := _hero_states if is_hero else _enemy_states
+		var existing := _hero_haste_pill if is_hero else _enemy_haste_pill
+		if (existing == null or not is_instance_valid(existing)) and states:
+			var pill := _make_state_pill_node("⚡ " + Translations.T("combat.haste_pill"), UIColors.HASTE)
+			states.add_child(pill)
+			if is_hero:
+				_hero_haste_pill = pill
+			else:
+				_enemy_haste_pill = pill
+	else:
+		_remove_haste_pill(is_hero)
+
+func _remove_haste_pill(is_hero: bool) -> void:
+	var pill := _hero_haste_pill if is_hero else _enemy_haste_pill
+	if pill and is_instance_valid(pill):
+		pill.queue_free()
+	if is_hero:
+		_hero_haste_pill = null
+	else:
+		_enemy_haste_pill = null
+
+# Coupe tout feedback hâte en cours (changement de rencontre / fin de combat).
+func _clear_haste() -> void:
+	if _hero_haste_tween and _hero_haste_tween.is_valid():
+		_hero_haste_tween.kill()
+	if _enemy_haste_tween and _enemy_haste_tween.is_valid():
+		_enemy_haste_tween.kill()
+	if is_instance_valid(_hero_bar):
+		_hero_bar.set_haste(false)
+	if is_instance_valid(_enemy_bar):
+		_enemy_bar.set_haste(false)
+	_remove_haste_pill(true)
+	_remove_haste_pill(false)
 
 # Joue la réaction d'un combattant touché : mort si coup fatal, sinon recul.
 func _fighter_take(target: CombatFighter, killing: bool) -> void:
@@ -934,15 +1001,18 @@ func _on_step_ended(step: CombatStep) -> void:
 	# d'un combattant → ils ne touchent aucune jauge. L'autre barre continue sa
 	# charge sans interruption.
 	if not step.is_poison and not step.is_passive_poison:
+		# Intervalle = temps jusqu'au PROCHAIN coup du combattant (honnête même
+		# sous hâte : les coups se rapprochent → la jauge remonte plus vite).
 		if step.attacker == "hero":
-			_charge_atb(true, CombatPlayer.hero_atb_interval)
+			_charge_atb(true, CombatPlayer.gap_to_next_attack(true))
 		else:
-			_charge_atb(false, CombatPlayer.enemy_atb_interval)
+			_charge_atb(false, CombatPlayer.gap_to_next_attack(false))
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 
 func _on_combat_ended(result: Dictionary) -> void:
 	_stop_atb()
+	_clear_haste()
 	_hero_bar.set_atb(0.0)
 	_enemy_bar.set_atb(0.0)
 	_hide_action(_hero_action)
@@ -1571,6 +1641,10 @@ func _clear_state_pills() -> void:
 			child.queue_free()
 	_shield_state_pill = null
 	_poison_state_pill = null
+	# Les pills de hâte sont des enfants de _hero_states/_enemy_states (libérés
+	# ci-dessus) : on annule juste les références pour éviter tout pointeur mort.
+	_hero_haste_pill  = null
+	_enemy_haste_pill = null
 
 func _update_shield_pill(value: int) -> void:
 	var color := Color(0.3, 0.7, 1.0)

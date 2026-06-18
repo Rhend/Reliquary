@@ -11,6 +11,7 @@ func _ready() -> void:
 	_test_degats_plancher()
 	_test_crit_deterministe()
 	_test_embuscade()
+	_test_speed_modifier()
 	_test_endurcissement()
 	_test_poison_biome()
 	_test_bouclier()
@@ -98,17 +99,51 @@ func _test_crit_deterministe() -> void:
 	_assert(steps.all(func(s): return not (s as CombatStep).is_crit),
 			"crit_chance 0.0 → aucun critique")
 
-# Option ambush : le premier step est un tour ennemi gratuit (tick 0).
+# Embuscade : la créature démarre sa jauge ATB pleine → elle frappe en premier,
+# à t = 0, AVANT le héros (exprimé via le modèle de jauge, pas un step spécial).
 func _test_embuscade() -> void:
 	print("\n[TEST] Embuscade (Forêt Sombre)")
 	var steps := CombatResolver.resolve(_hero(), _enemy(), {"ambush": true})
 	var first := steps[0] as CombatStep
-	_assert(first.is_ambush,           "premier step marqué is_ambush")
-	_assert(first.attacker == "enemy", "embuscade portée par l'ennemi")
-	_assert(is_zero_approx(first.time_sec), "embuscade à t = 0 s (avant le cycle ATB)")
-	# Dégâts embuscade = ATK ennemi 10 − DEF héros 5 = 5 → héros à 95 PV.
-	_assert(first.target_hp_after == 95, "dégâts d'embuscade corrects",
-			"hp_after=%d" % first.target_hp_after)
+	_assert(first.attacker == "enemy", "la créature frappe en premier (embuscade)")
+	_assert(is_zero_approx(first.time_sec), "1er coup à t = 0 s (jauge ennemie pleine au départ)")
+	_assert(first.is_ambush, "1er coup ennemi tagué is_ambush")
+	# À vit égale SANS embuscade, le héros frappe en premier : l'embuscade inverse bien l'ordre.
+	var normal := CombatResolver.resolve(_hero(), _enemy())
+	_assert((normal[0] as CombatStep).attacker == "hero",
+			"sans embuscade, le héros frappe en premier (témoin)")
+
+# Rail de vitesse : un modificateur temporaire accélérant augmente le nombre de
+# coups du combattant DANS sa fenêtre (puis la cadence revient à la normale).
+func _test_speed_modifier() -> void:
+	print("\n[TEST] Rail de vitesse (modificateur temporaire)")
+	# Ennemi increvable → combat long. On compte les coups héros avant t = 5 s.
+	var base := CombatResolver.resolve(
+			_hero({"hp": 1.0e9, "hp_max": 1.0e9, "atk": 1.0}),
+			_enemy({"hp": 1.0e9, "atk": 1.0, "def": 50.0}))
+	var hasted := CombatResolver.resolve(
+			_hero({"hp": 1.0e9, "hp_max": 1.0e9, "atk": 1.0}),
+			_enemy({"hp": 1.0e9, "atk": 1.0, "def": 50.0}),
+			{"hero_speed_mods": [{"factor": 3.0, "start": 0.0, "duration": 5.0}]})
+	var base_n   := _hero_hits_before(base, 5.0)
+	var hasted_n := _hero_hits_before(hasted, 5.0)
+	_assert(base_n > 0, "des coups héros de référence dans la fenêtre", "base=%d" % base_n)
+	_assert(hasted_n >= base_n * 2,
+			"hâte ×3 → bien plus de coups dans la fenêtre (≥ 2× le témoin)",
+			"base=%d hasted=%d" % [base_n, hasted_n])
+	# Hors fenêtre la cadence revient à la normale : l'écart par seconde se resserre.
+	var late_base   := _hero_hits_before(base, 20.0) - _hero_hits_before(base, 10.0)
+	var late_hasted := _hero_hits_before(hasted, 20.0) - _hero_hits_before(hasted, 10.0)
+	_assert(absi(late_hasted - late_base) <= 2,
+			"après la fenêtre, cadence revenue à la normale",
+			"late_base=%d late_hasted=%d" % [late_base, late_hasted])
+
+# Nombre de coups d'attaque du héros dont l'horodatage est < t.
+func _hero_hits_before(steps: Array, t: float) -> int:
+	return steps.filter(func(s):
+		var st := s as CombatStep
+		return st.attacker == "hero" and not st.is_passive_poison and st.time_sec < t
+	).size()
 
 # Endurcissement (Montagne) : dégâts héros réduits de 20 %.
 func _test_endurcissement() -> void:

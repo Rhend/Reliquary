@@ -213,7 +213,7 @@ func _validate_entities() -> void:
 					push_warning("GameData: créature %s sans biome_id (plafond de Maîtrise incalculable)" % eid)
 			Enums.EntityType.BENEDICTION:
 				var eff := str(e.get("effet", ""))
-				if eff not in [Enums.BlessEffect.HEAL, Enums.BlessEffect.XP_BONUS]:
+				if eff not in [Enums.BlessEffect.HEAL, Enums.BlessEffect.XP_BONUS, Enums.BlessEffect.HASTE]:
 					push_warning("GameData: bénédiction %s — effet inconnu « %s »" % [eid, eff])
 
 # Lit et parse un fichier JSON. Retourne {} en cas d'erreur.

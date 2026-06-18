@@ -53,6 +53,7 @@ const MODIFIER_ACTIVE := Color(0.95, 0.75, 0.10)
 # ── Effets visuels ──────────────────────────────────────────
 const VICTORY_GLOW := Color(0.22, 1.00, 0.48)   # flash carte héros après victoire
 const HEAL_COLOR   := Color(0.25, 0.95, 0.40)   # nombres flottants de soin
+const HASTE        := Color(0.25, 0.95, 0.85)   # hâte (jauge ATB accélérée + pill « Hâte »)
 
 # ── Forge / Recettes ────────────────────────────────────────
 const INGREDIENT_OK      := Color(0.35, 0.85, 0.35)

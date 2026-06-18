@@ -33,6 +33,7 @@ var camp_color: Color = Color.WHITE
 var cur_hp:     float = 100.0
 var max_hp:     float = 100.0
 var atb:        float = 0.0      # 0..1, piloté par la scène
+var haste_active: bool = false   # hâte : jauge ATB teintée + pulsée (rail de vitesse)
 
 # Barre miroir (créature, à droite de l'arène) : nom à droite, PV chiffrés à
 # gauche, et jauges qui se remplissent depuis le bord DROIT (convention JRPG).
@@ -147,6 +148,11 @@ func update_hp(p_cur: float) -> void:
 # Remplissage de la jauge ATB (0..1). Remplace set_cooldown.
 func set_atb(frac: float) -> void:
 	atb = clampf(frac, 0.0, 1.0)
+	queue_redraw()
+
+# Active/désactive le rendu « hâte » de la jauge ATB (teinte + pulse).
+func set_haste(active: bool) -> void:
+	haste_active = active
 	queue_redraw()
 
 # Entrée en scène : pop élastique + fondu.
@@ -295,8 +301,14 @@ func _draw() -> void:
 	if atb > 0.001:
 		var ready := atb >= 0.999
 		var atb_col := camp_color if ready else UIColors.TEXT_MUTED
+		# Hâte : jauge teintée HASTE et pulsée (sinusoïde) → lecture « buff actif ».
+		if haste_active:
+			var pulse := 0.62 + 0.38 * (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012))
+			atb_col = Color(UIColors.HASTE.r, UIColors.HASTE.g, UIColors.HASTE.b, pulse)
 		_draw_seg(ar, 0.0, atb, atb_col)
-	draw_rect(ar, Color(camp_color.r, camp_color.g, camp_color.b, 0.40), false, 1.0)
+	var border_col := UIColors.HASTE if haste_active \
+			else Color(camp_color.r, camp_color.g, camp_color.b, 0.40)
+	draw_rect(ar, border_col, false, 1.0 if not haste_active else 2.0)
 
 	# ── Flash (crit doré / soin vert) ─────────────────────────
 	if _flash_alpha > 0.001:

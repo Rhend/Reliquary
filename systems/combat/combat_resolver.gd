@@ -52,6 +52,15 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	# ── Options mécaniques ─────────────────────────────────────
 	var use_ambush: bool = options.get("ambush", false)
 
+	# Rail de modification de vitesse : listes de modificateurs {factor, additive,
+	# start, duration} par combattant. factor = multiplicatif (défaut 1,0),
+	# additive = +att/s (défaut 0,0). duration < 0 → permanent sur le combat ;
+	# sinon fenêtre temporaire de `duration` secondes à partir de `start`.
+	# N'importe quel effet (bénédiction, piège, équipement, biome, passif) peut
+	# pousser un modificateur ici — aucune mécanique codée en dur.
+	var h_mods: Array = options.get("hero_speed_mods",  [])
+	var e_mods: Array = options.get("enemy_speed_mods", [])
+
 	# Endurcissement biome (Montagne)
 	var use_endurcissement:   bool  = options.get("endurcissement", false)
 	var endurcissement_mult:  float = (1.0 - Balance.MONTAGNE_ENDURCISSEMENT_REDUCTION) if use_endurcissement else 1.0
@@ -85,44 +94,47 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	# Tableau de poisons indépendants : [{damage: float, turns: int}]
 	var passive_poisons: Array = []
 
-	# ── Tour d'embuscade (Forêt Sombre) ─────────────────────────
-	if use_ambush:
-		var ambush_step := _make_enemy_step(e_atk, h_def, h_hp, h_shield, e_crit_chance, e_crit_mult)
-		ambush_step.time_sec = 0.0
-		ambush_step.is_ambush = true
-		h_hp     = float(ambush_step.target_hp_after)
-		h_shield = maxf(h_shield - float(ambush_step.shield_absorbed), 0.0)
-		steps.append(ambush_step)
-		if h_hp <= 0.0:
-			return steps
-		# Vérifier activation bouclier post-embuscade
-		if shield_available and h_hp_max > 0.0 and h_hp / h_hp_max < shield_threshold:
-			h_shield         = h_hp_max * shield_value_pct
-			shield_available = false
-			ambush_step.is_shield_proc = true
-			ambush_step.shield_value   = int(h_shield)
+	# ── Embuscade (Forêt Sombre) : jauge ennemie pleine au départ ──
+	# Plus de « tour gratuit » hors cycle : la créature démarre sa jauge ATB au
+	# seuil d'une attaque, donc elle frappe à t = 0 (avant le héros). Exprimé
+	# proprement dans le modèle de jauge temps réel. Cohérent avec la simultanéité
+	# (jauge ennemie pleine → e_dt = 0 < h_dt → l'ennemi garde l'initiative).
+	var h_gauge  := 0.0
+	var e_gauge: float = Balance.ATTACK_GAUGE if use_ambush else 0.0
+	var sim_time := 0.0
+	var ambush_pending := use_ambush   # marque le 1er coup ennemi comme is_ambush (tag visuel)
 
 	# ── Boucle ATB horodatée en secondes ───────────────────────
 	# Jauge d'action en ATTAQUES (seuil Balance.ATTACK_GAUGE). À chaque itération,
-	# on avance le temps jusqu'au prochain combattant prêt à frapper et UN SEUL
-	# frappe ; le surplus de jauge est conservé (gauge -= seuil). Sur quasi-égalité
-	# (≤ SIMULTANEITY_EPS), le héros est prioritaire — l'ennemi frappe alors à
-	# l'itération suivante (dt ≈ 0), au même instant.
-	var h_gauge  := 0.0
-	var e_gauge  := 0.0
-	var sim_time := 0.0
-
+	# on avance jusqu'au PROCHAIN événement : soit un combattant atteint son seuil
+	# (il frappe, surplus conservé), soit une frontière de modificateur de vitesse
+	# est franchie (l'aps change, pas de frappe). L'aps effectif intègre le rail
+	# de vitesse (_effective_aps). Sur quasi-égalité (≤ SIMULTANEITY_EPS), le héros
+	# est prioritaire — l'ennemi frappe alors à l'itération suivante (dt ≈ 0).
 	while h_hp > 0.0 and e_hp > 0.0 and steps.size() < MAX_STEPS:
-		# Secondes avant que chacun n'atteigne le seuil d'une attaque.
-		var h_dt := (Balance.ATTACK_GAUGE - h_gauge) / h_aps
-		var e_dt := (Balance.ATTACK_GAUGE - e_gauge) / e_aps
+		var h_aps_t := _effective_aps(h_aps, h_mods, sim_time)
+		var e_aps_t := _effective_aps(e_aps, e_mods, sim_time)
+		# Secondes avant que chacun n'atteigne le seuil d'une attaque (à aps courant).
+		var h_dt := (Balance.ATTACK_GAUGE - h_gauge) / h_aps_t
+		var e_dt := (Balance.ATTACK_GAUGE - e_gauge) / e_aps_t
 		var hero_first := h_dt <= e_dt + Balance.SIMULTANEITY_EPS
-		var dt := h_dt if hero_first else e_dt
+		var strike_dt := h_dt if hero_first else e_dt
+
+		# Prochaine frontière de modificateur (début/fin de fenêtre) → l'aps change.
+		var bnd_t := minf(_next_mod_boundary(h_mods, sim_time), _next_mod_boundary(e_mods, sim_time))
+		var bnd_dt := bnd_t - sim_time
+		if bnd_dt < strike_dt - 1.0e-9:
+			# On atteint une frontière avant toute frappe : avance le temps et les
+			# jauges (aux aps courants), puis recalcule les aps à l'itération suivante.
+			sim_time += bnd_dt
+			h_gauge  += h_aps_t * bnd_dt
+			e_gauge  += e_aps_t * bnd_dt
+			continue
 
 		# Avance le temps simulé et les deux jauges (l'un atteint pile le seuil).
-		sim_time += dt
-		h_gauge  += h_aps * dt
-		e_gauge  += e_aps * dt
+		sim_time += strike_dt
+		h_gauge  += h_aps_t * strike_dt
+		e_gauge  += e_aps_t * strike_dt
 
 		if hero_first:
 			# ── Tour héros ───────────────────────────────────────
@@ -145,6 +157,11 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 			e_gauge -= Balance.ATTACK_GAUGE
 			var step := _make_enemy_step(e_atk, h_def, h_hp, h_shield, e_crit_chance, e_crit_mult)
 			step.time_sec = sim_time
+			# Le tout premier coup ennemi sous Embuscade est tagué is_ambush (frappe
+			# à t = 0 via la jauge pleine). Tag visuel seulement, coup normal.
+			if ambush_pending:
+				step.is_ambush = true
+				ambush_pending = false
 			h_hp     = float(step.target_hp_after)
 			h_shield = maxf(h_shield - float(step.shield_absorbed), 0.0)
 			steps.append(step)
@@ -215,6 +232,43 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 					break
 
 	return steps
+
+# ─── Rail de vitesse : aps effectif & frontières de fenêtres ──
+
+# aps effectif d'un combattant à l'instant `t` : base × produit des facteurs
+# multiplicatifs actifs + somme des bonus additifs actifs. Un modificateur est
+# actif si t ∈ [start, start+duration) (duration < 0 = permanent). Planché à APS_MIN.
+static func _effective_aps(base_aps: float, mods: Array, t: float) -> float:
+	var mult := 1.0
+	var add  := 0.0
+	for m: Dictionary in mods:
+		if _mod_active(m, t):
+			mult *= float(m.get("factor", 1.0))
+			add  += float(m.get("additive", 0.0))
+	return maxf(base_aps * mult + add, Balance.APS_MIN)
+
+static func _mod_active(m: Dictionary, t: float) -> bool:
+	var start: float = float(m.get("start", 0.0))
+	var dur:   float = float(m.get("duration", -1.0))
+	if t < start - 1.0e-9:
+		return false
+	return dur < 0.0 or t < start + dur
+
+# Instant de la prochaine frontière de fenêtre (début ou fin d'un modificateur)
+# strictement après `t`, ou INF si aucune. Sert à découper le temps en tranches
+# d'aps constant pour une accumulation de jauge exacte.
+static func _next_mod_boundary(mods: Array, t: float) -> float:
+	var next := INF
+	for m: Dictionary in mods:
+		var start: float = float(m.get("start", 0.0))
+		var dur:   float = float(m.get("duration", -1.0))
+		if start > t + 1.0e-9:
+			next = minf(next, start)
+		if dur >= 0.0:
+			var end_t := start + dur
+			if end_t > t + 1.0e-9:
+				next = minf(next, end_t)
+	return next
 
 # ─── Factories de steps ─────────────────────────────────────
 

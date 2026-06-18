@@ -9,7 +9,9 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 - **Équilibrage** : uniquement dans `scripts/autoloads/Balance.gd` (class_name, pas autoload).
 - **Communication inter-systèmes** : uniquement via `EventBus` (aucun référencement direct).
 - **Strings magiques interdits** : types d'entités → `Enums.EntityType.*`, effets de
-  bénédiction → `Enums.BlessEffect.*` (seuls effets supportés : HEAL, XP_BONUS).
+  bénédiction → `Enums.BlessEffect.*` (effets supportés : HEAL, XP_BONUS, HASTE — la
+  Hâte pousse un modificateur de vitesse temporaire sur le héros via le rail de
+  vitesse du combat, cf. `combat_resolver` `hero_speed_mods`).
 - **Noms affichés** : TOUJOURS via `Translations.entity_name(entity)` (et le lore via
   `Translations.entity_lore`, les effets de passifs via `Translations.effect_desc`).
   Champs sources : `nom_affichage_fr`/`nom_affichage_en`, `lore_fr`/`lore_en`

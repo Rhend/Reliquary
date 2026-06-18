@@ -70,7 +70,13 @@ const BLEED_DURATION: int   = 3     # nombre d'événements
 # ═══════════════════════════════════════════════════════════
 
 const BLESS_HEAL_PCT:     float = 0.15  # % PV max restaurés (indépendant de la zone)
-const BLESS_XP_BONUS_PCT: float = 0.50  # bonus d'XP de base sur le prochain événement
+const BLESS_XP_BONUS_PCT: float = 0.50  # bonus d'XP de base sur le prochain événement (LEGACY xp_bonus)
+# Bénédiction de Hâte : +X % de vitesse d'attaque du héros pendant N secondes
+# réelles, appliquée au prochain combat (rail de vitesse, modificateur
+# multiplicatif temporaire). Placeholder — équilibrage ultérieur. Le % réel
+# vient du champ `valeur` du .tres (fallback sur ce défaut).
+const BLESS_HASTE_PCT_DEFAULT: float = 30.0  # +30 % par défaut (si valeur du .tres absente)
+const BLESS_HASTE_DURATION:    float = 10.0  # fenêtre active en secondes réelles de combat
 
 # ═══════════════════════════════════════════════════════════
 #  Combat — résolution (CombatResolver)

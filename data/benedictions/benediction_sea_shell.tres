@@ -12,8 +12,8 @@ nom_affichage_en = "Glittering Geode"
 noms_par_palier_fr = {0: "Géode Étincelante", 1: "Cristal de Quartz", 2: "Éclat de Gemme", 3: "Noyau Cristallin", 4: "Diamant Brut des Cimes", 5: "Lumière Figée dans la Roche"}
 noms_par_palier_en = {0: "Glittering Geode", 1: "Quartz Crystal", 2: "Gem Shard", 3: "Crystalline Core", 4: "Raw Summit Diamond", 5: "Light Frozen in Stone"}
 biome_source_id = "biome_montagne"
-effet = "xp_bonus"
-valeur = 50
+effet = "haste"
+valeur = 30
 
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

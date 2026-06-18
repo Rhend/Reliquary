@@ -75,6 +75,9 @@ var _stats := CycleStats.new()  # stats du cycle courant
 var _bleed_remaining: int   = 0
 # Bénédiction XP : multiplicateur d'XP de base appliqué UNE fois sur le prochain événement.
 var _bless_xp_mult:   float = 1.0
+# Bénédiction de Hâte : modificateur de vitesse du héros en attente, consommé par
+# le PROCHAIN combat (rail de vitesse). {} = aucune. {factor, duration}.
+var _pending_hero_haste: Dictionary = {}
 
 func _ready() -> void:
 	_encounter_timer          = Timer.new()
@@ -136,6 +139,7 @@ func start_adventure(biome_id: String) -> void:
 	_stats           = CycleStats.new()
 	_bleed_remaining = 0
 	_bless_xp_mult   = 1.0
+	_pending_hero_haste = {}
 
 	_pick_modifier()
 
@@ -210,9 +214,24 @@ func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 		"ambush":         _is_first_combat and BiomeMechanics.is_ambush_active(),
 		"poison":         BiomeMechanics.is_mechanic_active("poison"),
 		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
+		"hero_speed_mods": _consume_hero_speed_mods(),
 	}
 	_is_first_combat = false
 	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses(), combat_options)
+
+# Vide et retourne les modificateurs de vitesse du héros en attente (rail de
+# vitesse), sous forme de liste de {factor, start, duration}. Consommé par le
+# combat. La fenêtre démarre au début du combat (start = 0).
+func _consume_hero_speed_mods() -> Array:
+	if _pending_hero_haste.is_empty():
+		return []
+	var mods: Array = [{
+		"factor":   _pending_hero_haste.get("factor", 1.0),
+		"start":    0.0,
+		"duration": _pending_hero_haste.get("duration", Balance.BLESS_HASTE_DURATION),
+	}]
+	_pending_hero_haste = {}
+	return mods
 
 # ─── Rencontre Bénédiction ────────────────────────────────────
 
@@ -253,6 +272,18 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 
 		Enums.BlessEffect.XP_BONUS:
 			_bless_xp_mult = 1.0 + Balance.BLESS_XP_BONUS_PCT
+
+		Enums.BlessEffect.HASTE:
+			# +valeur % de vitesse d'attaque du héros pendant BLESS_HASTE_DURATION s
+			# réelles, appliqué au prochain combat (rail de vitesse). valeur du .tres
+			# (fallback BLESS_HASTE_PCT_DEFAULT). Modificateur multiplicatif temporaire.
+			var pct := float(bene.get("valeur", 0))
+			if pct <= 0.0:
+				pct = Balance.BLESS_HASTE_PCT_DEFAULT
+			_pending_hero_haste = {
+				"factor":   1.0 + pct / 100.0,
+				"duration": Balance.BLESS_HASTE_DURATION,
+			}
 
 # Distribue l'XP de Maîtrise d'un événement résolu à TOUTES les entités actives :
 # l'entité rencontrée, le héros, le biome, le village et les passifs actifs.
@@ -682,6 +713,7 @@ func start_unique_combat() -> void:
 		"ambush":         false,
 		"poison":         BiomeMechanics.is_mechanic_active("poison"),
 		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
+		"hero_speed_mods": _consume_hero_speed_mods(),
 	})
 
 # Résout la victoire contre la créature Unique : flags, ingrédient, passif, signal.
