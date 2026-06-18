@@ -78,6 +78,13 @@ func _build_library() -> void:
 	_streams["ritual_crystal"] = _gen_bell(2400.0, 0.6, 8.0)
 	_streams["evolve_ready"]   = _gen_bell(1318.5, 0.5, 13.0)
 
+	# Placeholders (à remplacer par de vrais fichiers sous le même nom) :
+	_streams["ui_select"]          = _gen_blip(720.0, 0.09)               # clic UI net
+	_streams["attack"]             = _gen_whoosh(0.16)                    # souffle d'attaque
+	_streams["trap_appear"]        = _gen_menace(110.0, 0.55)             # grave, menaçant
+	_streams["benediction_appear"] = _gen_arpeggio(                       # arpège majeur joyeux
+			[523.25, 659.25, 783.99], 0.10, 7.0)
+
 # Stream nommé, pour un appelant qui gère son propre player (son séquencé /
 # pitché, ex. le rituel d'évolution). null si inconnu.
 func stream(sound_name: String) -> AudioStream:
@@ -149,6 +156,73 @@ func _gen_drone(freq: float, dur: float) -> AudioStreamWAV:
 		elif t > dur - fade:
 			env = 1.0 - (t - (dur - fade)) / fade
 		_put_s16(data, i, sin(t * freq * TAU) * 0.35 * env)
+	return _finish_wav(sr, data)
+
+# Blip court : sinus à décroissance très rapide + court fondu d'attaque
+# (anti-clic). Pour les clics d'interface.
+func _gen_blip(freq: float, dur: float) -> AudioStreamWAV:
+	var sr := 22050
+	var n  := int(sr * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i: int in n:
+		var t   := float(i) / float(sr)
+		var env := exp(-t * 32.0)
+		if t < 0.002:                       # fondu d'attaque 2 ms (évite le « clic »)
+			env *= t / 0.002
+		_put_s16(data, i, sin(t * freq * TAU) * 0.5 * env)
+	return _finish_wav(sr, data)
+
+# Souffle / whoosh : bruit blanc adouci (lissage 1 pôle) sous une enveloppe
+# triangulaire (montée brève, descente longue). Pour le lancement d'attaque.
+func _gen_whoosh(dur: float) -> AudioStreamWAV:
+	var sr := 22050
+	var n  := int(sr * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var prev := 0.0
+	for i: int in n:
+		var frac := float(i) / float(n)
+		var env := frac / 0.25 if frac < 0.25 else 1.0 - (frac - 0.25) / 0.75
+		prev = lerpf(prev, randf() * 2.0 - 1.0, 0.30)   # passe-bas simple
+		_put_s16(data, i, prev * 0.6 * clampf(env, 0.0, 1.0))
+	return _finish_wav(sr, data)
+
+# Tonalité grave et menaçante : deux sinus détunés (battement glauque) + une
+# harmonique, décroissance moyenne. Pour l'apparition d'un piège (danger).
+func _gen_menace(freq: float, dur: float) -> AudioStreamWAV:
+	var sr := 22050
+	var n  := int(sr * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i: int in n:
+		var t   := float(i) / float(sr)
+		var env := exp(-t * 5.0)
+		var s := (sin(t * freq * TAU) * 0.5
+				+ sin(t * freq * 1.04 * TAU) * 0.4
+				+ sin(t * freq * 2.0 * TAU) * 0.15) * env * 0.55
+		_put_s16(data, i, s)
+	return _finish_wav(sr, data)
+
+# Arpège ascendant de cloches (accord donné), notes égrenées toutes les
+# `note_dur` s, chacune en décroissance. Pour l'apparition d'une bénédiction.
+func _gen_arpeggio(freqs: Array, note_dur: float, decay: float) -> AudioStreamWAV:
+	var sr := 22050
+	var total := note_dur * float(freqs.size()) + 0.4   # queue pour la dernière note
+	var n := int(sr * total)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i: int in n:
+		var t := float(i) / float(sr)
+		var s := 0.0
+		for k: int in freqs.size():
+			var onset := note_dur * float(k)
+			if t >= onset:
+				var tt := t - onset
+				var env := exp(-tt * decay)
+				var f: float = freqs[k]
+				s += (sin(tt * f * TAU) * 0.6 + sin(tt * f * 2.01 * TAU) * 0.25) * env
+		_put_s16(data, i, clampf(s * 0.4, -1.0, 1.0))
 	return _finish_wav(sr, data)
 
 # Écrit un échantillon float [-1,1] en 16 bits little-endian à l'index i.

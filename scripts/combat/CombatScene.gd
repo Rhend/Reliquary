@@ -725,6 +725,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 					else Translations.T("combat.stinger.trap_dmg") % tdmg
 			_show_event_stinger(Translations.T("combat.stinger.trap"), tname,
 					trap_detail, UIColors.TYPE_TRAP, not ignored)
+			AudioManager.play_sfx("trap_appear", -4.0)
 			if not ignored:
 				_hero_bar.update_hp(AdventureSystem.current_hp)
 				_hero_bar.damage(tdmg, false)
@@ -752,6 +753,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 				UIColors.TYPE_BENEDICTION)
 			_show_event_stinger(Translations.T("combat.stinger.bless"), bname,
 					bdesc, UIColors.TYPE_BENEDICTION, false)
+			AudioManager.play_sfx("benediction_appear", -5.0)
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TYPE_BENEDICTION), bname], ["status"])
 
 func _on_combat_started(hero_id: String, enemy: Dictionary,
@@ -824,6 +826,9 @@ func _on_step_started(step: CombatStep) -> void:
 	# Tick de poison : instantané, pas d'action chargée ni d'intention affichée.
 	if step.is_poison or step.is_passive_poison:
 		return
+
+	# Souffle de l'attaque lancée (placeholder).
+	AudioManager.play_sfx("attack", -7.0)
 
 	var is_hero := step.attacker == "hero"
 	var lbl  := _hero_action if is_hero else _enemy_action
