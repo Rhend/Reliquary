@@ -547,6 +547,9 @@ func _build_bottom_bar() -> Control:
 	_evolve_badge_lbl.add_theme_color_override("font_color", Color.WHITE)
 	_evolve_badge_lbl.add_theme_constant_override("outline_size", 3)
 	_evolve_badge_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	# IGNORE : sans ça, le label (STOP par défaut) vole le survol au bouton dès
+	# que le badge apparaît → le tooltip d'évolution clignote/ne s'affiche pas.
+	_evolve_badge_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_evolve_badge.add_child(_evolve_badge_lbl)
 	inner.add_child(_evolve_badge)
 
