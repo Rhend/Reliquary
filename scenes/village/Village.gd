@@ -577,11 +577,20 @@ func _collapse_district(owner_id: String) -> void:
 		ft.chain().tween_callback(dr.queue_free)
 
 	# Caméra : glisse en douceur jusqu'à la place centrale (aucune téléportation,
-	# aucune reconstruction du hub).
+	# aucune reconstruction du hub). _pan = 0 → place centrale plein écran (état
+	# sans panneau, restauré à la fermeture d'un panneau).
 	_pan = Vector2.ZERO
+	# Cible réelle : si un panneau est ouvert, le hub est réduit et recentré dans
+	# l'espace libre à GAUCHE → centrer la place centrale (vp*0.5) là, pas au
+	# milieu de l'écran (même calcul que _open_panel / _expand_district).
+	var target := _pan
+	if _rp_root != null:
+		var vp := get_viewport_rect().size
+		var free_center := Vector2(vp.x * (1.0 - PANEL_FRACTION) * 0.5, vp.y * 0.5)
+		target = free_center - vp * 0.5  # focus = vp*0.5 → terme d'échelle nul
 	if _hub_root:
 		var ct := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-		ct.tween_property(_hub_root, "position", Vector2.ZERO, 0.5)
+		ct.tween_property(_hub_root, "position", target, 0.5)
 
 # Owner du quartier auquel appartient une pièce (room_panel_id), "" si aucune.
 func _owner_of_room(panel_id: String) -> String:
