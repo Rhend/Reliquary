@@ -1,38 +1,44 @@
 # ============================================================
-# CombatPlayer — Lecteur cosmétique d'une séquence de combat.
+# CombatPlayer — Lecteur cosmétique d'une séquence de combat ATB temps réel.
 #
 # 1. AdventureSystem appelle start_combat() avec l'ennemi et les HP courants.
-# 2. CombatPlayer délègue à CombatResolver (résolution VIT-based instantanée).
-# 3. Les steps sont joués un par un à cadence GameSettings.combat_speed.
+# 2. CombatPlayer délègue à CombatResolver (résolution ATB horodatée en secondes).
+# 3. Chaque step est joué À SON HORODATAGE réel (step.time_sec) : la durée du
+#    combat est ÉMERGENTE, sans borne. GameSettings.combat_speed est un
+#    multiplicateur global de vitesse de lecture (uniforme sur tous les délais).
 # 4. Chaque step émet step_started / step_ended pour piloter l'UI.
 # 5. En fin de séquence, combat_finished est émis ET relayé via EventBus.
 # ============================================================
 extends Node
 
-# Durée par tour calculée dynamiquement dans start_combat() depuis Balance.
-
 signal step_started(step: CombatStep)
 signal step_ended(step: CombatStep)
 signal combat_finished(winner: String)
 
-const MIN_STEP_DURATION: float = 0.05  # plancher de durée d'un step (sécurité timer)
+const MIN_STEP_DURATION: float = 0.05  # plancher de délai entre deux steps (sécurité timer)
 
 var _steps:            Array      = []
 var _index:            int        = 0
-var _step_duration:    float      = 0.0   # durée par tour calculée à start_combat
+var _prev_time_sec:    float      = 0.0   # horodatage du step précédent (calcul des délais)
 var _timer:            Timer
 var _current_hero_hp:  float      = 0.0
 var _current_enemy_hp: float      = 0.0
 var _enemy_dict:       Dictionary = {}
 
+# Intervalle d'affichage entre deux attaques de chaque combattant, en secondes
+# de LECTURE (déjà divisé par combat_speed). Permet à l'UI (CombatScene) de
+# remplir honnêtement chaque jauge ATB à la vitesse réelle du combattant :
+# un combattant rapide remplit visiblement plus vite.
+var _hero_atb_interval:  float = 1.0
+var _enemy_atb_interval: float = 1.0
+
 var is_playing: bool:
 	get: return _timer != null and not _timer.is_stopped()
 
-# Durée d'affichage d'un step du combat courant (lecture seule).
-# Utilisée par l'UI (CombatScene) pour caler ses animations de charge
-# sur le rythme réel du playback.
-var step_duration: float:
-	get: return _step_duration
+var hero_atb_interval: float:
+	get: return _hero_atb_interval
+var enemy_atb_interval: float:
+	get: return _enemy_atb_interval
 
 func _ready() -> void:
 	_timer          = Timer.new()
@@ -105,11 +111,15 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	_current_enemy_hp = e_hp
 	_steps            = CombatResolver.resolve(hero_stats, enemy_stats, extended_options)
 	_index            = 0
+	_prev_time_sec    = 0.0
 
-	# Durée d'affichage bornée : clamp(nb_tours × IDEAL, MIN, MAX), répartie équitablement.
-	var nb := maxi(_steps.size(), 1)
-	var duree := clampf(float(nb) * Balance.TEMPS_TOUR_IDEAL, Balance.COMBAT_MIN, Balance.COMBAT_MAX)
-	_step_duration = maxf(duree / float(nb) * GameSettings.combat_speed, MIN_STEP_DURATION)
+	# Intervalle d'affichage de chaque jauge ATB = (1 / aps) / combat_speed.
+	# combat_speed > 1 → lecture plus rapide (délais plus courts). aps = vit / VIT_PER_APS.
+	var speed   := maxf(GameSettings.combat_speed, 0.01)
+	var h_aps   := maxf(h_vit / Balance.VIT_PER_APS, Balance.APS_MIN)
+	var e_aps   := maxf(float(enemy.get("vit", 20)) / Balance.VIT_PER_APS, Balance.APS_MIN)
+	_hero_atb_interval  = maxf((1.0 / h_aps) / speed, MIN_STEP_DURATION)
+	_enemy_atb_interval = maxf((1.0 / e_aps) / speed, MIN_STEP_DURATION)
 
 	# Enregistrer le cooldown du bouclier si il a procé pendant la résolution
 	var shield_cfg := extended_options.get("passive_shield", {}) as Dictionary
@@ -145,7 +155,13 @@ func _play_next() -> void:
 
 	step_started.emit(step)
 
-	_timer.wait_time = _step_duration
+	# Délai jusqu'à l'atterrissage de ce step = écart d'horodatage avec le step
+	# précédent, ramené en secondes de lecture (÷ combat_speed). Les sous-steps
+	# instantanés (poison partageant l'instant d'un coup) tombent au plancher.
+	var speed := maxf(GameSettings.combat_speed, 0.01)
+	var delay := (step.time_sec - _prev_time_sec) / speed
+	_prev_time_sec = step.time_sec
+	_timer.wait_time = maxf(delay, MIN_STEP_DURATION)
 	_timer.start()
 
 func _on_timer() -> void:

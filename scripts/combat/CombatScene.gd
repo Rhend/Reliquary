@@ -102,6 +102,14 @@ var _cycle_xp:    float = 0.0
 var _navigating:  bool  = false
 var _hero_shield: float = 0.0
 
+# ─── Jauges ATB honnêtes (refonte temps réel) ───────────────
+# Chaque barre se remplit en continu à la cadence RÉELLE de son combattant
+# (CombatPlayer.*_atb_interval), indépendamment de l'autre : un combattant
+# rapide remplit visiblement plus vite. La jauge est pleine pile au moment où
+# le combattant frappe, puis se vide et redémarre.
+var _hero_atb_tween:  Tween = null
+var _enemy_atb_tween: Tween = null
+
 # ─── Polish combat ──────────────────────────────────────────
 var _danger_pulse_tween: Tween   = null   # pulse PV critique (item 5)
 var _shield_state_pill:  Control = null   # pill bouclier bleue  (item 8)
@@ -791,8 +799,11 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 			int(enemy.get("vit", 0)))
 	_enemy_stats_panel.visible = true
 
-	_hero_bar.set_atb(0.0)
-	_enemy_bar.set_atb(0.0)
+	# Jauges ATB honnêtes : chaque barre démarre sa charge à la cadence réelle de
+	# son combattant ; elle sera pleine pile quand il frappera (puis redémarre à
+	# chaque coup, cf. _on_step_ended).
+	_charge_atb(true,  CombatPlayer.hero_atb_interval)
+	_charge_atb(false, CombatPlayer.enemy_atb_interval)
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 	_hero_shield = 0.0
@@ -802,26 +813,47 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 	_add_log(Translations.T("combat.appears") \
 			% ("[color=%s]%s[/color]" % [_hex(Color(1.0, 0.8, 0.2)), ename]), ["monster"])
 
-# Début du cooldown : on affiche l'INTENTION de l'attaquant et on lance la
-# charge de son anneau. Aucun dégât appliqué ici — l'attaque atterrit à la
-# fin du cooldown (_on_step_ended). Pendant ce temps, l'autre entité n'affiche
-# rien (pill masquée).
+# Début du cooldown : on affiche l'INTENTION de l'attaquant. La jauge ATB n'est
+# PLUS pilotée ici : chaque barre se remplit en continu à sa cadence réelle
+# (cf. _charge_atb), donc elle est déjà pleine quand le coup atterrit
+# (_on_step_ended). Aucun dégât appliqué ici.
 func _on_step_started(step: CombatStep) -> void:
 	# Tick de poison : instantané, pas d'action chargée ni d'intention affichée.
 	if step.is_poison or step.is_passive_poison:
 		return
 
 	var is_hero := step.attacker == "hero"
-	var ring := _hero_bar if is_hero else _enemy_bar
 	var lbl  := _hero_action if is_hero else _enemy_action
 	var base_col := UIColors.STAT_ATK if is_hero else UIColors.TYPE_TRAP
 	_show_action(lbl, Translations.T("combat.action.crit") if step.is_crit else Translations.T("combat.action.attack"),
 			UIColors.FILTER_ON if step.is_crit else base_col)
-	ring.set_atb(0.0)
-	# La charge de l'anneau dure exactement un step côté CombatPlayer :
-	# l'attaque atterrit visuellement quand l'anneau est plein.
+
+# Lance (ou relance) la charge continue d'une jauge ATB sur `interval` secondes
+# de lecture : la barre va de 0 à 1 puis reste pleine jusqu'à la prochaine
+# relance (au coup suivant du combattant). Honnête : un combattant rapide a un
+# `interval` plus court, donc une jauge qui monte plus vite.
+func _charge_atb(is_hero: bool, interval: float) -> void:
+	var bar := _hero_bar if is_hero else _enemy_bar
+	if is_hero:
+		if _hero_atb_tween and _hero_atb_tween.is_valid():
+			_hero_atb_tween.kill()
+	else:
+		if _enemy_atb_tween and _enemy_atb_tween.is_valid():
+			_enemy_atb_tween.kill()
+	bar.set_atb(0.0)
 	var tw := create_tween()
-	tw.tween_method(ring.set_atb, 0.0, 1.0, CombatPlayer.step_duration).set_ease(Tween.EASE_IN)
+	tw.tween_method(bar.set_atb, 0.0, 1.0, maxf(interval, 0.05)).set_ease(Tween.EASE_IN)
+	if is_hero:
+		_hero_atb_tween = tw
+	else:
+		_enemy_atb_tween = tw
+
+# Stoppe les charges ATB en cours (fin de combat / arrêt d'expédition).
+func _stop_atb() -> void:
+	if _hero_atb_tween and _hero_atb_tween.is_valid():
+		_hero_atb_tween.kill()
+	if _enemy_atb_tween and _enemy_atb_tween.is_valid():
+		_enemy_atb_tween.kill()
 
 # Joue la réaction d'un combattant touché : mort si coup fatal, sinon recul.
 func _fighter_take(target: CombatFighter, killing: bool) -> void:
@@ -894,12 +926,20 @@ func _on_step_ended(step: CombatStep) -> void:
 			_add_log("[color=%s]%s[/color]" % [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_proc")], ["defense", "status"])
 		_log_attack(_enemy_name.text, step.damage, step.is_crit, ["monster", "attack"])
 
-	_hero_bar.set_atb(0.0)
-	_enemy_bar.set_atb(0.0)
+	# Jauge ATB : seul l'attaquant qui vient de frapper voit sa jauge se vider et
+	# redémarrer (à sa cadence). Les ticks de poison ne sont PAS un coup d'attaque
+	# d'un combattant → ils ne touchent aucune jauge. L'autre barre continue sa
+	# charge sans interruption.
+	if not step.is_poison and not step.is_passive_poison:
+		if step.attacker == "hero":
+			_charge_atb(true, CombatPlayer.hero_atb_interval)
+		else:
+			_charge_atb(false, CombatPlayer.enemy_atb_interval)
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 
 func _on_combat_ended(result: Dictionary) -> void:
+	_stop_atb()
 	_hero_bar.set_atb(0.0)
 	_enemy_bar.set_atb(0.0)
 	_hide_action(_hero_action)

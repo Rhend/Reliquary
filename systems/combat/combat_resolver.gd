@@ -1,9 +1,16 @@
 # ============================================================
-# CombatResolver — Résolution instantanée d'un combat VIT-based.
+# CombatResolver — Résolution d'un combat ATB horodaté en secondes réelles.
 #
-# Chaque entité accumule +VIT par tick dans sa jauge d'action.
-# Quand jauge >= Balance.GAUGE_THRESHOLD, l'entité attaque et la jauge
-# revient à 0. En cas d'égalité simultanée, le Héros agit en premier.
+# `vit` exprime une cadence d'attaques par SECONDE (aps = vit / Balance.VIT_PER_APS).
+# Chaque combattant accumule `aps` dans sa jauge d'action au fil du temps simulé ;
+# il frappe quand la jauge atteint Balance.ATTACK_GAUGE (= 1 attaque), puis le
+# seuil est retiré (le surplus est conservé → aucune fraction de cadence perdue).
+# Chaque CombatStep porte son instant réel (time_sec, en secondes).
+#
+# Simultanéité : si les deux atteignent leur seuil à moins de
+# Balance.SIMULTANEITY_EPS secondes l'un de l'autre, le HÉROS frappe en premier.
+# Conséquence assumée : un combattant rapide (aps 1,3) peut frapper deux fois
+# avant qu'un lent (aps 0,7) ne frappe une fois.
 #
 # Usage : CombatResolver.resolve(hero_stats, enemy_stats) → Array[CombatStep]
 # hero_stats attend : hp, hp_max, atk, def, vit.
@@ -30,14 +37,15 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	var h_hp_max := float(hero_stats.get("hp_max", h_hp))  # pour le seuil du bouclier
 	var h_atk    := float(hero_stats.get("atk",    10))
 	var h_def    := float(hero_stats.get("def",    5))
-	var h_vit    := maxf(float(hero_stats.get("vit", 20)), 1.0)
+	# vit brute → cadence en attaques/seconde (référentiel ATB temps réel).
+	var h_aps    := maxf(float(hero_stats.get("vit", 20)) / Balance.VIT_PER_APS, Balance.APS_MIN)
 	var h_crit_chance: float = float(hero_stats.get("crit_chance",     Balance.CRIT_CHANCE))
 	var h_crit_mult:   float = float(hero_stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER))
 
 	var e_hp  := float(enemy_stats.get("hp",  50))
 	var e_atk := float(enemy_stats.get("atk", 8))
 	var e_def := float(enemy_stats.get("def", 2))
-	var e_vit := maxf(float(enemy_stats.get("vit", 20)), 1.0)
+	var e_aps := maxf(float(enemy_stats.get("vit", 20)) / Balance.VIT_PER_APS, Balance.APS_MIN)
 	var e_crit_chance: float = float(enemy_stats.get("crit_chance",     Balance.CRIT_CHANCE))
 	var e_crit_mult:   float = float(enemy_stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER))
 
@@ -80,7 +88,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	# ── Tour d'embuscade (Forêt Sombre) ─────────────────────────
 	if use_ambush:
 		var ambush_step := _make_enemy_step(e_atk, h_def, h_hp, h_shield, e_crit_chance, e_crit_mult)
-		ambush_step.tick_time = 0
+		ambush_step.time_sec = 0.0
 		ambush_step.is_ambush = true
 		h_hp     = float(ambush_step.target_hp_after)
 		h_shield = maxf(h_shield - float(ambush_step.shield_absorbed), 0.0)
@@ -94,20 +102,33 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 			ambush_step.is_shield_proc = true
 			ambush_step.shield_value   = int(h_shield)
 
-	var h_gauge    := 0.0
-	var e_gauge    := 0.0
-	var current_tick := 0
+	# ── Boucle ATB horodatée en secondes ───────────────────────
+	# Jauge d'action en ATTAQUES (seuil Balance.ATTACK_GAUGE). À chaque itération,
+	# on avance le temps jusqu'au prochain combattant prêt à frapper et UN SEUL
+	# frappe ; le surplus de jauge est conservé (gauge -= seuil). Sur quasi-égalité
+	# (≤ SIMULTANEITY_EPS), le héros est prioritaire — l'ennemi frappe alors à
+	# l'itération suivante (dt ≈ 0), au même instant.
+	var h_gauge  := 0.0
+	var e_gauge  := 0.0
+	var sim_time := 0.0
 
 	while h_hp > 0.0 and e_hp > 0.0 and steps.size() < MAX_STEPS:
-		current_tick += 1
-		h_gauge += h_vit
-		e_gauge += e_vit
+		# Secondes avant que chacun n'atteigne le seuil d'une attaque.
+		var h_dt := (Balance.ATTACK_GAUGE - h_gauge) / h_aps
+		var e_dt := (Balance.ATTACK_GAUGE - e_gauge) / e_aps
+		var hero_first := h_dt <= e_dt + Balance.SIMULTANEITY_EPS
+		var dt := h_dt if hero_first else e_dt
 
-		# ── Tour héros ───────────────────────────────────────────
-		if h_gauge >= Balance.GAUGE_THRESHOLD:
-			h_gauge -= Balance.GAUGE_THRESHOLD
+		# Avance le temps simulé et les deux jauges (l'un atteint pile le seuil).
+		sim_time += dt
+		h_gauge  += h_aps * dt
+		e_gauge  += e_aps * dt
+
+		if hero_first:
+			# ── Tour héros ───────────────────────────────────────
+			h_gauge -= Balance.ATTACK_GAUGE
 			var step := _make_hero_step(h_atk, e_def, e_hp, h_crit_chance, h_crit_mult, endurcissement_mult)
-			step.tick_time = current_tick
+			step.time_sec = sim_time
 			e_hp = float(step.target_hp_after)
 			steps.append(step)
 
@@ -119,12 +140,11 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 
 			if e_hp <= 0.0:
 				break
-
-		# ── Tour ennemi ─────────────────────────────────────────
-		if e_gauge >= Balance.GAUGE_THRESHOLD and h_hp > 0.0:
-			e_gauge -= Balance.GAUGE_THRESHOLD
+		else:
+			# ── Tour ennemi ──────────────────────────────────────
+			e_gauge -= Balance.ATTACK_GAUGE
 			var step := _make_enemy_step(e_atk, h_def, h_hp, h_shield, e_crit_chance, e_crit_mult)
-			step.tick_time = current_tick
+			step.time_sec = sim_time
 			h_hp     = float(step.target_hp_after)
 			h_shield = maxf(h_shield - float(step.shield_absorbed), 0.0)
 			steps.append(step)
@@ -140,6 +160,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 			# Poison biome (Marécage) : le coup ennemi envenime le héros, puis le
 			# venin lui inflige des dégâts (DoT). La cible est le HÉROS — c'est une
 			# mécanique HOSTILE, pas un avantage. Le poison ignore le bouclier.
+			# Le tick partage l'instant du coup ennemi (suivi immédiat).
 			if use_poison and h_hp > 0.0:
 				poison_stacks     = mini(poison_stacks + 1, Balance.BIOME_POISON_MAX_STACKS)
 				poison_turns_left = Balance.BIOME_POISON_DURATION
@@ -152,7 +173,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 				p_step.damage          = int(maxf(roundf(pdmg), 1.0))
 				p_step.target_hp_after = int(roundf(new_h_hp))
 				p_step.is_killing_blow = (new_h_hp <= 0.0)
-				p_step.tick_time       = current_tick
+				p_step.time_sec        = sim_time
 				steps.append(p_step)
 				h_hp = new_h_hp
 
@@ -178,7 +199,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 					p_step.damage            = int(maxf(roundf(pdmg), 1.0))
 					p_step.target_hp_after   = int(roundf(new_e_hp))
 					p_step.is_killing_blow   = (new_e_hp <= 0.0)
-					p_step.tick_time         = current_tick
+					p_step.time_sec          = sim_time
 					steps.append(p_step)
 					e_hp = new_e_hp
 

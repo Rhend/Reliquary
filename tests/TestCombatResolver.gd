@@ -16,6 +16,9 @@ func _ready() -> void:
 	_test_bouclier()
 	_test_poison_passif()
 	_test_garde_fou_max_steps()
+	_test_cadence_relative()
+	_test_simultaneite_priorite_hero()
+	_test_horodatage_croissant()
 	_print_report()
 	var has_failure: bool = _results.any(func(r): return not r["ok"])
 	get_tree().quit(1 if has_failure else 0)
@@ -102,7 +105,7 @@ func _test_embuscade() -> void:
 	var first := steps[0] as CombatStep
 	_assert(first.is_ambush,           "premier step marqué is_ambush")
 	_assert(first.attacker == "enemy", "embuscade portée par l'ennemi")
-	_assert(first.tick_time == 0,      "embuscade au tick 0 (avant le cycle VIT)")
+	_assert(is_zero_approx(first.time_sec), "embuscade à t = 0 s (avant le cycle ATB)")
 	# Dégâts embuscade = ATK ennemi 10 − DEF héros 5 = 5 → héros à 95 PV.
 	_assert(first.target_hp_after == 95, "dégâts d'embuscade corrects",
 			"hp_after=%d" % first.target_hp_after)
@@ -160,6 +163,54 @@ func _test_poison_passif() -> void:
 	_assert(not procs.is_empty(), "le poison passif proc sur les coups héros")
 	_assert(not ticks.is_empty(), "des ticks de poison passif sont appliqués")
 	_assert(int((ticks[0] as CombatStep).damage) == 5, "dégâts du tick = damage_per_turn")
+
+# Référentiel temps réel : un combattant 2× plus rapide (vit double) frappe
+# ~2× plus souvent. Combat sans mort (faibles dégâts, gros PV) → on compte les
+# coups de chacun jusqu'au garde-fou MAX_STEPS.
+func _test_cadence_relative() -> void:
+	print("\n[TEST] Cadence relative (vit ×2 → ~2× plus de coups)")
+	# Héros vit 40 (aps 2,0) vs ennemi vit 20 (aps 1,0). Personne ne meurt.
+	var steps := CombatResolver.resolve(
+			_hero({"hp": 1.0e9, "hp_max": 1.0e9, "atk": 1.0, "vit": 40.0}),
+			_enemy({"hp": 1.0e9, "atk": 1.0, "def": 50.0, "vit": 20.0}))
+	var hero_n := steps.filter(func(s): return (s as CombatStep).attacker == "hero").size()
+	var enemy_n := steps.filter(func(s): return (s as CombatStep).attacker == "enemy").size()
+	_assert(enemy_n > 0, "l'ennemi a frappé au moins une fois", "enemy_n=%d" % enemy_n)
+	var ratio := float(hero_n) / float(maxi(enemy_n, 1))
+	_assert(ratio >= 1.8 and ratio <= 2.2,
+			"héros ~2× plus de coups que l'ennemi (ratio≈2)",
+			"hero=%d enemy=%d ratio=%.2f" % [hero_n, enemy_n, ratio])
+
+# Simultanéité : à vit égale, héros et ennemi atteignent leur seuil au même
+# instant → le héros frappe en premier, au même horodatage.
+func _test_simultaneite_priorite_hero() -> void:
+	print("\n[TEST] Simultanéité → priorité héros")
+	# Faibles dégâts, gros PV : les deux survivent aux premiers coups.
+	var steps := CombatResolver.resolve(
+			_hero({"hp": 1000.0, "hp_max": 1000.0, "atk": 1.0, "vit": 20.0}),
+			_enemy({"hp": 1000.0, "atk": 1.0, "def": 0.0, "vit": 20.0}))
+	_assert(steps.size() >= 2, "au moins deux coups produits", "steps=%d" % steps.size())
+	var s0 := steps[0] as CombatStep
+	var s1 := steps[1] as CombatStep
+	_assert(s0.attacker == "hero",  "premier coup porté par le héros")
+	_assert(s1.attacker == "enemy", "second coup porté par l'ennemi")
+	_assert(is_equal_approx(s0.time_sec, s1.time_sec),
+			"héros et ennemi frappent au même instant (priorité héros)",
+			"t_hero=%.3f t_enemy=%.3f" % [s0.time_sec, s1.time_sec])
+
+# Les horodatages des steps sont monotones croissants (jamais en arrière).
+func _test_horodatage_croissant() -> void:
+	print("\n[TEST] Horodatage croissant")
+	var steps := CombatResolver.resolve(
+			_hero({"hp": 5000.0, "hp_max": 5000.0, "atk": 2.0, "vit": 26.0}),
+			_enemy({"hp": 5000.0, "atk": 2.0, "def": 0.0, "vit": 14.0}))
+	var monotone := true
+	for i in range(1, steps.size()):
+		if (steps[i] as CombatStep).time_sec < (steps[i - 1] as CombatStep).time_sec - 1.0e-6:
+			monotone = false
+			break
+	_assert(steps.size() > 2, "plusieurs steps produits", "steps=%d" % steps.size())
+	_assert(monotone, "time_sec monotone croissant sur toute la séquence")
 
 # Deux combattants incapables de se tuer → la résolution s'arrête à MAX_STEPS.
 func _test_garde_fou_max_steps() -> void:

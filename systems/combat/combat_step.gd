@@ -11,7 +11,7 @@ class_name CombatStep extends Resource
 @export var target_hp_after: int    = 0        # PV de la cible après ce coup
 @export var is_killing_blow: bool   = false    # vrai si ce coup amène la cible à 0 PV
 @export var is_crit:         bool   = false    # vrai si coup critique (×CRIT_MULTIPLIER dégâts)
-@export var tick_time:       int    = 0        # tick absolu auquel ce coup se produit dans la simulation
+@export var time_sec:        float  = 0.0      # instant réel (secondes) auquel ce coup se produit dans la simulation ATB
 @export var is_ambush:            bool = false  # vrai pour le tour gratuit d'embuscade (Forêt Sombre)
 @export var is_poison:            bool = false  # vrai pour un tick de poison biome (Marécage Putride) — frappe le HÉROS (attacker = ENEMY), damage = dégâts subis
 @export var shield_absorbed:      int  = 0     # dégâts absorbés par le bouclier d'urgence ce step
