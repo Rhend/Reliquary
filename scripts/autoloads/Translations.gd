@@ -189,6 +189,8 @@ const STRINGS: Dictionary = {
 
 		# ── CombatScene ──────────────────────────────────────
 		"combat.end_btn":         "Mettre fin à l'expédition",
+		"combat.evolve_badge":    "▲ %d",
+		"combat.evolve_tt_title": "Prêtes à évoluer (%d)",
 		"combat.loot.title":      "Butin",
 		"combat.loot.empty":      "rien pour l'instant",
 		"combat.xp_float":        "+%d XP",
@@ -474,6 +476,8 @@ const STRINGS: Dictionary = {
 
 		# ── CombatScene ──────────────────────────────────────
 		"combat.end_btn":         "End expedition",
+		"combat.evolve_badge":    "▲ %d",
+		"combat.evolve_tt_title": "Ready to evolve (%d)",
 		"combat.loot.title":      "Loot",
 		"combat.loot.empty":      "nothing yet",
 		"combat.xp_float":        "+%d XP",

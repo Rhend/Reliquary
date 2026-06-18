@@ -28,7 +28,7 @@ const DISTRICT_LINK_START := 72.0
 # Écart entre l'extrémité du lien et le bord du cercle du quartier.
 const DISTRICT_RING_GAP   := 20.0
 # Durée de la montée de l'étincelle le long du fil avant l'éclosion du quartier.
-const BOULE_TRAVEL_DUR    := 1.0
+const BOULE_TRAVEL_DUR    := 0.75
 # Panneau droit : fraction de l'écran qu'il occupe quand il est ouvert.
 # Le hub est réduit (HUB_PANEL_SCALE) et recentré au milieu de l'espace
 # restant — le village entier doit y tenir (contenu utile ≈ 860 px).

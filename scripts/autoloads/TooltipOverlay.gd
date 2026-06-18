@@ -23,7 +23,7 @@ var _title_lbl:   Label
 var _lore_lbl:    Label
 var _sep:         TextureRect
 var _sep_grad:    Gradient
-var _body_lbl:    Label
+var _body_lbl:    RichTextLabel   # BBCode : autorise une colorisation par segment
 var _border_color: Color = UIColors.TEXT_MUTED
 var _show_token: int = 0   # invalide les apparitions différées obsolètes
 var _fade_tw: Tween
@@ -91,10 +91,16 @@ func _ready() -> void:
 	_sep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_child(_sep)
 
-	_body_lbl = Label.new()
-	_body_lbl.add_theme_font_size_override("font_size", 12)
-	_body_lbl.add_theme_constant_override("line_spacing", 4)
-	_body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# Corps en RichTextLabel (BBCode) : le texte simple s'affiche tel quel, mais
+	# les appelants peuvent colorer des segments ([color=#RRGGBB]…[/color]) — ex.
+	# liste d'entités prêtes à évoluer, chaque palier dans sa couleur de rareté.
+	_body_lbl = RichTextLabel.new()
+	_body_lbl.bbcode_enabled = true
+	_body_lbl.fit_content    = true
+	_body_lbl.scroll_active  = false
+	_body_lbl.autowrap_mode  = TextServer.AUTOWRAP_WORD_SMART
+	_body_lbl.add_theme_font_size_override("normal_font_size", 12)
+	_body_lbl.add_theme_constant_override("line_separation", 4)
 	_body_lbl.custom_minimum_size = Vector2(MAX_WIDTH, 0)
 	vb.add_child(_body_lbl)
 
@@ -131,7 +137,7 @@ func show_for(title: String, body: String, color: Color, lore: String = "") -> v
 	_lore_lbl.add_theme_color_override("font_color",
 			Color(color.lerp(Color.WHITE, 0.30), 0.80))
 	_body_lbl.text  = body
-	_body_lbl.add_theme_color_override("font_color", UIColors.TOOLTIP_BODY)
+	_body_lbl.add_theme_color_override("default_color", UIColors.TOOLTIP_BODY)
 	_sep.visible = not (lore.is_empty() and body.is_empty())
 	var sep_c := color.lerp(Color.WHITE, 0.20)
 	_sep_grad.colors = PackedColorArray([

@@ -69,6 +69,15 @@ var _tab_buttons: Dictionary = {}     # nom → Button
 var _xp_label: Label
 var _flee_btn: Button
 
+# ─── Compteur « prêtes à évoluer » (badge sur le bouton fin) ──
+# Badge or accolé au bouton : nombre d'entités actuellement éligibles à une
+# évolution. RECOMPTÉ (jamais incrémenté) à chaque entity_ready_to_evolve /
+# entity_evolved / adventure_started, depuis MasterySystem.can_evolve (source
+# de vérité). _evolve_ready_ids alimente aussi le tooltip de survol.
+var _evolve_badge:     PanelContainer = null
+var _evolve_badge_lbl: Label          = null
+var _evolve_ready_ids: Array          = []
+
 # ─── Bandeau de butin du cycle (barre de bas, à gauche) ──────
 # Les pastilles d'ingrédients volent depuis la créature et s'y empilent.
 # Aucune logique de drop ici : on ne fait qu'écouter EventBus.loot_dropped.
@@ -77,13 +86,11 @@ var _loot_row:     HBoxContainer         # rangée de pastilles empilées
 var _loot_hint:    Label                 # libellé affiché quand le bandeau est vide
 var _loot_pellets: Dictionary = {}       # item_id → {box: Control, count: Label, qty: int}
 
-# ─── XP flottante par entité (couche FX + agrégation) ────────
-# EventBus.xp_gained arrive ~6 fois quasi simultanément par combat : on agrège
-# par type d'entité réceptrice sur une courte fenêtre, puis on affiche en
-# cascade légère pour éviter le spam. Affichage seul — aucune logique d'XP ici.
-var _xp_fx_layer:    Control                # couche plein écran pour l'XP + halos
-var _xp_accum:       Dictionary = {}        # entity_type → float (fenêtre courante)
-var _xp_flush_timer: SceneTreeTimer = null  # débounce d'agrégation
+# ─── Couche FX (halos de palier) ─────────────────────────────
+# Plein écran, transparente à la souris : reçoit le burst de halo coloré quand
+# une entité atteint son palier (entity_ready_to_evolve). L'XP flottante par
+# entité a été retirée (chiffres bruts illisibles en plein combat).
+var _xp_fx_layer:    Control                # couche plein écran pour les halos de palier
 
 # ─── Overlays (zone + Unique) ────────────────────────────────
 var _zone_panel:   PanelContainer = null   # petit panneau strate, centré sur la barre VS
@@ -145,8 +152,8 @@ func _build_ui() -> void:
 	_build_zone_label()
 	_build_mechanic_label()
 
-	# Couche FX pour l'XP flottante et les halos de palier : par-dessus la zone
-	# de combat, sous les stingers (z 90+). Transparente à la souris.
+	# Couche FX pour les halos de palier : par-dessus la zone de combat, sous les
+	# stingers (z 90+). Transparente à la souris.
 	_xp_fx_layer = Control.new()
 	_xp_fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_xp_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -491,16 +498,49 @@ func _build_bottom_bar() -> Control:
 	# combat). _xp_label reste null : _update_xp_label() est inerte (garde de
 	# nullité). Le total d'XP du cycle reste affiché dans le résumé.
 	var tcolor := _hero_tier_color()
+	# Bouton SANS texte propre : son contenu (libellé + badge) vit dans un HBox
+	# interne centré, pour que le badge soit DANS le bouton et toujours visible.
 	_flee_btn = Button.new()
-	_flee_btn.text = Translations.T("combat.end_btn")
-	_flee_btn.custom_minimum_size = Vector2(240, 42)
-	_flee_btn.add_theme_font_size_override("font_size", 15)
-	_flee_btn.add_theme_color_override("font_color", tcolor)
+	_flee_btn.custom_minimum_size = Vector2(280, 42)
 	_flee_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.14, 1.0, 2, 6))
 	_flee_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 6))
 	_flee_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(_flee_btn)
 	_flee_btn.pressed.connect(_on_flee_pressed)
+	# Survol du bouton → tooltip listant les entités prêtes à évoluer (s'il y en a).
+	_flee_btn.mouse_entered.connect(_show_evolve_tooltip)
+	_flee_btn.mouse_exited.connect(TooltipOverlay.hide_tooltip)
+
+	# Contenu interne : libellé + badge, centrés en groupe. Transparent à la
+	# souris → le bouton garde le survol (tooltip) et le clic.
+	var inner := HBoxContainer.new()
+	inner.set_anchors_preset(Control.PRESET_FULL_RECT)
+	inner.alignment = BoxContainer.ALIGNMENT_CENTER
+	inner.add_theme_constant_override("separation", 8)
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flee_btn.add_child(inner)
+
+	var label := Label.new()
+	label.text = Translations.T("combat.end_btn")
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", tcolor)
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(label)
+
+	# Badge « ▲ N » : pastille colorée à la rareté du meilleur palier prêt
+	# (UIColors.tier_color), masquée tant qu'aucune entité n'est prête.
+	_evolve_badge = PanelContainer.new()
+	_evolve_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_evolve_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_evolve_badge.visible = false
+	_evolve_badge_lbl = Label.new()
+	_evolve_badge_lbl.add_theme_font_size_override("font_size", 13)
+	_evolve_badge_lbl.add_theme_color_override("font_color", Color.WHITE)
+	_evolve_badge_lbl.add_theme_constant_override("outline_size", 3)
+	_evolve_badge_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	_evolve_badge.add_child(_evolve_badge_lbl)
+	inner.add_child(_evolve_badge)
 
 	var flee_margin := MarginContainer.new()
 	flee_margin.add_theme_constant_override("margin_right", 5)
@@ -574,11 +614,11 @@ func _connect_signals() -> void:
 	EventBus.combat_started.connect(_on_combat_started)
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.loot_dropped.connect(_on_loot_dropped)
-	EventBus.xp_gained.connect(_on_xp_gained)
 	EventBus.heal_applied.connect(_on_heal_applied)
 	EventBus.adventure_cycle_ended.connect(_on_cycle_ended)
 	EventBus.adventure_stopped.connect(_on_adventure_stopped)
 	EventBus.entity_ready_to_evolve.connect(_on_entity_ready_to_evolve)
+	EventBus.entity_evolved.connect(_on_entity_evolved)
 	CombatPlayer.step_started.connect(_on_step_started)
 	CombatPlayer.step_ended.connect(_on_step_ended)
 
@@ -591,7 +631,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_cycle_xp = 0.0
 	_update_xp_label()
 	_reset_loot_banner()
-	_xp_accum.clear()
+	_refresh_evolve_counter()
 	_update_zone_label(AdventureSystem.zone_courante)
 	if AdventureSystem.zone_courante == Enums.Zone.ABYSSE:
 		_show_unique_indicator()
@@ -1049,52 +1089,6 @@ func _punch(node: Control, amount: float) -> void:
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tw.tween_property(node, "scale", Vector2.ONE, 0.16) \
 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-# ═══════════════════════════════════════════════════════════
-#  XP flottante par entité (Tâche A)
-#  EventBus.xp_gained est émis ~6× par combat (héros, biome, créature, passifs,
-#  équipement). On agrège par type sur une courte fenêtre puis on affiche un
-#  seul « +X XP » coloré par type, en cascade légère. Affichage seul.
-# ═══════════════════════════════════════════════════════════
-
-func _on_xp_gained(entity_id: String, amount: float) -> void:
-	if amount <= 0.0 or not AdventureSystem.is_running:
-		return
-	var etype := String(GameData.get_entity(entity_id).get("entity_type", ""))
-	_xp_accum[etype] = float(_xp_accum.get(etype, 0.0)) + amount
-	# Débounce : une seule fenêtre d'agrégation active à la fois.
-	if _xp_flush_timer == null:
-		_xp_flush_timer = get_tree().create_timer(0.22)
-		_xp_flush_timer.timeout.connect(_flush_xp)
-
-# Vide l'agrégat : un label par type, échelonné via un tween du nœud
-# (auto-libéré avec la scène → pas de callback orphelin après navigation).
-func _flush_xp() -> void:
-	_xp_flush_timer = null
-	var entries: Array = []
-	for etype: String in _xp_accum.keys():
-		var total := int(round(float(_xp_accum[etype])))
-		if total > 0:
-			entries.append([etype, total])
-	_xp_accum.clear()
-	if entries.is_empty() or not is_instance_valid(_xp_fx_layer):
-		return
-	# L'XP pop dans le coin HAUT-DROIT de la section du héros (moitié gauche de
-	# l'arène, près du séparateur VS), puisque c'est le héros qui mène l'expédition.
-	# Cascade verticale, un type par ligne préfixé du nom du type. Montée lente
-	# (vie 3,0 s) pour laisser le temps de lire.
-	var corner_x := size.x * 0.5 - CombatVS.BAND_WIDTH * 0.5 - 150.0
-	var tw := create_tween()
-	for i in entries.size():
-		var etype := String(entries[i][0])
-		var color := UIColors.entity_type_color(etype)
-		var pos   := Vector2(corner_x, 44.0 + i * 24.0)
-		var amount := Translations.T("combat.xp_float") % int(entries[i][1])
-		var label  := Translations.entity_type_label(etype)
-		var txt    := ("%s  %s" % [label, amount]) if label != "" else amount
-		tw.tween_callback(func() -> void:
-			UIHelpers.float_text(_xp_fx_layer, txt, 16, color, pos, 36.0, false, 3.0))
-		tw.tween_interval(0.10)
 
 # Position d'ancrage du halo de palier selon le type de l'entité.
 func _evolve_anchor(entity: Dictionary) -> Vector2:
@@ -1577,6 +1571,8 @@ func _make_state_pill_node(text: String, color: Color) -> Control:
 # ═══════════════════════════════════════════════════════════
 
 func _on_entity_ready_to_evolve(entity_id: String) -> void:
+	# Recompte la liste éligible (jamais d'incrément) à chaque franchissement.
+	_refresh_evolve_counter()
 	if not AdventureSystem.is_running:
 		return
 	var entity := GameData.get_entity(entity_id)
@@ -1588,3 +1584,62 @@ func _on_entity_ready_to_evolve(entity_id: String) -> void:
 	# l'entité concernée (héros / créature) ou au centre de l'arène.
 	if is_instance_valid(_xp_fx_layer):
 		UIHelpers.tier_halo_burst(_xp_fx_layer, _evolve_anchor(entity), target)
+
+# Une entité a évolué (action joueur, hors combat) → recompte la liste éligible.
+func _on_entity_evolved(_entity_id: String, _new_tier: int) -> void:
+	_refresh_evolve_counter()
+
+# ─── Compteur « prêtes à évoluer » ──────────────────────────
+# Recompte INTÉGRALEMENT les entités éligibles (MasterySystem.can_evolve =
+# source de vérité : seuil franchi ET palier suivant disponible) — pas
+# d'incrément/décrément, donc aucune dérive. Met à jour le badge et masque
+# quand 0.
+func _refresh_evolve_counter() -> void:
+	_evolve_ready_ids.clear()
+	var best_target := 0   # meilleur palier cible parmi les entités prêtes → teinte du badge
+	for eid: String in GameData.entities:
+		if MasterySystem.can_evolve(eid):
+			_evolve_ready_ids.append(eid)
+			var t := int(GameData.get_entity(eid).get("maitrise_actuelle", 0)) + 1
+			best_target = maxi(best_target, mini(t, Balance.GLOBAL_MAX_TIER))
+	if not is_instance_valid(_evolve_badge):
+		return
+	var n := _evolve_ready_ids.size()
+	_evolve_badge.visible = n > 0
+	if n > 0:
+		_evolve_badge_lbl.text = Translations.T("combat.evolve_badge") % n
+		# Pastille teintée à la rareté du meilleur palier prêt (code couleur standard).
+		var c := UIColors.tier_color(best_target)
+		var bs := StyleBoxFlat.new()
+		bs.bg_color     = Color(c.r, c.g, c.b, 0.95)
+		bs.border_color = Color(0, 0, 0, 0.55)
+		bs.set_border_width_all(1)
+		bs.set_corner_radius_all(9)
+		bs.content_margin_left = 7; bs.content_margin_right = 7
+		bs.content_margin_top  = 1; bs.content_margin_bottom = 1
+		_evolve_badge.add_theme_stylebox_override("panel", bs)
+
+# Tooltip de survol du bouton : liste des entités prêtes (nom + palier actuel →
+# palier cible). Aucun tooltip si rien n'est prêt (le bouton reste normal).
+# Chaque palier est colorié à sa rareté via UIColors.tier_color (BBCode), le
+# nom de l'entité prend la couleur de son palier cible.
+func _show_evolve_tooltip() -> void:
+	if _evolve_ready_ids.is_empty():
+		return
+	var lines: PackedStringArray = []
+	var accent_tier := 0   # palier cible le plus élevé → couleur d'accent du tooltip
+	for eid: String in _evolve_ready_ids:
+		var e      := GameData.get_entity(eid)
+		var tier   := int(e.get("maitrise_actuelle", 0))
+		var target := mini(tier + 1, Balance.GLOBAL_MAX_TIER)
+		accent_tier = maxi(accent_tier, target)
+		var cur_c  := UIColors.tier_color(tier).to_html(false)
+		var tgt_c  := UIColors.tier_color(target).to_html(false)
+		lines.append("[color=#%s]%s[/color]  [color=#%s]%s[/color] → [color=#%s]%s[/color]" % [
+				tgt_c, Translations.entity_name(e, eid),
+				cur_c, GameData.get_tier_name(tier),
+				tgt_c, GameData.get_tier_name(target)])
+	TooltipOverlay.show_for(
+			Translations.T("combat.evolve_tt_title") % _evolve_ready_ids.size(),
+			"\n".join(lines),
+			UIColors.tier_color(accent_tier))
