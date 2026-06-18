@@ -56,10 +56,6 @@ var _hero_stats_rows:   VBoxContainer
 var _enemy_stats_panel: PanelContainer
 var _enemy_stats_rows:  VBoxContainer
 
-# ─── Feed passifs ────────────────────────────────────────────
-var _feed_box:  HBoxContainer
-var _feed_wrap: CenterContainer   # masqué quand vide → ne réserve aucune place
-
 # ─── Journal ─────────────────────────────────────────────────
 var _log_vbox:    VBoxContainer
 var _log_entries: Array = []          # [{node: RichTextLabel, tags: Array}]
@@ -108,21 +104,17 @@ var _hero_shield: float = 0.0
 # (CombatPlayer.*_atb_interval), indépendamment de l'autre : un combattant
 # rapide remplit visiblement plus vite. La jauge est pleine pile au moment où
 # le combattant frappe, puis se vide et redémarre.
-var _hero_atb_tween:  Tween = null
-var _enemy_atb_tween: Tween = null
-# Fenêtre de hâte (rail de vitesse) : tween d'ordonnancement on/off du feedback.
-var _hero_haste_tween:  Tween = null
-var _enemy_haste_tween: Tween = null
+# Tweens indexés par camp (is_hero) : évite la duplication hero/enemy partout.
+var _atb_tween:   Dictionary = {true: null, false: null}   # charge ATB
+var _haste_tween: Dictionary = {true: null, false: null}   # ordonnancement on/off hâte
 
 # ─── Polish combat ──────────────────────────────────────────
 var _danger_pulse_tween: Tween   = null   # pulse PV critique (item 5)
 var _shield_state_pill:  Control = null   # pill bouclier bleue  (item 8)
 var _poison_state_pill:  Control = null   # pill venin violette  (item 8)
-var _hero_haste_pill:    Control = null   # pill « Hâte » héros (rail de vitesse)
-var _enemy_haste_pill:   Control = null   # pill « Hâte » créature
+var _haste_pill: Dictionary = {true: null, false: null}   # pill « Rapide » par camp
 var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
 var _stinger:            Control = null   # bandeau d'événement piège/bénédiction
-var _evolve_chime: AudioStreamPlayer = null  # carillon « prête à évoluer »
 
 # ═══════════════════════════════════════════════════════════
 func _ready() -> void:
@@ -159,7 +151,6 @@ func _build_ui() -> void:
 
 	root.add_child(_build_combat_area())
 	root.add_child(_build_combatant_bars())
-	root.add_child(_build_feed())
 	if LOG_ENABLED:
 		root.add_child(_build_log())
 	root.add_child(_build_bottom_bar())
@@ -174,43 +165,6 @@ func _build_ui() -> void:
 	_xp_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_xp_fx_layer.z_index = 50
 	add_child(_xp_fx_layer)
-
-	_build_audio()
-
-# ── Audio : carillon « prête à évoluer » ────────────────────
-# Son généré procéduralement (même famille que le crystal du rituel d'évolution)
-# mais plus court et plus sec — une cloche/notification brève.
-func _build_audio() -> void:
-	_evolve_chime = AudioStreamPlayer.new()
-	_evolve_chime.volume_db = -5.0
-	# Pas de bus dédié dans ce projet : on garde "Master" (défaut) plutôt que
-	# "SFX" (inexistant → erreur runtime).
-	_evolve_chime.stream    = _generate_chime_wav()
-	add_child(_evolve_chime)
-
-# Cloche brillante (fondamentale + harmoniques inharmoniques) à décroissance
-# rapide : attaque sèche, ~0,5 s mais éteinte bien avant. Mono 16 bits.
-func _generate_chime_wav() -> AudioStreamWAV:
-	var sr        := 22050
-	var freq      := 1318.5            # mi aigu — clair, type notification
-	var n_samples := int(sr * 0.5)
-	var data      := PackedByteArray()
-	data.resize(n_samples * 2)
-	for i: int in n_samples:
-		var t        := float(i) / float(sr)
-		var envelope := exp(-t * 13.0)
-		var sample_f := (sin(t * freq * TAU) * 0.60
-					   + sin(t * freq * 2.01 * TAU) * 0.26
-					   + sin(t * freq * 3.02 * TAU) * 0.12) * envelope
-		var v := clampi(int(sample_f * 0.55 * 32767.0), -32768, 32767)
-		data[i * 2 + 0] = v & 0xFF
-		data[i * 2 + 1] = (v >> 8) & 0xFF
-	var wav := AudioStreamWAV.new()
-	wav.format   = AudioStreamWAV.FORMAT_16_BITS
-	wav.stereo   = false
-	wav.mix_rate = sr
-	wav.data     = data
-	return wav
 
 # ── Zone de combat : fonds animés + 2 colonnes + séparateur diagonal ──
 # Les fonds (Ville côté héros, biome côté créature) sont CONFINÉS à cette zone
@@ -484,30 +438,6 @@ func _build_combatant_bars() -> Control:
 	_enemy_states = _enemy_bar.states_row
 	return m
 
-# ── Feed passifs ───────────────────────────────────────────
-# Masqué tant qu'aucun toast n'est affiché : le VBox racine ne lui alloue alors
-# ni hauteur ni séparation → plus d'espace vide entre les barres et le butin.
-func _build_feed() -> Control:
-	_feed_wrap = CenterContainer.new()
-	_feed_wrap.visible = false
-	_feed_box = HBoxContainer.new()
-	_feed_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_feed_box.add_theme_constant_override("separation", 6)
-	_feed_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_feed_wrap.add_child(_feed_box)
-	return _feed_wrap
-
-# Replie le feed dès qu'il ne reste plus aucun toast vivant (ignore ceux en
-# cours de libération). Branché sur tree_exited de chaque toast.
-func _update_feed_visibility() -> void:
-	if not is_instance_valid(_feed_wrap):
-		return
-	for c in _feed_box.get_children():
-		if c is Control and not (c as Node).is_queued_for_deletion():
-			_feed_wrap.visible = true
-			return
-	_feed_wrap.visible = false
-
 # ── Journal à onglets ──────────────────────────────────────
 func _build_log() -> Control:
 	var outer := VBoxContainer.new()
@@ -751,19 +681,19 @@ func _on_adventure_started(_biome_id: String) -> void:
 	match BiomeMechanics.active_mechanic:
 		"ambush":
 			var ac := Color(1.0, 0.42, 0.10)
-			_push_feed(Translations.mech_name("ambush"), ac)
+			_push_under_bar_pill(_hero_states, Translations.mech_name("ambush"), ac)
 			_show_mechanic_label("⚡ " + Translations.mech_name("ambush"), ac)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("ambush"),
 					Translations.mech_desc("ambush"), ac)
 		"poison":
 			var pc := UIColors.POISON
-			_push_feed(Translations.mech_name("poison"), pc)
+			_push_under_bar_pill(_hero_states, Translations.mech_name("poison"), pc)
 			_show_mechanic_label("☠ " + Translations.mech_name("poison"), pc)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("poison"),
 					Translations.mech_desc("poison"), pc)
 		"endurcissement":
 			var ec := Color(0.80, 0.55, 0.25)
-			_push_feed(Translations.mech_name("endurcissement"), ec)
+			_push_under_bar_pill(_hero_states, Translations.mech_name("endurcissement"), ec)
 			_show_mechanic_label("🗻 " + Translations.mech_name("endurcissement"), ec)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("endurcissement"),
 					Translations.mech_desc("endurcissement"), ec)
@@ -901,32 +831,35 @@ func _on_step_started(step: CombatStep) -> void:
 	_show_action(lbl, Translations.T("combat.action.crit") if step.is_crit else Translations.T("combat.action.attack"),
 			UIColors.FILTER_ON if step.is_crit else base_col)
 
+# Barre / rangée d'états d'un camp (is_hero) — évite le ternaire répété partout.
+func _bar(is_hero: bool) -> CombatBar:
+	return _hero_bar if is_hero else _enemy_bar
+
+func _states(is_hero: bool) -> HBoxContainer:
+	return _hero_states if is_hero else _enemy_states
+
+# Tue le tween stocké dans `dict[is_hero]` s'il est encore valide.
+func _kill_tween(dict: Dictionary, is_hero: bool) -> void:
+	var tw: Tween = dict[is_hero]
+	if tw and tw.is_valid():
+		tw.kill()
+
 # Lance (ou relance) la charge continue d'une jauge ATB sur `interval` secondes
 # de lecture : la barre va de 0 à 1 puis reste pleine jusqu'à la prochaine
 # relance (au coup suivant du combattant). Honnête : un combattant rapide a un
 # `interval` plus court, donc une jauge qui monte plus vite.
 func _charge_atb(is_hero: bool, interval: float) -> void:
-	var bar := _hero_bar if is_hero else _enemy_bar
-	if is_hero:
-		if _hero_atb_tween and _hero_atb_tween.is_valid():
-			_hero_atb_tween.kill()
-	else:
-		if _enemy_atb_tween and _enemy_atb_tween.is_valid():
-			_enemy_atb_tween.kill()
+	_kill_tween(_atb_tween, is_hero)
+	var bar := _bar(is_hero)
 	bar.set_atb(0.0)
 	var tw := create_tween()
 	tw.tween_method(bar.set_atb, 0.0, 1.0, maxf(interval, 0.05)).set_ease(Tween.EASE_IN)
-	if is_hero:
-		_hero_atb_tween = tw
-	else:
-		_enemy_atb_tween = tw
+	_atb_tween[is_hero] = tw
 
 # Stoppe les charges ATB en cours (fin de combat / arrêt d'expédition).
 func _stop_atb() -> void:
-	if _hero_atb_tween and _hero_atb_tween.is_valid():
-		_hero_atb_tween.kill()
-	if _enemy_atb_tween and _enemy_atb_tween.is_valid():
-		_enemy_atb_tween.kill()
+	_kill_tween(_atb_tween, true)
+	_kill_tween(_atb_tween, false)
 
 # ─── Feedback de hâte (rail de vitesse temporaire) ──────────
 # Programme l'activation puis la coupure du feedback « Hâte » d'un combattant sur
@@ -940,44 +873,33 @@ func _setup_haste(is_hero: bool, window: Vector2) -> void:
 	tw.tween_callback(_set_haste_active.bind(is_hero, true))
 	tw.tween_interval(maxf(window.y - maxf(window.x, 0.0), 0.05))
 	tw.tween_callback(_set_haste_active.bind(is_hero, false))
-	if is_hero:
-		_hero_haste_tween = tw
-	else:
-		_enemy_haste_tween = tw
+	_haste_tween[is_hero] = tw
 
-# Active/coupe le feedback hâte : jauge ATB teintée + pill « Hâte ».
+# Active/coupe le feedback hâte : jauge ATB teintée + pill « Rapide ».
 func _set_haste_active(is_hero: bool, active: bool) -> void:
-	var bar := _hero_bar if is_hero else _enemy_bar
+	var bar := _bar(is_hero)
 	if is_instance_valid(bar):
 		bar.set_haste(active)
-	if active:
-		var states := _hero_states if is_hero else _enemy_states
-		var existing := _hero_haste_pill if is_hero else _enemy_haste_pill
-		if (existing == null or not is_instance_valid(existing)) and states:
-			var pill := _make_state_pill_node("⚡ " + Translations.T("combat.haste_pill"), UIColors.HASTE)
-			states.add_child(pill)
-			if is_hero:
-				_hero_haste_pill = pill
-			else:
-				_enemy_haste_pill = pill
-	else:
+	if not active:
 		_remove_haste_pill(is_hero)
+		return
+	var existing: Control = _haste_pill[is_hero]
+	var states := _states(is_hero)
+	if (existing == null or not is_instance_valid(existing)) and states:
+		var pill := _make_state_pill_node("⚡ " + Translations.T("combat.haste_pill"), UIColors.HASTE)
+		states.add_child(pill)
+		_haste_pill[is_hero] = pill
 
 func _remove_haste_pill(is_hero: bool) -> void:
-	var pill := _hero_haste_pill if is_hero else _enemy_haste_pill
+	var pill: Control = _haste_pill[is_hero]
 	if pill and is_instance_valid(pill):
 		pill.queue_free()
-	if is_hero:
-		_hero_haste_pill = null
-	else:
-		_enemy_haste_pill = null
+	_haste_pill[is_hero] = null
 
 # Coupe tout feedback hâte en cours (changement de rencontre / fin de combat).
 func _clear_haste() -> void:
-	if _hero_haste_tween and _hero_haste_tween.is_valid():
-		_hero_haste_tween.kill()
-	if _enemy_haste_tween and _enemy_haste_tween.is_valid():
-		_enemy_haste_tween.kill()
+	_kill_tween(_haste_tween, true)
+	_kill_tween(_haste_tween, false)
 	if is_instance_valid(_hero_bar):
 		_hero_bar.set_haste(false)
 	if is_instance_valid(_enemy_bar):
@@ -1051,7 +973,7 @@ func _on_step_ended(step: CombatStep) -> void:
 			_hero_bar.update_hp(float(step.target_hp_after))
 		if step.is_shield_proc:
 			_hero_shield = float(step.shield_value)
-			_push_feed(Translations.T("combat.shield_pill") % step.shield_value, UIColors.SHIELD)
+			# La pill persistante 🛡 sous la barre du héros suffit (plus de toast centré).
 			_update_shield_pill(int(_hero_shield))
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.SHIELD), Translations.T("combat.shield_proc")], ["defense", "status"])
 		_log_attack(_enemy_name.text, step.damage, step.is_crit, ["monster", "attack"])
@@ -1286,6 +1208,13 @@ func _evolve_anchor(entity: Dictionary) -> Vector2:
 		return _enemy_bar.global_position + _enemy_bar.size * 0.5
 	return size * Vector2(0.5, 0.40)
 
+# Rangée d'états sous laquelle accrocher un toast lié à une entité : la barre
+# créature pour une créature, sinon la barre du héros (côté joueur par défaut).
+func _states_for_entity(entity: Dictionary) -> HBoxContainer:
+	if String(entity.get("entity_type", "")) == Enums.EntityType.CREATURE:
+		return _enemy_states
+	return _hero_states
+
 # ═══════════════════════════════════════════════════════════
 #  Animation cooldown / shake / feed
 # ═══════════════════════════════════════════════════════════
@@ -1400,43 +1329,6 @@ func _screen_shake(strength: float = 1.0) -> void:
 				Vector2(a * strength, -a * 0.45 * (strength - 0.6)),
 				0.35 / float(amps.size())).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(_shaker, "position", Vector2.ZERO, 0.05)
-
-# Ajoute un pill transitoire dans le feed (pop-in, disparaît après ~2s).
-func _push_feed(text: String, color: Color) -> void:
-	if not _feed_box:
-		return
-	var box := PanelContainer.new()
-	var style := UIHelpers.card_style(color, 0.26, 0.90, 1, 9)
-	style.content_margin_left   = 10
-	style.content_margin_right  = 10
-	style.content_margin_top    = 2
-	style.content_margin_bottom = 3
-	box.add_theme_stylebox_override("panel", style)
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_constant_override("outline_size", 3)
-	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	lbl.add_theme_color_override("font_color", color.lightened(0.30))
-	box.add_child(lbl)
-	_feed_box.add_child(box)
-	# Déplie le feed (replié à vide) et le replie quand ce toast disparaît.
-	if is_instance_valid(_feed_wrap):
-		_feed_wrap.visible = true
-	box.tree_exited.connect(_update_feed_visibility)
-	# Pop-in (pivot connu une fois la taille calculée).
-	box.scale = Vector2(0.5, 0.5)
-	box.resized.connect(func() -> void:
-		box.pivot_offset = box.size * 0.5
-	, CONNECT_ONE_SHOT)
-	var tw := create_tween()
-	tw.tween_property(box, "scale", Vector2.ONE, 0.30) \
-			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_interval(1.8)
-	tw.tween_property(box, "modulate:a", 0.0, 0.4)
-	# Suppression garantie via un SceneTreeTimer indépendant du Tween.
-	get_tree().create_timer(2.6).timeout.connect(box.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Journal
@@ -1721,8 +1613,8 @@ func _clear_state_pills() -> void:
 	_poison_state_pill = null
 	# Les pills de hâte sont des enfants de _hero_states/_enemy_states (libérés
 	# ci-dessus) : on annule juste les références pour éviter tout pointeur mort.
-	_hero_haste_pill  = null
-	_enemy_haste_pill = null
+	_haste_pill[true]  = null
+	_haste_pill[false] = null
 
 func _update_shield_pill(value: int) -> void:
 	_shield_state_pill = _set_persistent_pill(
@@ -1793,11 +1685,11 @@ func _on_entity_ready_to_evolve(entity_id: String) -> void:
 	var nom    := Translations.entity_name(entity, entity_id)
 	var tier   := int(entity.get("maitrise_actuelle", 0))
 	var target := UIColors.tier_color(mini(tier + 1, 5))
-	_push_feed(Translations.T("combat.ready_evolve") % nom, target)
+	# Toast sous la barre de l'entité concernée (créature à droite, sinon héros).
+	_push_under_bar_pill(_states_for_entity(entity), Translations.T("combat.ready_evolve") % nom, target)
 	# Carillon court et sec (même famille que le crystal du rituel d'évolution) :
 	# marque le coup quand une entité devient éligible.
-	if is_instance_valid(_evolve_chime):
-		_evolve_chime.play()
+	AudioManager.play_sfx("evolve_ready", -5.0)
 	# Tâche B — flash de palier : halo de la couleur du palier cible, ancré sur
 	# l'entité concernée (héros / créature) ou au centre de l'arène.
 	if is_instance_valid(_xp_fx_layer):

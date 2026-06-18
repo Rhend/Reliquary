@@ -42,9 +42,14 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
 
-Autoloads (ordre dans project.godot) : UIColors, EventBus, Translations, GameData,
-CycleData, SaveManager, GameSettings, MasterySystem, CombatPlayer, AdventureSystem,
-PassiveSystem, MasteryRegistry, BiomeMechanics, TooltipOverlay.
+Autoloads (ordre dans project.godot) : UIColors, EventBus, AudioManager, Translations,
+GameData, CycleData, SaveManager, GameSettings, MasterySystem, CombatPlayer,
+AdventureSystem, PassiveSystem, MasteryRegistry, BiomeMechanics, TooltipOverlay.
+
+Audio : tout passe par `AudioManager` (autoload). Bruitage ponctuel =
+`AudioManager.play_sfx("nom", volume_db)` ; sons nommés générés en procédural
+dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
+`Music`/`SFX` créés au runtime (pas de default_bus_layout.tres).
 
 ## Conventions spécifiques
 

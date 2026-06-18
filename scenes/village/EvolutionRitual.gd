@@ -265,66 +265,24 @@ func _accent_color() -> Color:
 		return ECLOSION_COLOR
 	return UIColors.tier_color(_params.get("to_tier", 1) as int)
 
-# ─── Sons générés procéduralement ────────────────────────────
+# ─── Sons (streams fournis par AudioManager) ─────────────────
+# Players locaux conservés : le rituel pilote finement le drone (pitch tweené
+# pendant la montée) et déclenche le crystal au flash. Seuls les STREAMS sont
+# mutualisés via AudioManager (bus « SFX »).
 
 func _build_sounds() -> void:
 	_drone = AudioStreamPlayer.new()
 	_drone.volume_db   = -8.0
 	_drone.pitch_scale = 0.7
-	_drone.bus         = "SFX"
-	_drone.stream      = _generate_drone_wav()
+	_drone.bus         = AudioManager.SFX_BUS
+	_drone.stream      = AudioManager.stream("ritual_drone")
 	add_child(_drone)
 
 	_crystal = AudioStreamPlayer.new()
 	_crystal.volume_db = -4.0
-	_crystal.bus       = "SFX"
-	_crystal.stream    = _generate_crystal_wav()
+	_crystal.bus       = AudioManager.SFX_BUS
+	_crystal.stream    = AudioManager.stream("ritual_crystal")
 	add_child(_crystal)
-
-func _generate_drone_wav() -> AudioStreamWAV:
-	var sr        := 11025
-	var frequency := 160.0
-	var n_samples := sr * 3
-	var data      := PackedByteArray()
-	data.resize(n_samples * 2)
-	for i: int in n_samples:
-		var t        := float(i) / float(sr)
-		var envelope := 1.0
-		if t < 0.3:   envelope = t / 0.3
-		elif t > 2.7: envelope = 1.0 - (t - 2.7) / 0.3
-		var v := int(sin(t * frequency * TAU) * 0.35 * 32767.0 * envelope)
-		v = clampi(v, -32768, 32767)
-		data[i * 2 + 0] = v & 0xFF
-		data[i * 2 + 1] = (v >> 8) & 0xFF
-	var wav := AudioStreamWAV.new()
-	wav.format   = AudioStreamWAV.FORMAT_16_BITS
-	wav.stereo   = false
-	wav.mix_rate = sr
-	wav.data     = data
-	return wav
-
-func _generate_crystal_wav() -> AudioStreamWAV:
-	var sr        := 11025
-	var frequency := 2400.0
-	var n_samples := int(sr * 0.6)
-	var data      := PackedByteArray()
-	data.resize(n_samples * 2)
-	for i: int in n_samples:
-		var t        := float(i) / float(sr)
-		var envelope := exp(-t * 8.0)
-		var sample_f := (sin(t * frequency * TAU) * 0.55
-					   + sin(t * frequency * 2.01 * TAU) * 0.28
-					   + sin(t * frequency * 2.99 * TAU) * 0.12) * envelope
-		var v := int(sample_f * 0.55 * 32767.0)
-		v = clampi(v, -32768, 32767)
-		data[i * 2 + 0] = v & 0xFF
-		data[i * 2 + 1] = (v >> 8) & 0xFF
-	var wav := AudioStreamWAV.new()
-	wav.format   = AudioStreamWAV.FORMAT_16_BITS
-	wav.stereo   = false
-	wav.mix_rate = sr
-	wav.data     = data
-	return wav
 
 # ═══════════════════════════════════════════════════════════
 #  Séquence

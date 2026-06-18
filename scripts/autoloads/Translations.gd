@@ -226,7 +226,7 @@ const STRINGS: Dictionary = {
 		"combat.regen":           "Régénération +%d",
 		"combat.unique_slain":    "Créature Unique vaincue — %s, %s",
 		"combat.venom_pill":      "☠ Venin",
-		"combat.haste_pill":      "Hâte",
+		"combat.haste_pill":      "Rapide",
 		"combat.ready_evolve":    "⬆ %s prêt à évoluer",
 		"combat.appears":         "%s apparaît",
 		"combat.tt_stats":        "Rang : %s\nPV : %d  ·  ATK : %d  ·  DEF : %d",
