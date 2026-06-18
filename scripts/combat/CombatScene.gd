@@ -756,7 +756,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("ambush"),
 					Translations.mech_desc("ambush"), ac)
 		"poison":
-			var pc := Color(0.62, 0.15, 0.78)
+			var pc := UIColors.POISON
 			_push_feed(Translations.mech_name("poison"), pc)
 			_show_mechanic_label("☠ " + Translations.mech_name("poison"), pc)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("poison"),
@@ -1037,7 +1037,7 @@ func _on_step_ended(step: CombatStep) -> void:
 			_hero_shield = maxf(_hero_shield - float(step.shield_absorbed), 0.0)
 			_update_shield_pill(int(_hero_shield))
 			_add_log("[color=%s]%s[/color]"
-					% [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_absorb") % step.shield_absorbed], ["defense", "status"])
+					% [_hex(UIColors.SHIELD), Translations.T("combat.shield_absorb") % step.shield_absorbed], ["defense", "status"])
 		if step.damage > 0:
 			_hero_bar.update_hp(float(step.target_hp_after))
 			_hero_bar.damage(step.damage, step.is_crit)
@@ -1051,9 +1051,9 @@ func _on_step_ended(step: CombatStep) -> void:
 			_hero_bar.update_hp(float(step.target_hp_after))
 		if step.is_shield_proc:
 			_hero_shield = float(step.shield_value)
-			_push_feed(Translations.T("combat.shield_pill") % step.shield_value, Color(0.3, 0.7, 1.0))
+			_push_feed(Translations.T("combat.shield_pill") % step.shield_value, UIColors.SHIELD)
 			_update_shield_pill(int(_hero_shield))
-			_add_log("[color=%s]%s[/color]" % [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_proc")], ["defense", "status"])
+			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.SHIELD), Translations.T("combat.shield_proc")], ["defense", "status"])
 		_log_attack(_enemy_name.text, step.damage, step.is_crit, ["monster", "attack"])
 
 	# Jauge ATB : seul l'attaquant qui vient de frapper voit sa jauge se vider et
@@ -1108,7 +1108,7 @@ func _on_bleed_ticked(damage: float, new_hp: float, _remaining: int) -> void:
 	if is_instance_valid(_hero_bar):
 		_hero_bar.update_hp(new_hp)
 		_hero_bar.poison(int(damage))
-	_push_under_bar_pill(_hero_states, "☠ -%d" % int(damage), Color(0.62, 0.15, 0.78))
+	_push_under_bar_pill(_hero_states, "☠ -%d" % int(damage), UIColors.POISON)
 	_check_danger_pulse()
 
 func _on_cycle_ended(result: Dictionary) -> void:
@@ -1725,30 +1725,29 @@ func _clear_state_pills() -> void:
 	_enemy_haste_pill = null
 
 func _update_shield_pill(value: int) -> void:
-	var color := Color(0.3, 0.7, 1.0)
-	if value <= 0:
-		if _shield_state_pill and is_instance_valid(_shield_state_pill):
-			_shield_state_pill.queue_free()
-		_shield_state_pill = null
-		return
-	if _shield_state_pill == null or not is_instance_valid(_shield_state_pill):
-		_shield_state_pill = _make_state_pill_node("🛡 %d" % value, color)
-		if _hero_states:
-			_hero_states.add_child(_shield_state_pill)
-	else:
-		(_shield_state_pill.get_child(0) as Label).text = "🛡 %d" % value
+	_shield_state_pill = _set_persistent_pill(
+			_shield_state_pill, _hero_states, value > 0, "🛡 %d" % value, UIColors.SHIELD)
 
 func _update_poison_pill(active: bool) -> void:
-	var color := Color(0.62, 0.15, 0.78)
+	_poison_state_pill = _set_persistent_pill(
+			_poison_state_pill, _enemy_states, active, Translations.T("combat.venom_pill"), UIColors.POISON)
+
+# Pose / met à jour / retire une pill d'état PERSISTANTE (bouclier, venin). La
+# référence est passée puis renvoyée (GDScript ne passe pas les membres par
+# référence) : `_x = _set_persistent_pill(_x, …)`. Renvoie null quand retirée.
+func _set_persistent_pill(pill: Control, states: HBoxContainer, active: bool,
+		text: String, color: Color) -> Control:
 	if not active:
-		if _poison_state_pill and is_instance_valid(_poison_state_pill):
-			_poison_state_pill.queue_free()
-		_poison_state_pill = null
-		return
-	if _poison_state_pill == null or not is_instance_valid(_poison_state_pill):
-		_poison_state_pill = _make_state_pill_node(Translations.T("combat.venom_pill"), color)
-		if _enemy_states:
-			_enemy_states.add_child(_poison_state_pill)
+		if pill and is_instance_valid(pill):
+			pill.queue_free()
+		return null
+	if pill == null or not is_instance_valid(pill):
+		pill = _make_state_pill_node(text, color)
+		if states:
+			states.add_child(pill)
+	else:
+		(pill.get_child(0) as Label).text = text
+	return pill
 
 func _make_state_pill_node(text: String, color: Color) -> Control:
 	var box := PanelContainer.new()

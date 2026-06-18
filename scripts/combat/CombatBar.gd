@@ -126,12 +126,12 @@ func _layout() -> void:
 		_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		_hp_label.position  = Vector2(size.x * 0.40, PAD)
 		_hp_label.size      = Vector2(size.x * 0.60 - PAD, NAME_H)
-	# Rangée d'états : sous la jauge ATB, dans le cadre. Alignée du même bord que
-	# le combattant (gauche normal, droite en miroir pour la créature).
+	# Rangée d'états : juste sous la jauge ATB, dans le cadre (position dérivée de
+	# l'ATB → source unique). Alignée du même bord que le combattant (gauche
+	# normal, droite en miroir pour la créature).
 	if states_row:
-		var sy := PAD + NAME_H + GAP + HP_BAR_H + GAP + ATB_H + STATES_GAP
-		states_row.position  = Vector2(PAD + 2.0, sy)
-		states_row.size      = Vector2(maxf(size.x - (PAD + 2.0) * 2.0, 10.0), STATES_H)
+		states_row.position  = Vector2(_inner_x(), _atb_rect().end.y + STATES_GAP)
+		states_row.size      = Vector2(_inner_w(), STATES_H)
 		states_row.alignment = BoxContainer.ALIGNMENT_END if mirrored else BoxContainer.ALIGNMENT_BEGIN
 	queue_redraw()
 
@@ -281,13 +281,18 @@ func _has_live_states() -> bool:
 			return true
 	return false
 
+# Géométrie interne mutualisée : origine X et largeur des pistes (PV, ATB, états).
+func _inner_x() -> float:
+	return PAD + 2.0
+
+func _inner_w() -> float:
+	return maxf(size.x - (PAD + 2.0) * 2.0, 1.0)
+
 func _hp_track_rect() -> Rect2:
-	var y := PAD + NAME_H + GAP
-	return Rect2(PAD + 2.0, y, maxf(size.x - (PAD + 2.0) * 2.0, 1.0), HP_BAR_H)
+	return Rect2(_inner_x(), PAD + NAME_H + GAP, _inner_w(), HP_BAR_H)
 
 func _atb_rect() -> Rect2:
-	var y := PAD + NAME_H + GAP + HP_BAR_H + GAP
-	return Rect2(PAD + 2.0, y, maxf(size.x - (PAD + 2.0) * 2.0, 1.0), ATB_H)
+	return Rect2(_inner_x(), PAD + NAME_H + GAP + HP_BAR_H + GAP, _inner_w(), ATB_H)
 
 # Remplit un segment [from_f, to_f] (fractions 0..1) d'une piste. En mode
 # miroir, les fractions sont mesurées depuis le bord DROIT.
