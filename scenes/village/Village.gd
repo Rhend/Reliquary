@@ -191,7 +191,14 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.keycode == KEY_ESCAPE:
 		get_viewport().set_input_as_handled()
-		_toggle_settings_overlay()
+		# Priorité d'Échap : Paramètres ouverts → les fermer ; sinon un panneau
+		# ouvert → le fermer ; sinon ouvrir les Paramètres.
+		if _settings_overlay and is_instance_valid(_settings_overlay):
+			_toggle_settings_overlay()
+		elif _rp_root != null:
+			_close_panel()
+		else:
+			_toggle_settings_overlay()
 
 # Palier de Maîtrise du Village — détermine le layout et les couleurs du hub.
 func village_tier() -> int:
@@ -351,22 +358,6 @@ func _build_hub() -> void:
 		max_lbl.add_theme_font_size_override("font_size", 12)
 		max_lbl.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.40))
 		center_box.add_child(max_lbl)
-
-	# ── Hint contextuel (objectif courant) ───────────────────────
-	var hint := _current_hint(village_maitrise)
-	if hint != "":
-		var hint_lbl := Label.new()
-		hint_lbl.text = hint
-		hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		hint_lbl.anchor_left   = 0.0; hint_lbl.anchor_right  = 1.0
-		hint_lbl.anchor_top    = 1.0; hint_lbl.anchor_bottom = 1.0
-		hint_lbl.offset_top    = -36; hint_lbl.offset_bottom = -8
-		hint_lbl.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-		hint_lbl.add_theme_font_size_override("font_size", 12)
-		hint_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.70))
-		hint_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.60))
-		hint_lbl.add_theme_constant_override("shadow_offset_y", 1)
-		_hub_root.add_child(hint_lbl)
 
 	# ── HexItems : tous gated uniformément par village_maitrise ──
 	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
@@ -544,9 +535,19 @@ func _reveal_district(owner_id: String, animate: bool) -> void:
 				.set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 		var vp := get_viewport_rect().size
+		# Offset d'exploration (état SANS panneau) : centre dc plein écran. Mémorisé
+		# dans _pan pour que la fermeture d'un panneau y revienne bien recentrée.
 		_pan = HUB_BASE_SCALE * (vp * 0.5 - dc)
+		# Cible réelle de la caméra : si un panneau est ouvert, le hub est réduit
+		# (HUB_PANEL_SCALE) et recentré dans l'espace libre à GAUCHE — il faut donc
+		# centrer dc dans cet espace, pas au milieu de l'écran (même calcul que
+		# _open_panel). pivot_offset = vp*0.5 dans les deux cas.
+		var target := _pan
+		if _rp_root != null:
+			var free_center := Vector2(vp.x * (1.0 - PANEL_FRACTION) * 0.5, vp.y * 0.5)
+			target = free_center - vp * 0.5 - HUB_PANEL_SCALE * (dc - vp * 0.5)
 		var pt := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-		pt.tween_property(_hub_root, "position", _pan, 0.6)
+		pt.tween_property(_hub_root, "position", target, 0.6)
 
 # Referme le quartier d'un owner : le lien redevient diffus, la boule revient
 # et le quartier se fond — SANS reconstruire le hub (le cercle du village et
@@ -601,14 +602,25 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
-			# On ne DÉMARRE un pan que sur l'espace libre (hub présent, aucun
-			# panneau ni Paramètres ouverts). Le relâché coupe toujours le pan.
+			# On DÉMARRE un pan sur l'espace libre (hub présent, Paramètres
+			# fermés) — y compris quand un panneau est ouvert, tant que le clic
+			# tombe HORS du panneau de droite (sinon glisser dedans baladerait
+			# le village). Le relâché coupe toujours le pan.
 			_panning = mb.pressed and _hub_root != null \
-					and _rp_root == null and _settings_overlay == null
-	elif event is InputEventMouseMotion and _panning \
-			and _hub_root != null and _rp_root == null:
-		_pan += (event as InputEventMouseMotion).relative
-		_hub_root.position = _pan
+					and _settings_overlay == null \
+					and not _point_over_panel(mb.position)
+	elif event is InputEventMouseMotion and _panning and _hub_root != null:
+		_hub_root.position += (event as InputEventMouseMotion).relative
+		# En exploration libre (aucun panneau), l'offset de pan est mémorisé ;
+		# avec un panneau ouvert, le déplacement est éphémère — le hub revient
+		# à sa position recentrée à la fermeture du panneau.
+		if _rp_root == null:
+			_pan = _hub_root.position
+
+# Vrai si le point écran tombe dans le panneau de droite (s'il est ouvert).
+func _point_over_panel(global_pos: Vector2) -> bool:
+	return _rp_root != null \
+			and Rect2(_rp_root.global_position, _rp_root.size).has_point(global_pos)
 
 # Fine ligne horizontale décorative (ornement du nom de palier).
 func _ornament_line(color: Color) -> ColorRect:
@@ -636,23 +648,6 @@ func _animate_hub_entrance() -> void:
 		tw.tween_property(item, "scale", Vector2.ONE, 0.40) \
 				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK).set_delay(0.07 * i)
 		i += 1
-
-# Retourne le texte du hint contextuel selon la progression actuelle.
-# Couvre toute la partie : démarrage → premier Fragment → évolution du
-# Village prête → Forge → Fragments manquants pour le palier suivant.
-func _current_hint(village_maitrise: int) -> String:
-	var frags := (GameData.village.get("fragments_collectes", []) as Array).size()
-	var hero_tier := int(GameData.get_entity("hero").get("maitrise_actuelle", 0))
-	if GameData.can_upgrade_village():
-		return Translations.T("hint.upgrade_ready")
-	if village_maitrise == 0 and hero_tier == 0 and frags == 0:
-		return Translations.T("hint.start")
-	if village_maitrise == 0 and frags == 0:
-		return Translations.T("hint.reach_rare")
-	if village_maitrise < GameData.village_max_tier():
-		var missing := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise] - frags
-		return Translations.T("hint.need_fragments") % missing
-	return ""
 
 # ─── Conditions d'évolution du Village ────────────────────────
 # Affiche le compteur de fragments et le bouton Évoluer si la condition est remplie.

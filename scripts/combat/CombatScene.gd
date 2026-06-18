@@ -86,6 +86,7 @@ var _xp_accum:       Dictionary = {}        # entity_type → float (fenêtre co
 var _xp_flush_timer: SceneTreeTimer = null  # débounce d'agrégation
 
 # ─── Overlays (zone + Unique) ────────────────────────────────
+var _zone_panel:   PanelContainer = null   # petit panneau strate, centré sur la barre VS
 var _zone_label:   Label   = null
 var _unique_panel: Control = null
 
@@ -1333,15 +1334,26 @@ func _matches_filter(tags: Array) -> bool:
 #  Zone + Créature Unique (overlays conservés)
 # ═══════════════════════════════════════════════════════════
 
+# Petit panneau de strate (Surface/Profondeur/Abysse) centré en haut de l'arène,
+# par-dessus la barre oblique VS. Auto-dimensionné à son texte (grow symétrique
+# autour du centre). Le style (teinte de bordure) est posé par _update_zone_label.
 func _build_zone_label() -> void:
+	_zone_panel = PanelContainer.new()
+	_zone_panel.anchor_left = 0.5; _zone_panel.anchor_right = 0.5
+	_zone_panel.anchor_top  = 0.0; _zone_panel.anchor_bottom = 0.0
+	_zone_panel.offset_top  = 8
+	_zone_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_zone_panel.grow_vertical   = Control.GROW_DIRECTION_END
+	_zone_panel.mouse_filter = Control.MOUSE_FILTER_PASS
+
 	_zone_label = Label.new()
-	_zone_label.anchor_left = 0.0; _zone_label.anchor_right = 1.0
-	_zone_label.anchor_top = 0.0;  _zone_label.anchor_bottom = 0.0
-	_zone_label.offset_top = 6;    _zone_label.offset_bottom = 30
 	_zone_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_zone_label.add_theme_font_size_override("font_size", 13)
-	_zone_label.mouse_filter = Control.MOUSE_FILTER_PASS
-	add_child(_zone_label)
+	_zone_label.add_theme_constant_override("outline_size", 3)
+	_zone_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	_zone_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_zone_panel.add_child(_zone_label)
+	add_child(_zone_panel)
 
 func _build_mechanic_label() -> void:
 	_mechanic_label = Label.new()
@@ -1356,13 +1368,24 @@ func _build_mechanic_label() -> void:
 	add_child(_mechanic_label)
 
 func _update_zone_label(zone: Enums.Zone) -> void:
-	if not _zone_label:
+	if not _zone_label or not _zone_panel:
 		return
 	var idx   := clampi(int(zone), 0, 2)
 	var color := UIColors.zone_color(idx)
 	_zone_label.text = "◆ " + Translations.zone_name(idx)
 	_zone_label.add_theme_color_override("font_color", color)
-	UIHelpers.register_tooltip(_zone_label, Translations.zone_name(idx),
+
+	# Panneau sombre à bordure teintée strate, avec un peu d'air autour du texte.
+	var s := StyleBoxFlat.new()
+	s.bg_color     = Color(UIColors.BG_DARK.r, UIColors.BG_DARK.g, UIColors.BG_DARK.b, 0.88)
+	s.border_color = Color(color.r, color.g, color.b, 0.85)
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(7)
+	s.content_margin_left = 14; s.content_margin_right = 14
+	s.content_margin_top = 3;   s.content_margin_bottom = 3
+	_zone_panel.add_theme_stylebox_override("panel", s)
+
+	UIHelpers.register_tooltip(_zone_panel, Translations.zone_name(idx),
 			Translations.zone_tooltip(idx), color)
 
 func _show_unique_indicator() -> void:
