@@ -54,9 +54,10 @@ static func build(host: Village) -> void:
 	var def_bonus := int(eq.get("def", 0)) + int(pas.get("def_bonus", 0))
 	var hp_base   := int(eff.get("hp", 0))
 	var hp_bonus  := int(eq.get("hp", 0)) + int(pas.get("hp_bonus", 0))
-	# VIT effective = base × (1 + attack_speed_pct/100) — même formule que le combat.
+	# VIT effective via StatStacker (même point d'application que le combat).
 	var vit_base  := int(eff.get("vit", 20))
-	var vit_bonus := int(round(vit_base * float(eq.get("attack_speed_pct", 0.0)) / 100.0))
+	var vit_bonus := int(round(StatStacker.final_stat(float(vit_base),
+			[float(eq.get("attack_speed_pct", 0.0)) / 100.0], "vit") - float(vit_base)))
 
 	var stats_row := HBoxContainer.new()
 	stats_row.add_theme_constant_override("separation", 24)

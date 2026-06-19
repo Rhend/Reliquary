@@ -325,8 +325,8 @@ func _refresh_hero_stats(htier: int) -> void:
 		return
 	var hstats := GameData.get_effective_stats("hero")
 	var heqp   := GameData.get_equipment_bonuses()
-	var vit := int(round(float(hstats.get("vit", 20)) \
-			* (1.0 + float(heqp.get("attack_speed_pct", 0.0)) / 100.0)))
+	var vit := int(round(StatStacker.final_stat(float(hstats.get("vit", 20)),
+			[float(heqp.get("attack_speed_pct", 0.0)) / 100.0], "vit")))
 	_fill_stats_panel(_hero_stats_panel, _hero_stats_rows, UIColors.tier_color(htier), htier,
 			int(AdventureSystem.get_max_hp()),
 			int(hstats.get("atk", 0)) + int(heqp.get("atk", 0)),

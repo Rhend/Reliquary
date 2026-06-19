@@ -273,17 +273,21 @@ static func _next_mod_boundary(mods: Array, t: float) -> float:
 # ─── Factories de steps ─────────────────────────────────────
 
 # Step héros : dégâts simples sur l'ennemi (pas de bouclier côté ennemi).
+# Atténuation par la DEF via Balance.mitigated_damage (réduction en cloche),
+# puis crit / endurcissement en multiplicateurs. Arrondi entier au moment
+# d'appliquer aux PV (recommandation du référentiel ; cohérent avec les ticks
+# de poison qui arrondissent déjà). Plancher MIN_DAMAGE garanti après crit/mult.
 static func _make_hero_step(atk: float, target_def: float, target_hp: float,
 		crit_chance: float, crit_mult: float, dmg_mult: float = 1.0) -> CombatStep:
-	var is_crit  := randf() < crit_chance
-	var base_dmg := maxf(atk - target_def, Balance.MIN_DAMAGE)
-	var damage   := base_dmg * (crit_mult if is_crit else 1.0) * dmg_mult
-	var new_hp   := maxf(target_hp - damage, 0.0)
+	var is_crit := randf() < crit_chance
+	var raw     := Balance.mitigated_damage(atk, target_def) * (crit_mult if is_crit else 1.0) * dmg_mult
+	var damage  := int(roundf(maxf(raw, Balance.MIN_DAMAGE)))
+	var new_hp  := maxf(target_hp - float(damage), 0.0)
 
 	var step := CombatStep.new()
 	step.attacker        = Enums.Actor.HERO
-	step.damage          = int(damage)
-	step.target_hp_after = int(new_hp)
+	step.damage          = damage
+	step.target_hp_after = int(roundf(new_hp))
 	step.is_killing_blow = (new_hp <= 0.0)
 	step.is_crit         = is_crit
 	return step
@@ -294,8 +298,8 @@ static func _make_enemy_step(atk: float, target_def: float,
 		target_hp: float, current_shield: float,
 		crit_chance: float, crit_mult: float) -> CombatStep:
 	var is_crit  := randf() < crit_chance
-	var base_dmg := maxf(atk - target_def, Balance.MIN_DAMAGE)
-	var raw_dmg  := base_dmg * (crit_mult if is_crit else 1.0)
+	var raw      := Balance.mitigated_damage(atk, target_def) * (crit_mult if is_crit else 1.0)
+	var raw_dmg  := roundf(maxf(raw, Balance.MIN_DAMAGE))
 
 	# Absorption bouclier
 	var absorbed  := minf(raw_dmg, current_shield)
@@ -305,7 +309,7 @@ static func _make_enemy_step(atk: float, target_def: float,
 	var step := CombatStep.new()
 	step.attacker        = Enums.Actor.ENEMY
 	step.damage          = int(actual_dmg)   # dégâts réels reçus par les HP
-	step.target_hp_after = int(new_hp)
+	step.target_hp_after = int(roundf(new_hp))
 	step.is_killing_blow = (new_hp <= 0.0)
 	step.is_crit         = is_crit
 	step.shield_absorbed = int(absorbed)

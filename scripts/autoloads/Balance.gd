@@ -110,7 +110,32 @@ const SIMULTANEITY_EPS: float = 0.01  # 1 centième de seconde
 const GAUGE_THRESHOLD: float = 100.0  # LEGACY (ancien référentiel par ticks) — plus utilisé par le resolver
 const CRIT_CHANCE:     float = 0.20   # probabilité de coup critique
 const CRIT_MULTIPLIER: float = 1.8    # multiplicateur de dégâts en cas de critique
-const MIN_DAMAGE:      float = 1.0    # plancher de dégâts après défense (ATK − DEF)
+const MIN_DAMAGE:      float = 1.0    # plancher de dégâts : un coup inflige toujours ≥ 1
+
+# ─── Atténuation des dégâts par la DEF (réduction) ───────────
+# Formule verrouillée (cf. « Référentiel des statistiques de combat ») :
+#   réduction = DEF / (DEF + DEF_MITIGATION_BASE + DEF² / DEF_MITIGATION_SOFTCAP)
+#   dégâts    = max(1, ATK × (1 − réduction))
+# La réduction est une cloche : elle culmine vers DEF = 100 puis REDESCEND
+# (comportement voulu — la DEF a un rendement décroissant aux valeurs extrêmes).
+# DEF_MITIGATION_SOFTCAP est le paramètre de réglage du terme carré : le réduire
+# (ex. 80) fait mordre la pince plus tôt, l'augmenter (150) plus tard. v1 = 100.
+# ATK/DEF reçus sont les stats FINALES (après empilement additif, cf. StatStacker).
+const DEF_MITIGATION_BASE:    float = 100.0  # terme constant du dénominateur
+const DEF_MITIGATION_SOFTCAP: float = 100.0  # diviseur du terme DEF² (↓ = pince plus tôt)
+
+# Réduction de dégâts apportée par une DEF donnée, bornée [0, 1[.
+# Pure et statique → réutilisable par l'UI (tooltips) et les tests.
+static func def_reduction(def_val: float) -> float:
+	if def_val <= 0.0:
+		return 0.0
+	var k := DEF_MITIGATION_BASE + (def_val * def_val) / DEF_MITIGATION_SOFTCAP
+	return def_val / (def_val + k)
+
+# Dégâts d'un coup APRÈS atténuation par la DEF, planchés à MIN_DAMAGE.
+# Crit / endurcissement sont des multiplicateurs appliqués EN AVAL par le resolver.
+static func mitigated_damage(atk: float, def_val: float) -> float:
+	return maxf(atk * (1.0 - def_reduction(def_val)), MIN_DAMAGE)
 
 # ─── Endurcissement de biome (Montagne) ─────────────────────
 const MONTAGNE_ENDURCISSEMENT_REDUCTION: float = 0.20  # réduction des dégâts héros (−20 %)

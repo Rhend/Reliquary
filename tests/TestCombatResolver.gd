@@ -17,6 +17,9 @@ func _ready() -> void:
 	_test_bouclier()
 	_test_poison_passif()
 	_test_garde_fou_max_steps()
+	_test_def_reduction_curve()
+	_test_stat_stacker_additif()
+	_test_stat_stacker_ordre_independant()
 	_test_cadence_relative()
 	_test_simultaneite_priorite_hero()
 	_test_horodatage_croissant()
@@ -90,10 +93,12 @@ func _test_crit_deterministe() -> void:
 	var hero_steps := steps.filter(func(s): return (s as CombatStep).attacker == "hero")
 	_assert(hero_steps.all(func(s): return (s as CombatStep).is_crit),
 			"crit_chance 1.0 → tous les coups héros critiques")
-	# Dégâts critiques = (ATK − DEF) × crit_multiplier = (12 − 2) × 2 = 20
-	_assert(int((hero_steps[0] as CombatStep).damage) == 20,
-			"dégâts critiques = (ATK − DEF) × multiplicateur",
-			"damage=%d" % (hero_steps[0] as CombatStep).damage)
+	# Dégâts critiques = round(mitigated_damage(ATK, DEF) × crit_mult).
+	# ATK 12, DEF 2 → réduction ≈ 0.0196 → 12×0.9804 ≈ 11.765 ; ×2 ≈ 23.53 → 24.
+	var expected_crit := int(roundf(Balance.mitigated_damage(12.0, 2.0) * 2.0))
+	_assert(int((hero_steps[0] as CombatStep).damage) == expected_crit,
+			"dégâts critiques = round(mitigated_damage × multiplicateur)",
+			"damage=%d attendu=%d" % [(hero_steps[0] as CombatStep).damage, expected_crit])
 
 	steps = CombatResolver.resolve(_hero(), _enemy({"hp": 100.0}))
 	_assert(steps.all(func(s): return not (s as CombatStep).is_crit),
@@ -256,6 +261,45 @@ func _test_garde_fou_max_steps() -> void:
 	_assert(steps.size() == CombatResolver.MAX_STEPS,
 			"la résolution s'arrête à MAX_STEPS (%d)" % CombatResolver.MAX_STEPS,
 			"steps=%d" % steps.size())
+
+# Courbe de réduction par la DEF (Balance.def_reduction) : repères du référentiel
+# + invariant DUR « la cloche redescend » (DEF 150 < DEF 100). Si DEF 150 réduit
+# PLUS que DEF 100, le terme carré est mal placé.
+func _test_def_reduction_curve() -> void:
+	print("\n[TEST] Courbe de réduction par la DEF")
+	var cas := {0: 0.0, 25: 0.1905, 84: 0.3300, 100: 0.3333, 150: 0.3158}
+	for d in cas:
+		var got := Balance.def_reduction(float(d))
+		_assert(absf(got - float(cas[d])) < 0.005,
+				"réduction(DEF %d) ≈ %.4f" % [d, float(cas[d])],
+				"got=%.4f" % got)
+	_assert(Balance.def_reduction(150.0) < Balance.def_reduction(100.0),
+			"la cloche redescend : réduction(DEF 150) < réduction(DEF 100)",
+			"r150=%.4f r100=%.4f" % [Balance.def_reduction(150.0), Balance.def_reduction(100.0)])
+
+# Empilement ADDITIF : stat_finale = nue × (1 + Σ%). Exemple du référentiel
+# (DEF 50, +16/+9/+43 % = +68 % → 84) ET interdiction du produit multiplicatif.
+func _test_stat_stacker_additif() -> void:
+	print("\n[TEST] Empilement additif des bonus %")
+	var got := StatStacker.final_stat(50.0, [0.16, 0.09, 0.43], "def")
+	_assert(is_equal_approx(got, 84.0),
+			"50 × (1 + 0,16 + 0,09 + 0,43) = 84", "got=%.4f" % got)
+	# Le produit séquentiel (faux) donnerait 50 × 1,16 × 1,09 × 1,43 ≈ 90,4.
+	var multiplicatif := 50.0 * 1.16 * 1.09 * 1.43
+	_assert(absf(got - multiplicatif) > 1.0,
+			"résultat additif ≠ résultat multiplicatif (pas d'emballement)",
+			"additif=%.2f multiplicatif=%.2f" % [got, multiplicatif])
+
+# Non-régression : permuter l'ordre des sources de bonus donne un résultat
+# IDENTIQUE au bit près (l'ordre d'acquisition ne doit jamais compter).
+func _test_stat_stacker_ordre_independant() -> void:
+	print("\n[TEST] Empilement additif : indépendant de l'ordre")
+	var a := StatStacker.final_stat(50.0, [0.16, 0.09, 0.43], "def")
+	var b := StatStacker.final_stat(50.0, [0.43, 0.16, 0.09], "def")
+	var c := StatStacker.final_stat(50.0, [0.09, 0.43, 0.16], "def")
+	_assert(a == b and b == c,
+			"permuter les bonus → résultat identique au bit près",
+			"a=%.17f b=%.17f c=%.17f" % [a, b, c])
 
 # ─── Rapport final ──────────────────────────────────────────
 

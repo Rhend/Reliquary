@@ -65,28 +65,35 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	var equip    := GameData.get_equipment_bonuses()
 	var stats    := GameData.get_effective_stats("hero")
 
-	var h_atk: float = (
-		float(stats.get("atk", 0))
-		+ float(passives.get("atk_bonus", 0.0))
-		+ float(equip.get("atk", 0.0))
-	) * float(modifier_bonuses.get("atk_mult", 1.0))
-	h_atk += GameData.get_mastery_combat_bonus(enemy.get("id", ""))
+	# Stat NUE + bonus PLATS hérités (équipement / passifs / familiarité bestiaire).
+	# Tous les bonus EN POURCENTAGE transitent par StatStacker : empilement additif,
+	# appliqué une seule fois, point unique clampable. v1 : seul le modificateur de
+	# cycle (atk_mult/def_mult) et attack_speed_pct fournissent des % ; les futures
+	# sources % (village, Forge, Maîtrise) viendront grossir ces listes — jamais de
+	# produit multiplicatif réintroduit ailleurs.
+	var atk_base: float = float(stats.get("atk", 0)) \
+			+ float(passives.get("atk_bonus", 0.0)) \
+			+ float(equip.get("atk", 0.0)) \
+			+ GameData.get_mastery_combat_bonus(enemy.get("id", ""))
+	var h_atk := StatStacker.final_stat(atk_base,
+			[float(modifier_bonuses.get("atk_mult", 1.0)) - 1.0], "atk")
 
-	var h_def: float = (
-		float(stats.get("def", 0))
-		+ float(passives.get("def_bonus", 0.0))
-		+ float(equip.get("def", 0.0))
-	) * float(modifier_bonuses.get("def_mult", 1.0))
-	# attack_speed_pct (équipement, ex. Anneau) accélère la jauge VIT.
-	var h_vit: float = float(stats.get("vit", 20)) \
-			* (1.0 + float(equip.get("attack_speed_pct", 0.0)) / 100.0)
+	var def_base: float = float(stats.get("def", 0)) \
+			+ float(passives.get("def_bonus", 0.0)) \
+			+ float(equip.get("def", 0.0))
+	var h_def := StatStacker.final_stat(def_base,
+			[float(modifier_bonuses.get("def_mult", 1.0)) - 1.0], "def")
+
+	# attack_speed_pct (équipement, ex. Anneau) accélère la jauge VIT (bonus %).
+	var h_vit := StatStacker.final_stat(float(stats.get("vit", 20)),
+			[float(equip.get("attack_speed_pct", 0.0)) / 100.0], "vit")
 
 	# HP maximum du héros (pour le calcul du seuil de bouclier)
-	var h_hp_max: float = (
+	var h_hp_max := StatStacker.final_stat(
 		float(stats.get("hp", 100))
-		+ float(passives.get("hp_bonus", 0.0))
-		+ float(equip.get("hp", 0.0))
-	)
+			+ float(passives.get("hp_bonus", 0.0))
+			+ float(equip.get("hp", 0.0)),
+		[], "hp")
 
 	var e_hp := float(enemy.get("hp", 50))
 
