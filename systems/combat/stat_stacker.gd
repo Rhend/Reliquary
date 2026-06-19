@@ -30,10 +30,18 @@ static func final_stat(base: float, bonus_pcts: Array, stat_key: String = "") ->
 
 # Somme brute d'une liste de bonus % (sans cap). Exposée pour les sources qui
 # accumulent un total avant de le passer à final_stat.
+#
+# L'addition flottante n'étant PAS associative, on somme dans un ordre CANONIQUE
+# (tri croissant d'une copie) : permuter les sources donne alors un résultat
+# identique AU BIT PRÈS — l'ordre d'acquisition des bonus ne change jamais rien.
 static func sum_pcts(bonus_pcts: Array) -> float:
-	var total := 0.0
+	var vals: Array = []
 	for p in bonus_pcts:
-		total += float(p)
+		vals.append(float(p))
+	vals.sort()
+	var total := 0.0
+	for v: float in vals:
+		total += v
 	return total
 
 # Point d'extension UNIQUE pour un plafond par stat. v1 : identité (aucun cap).

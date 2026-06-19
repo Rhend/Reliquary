@@ -454,7 +454,7 @@ func _trap_dmg_pct() -> float:
 func get_max_hp() -> float:
 	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)
 	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
-	var base := float(GameData.get_effective_stats("hero").get("hp", 100)) + equip_hp + hp_bonus
+	var base: float = float(GameData.get_effective_stats("hero").get("hp", 100)) + equip_hp + hp_bonus
 	return StatStacker.final_stat(base, [], "hp")
 
 # Programme la prochaine rencontre.
