@@ -56,9 +56,6 @@ var _hero_stats_rows:   VBoxContainer
 var _enemy_stats_panel: PanelContainer
 var _enemy_stats_rows:  VBoxContainer
 
-# ─── Feed passifs ────────────────────────────────────────────
-var _feed_box: HBoxContainer
-
 # ─── Journal ─────────────────────────────────────────────────
 var _log_vbox:    VBoxContainer
 var _log_entries: Array = []          # [{node: RichTextLabel, tags: Array}]
@@ -102,10 +99,20 @@ var _cycle_xp:    float = 0.0
 var _navigating:  bool  = false
 var _hero_shield: float = 0.0
 
+# ─── Jauges ATB honnêtes (refonte temps réel) ───────────────
+# Chaque barre se remplit en continu à la cadence RÉELLE de son combattant
+# (CombatPlayer.*_atb_interval), indépendamment de l'autre : un combattant
+# rapide remplit visiblement plus vite. La jauge est pleine pile au moment où
+# le combattant frappe, puis se vide et redémarre.
+# Tweens indexés par camp (is_hero) : évite la duplication hero/enemy partout.
+var _atb_tween:   Dictionary = {true: null, false: null}   # charge ATB
+var _haste_tween: Dictionary = {true: null, false: null}   # ordonnancement on/off hâte
+
 # ─── Polish combat ──────────────────────────────────────────
 var _danger_pulse_tween: Tween   = null   # pulse PV critique (item 5)
 var _shield_state_pill:  Control = null   # pill bouclier bleue  (item 8)
 var _poison_state_pill:  Control = null   # pill venin violette  (item 8)
+var _haste_pill: Dictionary = {true: null, false: null}   # pill « Rapide » par camp
 var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
 var _stinger:            Control = null   # bandeau d'événement piège/bénédiction
 
@@ -144,7 +151,6 @@ func _build_ui() -> void:
 
 	root.add_child(_build_combat_area())
 	root.add_child(_build_combatant_bars())
-	root.add_child(_build_feed())
 	if LOG_ENABLED:
 		root.add_child(_build_log())
 	root.add_child(_build_bottom_bar())
@@ -346,9 +352,11 @@ func _add_stat_row(rows: VBoxContainer, label: String, value: int, color: Color)
 	row.add_child(v)
 	rows.add_child(row)
 
-# Construit une colonne de l'arène (bande centrale) : intention d'action +
-# pills d'état, calées vers le HAUT de la moitié pour laisser le centre à la
-# boule d'énergie (centrée verticalement). Plus d'anneau ni de plaque de nom.
+# Construit une colonne de l'arène (bande centrale) : intention d'action,
+# calée vers le HAUT de la moitié pour laisser le centre à la boule d'énergie
+# (centrée verticalement). Les pills d'état (bonus/malus) vivent désormais SOUS
+# la barre du combattant (cf. _build_combatant_bars), pas ici. Plus d'anneau
+# ni de plaque de nom.
 func _build_column(is_hero: bool) -> Control:
 	var col := VBoxContainer.new()
 	col.alignment = BoxContainer.ALIGNMENT_BEGIN
@@ -377,21 +385,19 @@ func _build_column(is_hero: bool) -> Control:
 	action_center.add_child(action_box)
 	col.add_child(action_center)
 
-	var states := HBoxContainer.new()
-	states.alignment = BoxContainer.ALIGNMENT_CENTER
-	states.add_theme_constant_override("separation", 4)
-	col.add_child(states)
-
 	if is_hero:
-		_hero_action = action; _hero_states = states
+		_hero_action = action
 	else:
-		_enemy_action = action; _enemy_states = states
+		_enemy_action = action
 	return col
 
 # ── Bande basse de l'arène : deux barres JRPG ────────────────
 # Héros calé à GAUCHE, créature calée à DROITE (barre miroir : se remplit depuis
 # le bord droit). Un espaceur central élastique creuse l'écart pour ne pas que
 # les barres se rejoignent au centre (et libère la place pour la boule à venir).
+# Les pills d'état (bonus/malus : bouclier, venin, hâte, régén, poison) vivent
+# DANS le cadre de chaque barre, sous la jauge ATB (cf. CombatBar.states_row) ;
+# le cadre grandit pour les englober et ne réserve la place que s'il y en a.
 # Les labels de nom vivent DANS les barres (_hero_name/_enemy_name : .text + tooltips).
 func _build_combatant_bars() -> Control:
 	var m := MarginContainer.new()
@@ -403,8 +409,11 @@ func _build_combatant_bars() -> Control:
 	band.add_theme_constant_override("separation", 0)
 	m.add_child(band)
 
+	# Barres top-alignées (SHRINK_BEGIN) : si l'une grandit (états), l'autre reste
+	# courte et les jauges PV/ATB des deux restent alignées en haut.
 	_hero_bar = CombatBar.new()
 	_hero_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hero_bar.size_flags_vertical   = Control.SIZE_SHRINK_BEGIN
 	_hero_bar.size_flags_stretch_ratio = 1.0
 	band.add_child(_hero_bar)
 
@@ -417,24 +426,17 @@ func _build_combatant_bars() -> Control:
 
 	_enemy_bar = CombatBar.new()
 	_enemy_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_enemy_bar.size_flags_vertical   = Control.SIZE_SHRINK_BEGIN
 	_enemy_bar.size_flags_stretch_ratio = 1.0
 	_enemy_bar.mirrored = true
 	band.add_child(_enemy_bar)
 
 	_hero_name  = _hero_bar.name_label
 	_enemy_name = _enemy_bar.name_label
+	# Les rangées d'états sont fournies par les barres elles-mêmes (dans le cadre).
+	_hero_states  = _hero_bar.states_row
+	_enemy_states = _enemy_bar.states_row
 	return m
-
-# ── Feed passifs ───────────────────────────────────────────
-func _build_feed() -> Control:
-	var feed_wrap := CenterContainer.new()
-	feed_wrap.custom_minimum_size = Vector2(0, 28)
-	_feed_box = HBoxContainer.new()
-	_feed_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_feed_box.add_theme_constant_override("separation", 6)
-	_feed_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	feed_wrap.add_child(_feed_box)
-	return feed_wrap
 
 # ── Journal à onglets ──────────────────────────────────────
 func _build_log() -> Control:
@@ -539,6 +541,9 @@ func _build_bottom_bar() -> Control:
 	_evolve_badge_lbl.add_theme_color_override("font_color", Color.WHITE)
 	_evolve_badge_lbl.add_theme_constant_override("outline_size", 3)
 	_evolve_badge_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	# IGNORE : sans ça, le label (STOP par défaut) vole le survol au bouton dès
+	# que le badge apparaît → le tooltip d'évolution clignote/ne s'affiche pas.
+	_evolve_badge_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_evolve_badge.add_child(_evolve_badge_lbl)
 	inner.add_child(_evolve_badge)
 
@@ -615,6 +620,7 @@ func _connect_signals() -> void:
 	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.loot_dropped.connect(_on_loot_dropped)
 	EventBus.heal_applied.connect(_on_heal_applied)
+	EventBus.bleed_ticked.connect(_on_bleed_ticked)
 	EventBus.adventure_cycle_ended.connect(_on_cycle_ended)
 	EventBus.adventure_stopped.connect(_on_adventure_stopped)
 	EventBus.entity_ready_to_evolve.connect(_on_entity_ready_to_evolve)
@@ -675,19 +681,19 @@ func _on_adventure_started(_biome_id: String) -> void:
 	match BiomeMechanics.active_mechanic:
 		"ambush":
 			var ac := Color(1.0, 0.42, 0.10)
-			_push_feed(Translations.mech_name("ambush"), ac)
+			_push_under_bar_pill(_hero_states, Translations.mech_name("ambush"), ac)
 			_show_mechanic_label("⚡ " + Translations.mech_name("ambush"), ac)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("ambush"),
 					Translations.mech_desc("ambush"), ac)
 		"poison":
-			var pc := Color(0.62, 0.15, 0.78)
-			_push_feed(Translations.mech_name("poison"), pc)
+			var pc := UIColors.POISON
+			_push_under_bar_pill(_hero_states, Translations.mech_name("poison"), pc)
 			_show_mechanic_label("☠ " + Translations.mech_name("poison"), pc)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("poison"),
 					Translations.mech_desc("poison"), pc)
 		"endurcissement":
 			var ec := Color(0.80, 0.55, 0.25)
-			_push_feed(Translations.mech_name("endurcissement"), ec)
+			_push_under_bar_pill(_hero_states, Translations.mech_name("endurcissement"), ec)
 			_show_mechanic_label("🗻 " + Translations.mech_name("endurcissement"), ec)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("endurcissement"),
 					Translations.mech_desc("endurcissement"), ec)
@@ -719,6 +725,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 					else Translations.T("combat.stinger.trap_dmg") % tdmg
 			_show_event_stinger(Translations.T("combat.stinger.trap"), tname,
 					trap_detail, UIColors.TYPE_TRAP, not ignored)
+			AudioManager.play_sfx("trap_appear", -4.0)
 			if not ignored:
 				_hero_bar.update_hp(AdventureSystem.current_hp)
 				_hero_bar.damage(tdmg, false)
@@ -746,6 +753,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 				UIColors.TYPE_BENEDICTION)
 			_show_event_stinger(Translations.T("combat.stinger.bless"), bname,
 					bdesc, UIColors.TYPE_BENEDICTION, false)
+			AudioManager.play_sfx("benediction_appear", -5.0)
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TYPE_BENEDICTION), bname], ["status"])
 
 func _on_combat_started(hero_id: String, enemy: Dictionary,
@@ -791,37 +799,118 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 			int(enemy.get("vit", 0)))
 	_enemy_stats_panel.visible = true
 
-	_hero_bar.set_atb(0.0)
-	_enemy_bar.set_atb(0.0)
+	# Jauges ATB honnêtes : chaque barre démarre sa charge à la cadence réelle de
+	# son combattant ; elle sera pleine pile quand il frappera (puis redémarre à
+	# chaque coup, cf. _on_step_ended).
+	_charge_atb(true,  CombatPlayer.hero_atb_interval)
+	_charge_atb(false, CombatPlayer.enemy_atb_interval)
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 	_hero_shield = 0.0
 	_stop_danger_pulse()
 	_clear_state_pills()
+	_clear_haste()
+	# Feedback de hâte (rail de vitesse) : pill + jauge teintée pendant la fenêtre
+	# (APRÈS _clear_state_pills, qui vide les pills d'états).
+	_setup_haste(true,  CombatPlayer.hero_haste_window)
+	_setup_haste(false, CombatPlayer.enemy_haste_window)
 	_flee_btn.disabled = false
 	_add_log(Translations.T("combat.appears") \
 			% ("[color=%s]%s[/color]" % [_hex(Color(1.0, 0.8, 0.2)), ename]), ["monster"])
 
-# Début du cooldown : on affiche l'INTENTION de l'attaquant et on lance la
-# charge de son anneau. Aucun dégât appliqué ici — l'attaque atterrit à la
-# fin du cooldown (_on_step_ended). Pendant ce temps, l'autre entité n'affiche
-# rien (pill masquée).
+# Début du cooldown : on affiche l'INTENTION de l'attaquant. La jauge ATB n'est
+# PLUS pilotée ici : chaque barre se remplit en continu à sa cadence réelle
+# (cf. _charge_atb), donc elle est déjà pleine quand le coup atterrit
+# (_on_step_ended). Aucun dégât appliqué ici.
 func _on_step_started(step: CombatStep) -> void:
 	# Tick de poison : instantané, pas d'action chargée ni d'intention affichée.
 	if step.is_poison or step.is_passive_poison:
 		return
 
+	# Souffle de l'attaque lancée (placeholder).
+	AudioManager.play_sfx("attack", -7.0)
+
 	var is_hero := step.attacker == "hero"
-	var ring := _hero_bar if is_hero else _enemy_bar
 	var lbl  := _hero_action if is_hero else _enemy_action
 	var base_col := UIColors.STAT_ATK if is_hero else UIColors.TYPE_TRAP
 	_show_action(lbl, Translations.T("combat.action.crit") if step.is_crit else Translations.T("combat.action.attack"),
 			UIColors.FILTER_ON if step.is_crit else base_col)
-	ring.set_atb(0.0)
-	# La charge de l'anneau dure exactement un step côté CombatPlayer :
-	# l'attaque atterrit visuellement quand l'anneau est plein.
+
+# Barre / rangée d'états d'un camp (is_hero) — évite le ternaire répété partout.
+func _bar(is_hero: bool) -> CombatBar:
+	return _hero_bar if is_hero else _enemy_bar
+
+func _states(is_hero: bool) -> HBoxContainer:
+	return _hero_states if is_hero else _enemy_states
+
+# Tue le tween stocké dans `dict[is_hero]` s'il est encore valide.
+func _kill_tween(dict: Dictionary, is_hero: bool) -> void:
+	var tw: Tween = dict[is_hero]
+	if tw and tw.is_valid():
+		tw.kill()
+
+# Lance (ou relance) la charge continue d'une jauge ATB sur `interval` secondes
+# de lecture : la barre va de 0 à 1 puis reste pleine jusqu'à la prochaine
+# relance (au coup suivant du combattant). Honnête : un combattant rapide a un
+# `interval` plus court, donc une jauge qui monte plus vite.
+func _charge_atb(is_hero: bool, interval: float) -> void:
+	_kill_tween(_atb_tween, is_hero)
+	var bar := _bar(is_hero)
+	bar.set_atb(0.0)
 	var tw := create_tween()
-	tw.tween_method(ring.set_atb, 0.0, 1.0, CombatPlayer.step_duration).set_ease(Tween.EASE_IN)
+	tw.tween_method(bar.set_atb, 0.0, 1.0, maxf(interval, 0.05)).set_ease(Tween.EASE_IN)
+	_atb_tween[is_hero] = tw
+
+# Stoppe les charges ATB en cours (fin de combat / arrêt d'expédition).
+func _stop_atb() -> void:
+	_kill_tween(_atb_tween, true)
+	_kill_tween(_atb_tween, false)
+
+# ─── Feedback de hâte (rail de vitesse temporaire) ──────────
+# Programme l'activation puis la coupure du feedback « Hâte » d'un combattant sur
+# la fenêtre `window` = (début, fin) en secondes de lecture. ZERO → rien.
+func _setup_haste(is_hero: bool, window: Vector2) -> void:
+	if window == Vector2.ZERO or window.y <= window.x:
+		return
+	var tw := create_tween()
+	if window.x > 0.001:
+		tw.tween_interval(window.x)
+	tw.tween_callback(_set_haste_active.bind(is_hero, true))
+	tw.tween_interval(maxf(window.y - maxf(window.x, 0.0), 0.05))
+	tw.tween_callback(_set_haste_active.bind(is_hero, false))
+	_haste_tween[is_hero] = tw
+
+# Active/coupe le feedback hâte : jauge ATB teintée + pill « Rapide ».
+func _set_haste_active(is_hero: bool, active: bool) -> void:
+	var bar := _bar(is_hero)
+	if is_instance_valid(bar):
+		bar.set_haste(active)
+	if not active:
+		_remove_haste_pill(is_hero)
+		return
+	var existing: Control = _haste_pill[is_hero]
+	var states := _states(is_hero)
+	if (existing == null or not is_instance_valid(existing)) and states:
+		var pill := _make_state_pill_node("⚡ " + Translations.T("combat.haste_pill"), UIColors.HASTE)
+		states.add_child(pill)
+		_haste_pill[is_hero] = pill
+
+func _remove_haste_pill(is_hero: bool) -> void:
+	var pill: Control = _haste_pill[is_hero]
+	if pill and is_instance_valid(pill):
+		pill.queue_free()
+	_haste_pill[is_hero] = null
+
+# Coupe tout feedback hâte en cours (changement de rencontre / fin de combat).
+func _clear_haste() -> void:
+	_kill_tween(_haste_tween, true)
+	_kill_tween(_haste_tween, false)
+	if is_instance_valid(_hero_bar):
+		_hero_bar.set_haste(false)
+	if is_instance_valid(_enemy_bar):
+		_enemy_bar.set_haste(false)
+	_remove_haste_pill(true)
+	_remove_haste_pill(false)
 
 # Joue la réaction d'un combattant touché : mort si coup fatal, sinon recul.
 func _fighter_take(target: CombatFighter, killing: bool) -> void:
@@ -875,7 +964,7 @@ func _on_step_ended(step: CombatStep) -> void:
 			_hero_shield = maxf(_hero_shield - float(step.shield_absorbed), 0.0)
 			_update_shield_pill(int(_hero_shield))
 			_add_log("[color=%s]%s[/color]"
-					% [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_absorb") % step.shield_absorbed], ["defense", "status"])
+					% [_hex(UIColors.SHIELD), Translations.T("combat.shield_absorb") % step.shield_absorbed], ["defense", "status"])
 		if step.damage > 0:
 			_hero_bar.update_hp(float(step.target_hp_after))
 			_hero_bar.damage(step.damage, step.is_crit)
@@ -889,17 +978,28 @@ func _on_step_ended(step: CombatStep) -> void:
 			_hero_bar.update_hp(float(step.target_hp_after))
 		if step.is_shield_proc:
 			_hero_shield = float(step.shield_value)
-			_push_feed(Translations.T("combat.shield_pill") % step.shield_value, Color(0.3, 0.7, 1.0))
+			# La pill persistante 🛡 sous la barre du héros suffit (plus de toast centré).
 			_update_shield_pill(int(_hero_shield))
-			_add_log("[color=%s]%s[/color]" % [_hex(Color(0.3, 0.7, 1.0)), Translations.T("combat.shield_proc")], ["defense", "status"])
+			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.SHIELD), Translations.T("combat.shield_proc")], ["defense", "status"])
 		_log_attack(_enemy_name.text, step.damage, step.is_crit, ["monster", "attack"])
 
-	_hero_bar.set_atb(0.0)
-	_enemy_bar.set_atb(0.0)
+	# Jauge ATB : seul l'attaquant qui vient de frapper voit sa jauge se vider et
+	# redémarrer (à sa cadence). Les ticks de poison ne sont PAS un coup d'attaque
+	# d'un combattant → ils ne touchent aucune jauge. L'autre barre continue sa
+	# charge sans interruption.
+	if not step.is_poison and not step.is_passive_poison:
+		# Intervalle = temps jusqu'au PROCHAIN coup du combattant (honnête même
+		# sous hâte : les coups se rapprochent → la jauge remonte plus vite).
+		if step.attacker == "hero":
+			_charge_atb(true, CombatPlayer.gap_to_next_attack(true))
+		else:
+			_charge_atb(false, CombatPlayer.gap_to_next_attack(false))
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
 
 func _on_combat_ended(result: Dictionary) -> void:
+	_stop_atb()
+	_clear_haste()
 	_hero_bar.set_atb(0.0)
 	_enemy_bar.set_atb(0.0)
 	_hide_action(_hero_action)
@@ -923,8 +1023,19 @@ func _on_combat_ended(result: Dictionary) -> void:
 func _on_heal_applied(amount: float, new_hp: float) -> void:
 	_hero_bar.update_hp(new_hp)
 	_hero_bar.heal(int(amount))
-	_push_feed(Translations.T("combat.regen") % int(amount), UIColors.HEAL_COLOR)
+	# Toast de régénération sous la barre du héros (et non au centre de l'écran).
+	_push_under_bar_pill(_hero_states, "♥ " + Translations.T("combat.regen") % int(amount), UIColors.HEAL_COLOR)
 	_add_log("[color=%s]%s[/color]" % [_hex(UIColors.HEAL_COLOR), Translations.T("combat.regen") % int(amount)], ["heal"])
+	_check_danger_pulse()
+
+# Tick de saignement/poison infligé par un piège (ex. Baies empoisonnées) : ronge
+# le héros entre les rencontres. Sans retour visuel, le joueur ne « voyait » pas
+# l'état poison → chiffre flottant vert sur la barre + pill poison transitoire.
+func _on_bleed_ticked(damage: float, new_hp: float, _remaining: int) -> void:
+	if is_instance_valid(_hero_bar):
+		_hero_bar.update_hp(new_hp)
+		_hero_bar.poison(int(damage))
+	_push_under_bar_pill(_hero_states, "☠ -%d" % int(damage), UIColors.POISON)
 	_check_danger_pulse()
 
 func _on_cycle_ended(result: Dictionary) -> void:
@@ -999,9 +1110,12 @@ func _spawn_loot_pellet(item_id: String, item_name: String, qty: int) -> void:
 	const D := 33   # +25 % vs taille du bandeau, pour bien la voir jaillir
 	var half := Vector2(D, D) * 0.5
 
-	# Origine : centre de l'anneau créature (fallback : centre-droit de l'écran).
+	# Origine : centre de la boule d'énergie de la créature (là où elle « lâche »
+	# l'ingrédient), pas sa barre ATB. Fallbacks : barre créature, puis centre-droit.
 	var start_c := size * Vector2(0.72, 0.40)
-	if _enemy_bar and is_instance_valid(_enemy_bar):
+	if _enemy_fighter and is_instance_valid(_enemy_fighter) and _enemy_fighter.visible:
+		start_c = _enemy_fighter.global_position + _enemy_fighter.size * 0.5
+	elif _enemy_bar and is_instance_valid(_enemy_bar):
 		start_c = _enemy_bar.global_position + _enemy_bar.size * 0.5
 	# Cible : tiers gauche du bandeau (fallback : coin bas-gauche).
 	var end_c := size * Vector2(0.10, 0.95)
@@ -1098,6 +1212,13 @@ func _evolve_anchor(entity: Dictionary) -> Vector2:
 	if etype == Enums.EntityType.CREATURE and _enemy_bar and is_instance_valid(_enemy_bar):
 		return _enemy_bar.global_position + _enemy_bar.size * 0.5
 	return size * Vector2(0.5, 0.40)
+
+# Rangée d'états sous laquelle accrocher un toast lié à une entité : la barre
+# créature pour une créature, sinon la barre du héros (côté joueur par défaut).
+func _states_for_entity(entity: Dictionary) -> HBoxContainer:
+	if String(entity.get("entity_type", "")) == Enums.EntityType.CREATURE:
+		return _enemy_states
+	return _hero_states
 
 # ═══════════════════════════════════════════════════════════
 #  Animation cooldown / shake / feed
@@ -1213,39 +1334,6 @@ func _screen_shake(strength: float = 1.0) -> void:
 				Vector2(a * strength, -a * 0.45 * (strength - 0.6)),
 				0.35 / float(amps.size())).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(_shaker, "position", Vector2.ZERO, 0.05)
-
-# Ajoute un pill transitoire dans le feed (pop-in, disparaît après ~2s).
-func _push_feed(text: String, color: Color) -> void:
-	if not _feed_box:
-		return
-	var box := PanelContainer.new()
-	var style := UIHelpers.card_style(color, 0.26, 0.90, 1, 9)
-	style.content_margin_left   = 10
-	style.content_margin_right  = 10
-	style.content_margin_top    = 2
-	style.content_margin_bottom = 3
-	box.add_theme_stylebox_override("panel", style)
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_constant_override("outline_size", 3)
-	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	lbl.add_theme_color_override("font_color", color.lightened(0.30))
-	box.add_child(lbl)
-	_feed_box.add_child(box)
-	# Pop-in (pivot connu une fois la taille calculée).
-	box.scale = Vector2(0.5, 0.5)
-	box.resized.connect(func() -> void:
-		box.pivot_offset = box.size * 0.5
-	, CONNECT_ONE_SHOT)
-	var tw := create_tween()
-	tw.tween_property(box, "scale", Vector2.ONE, 0.30) \
-			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_interval(1.8)
-	tw.tween_property(box, "modulate:a", 0.0, 0.4)
-	# Suppression garantie via un SceneTreeTimer indépendant du Tween.
-	get_tree().create_timer(2.6).timeout.connect(box.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Journal
@@ -1528,32 +1616,35 @@ func _clear_state_pills() -> void:
 			child.queue_free()
 	_shield_state_pill = null
 	_poison_state_pill = null
+	# Les pills de hâte sont des enfants de _hero_states/_enemy_states (libérés
+	# ci-dessus) : on annule juste les références pour éviter tout pointeur mort.
+	_haste_pill[true]  = null
+	_haste_pill[false] = null
 
 func _update_shield_pill(value: int) -> void:
-	var color := Color(0.3, 0.7, 1.0)
-	if value <= 0:
-		if _shield_state_pill and is_instance_valid(_shield_state_pill):
-			_shield_state_pill.queue_free()
-		_shield_state_pill = null
-		return
-	if _shield_state_pill == null or not is_instance_valid(_shield_state_pill):
-		_shield_state_pill = _make_state_pill_node("🛡 %d" % value, color)
-		if _hero_states:
-			_hero_states.add_child(_shield_state_pill)
-	else:
-		(_shield_state_pill.get_child(0) as Label).text = "🛡 %d" % value
+	_shield_state_pill = _set_persistent_pill(
+			_shield_state_pill, _hero_states, value > 0, "🛡 %d" % value, UIColors.SHIELD)
 
 func _update_poison_pill(active: bool) -> void:
-	var color := Color(0.62, 0.15, 0.78)
+	_poison_state_pill = _set_persistent_pill(
+			_poison_state_pill, _enemy_states, active, Translations.T("combat.venom_pill"), UIColors.POISON)
+
+# Pose / met à jour / retire une pill d'état PERSISTANTE (bouclier, venin). La
+# référence est passée puis renvoyée (GDScript ne passe pas les membres par
+# référence) : `_x = _set_persistent_pill(_x, …)`. Renvoie null quand retirée.
+func _set_persistent_pill(pill: Control, states: HBoxContainer, active: bool,
+		text: String, color: Color) -> Control:
 	if not active:
-		if _poison_state_pill and is_instance_valid(_poison_state_pill):
-			_poison_state_pill.queue_free()
-		_poison_state_pill = null
-		return
-	if _poison_state_pill == null or not is_instance_valid(_poison_state_pill):
-		_poison_state_pill = _make_state_pill_node(Translations.T("combat.venom_pill"), color)
-		if _enemy_states:
-			_enemy_states.add_child(_poison_state_pill)
+		if pill and is_instance_valid(pill):
+			pill.queue_free()
+		return null
+	if pill == null or not is_instance_valid(pill):
+		pill = _make_state_pill_node(text, color)
+		if states:
+			states.add_child(pill)
+	else:
+		(pill.get_child(0) as Label).text = text
+	return pill
 
 func _make_state_pill_node(text: String, color: Color) -> Control:
 	var box := PanelContainer.new()
@@ -1565,6 +1656,26 @@ func _make_state_pill_node(text: String, color: Color) -> Control:
 	lbl.add_theme_color_override("font_color", color)
 	box.add_child(lbl)
 	return box
+
+# Pill transitoire (toast) ajouté SOUS la barre d'un combattant : pop-in, puis
+# fondu et disparition après ~2 s. Pour les événements ponctuels (régénération,
+# tick de poison) — affichés au même endroit que les états persistants, plutôt
+# qu'au centre de l'écran.
+func _push_under_bar_pill(states: HBoxContainer, text: String, color: Color) -> void:
+	if not states or not is_instance_valid(states):
+		return
+	var pill := _make_state_pill_node(text, color)
+	states.add_child(pill)
+	pill.scale = Vector2(0.5, 0.5)
+	pill.resized.connect(func() -> void:
+		pill.pivot_offset = pill.size * 0.5
+	, CONNECT_ONE_SHOT)
+	var tw := create_tween()
+	tw.tween_property(pill, "scale", Vector2.ONE, 0.25) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.6)
+	tw.tween_property(pill, "modulate:a", 0.0, 0.4)
+	get_tree().create_timer(2.4).timeout.connect(pill.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Polish combat — item 9 (notification d'évolution)
@@ -1579,7 +1690,11 @@ func _on_entity_ready_to_evolve(entity_id: String) -> void:
 	var nom    := Translations.entity_name(entity, entity_id)
 	var tier   := int(entity.get("maitrise_actuelle", 0))
 	var target := UIColors.tier_color(mini(tier + 1, 5))
-	_push_feed(Translations.T("combat.ready_evolve") % nom, target)
+	# Toast sous la barre de l'entité concernée (créature à droite, sinon héros).
+	_push_under_bar_pill(_states_for_entity(entity), Translations.T("combat.ready_evolve") % nom, target)
+	# Carillon court et sec (même famille que le crystal du rituel d'évolution) :
+	# marque le coup quand une entité devient éligible.
+	AudioManager.play_sfx("evolve_ready", -5.0)
 	# Tâche B — flash de palier : halo de la couleur du palier cible, ancré sur
 	# l'entité concernée (héros / créature) ou au centre de l'arène.
 	if is_instance_valid(_xp_fx_layer):

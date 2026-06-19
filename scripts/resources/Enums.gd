@@ -33,6 +33,7 @@ class Actor:
 class BlessEffect:
 	const HEAL     := "heal"
 	const XP_BONUS := "xp_bonus"
+	const HASTE    := "haste"   # +X % de vitesse d'attaque du héros pendant N s réelles (rail de vitesse)
 
 enum Maitrise {
 	COMMUN     = 0,

@@ -22,7 +22,8 @@ var language:       String = "fr"  # "fr" ou "en"
 var welcome_dismissed: bool = false
 
 func _ready() -> void:
-	_ensure_audio_buses()
+	# Les bus Music/SFX sont créés par AudioManager (autoload antérieur) ; ici on
+	# ne fait qu'appliquer les volumes persistés.
 	_load()
 	_apply_fullscreen()
 	_apply_volume_music(volume_music)
@@ -65,28 +66,10 @@ func _apply_fullscreen() -> void:
 	DisplayServer.window_set_mode(mode)
 
 func _apply_volume_music(v: float) -> void:
-	var idx := AudioServer.get_bus_index("Music")
-	if idx >= 0:
-		AudioServer.set_bus_mute(idx, v <= 0.0)
-		AudioServer.set_bus_volume_db(idx, linear_to_db(v) if v > 0.0 else -80.0)
+	AudioManager.set_bus_volume(AudioManager.MUSIC_BUS, v)
 
 func _apply_volume_sfx(v: float) -> void:
-	var idx := AudioServer.get_bus_index("SFX")
-	if idx >= 0:
-		AudioServer.set_bus_mute(idx, v <= 0.0)
-		AudioServer.set_bus_volume_db(idx, linear_to_db(v) if v > 0.0 else -80.0)
-
-func _ensure_audio_buses() -> void:
-	if AudioServer.get_bus_index("Music") < 0:
-		AudioServer.add_bus()
-		var idx := AudioServer.bus_count - 1
-		AudioServer.set_bus_name(idx, "Music")
-		AudioServer.set_bus_send(idx, "Master")
-	if AudioServer.get_bus_index("SFX") < 0:
-		AudioServer.add_bus()
-		var idx := AudioServer.bus_count - 1
-		AudioServer.set_bus_name(idx, "SFX")
-		AudioServer.set_bus_send(idx, "Master")
+	AudioManager.set_bus_volume(AudioManager.SFX_BUS, v)
 
 func _save() -> void:
 	var file = FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)

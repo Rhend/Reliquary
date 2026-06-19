@@ -603,7 +603,18 @@ func _launch_evolution(entity_id: String, entity_name: String,
 
 func _fade_register(node: Control) -> void:
 	node.modulate.a = 0.0
+	# modulate.a = 0 rend le nœud invisible mais TOUJOURS cliquable : on désactive
+	# ses boutons tant qu'il n'est pas révélé, sinon un clic « dans le vide » à
+	# l'emplacement d'un bouton pas encore apparu le déclencherait.
+	_set_buttons_disabled(node, true)
 	_fade_nodes.append(node)
+
+# Active/désactive récursivement tous les Button d'un sous-arbre.
+func _set_buttons_disabled(node: Node, disabled: bool) -> void:
+	if node is Button:
+		(node as Button).disabled = disabled
+	for child in node.get_children():
+		_set_buttons_disabled(child, disabled)
 
 # Révélation LENTE et séquentielle : bannière en punch, puis chaque élément
 # (puces, séparateur, sections, lignes, cartes XP, bouton) apparaît l'un après
@@ -649,6 +660,8 @@ func _reveal_node(i: int) -> void:
 	var node := _fade_nodes[i] as Control
 	if not is_instance_valid(node):
 		return
+	# Le nœud devient visible → ses boutons redeviennent cliquables.
+	_set_buttons_disabled(node, false)
 	var tw := _track(create_tween())
 	tw.tween_property(node, "modulate:a", 1.0, FADE_IN_TIME).set_ease(Tween.EASE_OUT)
 
@@ -673,7 +686,8 @@ func _track(tw: Tween) -> Tween:
 	_running_tweens.append(tw)
 	return tw
 
-# Double-clic souris : stoppe la séquence et affiche tout dans son état final.
+# Double-clic souris OU touche Échap : stoppe la séquence et affiche tout dans
+# son état final.
 func _input(event: InputEvent) -> void:
 	if _seq_done:
 		return
@@ -682,6 +696,9 @@ func _input(event: InputEvent) -> void:
 		if mb.pressed and mb.double_click:
 			_skip_to_end()
 			get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel"):
+		_skip_to_end()
+		get_viewport().set_input_as_handled()
 
 func _skip_to_end() -> void:
 	if _seq_done:
@@ -696,6 +713,7 @@ func _skip_to_end() -> void:
 	for node: Control in _fade_nodes:
 		if is_instance_valid(node):
 			node.modulate.a = 1.0
+			_set_buttons_disabled(node, false)   # tout visible → boutons réactivés
 	for c: Dictionary in _counters:
 		var lbl := c["label"] as Label
 		if is_instance_valid(lbl):

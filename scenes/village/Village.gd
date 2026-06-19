@@ -706,6 +706,9 @@ func _open_panel(panel_id: String) -> void:
 		_close_panel()
 		return
 
+	# Sélection d'un élément du village (ouverture / changement de panneau).
+	AudioManager.play_sfx("ui_select", -6.0)
+
 	_active_panel_id = panel_id
 	_update_hex_selection(panel_id)
 

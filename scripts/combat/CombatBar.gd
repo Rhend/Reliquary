@@ -24,6 +24,12 @@ const ATB_H    := 7.0
 const GAP      := 5.0
 const MIN_H    := PAD + NAME_H + GAP + HP_BAR_H + GAP + ATB_H + PAD
 
+# Rangée de pills bonus/malus, DANS le cadre, juste sous la jauge ATB. L'espace
+# n'est réservé que lorsqu'au moins un état est présent (cf. _process) : le
+# cadre grandit alors vers le bas pour les englober.
+const STATES_GAP := 4.0
+const STATES_H   := 20.0
+
 const LOW_HP_PCT  := 0.30        # bascule au rouge
 const GHOST_HOLD  := 0.45        # maintien de la traînée avant résorption
 const GHOST_DRAIN := 0.32        # vitesse de résorption (fraction de max/s)
@@ -33,6 +39,7 @@ var camp_color: Color = Color.WHITE
 var cur_hp:     float = 100.0
 var max_hp:     float = 100.0
 var atb:        float = 0.0      # 0..1, piloté par la scène
+var haste_active: bool = false   # hâte : jauge ATB teintée + pulsée (rail de vitesse)
 
 # Barre miroir (créature, à droite de l'arène) : nom à droite, PV chiffrés à
 # gauche, et jauges qui se remplissent depuis le bord DROIT (convention JRPG).
@@ -54,6 +61,7 @@ var _flash_col:   Color = Color.TRANSPARENT
 var _flash_alpha: float = 0.0
 
 var name_label: Label       # public : la scène y écrit le nom et y branche le tooltip
+var states_row: HBoxContainer  # public : la scène y ajoute les pills bonus/malus
 var _hp_label:  Label
 var _fx_layer:  Control
 var _punch_tw:  Tween
@@ -82,11 +90,18 @@ func _init() -> void:
 	_fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	# Rangée d'états (bonus/malus) ancrée dans le cadre, sous l'ATB. Transparente
+	# à la souris pour ne pas voler le survol (tooltip) à la barre.
+	states_row = HBoxContainer.new()
+	states_row.add_theme_constant_override("separation", 4)
+	states_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 func _ready() -> void:
 	custom_minimum_size = Vector2(0, MIN_H)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(name_label)
 	add_child(_hp_label)
+	add_child(states_row)
 	add_child(_fx_layer)
 	resized.connect(_layout)
 	_layout()
@@ -111,6 +126,13 @@ func _layout() -> void:
 		_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		_hp_label.position  = Vector2(size.x * 0.40, PAD)
 		_hp_label.size      = Vector2(size.x * 0.60 - PAD, NAME_H)
+	# Rangée d'états : juste sous la jauge ATB, dans le cadre (position dérivée de
+	# l'ATB → source unique). Alignée du même bord que le combattant (gauche
+	# normal, droite en miroir pour la créature).
+	if states_row:
+		states_row.position  = Vector2(_inner_x(), _atb_rect().end.y + STATES_GAP)
+		states_row.size      = Vector2(_inner_w(), STATES_H)
+		states_row.alignment = BoxContainer.ALIGNMENT_END if mirrored else BoxContainer.ALIGNMENT_BEGIN
 	queue_redraw()
 
 # ═══════════════════════════════════════════════════════════
@@ -147,6 +169,11 @@ func update_hp(p_cur: float) -> void:
 # Remplissage de la jauge ATB (0..1). Remplace set_cooldown.
 func set_atb(frac: float) -> void:
 	atb = clampf(frac, 0.0, 1.0)
+	queue_redraw()
+
+# Active/désactive le rendu « hâte » de la jauge ATB (teinte + pulse).
+func set_haste(active: bool) -> void:
+	haste_active = active
 	queue_redraw()
 
 # Entrée en scène : pop élastique + fondu.
@@ -212,6 +239,12 @@ func _impact_punch(strength: float) -> void:
 # ═══════════════════════════════════════════════════════════
 
 func _process(delta: float) -> void:
+	# Hauteur du cadre : étendue pour englober la rangée d'états seulement quand
+	# au moins un bonus/malus est vivant (sinon aucun espace réservé).
+	var want_h := MIN_H + STATES_GAP + STATES_H if _has_live_states() else MIN_H
+	if absf(custom_minimum_size.y - want_h) > 0.5:
+		custom_minimum_size.y = want_h
+
 	if _flash_alpha > 0.0:
 		_flash_alpha = maxf(_flash_alpha - delta * 4.0, 0.0)
 
@@ -238,13 +271,28 @@ func _process(delta: float) -> void:
 	_refresh_label()
 	queue_redraw()
 
+# Vrai si la rangée d'états porte au moins une pill encore vivante (on ignore
+# celles en cours de libération, pour replier le cadre dès le dernier retiré).
+func _has_live_states() -> bool:
+	if not states_row:
+		return false
+	for c in states_row.get_children():
+		if c is CanvasItem and not (c as Node).is_queued_for_deletion():
+			return true
+	return false
+
+# Géométrie interne mutualisée : origine X et largeur des pistes (PV, ATB, états).
+func _inner_x() -> float:
+	return PAD + 2.0
+
+func _inner_w() -> float:
+	return maxf(size.x - (PAD + 2.0) * 2.0, 1.0)
+
 func _hp_track_rect() -> Rect2:
-	var y := PAD + NAME_H + GAP
-	return Rect2(PAD + 2.0, y, maxf(size.x - (PAD + 2.0) * 2.0, 1.0), HP_BAR_H)
+	return Rect2(_inner_x(), PAD + NAME_H + GAP, _inner_w(), HP_BAR_H)
 
 func _atb_rect() -> Rect2:
-	var y := PAD + NAME_H + GAP + HP_BAR_H + GAP
-	return Rect2(PAD + 2.0, y, maxf(size.x - (PAD + 2.0) * 2.0, 1.0), ATB_H)
+	return Rect2(_inner_x(), PAD + NAME_H + GAP + HP_BAR_H + GAP, _inner_w(), ATB_H)
 
 # Remplit un segment [from_f, to_f] (fractions 0..1) d'une piste. En mode
 # miroir, les fractions sont mesurées depuis le bord DROIT.
@@ -295,8 +343,14 @@ func _draw() -> void:
 	if atb > 0.001:
 		var ready := atb >= 0.999
 		var atb_col := camp_color if ready else UIColors.TEXT_MUTED
+		# Hâte : jauge teintée HASTE et pulsée (sinusoïde) → lecture « buff actif ».
+		if haste_active:
+			var pulse := 0.62 + 0.38 * (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012))
+			atb_col = Color(UIColors.HASTE.r, UIColors.HASTE.g, UIColors.HASTE.b, pulse)
 		_draw_seg(ar, 0.0, atb, atb_col)
-	draw_rect(ar, Color(camp_color.r, camp_color.g, camp_color.b, 0.40), false, 1.0)
+	var border_col := UIColors.HASTE if haste_active \
+			else Color(camp_color.r, camp_color.g, camp_color.b, 0.40)
+	draw_rect(ar, border_col, false, 1.0 if not haste_active else 2.0)
 
 	# ── Flash (crit doré / soin vert) ─────────────────────────
 	if _flash_alpha > 0.001:

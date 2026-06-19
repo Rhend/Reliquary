@@ -70,13 +70,44 @@ const BLEED_DURATION: int   = 3     # nombre d'événements
 # ═══════════════════════════════════════════════════════════
 
 const BLESS_HEAL_PCT:     float = 0.15  # % PV max restaurés (indépendant de la zone)
-const BLESS_XP_BONUS_PCT: float = 0.50  # bonus d'XP de base sur le prochain événement
+const BLESS_XP_BONUS_PCT: float = 0.50  # bonus d'XP de base sur le prochain événement (LEGACY xp_bonus)
+# Bénédiction de Hâte : +X % de vitesse d'attaque du héros pendant N secondes
+# réelles, appliquée au prochain combat (rail de vitesse, modificateur
+# multiplicatif temporaire). Placeholder — équilibrage ultérieur. Le % réel
+# vient du champ `valeur` du .tres (fallback sur ce défaut).
+const BLESS_HASTE_PCT_DEFAULT: float = 30.0  # +30 % par défaut (si valeur du .tres absente)
+const BLESS_HASTE_DURATION:    float = 10.0  # fenêtre active en secondes réelles de combat
 
 # ═══════════════════════════════════════════════════════════
 #  Combat — résolution (CombatResolver)
 # ═══════════════════════════════════════════════════════════
 
-const GAUGE_THRESHOLD: float = 100.0  # jauge d'action requise pour agir (+VIT/tick)
+# ─── Référentiel de vitesse : VIT = cadence d'attaques par seconde ──────────
+# Depuis la refonte ATB temps réel, la jauge d'action s'horodate en SECONDES
+# réelles : un combattant frappe toutes les (1 / aps) secondes, où aps est sa
+# cadence en attaques/seconde. Repères : 0,7 lent · 1,0 normal · 1,3 rapide.
+#
+# Les stats `vit` brutes des .tres (échelle ~20, héros = HERO_VIT = 20) ne sont
+# PAS retouchées : on les transpose vers le référentiel att/s par division.
+#   aps = vit / VIT_PER_APS   →   vit 20 = 1,0 att/s (normal),
+#                                 vit 14 ≈ 0,7 (lent), vit 26 ≈ 1,3 (rapide).
+# VIT_PER_APS = HERO_VIT préserve au mieux le comportement relatif actuel
+# (toutes les créatures sont aujourd'hui à vit = 20, donc 1,0 att/s comme le héros).
+const VIT_PER_APS: float = 20.0   # 1 attaque/s = VIT_PER_APS points de vit bruts
+const APS_SLOW:    float = 0.7    # repère documentaire — cadence « lente »
+const APS_NORMAL:  float = 1.0    # repère documentaire — cadence « normale »
+const APS_FAST:    float = 1.3    # repère documentaire — cadence « rapide »
+const APS_MIN:     float = 0.05   # garde-fou : cadence plancher (évite 1/0)
+
+# Seuil de la jauge d'action exprimé en ATTAQUES : la jauge accumule `aps` par
+# seconde, le combattant frappe à 1 attaque accumulée puis retire ce seuil
+# (le surplus est conservé → aucune fraction de cadence perdue).
+const ATTACK_GAUGE: float = 1.0
+# Tolérance de simultanéité : si héros et ennemi atteignent leur seuil à moins
+# de ce delta (en secondes), le HÉROS frappe en premier.
+const SIMULTANEITY_EPS: float = 0.01  # 1 centième de seconde
+
+const GAUGE_THRESHOLD: float = 100.0  # LEGACY (ancien référentiel par ticks) — plus utilisé par le resolver
 const CRIT_CHANCE:     float = 0.20   # probabilité de coup critique
 const CRIT_MULTIPLIER: float = 1.8    # multiplicateur de dégâts en cas de critique
 const MIN_DAMAGE:      float = 1.0    # plancher de dégâts après défense (ATK − DEF)
@@ -238,24 +269,26 @@ static func max_unlocked_zone(biome_tier: int) -> int:
 # ═══════════════════════════════════════════════════════════
 # Durées nominales en secondes (à combat_speed = 1.0).
 # Pièges/bénédictions : AFFICHAGE_EVENEMENT puis TRANSITION puis suivant.
-# Combats : durée calculée par CombatPlayer (nb_tours × IDEAL → clamp MIN..MAX)
-#           puis TRANSITION puis suivant.
-# Valeurs à affiner au playtest via COMBAT_MIN / COMBAT_MAX / TEMPS_TOUR_IDEAL ;
-# ne pas toucher les seuils XP pour corriger le ressenti de rythme.
+# Combats : depuis la refonte ATB temps réel, la durée est ÉMERGENTE — chaque
+#           CombatStep est joué à son horodatage réel (time_sec), sans borne min
+#           ni max. GameSettings.combat_speed est le seul multiplicateur global
+#           de vitesse de lecture.
 
 const TRANSITION:          float = 1.0  # pause post-événement avant la rencontre suivante
 const AFFICHAGE_EVENEMENT: float = 1.5  # durée d'affichage fixe d'un piège ou d'une bénédiction
-const COMBAT_MIN:          float = 2.0  # durée minimale d'affichage d'un combat (plancher)
-const COMBAT_MAX:          float = 5.0  # durée maximale d'affichage d'un combat (plafond rafale)
-const TEMPS_TOUR_IDEAL:    float = 1.2  # durée cible par tour (référence de calcul)
+# LEGACY — ne bornent plus la durée d'un combat (référentiel ATB temps réel).
+# Conservés au cas où un futur réglage de cadence les réutilise ; aucun appelant
+# actuel hors documentation.
+const COMBAT_MIN:          float = 2.0  # LEGACY (ancien plancher de durée de combat)
+const COMBAT_MAX:          float = 5.0  # LEGACY (ancien plafond de durée de combat)
+const TEMPS_TOUR_IDEAL:    float = 1.2  # LEGACY (ancienne durée cible par tour)
 
 # ═══════════════════════════════════════════════════════════
 #  Pondération du pool de créatures par zone
 # ═══════════════════════════════════════════════════════════
 
 const POOL_WEIGHT_SURFACE_ONLY: float = 100.0  # zone Surface : créature Surface uniquement
-const POOL_WEIGHT_BASE:         float = 50.0   # poids de base quand les deux créatures sont au même palier
-const POOL_WEIGHT_DIFF_BONUS:   float = 10.0   # bonus par palier d'écart, vers la créature la moins avancée
+const POOL_WEIGHT_BASE:         float = 50.0   # Profondeur/Abysse : poids égal pour les deux créatures (50/50 fixe)
 
 # ═══════════════════════════════════════════════════════════
 #  Modificateurs de cycle (tirage pondéré au lancement d'aventure)
