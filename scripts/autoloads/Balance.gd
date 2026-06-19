@@ -288,8 +288,7 @@ const TEMPS_TOUR_IDEAL:    float = 1.2  # LEGACY (ancienne durée cible par tour
 # ═══════════════════════════════════════════════════════════
 
 const POOL_WEIGHT_SURFACE_ONLY: float = 100.0  # zone Surface : créature Surface uniquement
-const POOL_WEIGHT_BASE:         float = 50.0   # poids de base quand les deux créatures sont au même palier
-const POOL_WEIGHT_DIFF_BONUS:   float = 10.0   # bonus par palier d'écart, vers la créature la moins avancée
+const POOL_WEIGHT_BASE:         float = 50.0   # Profondeur/Abysse : poids égal pour les deux créatures (50/50 fixe)
 
 # ═══════════════════════════════════════════════════════════
 #  Modificateurs de cycle (tirage pondéré au lancement d'aventure)

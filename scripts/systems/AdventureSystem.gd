@@ -578,9 +578,7 @@ func _drop_biome_ingredients() -> void:
 
 # Reconstruit available_creatures selon la zone courante.
 # Surface              : créature Surface uniquement.
-# Profondeur et Abysse : Surface + Profondeur, pondérées par écart de palier.
-#   - Paliers égaux → 50/50.
-#   - Chaque palier d'écart ajoute Balance.POOL_WEIGHT_DIFF_BONUS à la créature la moins avancée.
+# Profondeur et Abysse : Surface + Profondeur, à 50/50 fixe (indépendant des paliers).
 func _build_available_creatures(biome_id: String) -> void:
 	available_creatures = []
 	var biome      := GameData.get_entity(biome_id)
@@ -591,16 +589,10 @@ func _build_available_creatures(biome_id: String) -> void:
 		_pool_add(surface, Balance.POOL_WEIGHT_SURFACE_ONLY)
 		return
 
-	# Profondeur et Abysse : pondération dynamique par écart de tier entre les deux créatures.
-	# On lit la maîtrise réelle depuis GameData.entities (source de vérité à jour),
-	# pas depuis le dict imbriqué dans le biome (copie figée au chargement).
-	var tier_s := int(GameData.get_entity(surface.get("id",    "")).get("maitrise_actuelle", 0))
-	var tier_p := int(GameData.get_entity(profondeur.get("id", "")).get("maitrise_actuelle", 0))
-	var diff   := tier_s - tier_p  # positif = Surface plus haute → Profondeur favorisée
-	var w_s := maxf(Balance.POOL_WEIGHT_BASE - float(diff) * Balance.POOL_WEIGHT_DIFF_BONUS, 5.0)
-	var w_p := maxf(Balance.POOL_WEIGHT_BASE + float(diff) * Balance.POOL_WEIGHT_DIFF_BONUS, 5.0)
-	_pool_add(surface,    w_s)
-	_pool_add(profondeur, w_p)
+	# Profondeur et Abysse : les deux créatures du biome apparaissent à 50/50,
+	# quels que soient leurs paliers de Maîtrise respectifs.
+	_pool_add(surface,    Balance.POOL_WEIGHT_BASE)
+	_pool_add(profondeur, Balance.POOL_WEIGHT_BASE)
 
 # Convertit un dict créature (.tres) en fiche de combat pour CombatPlayer.
 # Les stats sont lues au palier de Maîtrise courant de la créature, en
