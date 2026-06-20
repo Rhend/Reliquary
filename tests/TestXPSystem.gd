@@ -33,17 +33,17 @@ func _test_xp_produced() -> void:
 # l'écart entre son palier et celui de la cible. Coef créature ×1.0, héros ×0.05.
 func _test_distribution_no_gap() -> void:
 	print("\n[TEST] Distribution sans écart de palier (produced × coef)")
-	var id := "creature_rat"
+	var id := "creature_foret_surface"
 	var e  := GameData.get_entity(id)
 	if e.is_empty():
-		print("  ECHEC : 'creature_rat' introuvable")
+		print("  ECHEC : 'creature_foret_surface' introuvable")
 		return
 	# Même montant produit donné à la créature : reçoit le plein montant (coef 1.0),
 	# indépendamment du palier de la cible (pas de gap).
 	e["maitrise_actuelle"] = 0
 	e["xp_maitrise_actuelle"] = 0.0
 	MasterySystem.add_xp_to_entity(id, 50.0)
-	var ok_full := abs(float(e.get("xp_maitrise_actuelle", 0.0)) - 50.0) < 0.001
+	var ok_full := absf(float(e.get("xp_maitrise_actuelle", 0.0)) - 50.0) < 0.001
 	print("  Créature reçoit 50 (coef ×1.0) : %s (%.2f)" % ["OK" if ok_full else "ECHEC", e.get("xp_maitrise_actuelle", 0.0)])
 
 	# Héros : coef ×0.05 → 50 produit = 2.5 reçu.
@@ -52,14 +52,14 @@ func _test_distribution_no_gap() -> void:
 		h["maitrise_actuelle"] = 0
 		h["xp_maitrise_actuelle"] = 0.0
 		MasterySystem.add_xp_to_entity("hero", 50.0)
-		var ok_hero := abs(float(h.get("xp_maitrise_actuelle", 0.0)) - 2.5) < 0.001
+		var ok_hero := absf(float(h.get("xp_maitrise_actuelle", 0.0)) - 2.5) < 0.001
 		print("  Héros reçoit 2.5 (coef ×0.05) : %s (%.3f)" % ["OK" if ok_hero else "ECHEC", h.get("xp_maitrise_actuelle", 0.0)])
 
 # Buffer borné : l'XP est plafonnée à coût × (1 + EVOLVE_BUFFER_CAP) ; l'excédent
 # est perdu. Coût T0→T1 créature = 100, cap 20% → plafond 120.
 func _test_buffer_cap() -> void:
 	print("\n[TEST] Buffer d'évolution borné (excédent perdu)")
-	var id := "creature_rat"
+	var id := "creature_foret_surface"
 	var e  := GameData.get_entity(id)
 	if e.is_empty():
 		return
@@ -74,16 +74,16 @@ func _test_buffer_cap() -> void:
 	MasterySystem.add_xp_to_entity(id, 1000.0)                          # bien au-delà
 	biome["maitrise_actuelle"] = biome_save
 	var got := float(e.get("xp_maitrise_actuelle", 0.0))
-	var ok  := abs(got - ceiling) < 0.001
+	var ok  := absf(got - ceiling) < 0.001
 	print("  XP plafonnée à %.0f (coût %.0f + buffer 20%%) : %s (%.2f)" % [ceiling, cost, "OK" if ok else "ECHEC", got])
 
 func _test_evolution() -> void:
 	print("\n[TEST] Évolution d'entité")
 
-	var test_id = "creature_rat"
+	var test_id = "creature_foret_surface"
 	var entity  = GameData.get_entity(test_id)
 	if entity.is_empty():
-		print("  ECHEC : entité 'creature_rat' introuvable")
+		print("  ECHEC : entité 'creature_foret_surface' introuvable")
 		return
 
 	# Biome non bridant + remise à zéro.
@@ -106,6 +106,8 @@ func _test_evolution() -> void:
 	print("  Palier actuel = %d (%s)" % [entity["maitrise_actuelle"], GameData.get_tier_name(entity["maitrise_actuelle"])])
 	print("  XP résiduel   = %.1f" % entity["xp_maitrise_actuelle"])
 
-	# Vérifier le déverrouillage du passif au palier 1
-	var has_passive = "passive_regeneration" in entity.get("unlocked_passives", [])
-	print("  Passif 'régénération' déverrouillé : %s" % ("OK" if has_passive else "ECHEC"))
+	# Palier monté à 1, coût exactement consommé → résidu nul (pas de buffer ici).
+	var tier_ok = int(entity.get("maitrise_actuelle", -1)) == 1
+	var residu_ok = absf(float(entity.get("xp_maitrise_actuelle", -1.0))) < 0.001
+	print("  Palier = 1 après évolution : %s" % ("OK" if tier_ok else "ECHEC"))
+	print("  XP résiduel = 0 (coût consommé) : %s" % ("OK" if residu_ok else "ECHEC"))
