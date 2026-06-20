@@ -114,23 +114,25 @@ const MIN_DAMAGE:      float = 1.0    # plancher de dégâts : un coup inflige t
 
 # ─── Atténuation des dégâts par la DEF (réduction) ───────────
 # Formule verrouillée (cf. « Référentiel des statistiques de combat ») :
-#   réduction = DEF / (DEF + DEF_MITIGATION_BASE + DEF² / DEF_MITIGATION_SOFTCAP)
+#   réduction = DEF_REDUCTION_CAP × DEF / (DEF + DEF_REDUCTION_HALF)
 #   dégâts    = max(1, ATK × (1 − réduction))
-# La réduction est une cloche : elle culmine vers DEF = 100 puis REDESCEND
-# (comportement voulu — la DEF a un rendement décroissant aux valeurs extrêmes).
-# DEF_MITIGATION_SOFTCAP est le paramètre de réglage du terme carré : le réduire
-# (ex. 80) fait mordre la pince plus tôt, l'augmenter (150) plus tard. v1 = 100.
+# Courbe à rendements décroissants : la réduction MONTE TOUJOURS avec la DEF
+# (elle ne recule JAMAIS — plus de DEF ⇒ jamais moins de réduction) et SATURE
+# vers un plafond doux (DEF_REDUCTION_CAP, asymptote atteinte à DEF → ∞).
+# Empiler de la DEF reste utile mais de moins en moins, ce qui décourage le
+# stacking dégénéré sans cap arbitraire ET sans qu'une stat ne régresse jamais.
+# DEF_REDUCTION_HALF est le bouton de réglage : c'est la DEF de demi-saturation
+# (réduction = CAP/2) ; la réduire fait saturer plus tôt, l'augmenter plus tard.
 # ATK/DEF reçus sont les stats FINALES (après empilement additif, cf. StatStacker).
-const DEF_MITIGATION_BASE:    float = 100.0  # terme constant du dénominateur
-const DEF_MITIGATION_SOFTCAP: float = 100.0  # diviseur du terme DEF² (↓ = pince plus tôt)
+const DEF_REDUCTION_CAP:  float = 0.50  # plafond (asymptote) de la réduction
+const DEF_REDUCTION_HALF: float = 40.0  # DEF de demi-saturation (réduction = CAP/2)
 
-# Réduction de dégâts apportée par une DEF donnée, bornée [0, 1[.
-# Pure et statique → réutilisable par l'UI (tooltips) et les tests.
+# Réduction de dégâts apportée par une DEF donnée, bornée [0, DEF_REDUCTION_CAP[.
+# Monotone croissante. Pure et statique → réutilisable par l'UI (tooltips) et les tests.
 static func def_reduction(def_val: float) -> float:
 	if def_val <= 0.0:
 		return 0.0
-	var k := DEF_MITIGATION_BASE + (def_val * def_val) / DEF_MITIGATION_SOFTCAP
-	return def_val / (def_val + k)
+	return DEF_REDUCTION_CAP * def_val / (def_val + DEF_REDUCTION_HALF)
 
 # Dégâts d'un coup APRÈS atténuation par la DEF, planchés à MIN_DAMAGE.
 # Crit / endurcissement sont des multiplicateurs appliqués EN AVAL par le resolver.

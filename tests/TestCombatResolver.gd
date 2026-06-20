@@ -263,19 +263,27 @@ func _test_garde_fou_max_steps() -> void:
 			"steps=%d" % steps.size())
 
 # Courbe de réduction par la DEF (Balance.def_reduction) : repères du référentiel
-# + invariant DUR « la cloche redescend » (DEF 150 < DEF 100). Si DEF 150 réduit
-# PLUS que DEF 100, le terme carré est mal placé.
+# + invariant DUR « MONOTONE CROISSANTE » — plus de DEF ⇒ jamais moins de réduction
+# (une stat de défense ne doit JAMAIS régresser), et saturation sous le plafond.
 func _test_def_reduction_curve() -> void:
 	print("\n[TEST] Courbe de réduction par la DEF")
-	var cas := {0: 0.0, 25: 0.1905, 84: 0.3300, 100: 0.3333, 150: 0.3158}
+	var cas := {0: 0.0, 25: 0.1923, 50: 0.2778, 84: 0.3387, 100: 0.3571, 150: 0.3947}
 	for d in cas:
 		var got := Balance.def_reduction(float(d))
 		_assert(absf(got - float(cas[d])) < 0.005,
 				"réduction(DEF %d) ≈ %.4f" % [d, float(cas[d])],
 				"got=%.4f" % got)
-	_assert(Balance.def_reduction(150.0) < Balance.def_reduction(100.0),
-			"la cloche redescend : réduction(DEF 150) < réduction(DEF 100)",
-			"r150=%.4f r100=%.4f" % [Balance.def_reduction(150.0), Balance.def_reduction(100.0)])
+	# Monotonie stricte : la réduction ne recule jamais quand la DEF augmente.
+	var prev := -1.0
+	for d in [0, 10, 25, 50, 84, 100, 150, 300, 1000]:
+		var r := Balance.def_reduction(float(d))
+		_assert(r >= prev, "réduction monotone croissante à DEF %d" % d,
+				"r=%.4f < prev=%.4f" % [r, prev])
+		prev = r
+	# Saturation : la réduction reste sous le plafond (asymptote, jamais atteint).
+	_assert(Balance.def_reduction(1000.0) < Balance.DEF_REDUCTION_CAP,
+			"la réduction sature sous le plafond DEF_REDUCTION_CAP",
+			"r1000=%.4f cap=%.4f" % [Balance.def_reduction(1000.0), Balance.DEF_REDUCTION_CAP])
 
 # Empilement ADDITIF : stat_finale = nue × (1 + Σ%). Exemple du référentiel
 # (DEF 50, +16/+9/+43 % = +68 % → 84) ET interdiction du produit multiplicatif.

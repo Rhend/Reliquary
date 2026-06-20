@@ -273,7 +273,7 @@ static func _next_mod_boundary(mods: Array, t: float) -> float:
 # ─── Factories de steps ─────────────────────────────────────
 
 # Step héros : dégâts simples sur l'ennemi (pas de bouclier côté ennemi).
-# Atténuation par la DEF via Balance.mitigated_damage (réduction en cloche),
+# Atténuation par la DEF via Balance.mitigated_damage (réduction monotone saturante),
 # puis crit / endurcissement en multiplicateurs. Arrondi entier au moment
 # d'appliquer aux PV (recommandation du référentiel ; cohérent avec les ticks
 # de poison qui arrondissent déjà). Plancher MIN_DAMAGE garanti après crit/mult.
