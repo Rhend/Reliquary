@@ -243,7 +243,7 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 	if not benedictions.is_empty():
 		var bene             = benedictions[randi() % benedictions.size()]
 		enc_data["effect"]   = bene
-		_distribute_mastery_xp(bene.get("id", ""), Balance.XP_BASE_BENEDICTION)
+		_distribute_mastery_xp(bene.get("id", ""))
 		GameData.record_encounter(
 			bene.get("id", ""), bene.get("nom_affichage_fr", "?"), "Bénédiction", current_biome_id, Balance.HALL_XP_EVENT
 		)
@@ -287,30 +287,31 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 
 # Distribue l'XP de Maîtrise d'un événement résolu à TOUTES les entités actives :
 # l'entité rencontrée, le héros, le biome, le village et les passifs actifs.
-# Pour chacune : XP = base × modificateur d'écart × coefficient de type (cf. MasterySystem).
-# event_id   = id de l'entité rencontrée (créature / piège / bénédiction).
-# event_base = XP de base du type d'événement (avant modificateur de cycle).
-func _distribute_mastery_xp(event_id: String, event_base: float) -> void:
+# XP PRODUITE par l'événement (= 10 × 1.6^palier de la cible) distribuée
+# SIMULTANÉMENT à toutes les entités actives, chacune recevant produced × son
+# coef de type (cf. MasterySystem). event_id = id de l'entité rencontrée.
+func _distribute_mastery_xp(event_id: String) -> void:
 	if event_id == "":
 		return
-	var base         := event_base * float(current_modifier.get("xp_mult", 1.0)) * _bless_xp_mult
-	_bless_xp_mult    = 1.0  # consommé une seule fois
 	var event_entity := GameData.get_entity(event_id)
 	var event_tier   := int(event_entity.get("maitrise_actuelle", 0))
+	# Modulée par le modificateur de cycle et la hâte de bénédiction (one-shot).
+	var produced     := Balance.xp_produced(event_tier) * float(current_modifier.get("xp_mult", 1.0)) * _bless_xp_mult
+	_bless_xp_mult    = 1.0
 
 	# Pas d'XP à l'entité si créature Unique d'Abysse (statique tier 5)
 	if not (event_entity.get("est_unique", false) and int(event_entity.get("zone_associee", -1)) == Enums.Zone.ABYSSE):
-		MasterySystem.add_xp_to_entity(event_id, base, event_tier)
-	MasterySystem.add_xp_to_entity("hero", base, event_tier)                                         # héros
-	MasterySystem.add_xp_to_entity(current_biome_id, base, event_tier)                               # biome
-	MasterySystem.add_xp_to_all_active(base, event_tier)                                             # passifs actifs
+		MasterySystem.add_xp_to_entity(event_id, produced)
+	MasterySystem.add_xp_to_entity("hero", produced)                                                 # héros (coef ×0.05)
+	MasterySystem.add_xp_to_entity(current_biome_id, produced)                                       # biome
+	MasterySystem.add_xp_to_all_active(produced)                                                     # passifs actifs
 	for item_id in GameData.player.get("equipped", {}).values():                                     # équipements actifs (biome_source_id défini)
 		if item_id != "":
 			var item := GameData.get_entity(item_id)
 			if item.get("biome_source_id", "") != "":  # items sans biome = futurs biomes, pas encore actifs
-				MasterySystem.add_xp_to_entity(item_id, base, event_tier)
+				MasterySystem.add_xp_to_entity(item_id, produced)
 
-	_stats.xp_total += base
+	_stats.xp_total += produced
 
 # ─── Rencontre Piège ──────────────────────────────────────────
 
@@ -326,7 +327,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 
 	var trap           = traps[randi() % traps.size()]
 	enc_data["trap"]   = trap
-	_distribute_mastery_xp(trap.get("id", ""), Balance.XP_BASE_TRAP)
+	_distribute_mastery_xp(trap.get("id", ""))
 
 	# Dégâts du piège = pourcentage du PV max selon la zone (le champ `degats`
 	# du .tres n'est pas utilisé). Stocké dans enc_data pour que l'affichage du
@@ -393,12 +394,13 @@ func _on_combat_ended(result: Dictionary) -> void:
 
 # Distribue l'XP, le loot et les ingrédients après une victoire.
 func _resolve_victory(enemy: Dictionary) -> void:
-	# XP de Maîtrise distribuée à toutes les entités actives (base de combat)
-	_distribute_mastery_xp(enemy.get("id", ""), Balance.XP_BASE_COMBAT)
+	# XP de Maîtrise distribuée à toutes les entités actives (produite par palier)
+	_distribute_mastery_xp(enemy.get("id", ""))
 
-	# Hall des Évolutions
+	# Hall des Évolutions : crédité de l'XP produite par la créature (hors cycle/bless)
+	var hall_xp := Balance.xp_produced(int(enemy.get("maitrise_actuelle", 0)))
 	GameData.record_encounter(
-		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, Balance.XP_BASE_COMBAT
+		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, hall_xp
 	)
 
 	# Loot ennemi
@@ -727,9 +729,9 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 		if not passif.is_empty():
 			passif["est_debloque"] = true
 
-	# XP de Maîtrise (distribution standard, base de combat) + loot
-	_distribute_mastery_xp(enemy.get("id", ""), Balance.XP_BASE_COMBAT)
-	GameData.record_encounter(enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, Balance.XP_BASE_COMBAT)
+	# XP de Maîtrise (distribution standard, produite par palier) + loot
+	_distribute_mastery_xp(enemy.get("id", ""))
+	GameData.record_encounter(enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, Balance.xp_produced(int(enemy.get("maitrise_actuelle", 0))))
 	_drop_loot(enemy)
 
 	_stats.combats_won += 1

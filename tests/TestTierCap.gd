@@ -92,7 +92,7 @@ func _test_xp_stops_at_cap() -> void:
 		return
 	e["maitrise_actuelle"] = Balance.GLOBAL_MAX_TIER
 	e["xp_maitrise_actuelle"] = 0.0
-	MasterySystem.add_xp_to_entity(id, 1000.0, 0)
+	MasterySystem.add_xp_to_entity(id, 1000.0)
 	_assert(e.get("xp_maitrise_actuelle", -1.0) == 0.0,
 			"XP reste à 0 au palier max", "obtenu %.1f" % e.get("xp_maitrise_actuelle", -1.0))
 
@@ -102,7 +102,7 @@ func _test_xp_flows_below_cap() -> void:
 	var e := GameData.get_entity(id)
 	e["maitrise_actuelle"] = 0
 	e["xp_maitrise_actuelle"] = 0.0
-	MasterySystem.add_xp_to_entity(id, 100.0, 0)  # créature coef ×1.0, même palier → 100
+	MasterySystem.add_xp_to_entity(id, 100.0)  # créature coef ×1.0 → 100 (sous le plafond du buffer)
 	_assert(e.get("xp_maitrise_actuelle", 0.0) > 0.0,
 			"XP > 0 sous le plafond", "obtenu %.1f" % e.get("xp_maitrise_actuelle", 0.0))
 

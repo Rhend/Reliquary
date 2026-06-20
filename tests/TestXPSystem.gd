@@ -8,35 +8,74 @@ func _ready() -> void:
 
 func _run_all_tests() -> void:
 	print("=== TESTS XP SYSTEM ===")
-	_test_xp_modifiers()
+	_test_xp_produced()
+	_test_distribution_no_gap()
+	_test_buffer_cap()
 	_test_evolution()
-	_test_xp_distribution()
 	print("=== FIN DES TESTS ===")
 
-func _test_xp_modifiers() -> void:
-	print("\n[TEST] Modificateurs XP")
-	# [event_tier, receiver_tier, base_xp, expected_result]
-	# écart = receiver − event ; entité plus faible que l'événement → plus d'XP.
-	var cases = [
-		[0, 0, 10.0, 10.0 ],   # même palier              → 100%
-		[1, 0, 10.0, 14.9 ],   # entité 1 SOUS l'événement → 149%
-		[0, 1, 10.0,  4.7 ],   # entité 1 au-dessus        →  47%
-		[4, 0, 10.0, 50.0 ],   # entité 4 sous             → 500%
-		[0, 4, 10.0,  0.5 ],   # entité 4 au-dessus        →   5%
-		[2, 0, 10.0, 22.4 ],   # entité 2 sous             → 224%
-		[0, 2, 10.0,  2.2 ],   # entité 2 au-dessus        →  22%
-	]
+# XP produite par un événement = 10 × 1.6^palier de la cible (T0→10 … T4→66).
+func _test_xp_produced() -> void:
+	print("\n[TEST] XP produite par palier de la cible (10 × 1.6^tier)")
+	# [palier_cible, XP produite arrondie attendue]
+	var cases = [[0, 10], [1, 16], [2, 26], [3, 41], [4, 66]]
 	var passed = 0
 	for c in cases:
-		var result   = MasterySystem.calculate_xp(c[2], c[0], c[1])
-		var expected = c[3]
-		var ok       = abs(result - expected) < 0.001
-		print("  gen=%d rec=%d base=%.1f → %.3f (attendu %.3f) %s" % [
-			c[0], c[1], c[2], result, expected, "OK" if ok else "ECHEC"
-		])
+		var got      = Balance.xp_produced(c[0])
+		var expected = c[1]
+		var ok       = int(round(got)) == expected
+		print("  tier=%d → %.3f (arrondi attendu %d) %s" % [c[0], got, expected, "OK" if ok else "ECHEC"])
 		if ok:
 			passed += 1
 	print("  Résultat : %d/%d" % [passed, cases.size()])
+
+# Pas de modificateur d'écart : une entité reçoit produced × coef, quel que soit
+# l'écart entre son palier et celui de la cible. Coef créature ×1.0, héros ×0.05.
+func _test_distribution_no_gap() -> void:
+	print("\n[TEST] Distribution sans écart de palier (produced × coef)")
+	var id := "creature_rat"
+	var e  := GameData.get_entity(id)
+	if e.is_empty():
+		print("  ECHEC : 'creature_rat' introuvable")
+		return
+	# Même montant produit donné à la créature : reçoit le plein montant (coef 1.0),
+	# indépendamment du palier de la cible (pas de gap).
+	e["maitrise_actuelle"] = 0
+	e["xp_maitrise_actuelle"] = 0.0
+	MasterySystem.add_xp_to_entity(id, 50.0)
+	var ok_full := abs(float(e.get("xp_maitrise_actuelle", 0.0)) - 50.0) < 0.001
+	print("  Créature reçoit 50 (coef ×1.0) : %s (%.2f)" % ["OK" if ok_full else "ECHEC", e.get("xp_maitrise_actuelle", 0.0)])
+
+	# Héros : coef ×0.05 → 50 produit = 2.5 reçu.
+	var h := GameData.get_entity("hero")
+	if not h.is_empty():
+		h["maitrise_actuelle"] = 0
+		h["xp_maitrise_actuelle"] = 0.0
+		MasterySystem.add_xp_to_entity("hero", 50.0)
+		var ok_hero := abs(float(h.get("xp_maitrise_actuelle", 0.0)) - 2.5) < 0.001
+		print("  Héros reçoit 2.5 (coef ×0.05) : %s (%.3f)" % ["OK" if ok_hero else "ECHEC", h.get("xp_maitrise_actuelle", 0.0)])
+
+# Buffer borné : l'XP est plafonnée à coût × (1 + EVOLVE_BUFFER_CAP) ; l'excédent
+# est perdu. Coût T0→T1 créature = 100, cap 20% → plafond 120.
+func _test_buffer_cap() -> void:
+	print("\n[TEST] Buffer d'évolution borné (excédent perdu)")
+	var id := "creature_rat"
+	var e  := GameData.get_entity(id)
+	if e.is_empty():
+		return
+	# S'assurer que le biome ne bride pas (T1 atteignable).
+	var biome := GameData.get_entity(str(e.get("biome_id", "")))
+	var biome_save := int(biome.get("maitrise_actuelle", 0))
+	biome["maitrise_actuelle"] = Balance.DEFAULT_MAX_TIER
+	e["maitrise_actuelle"] = 0
+	e["xp_maitrise_actuelle"] = 0.0
+	var cost := Balance.evolve_cost(Enums.EntityType.CREATURE, 1)        # 100
+	var ceiling := cost * (1.0 + Balance.EVOLVE_BUFFER_CAP)             # 120
+	MasterySystem.add_xp_to_entity(id, 1000.0)                          # bien au-delà
+	biome["maitrise_actuelle"] = biome_save
+	var got := float(e.get("xp_maitrise_actuelle", 0.0))
+	var ok  := abs(got - ceiling) < 0.001
+	print("  XP plafonnée à %.0f (coût %.0f + buffer 20%%) : %s (%.2f)" % [ceiling, cost, "OK" if ok else "ECHEC", got])
 
 func _test_evolution() -> void:
 	print("\n[TEST] Évolution d'entité")
@@ -47,7 +86,10 @@ func _test_evolution() -> void:
 		print("  ECHEC : entité 'creature_rat' introuvable")
 		return
 
-	# Remise à zéro
+	# Biome non bridant + remise à zéro.
+	var biome := GameData.get_entity(str(entity.get("biome_id", "")))
+	var biome_save := int(biome.get("maitrise_actuelle", 0))
+	biome["maitrise_actuelle"] = Balance.DEFAULT_MAX_TIER
 	entity["maitrise_actuelle"] = 0
 	entity["xp_maitrise_actuelle"]   = 0.0
 	entity["unlocked_passives"] = []
@@ -56,9 +98,10 @@ func _test_evolution() -> void:
 	var refused = not MasterySystem.evolve_entity(test_id)
 	print("  Refus sans XP suffisant : %s" % ("OK" if refused else "ECHEC"))
 
-	# Donner exactement le seuil du palier 1
-	entity["xp_maitrise_actuelle"] = float(GameData.xp_thresholds[1])
+	# Donner exactement le coût du palier 1
+	entity["xp_maitrise_actuelle"] = Balance.evolve_cost(Enums.EntityType.CREATURE, 1)
 	var evolved = MasterySystem.evolve_entity(test_id)
+	biome["maitrise_actuelle"] = biome_save
 	print("  Évolution vers palier 1 : %s" % ("OK" if evolved else "ECHEC"))
 	print("  Palier actuel = %d (%s)" % [entity["maitrise_actuelle"], GameData.get_tier_name(entity["maitrise_actuelle"])])
 	print("  XP résiduel   = %.1f" % entity["xp_maitrise_actuelle"])
@@ -66,20 +109,3 @@ func _test_evolution() -> void:
 	# Vérifier le déverrouillage du passif au palier 1
 	var has_passive = "passive_regeneration" in entity.get("unlocked_passives", [])
 	print("  Passif 'régénération' déverrouillé : %s" % ("OK" if has_passive else "ECHEC"))
-
-func _test_xp_distribution() -> void:
-	print("\n[TEST] Distribution XP à toutes les entités actives")
-
-	var creature_id = "creature_rat"
-	GameData.player["active_creature_id"] = creature_id
-	GameData.player["active_passives"]    = []
-
-	var entity = GameData.get_entity(creature_id)
-	entity["maitrise_actuelle"] = 0
-	entity["xp_maitrise_actuelle"]   = 0.0
-
-	MasterySystem.add_xp_to_all_active(100.0, 0)
-
-	var xp_after = entity.get("xp_maitrise_actuelle", 0.0)
-	var ok       = abs(xp_after - 100.0) < 0.001
-	print("  Créature reçoit 100 XP (même palier) : %s (valeur=%.1f)" % ["OK" if ok else "ECHEC", xp_after])

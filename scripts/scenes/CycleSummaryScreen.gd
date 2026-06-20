@@ -775,13 +775,16 @@ func _animate_xp_card(xp: Dictionary, delay: float) -> void:
 #  Helpers
 # ═══════════════════════════════════════════════════════════
 
-# Seuil XP du prochain tier de l'entité (dernier seuil si au max).
+# Coût XP du prochain tier de l'entité (type-aware, biome ×3). Au palier max,
+# réutilise le dernier coût franchi pour garder la barre pleine.
 func _next_tier_threshold(entity: Dictionary) -> float:
+	var etype := entity.get("entity_type", "") as String
 	var tier := entity.get("maitrise_actuelle", 0) as int
-	var next_idx := tier + 1
-	if tier >= GameData.get_max_tier_for_type(entity.get("entity_type", "")) or next_idx >= GameData.xp_thresholds.size():
-		return float(GameData.xp_thresholds.back())
-	return float(GameData.xp_thresholds[next_idx])
+	var cost := GameData.palier_suivant_cost(etype, tier)
+	if cost > 0.0:
+		return cost
+	var last := GameData.palier_suivant_cost(etype, maxi(tier - 1, 0))
+	return last if last > 0.0 else 1.0
 
 # Carte XP du récap : carte d'entité commune (UIHelpers.entity_xp_card —
 # même DA que les panneaux du Village : fond rempli, « icône | nom | palier |

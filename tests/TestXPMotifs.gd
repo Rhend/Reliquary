@@ -72,8 +72,8 @@ func _ready() -> void:
 # dernier seuil pour garder la barre remplie et le motif visible.
 func _demo_card(entity_type: String, tier: int) -> Control:
 	var next_idx := tier + 1
-	var threshold := float(Balance.XP_THRESHOLDS[next_idx]) if next_idx < Balance.XP_THRESHOLDS.size() \
-			else float(Balance.XP_THRESHOLDS.back())
+	var threshold := float(GameData.xp_thresholds[next_idx]) if next_idx < GameData.xp_thresholds.size() \
+			else float(GameData.xp_thresholds.back())
 	var frac := randf_range(0.30, 0.60)
 	var xp := frac * threshold
 

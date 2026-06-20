@@ -26,10 +26,10 @@ const MAX_TIER: int = 5
 # Référencées ici pour rester le point d'accès runtime habituel
 # (GameData.xp_thresholds) ; la source de vérité reste Balance.
 
-# XP cumulatif requis pour atteindre chaque tier [0, 100, 500, …]
+# Courbe de coût d'évolution PAR DÉFAUT (type ×1.0 : créature/héros/piège/…),
+# index = palier visé : [0, 100, 180, 324, 583, 1050]. Dérivée de Balance.evolve_cost.
+# Le biome (×3) NE PASSE PAS par ce tableau : utiliser palier_suivant_cost(type, tier).
 var xp_thresholds: Array = []
-# Dictionnaire écart_de_tier (int) → multiplicateur d'XP reçu (float)
-var xp_modifiers: Dictionary = {}
 
 # ─── Catalogue d'entités ────────────────────────────────────
 
@@ -79,10 +79,12 @@ func _ready() -> void:
 	_validate_entities()
 	EventBus.entity_evolved.connect(_on_entity_evolved)
 
-# Référence les constantes de progression depuis Balance (source unique).
+# Dérive la courbe de coût par défaut depuis Balance.evolve_cost (source unique).
+# Index = palier visé ; index 0 inutilisé (pas de palier −1→0).
 func _init_progression_constants() -> void:
-	xp_thresholds = Balance.XP_THRESHOLDS
-	xp_modifiers  = Balance.XP_GAP_MODIFIERS
+	xp_thresholds = [0.0]
+	for t in range(1, MAX_TIER + 1):
+		xp_thresholds.append(Balance.evolve_cost(Enums.EntityType.CREATURE, t))
 
 # Charge toutes les entités depuis leurs dossiers respectifs.
 func _load_all_entities() -> void:
@@ -386,13 +388,13 @@ func get_max_tier_for_type(entity_type: String) -> int:
 	var type_max := int(Balance.ENTITY_MAX_TIER.get(entity_type, Balance.DEFAULT_MAX_TIER))
 	return mini(type_max, Balance.GLOBAL_MAX_TIER)
 
-# Coût d'XP pour franchir le palier suivant (courbe Balance), ou 0.0 si palier max
-# de type atteint / hors courbe. Sert à alimenter xp_maitrise_palier_suivant.
+# Coût d'XP pour franchir le palier suivant (Balance.evolve_cost, type-aware :
+# biome ×3), ou 0.0 si palier max de type atteint. Sert à alimenter
+# xp_maitrise_palier_suivant et tous les affichages de coût d'évolution.
 func palier_suivant_cost(entity_type: String, tier: int) -> float:
-	var next_idx := tier + 1
-	if tier >= get_max_tier_for_type(entity_type) or next_idx >= xp_thresholds.size():
+	if tier >= get_max_tier_for_type(entity_type):
 		return 0.0
-	return float(xp_thresholds[next_idx])
+	return Balance.evolve_cost(entity_type, tier + 1)
 
 # Stats brutes d'une entité pour un palier donné, lues dans stats_par_palier.
 # Si le palier exact n'est pas défini dans le .tres, descend au palier

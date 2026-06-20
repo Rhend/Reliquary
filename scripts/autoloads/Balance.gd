@@ -11,7 +11,7 @@
 # depuis les fonctions statiques (ex. CombatResolver). Même
 # convention que UIHelpers.gd.
 #
-# Usage : Balance.CRIT_CHANCE, Balance.XP_THRESHOLDS, etc.
+# Usage : Balance.CRIT_CHANCE, Balance.evolve_cost(...), etc.
 #
 # Ce qui N'EST PAS ici (volontairement) :
 #   • Tables d'événements par biome       → .tres des biomes
@@ -155,40 +155,61 @@ const SHIELD_VALUE_PCT_DEFAULT: float = 0.15  # % PV max absorbé par le bouclie
 #  Progression — Maîtrise (ex-mastery_config.json)
 # ═══════════════════════════════════════════════════════════
 
-# XP requis pour franchir du palier n au palier n+1 (index = palier source).
-# Courbe : seuil(n) = 360 × 2.2^n. L'index 0 est inutilisé (pas de palier −1→0).
-# Légendaire→Unique (index 5) ne concerne que biomes / pièges / bénédictions
-# (les créatures s'arrêtent à Légendaire — voir ENTITY_MAX_TIER).
-# Calibré pour 25-30 min de session beta : cumul jusqu'à Rare = 1152 XP / biome.
-const XP_THRESHOLDS: Array = [0, 360, 792, 1742, 3833, 8432]
+# ═══════════════════════════════════════════════════════════
+#  Économie XP — Chantier 2 (source de vérité : « Référentiel XP & Progression »)
+# ═══════════════════════════════════════════════════════════
+# Trois leviers INDÉPENDANTS pilotent toute la progression :
+#   A. XP PRODUITE par un événement résolu, selon le palier de la CIBLE :
+#        XP_produite = XP_PRODUCED_BASE × XP_PRODUCED_GROWTH ^ palier_cible
+#      (T0→10, T1→16, T2→26, T3→41, T4→66). PAS de modificateur d'écart de
+#      palier (abandonné : trop opaque). Stockée en float exact, arrondie
+#      seulement à l'affichage (sinon l'erreur se cumule sur des milliers d'évts).
+#   B. COÛT d'évolution vers un palier visé (× selon le type) :
+#        coût = EVOLVE_COST_BASE × EVOLVE_COST_GROWTH ^ (palier_visé − 1) × mult_type
+#      (créature →T1 100, →T2 180, →T3 324, →T4 583 ; biome = ×3).
+#   C. COEFFICIENT d'XP reçue par type de RÉCEPTEUR (cf. ENTITY_XP_COEF).
+# L'XP est distribuée SIMULTANÉMENT à toutes les entités actives, chacune
+# recevant XP_produite × son coef (pas de partage, pas de division).
+const XP_PRODUCED_BASE:   float = 10.0  # XP produite par un événement T0 (réglage)
+const XP_PRODUCED_GROWTH: float = 1.6   # raison géométrique par palier de la cible
 
-# Modificateur d'XP selon l'écart de Maîtrise = (palier de l'entité − palier de l'événement),
-# clampé à ±4. Entité plus FAIBLE que l'événement (écart négatif) → plus d'XP (catch-up).
-# Table de correspondance FIXE (pas une formule : les deux branches n'ont pas la même progression).
-const XP_GAP_MODIFIERS: Dictionary = {
-	-4: 5.00, -3: 3.34, -2: 2.24, -1: 1.49,
-	 0: 1.00,  1: 0.47,  2: 0.22,  3: 0.11, 4: 0.05,
+# XP produite par un événement résolu de palier `target_tier` (float exact).
+static func xp_produced(target_tier: int) -> float:
+	return XP_PRODUCED_BASE * pow(XP_PRODUCED_GROWTH, float(target_tier))
+
+const EVOLVE_COST_BASE:   float = 100.0  # coût créature → T1 (réglage)
+const EVOLVE_COST_GROWTH: float = 1.8    # raison géométrique par palier
+# Multiplicateur de coût ISOLÉ par type (point unique, modifiable en 1 ligne).
+# ⚠ PROVISOIRE : le ×3 biome n'est pas réconcilié avec le débit de farm —
+# premier chiffre à rouvrir en passe finale (cf. audit du Référentiel XP).
+const EVOLVE_COST_TYPE_MULT: Dictionary = {
+	Enums.EntityType.BIOME: 3.0,
 }
-const XP_GAP_CLAMP: int = 4  # écart clampé à ±4
 
-# ═══════════════════════════════════════════════════════════
-#  XP de base par type d'événement résolu
-# ═══════════════════════════════════════════════════════════
+# Coût d'XP pour franchir vers `target_tier` (≥1), selon le type. Float exact.
+static func evolve_cost(entity_type: String, target_tier: int) -> float:
+	if target_tier < 1:
+		return 0.0
+	var mult := float(EVOLVE_COST_TYPE_MULT.get(entity_type, 1.0))
+	return EVOLVE_COST_BASE * pow(EVOLVE_COST_GROWTH, float(target_tier - 1)) * mult
 
-const XP_BASE_COMBAT:      float = 10.0  # créature résolue
-const XP_BASE_TRAP:        float = 6.0   # piège déclenché
-const XP_BASE_BENEDICTION: float = 6.0   # bénédiction rencontrée
+# Buffer d'évolution (universel, décorrélé du biome) : une entité PRÊTE mais
+# non évoluée bufferise l'XP excédentaire jusqu'à cette fraction du coût du
+# palier visé, puis la perd. Au déclenchement de l'évolution, le buffer est
+# reversé dans la progression suivante. Cap < 100% ⇒ JAMAIS de cascade.
+# Constante de réglage, à évaluer en playtest.
+const EVOLVE_BUFFER_CAP: float = 0.20
 
 # XP créditée au Hall des Évolutions (bestiaire) pour un événement non-combat
-# résolu (piège, bénédiction). Les combats créditent XP_BASE_COMBAT à la victoire.
+# résolu (piège, bénédiction). Les combats créditent l'XP produite de la créature.
 const HALL_XP_EVENT: float = 5.0
 
-# ═══════════════════════════════════════════════════════════
-#  Coefficient de progression par type d'entité réceptrice
-# ═══════════════════════════════════════════════════════════
-# À chaque événement, XP reçue = XP de base × modificateur d'écart × coefficient.
-# Tout type absent → DEFAULT_XP_COEF (créatures, pièges, bénédictions, passifs, biomes : ×1.0).
-
+# ─── Coefficient d'XP reçue par type de RÉCEPTEUR ───────────
+# XP reçue = XP produite × coef. Tout type absent → DEFAULT_XP_COEF (×1.0 :
+# créatures, pièges, bénédictions, biomes, passifs). Le héros est isolé et
+# réglable individuellement.
+# ⚠ PROVISOIRE : coef héros ×0.05 peut-être trop bas — marge 0.08–0.10 sans
+# toucher au reste.
 const DEFAULT_XP_COEF: float = 1.0
 const ENTITY_XP_COEF: Dictionary = {
 	Enums.EntityType.HERO: 0.05,
@@ -218,8 +239,10 @@ const GLOBAL_MAX_TIER: int = 2
 #  Plafond de Maîtrise des créatures selon le palier du biome
 # ═══════════════════════════════════════════════════════════
 # Palier max franchissable par une créature selon le palier du biome et sa zone.
-# L'XP au-delà du plafond n'est pas perdue : elle reste stockée et débloque des
-# paliers quand le biome monte (réévaluation à l'évolution du biome).
+# Au plafond, la créature est « prête mais non évoluée » : l'XP entre dans le
+# buffer d'évolution (borné EVOLVE_BUFFER_CAP), l'excédent est PERDU — la valeur
+# du farm plafonné passe par l'ingrédient, pas l'XP. Le plafond se lève quand le
+# biome monte (réévaluation à l'évolution du biome, qui resignale les créatures).
 # Profondeur : zone non débloquée tant que le biome < Rare (2) → absente de la table.
 # Clé = palier du biome (0..5), valeur = palier max de la créature.
 

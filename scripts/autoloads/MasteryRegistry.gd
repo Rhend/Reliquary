@@ -58,8 +58,10 @@ func get_mastery_display(entity_id: String) -> Dictionary:
 		return {}
 	var tier: int      = e.get("maitrise_actuelle", 0)
 	var xp: float      = e.get("xp_maitrise_actuelle",   0.0)
-	var next_idx: int  = mini(tier + 1, GameData.xp_thresholds.size() - 1)
-	var xp_max: float  = float(GameData.xp_thresholds[next_idx])
+	# Coût type-aware (biome ×3) ; au palier max, barre pleine (xp_max = xp).
+	var xp_max: float  = GameData.palier_suivant_cost(e.get("entity_type", ""), tier)
+	if xp_max <= 0.0:
+		xp_max = xp if xp > 0.0 else 1.0
 	return {
 		"name":       Translations.entity_name(e, entity_id),
 		"tier":       tier,
