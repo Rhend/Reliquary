@@ -39,7 +39,6 @@ func get_biome_entity_pools(biome_id: String) -> Dictionary:
 		"creatures":    creatures,
 		"traps":        biome.get("pieges",           []),
 		"benedictions": biome.get("benedictions",     []),
-		"ingredients":  biome.get("ingredients_drop", []),
 	}
 
 # Nombre d'entités découvertes parmi une liste de Dictionaries (issues du pool biome).

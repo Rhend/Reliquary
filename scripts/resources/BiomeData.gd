@@ -28,4 +28,9 @@ extends Resource
 @export var benedictions:               Array[BenedictionData] = []
 @export var ingredients_drop:           Array[IngredientData]  = []
 @export var ingredient_unique:          IngredientData       = null
+# Chantier 3 — drops de ressources : les 2 ressources propres du biome (ids
+# d'entités RESOURCE). Fréquente = drop 90 % ; rare = drop selon le palier de
+# la créature tuée (cf. Balance.DROP_*). Table biome→ressources en DONNÉE.
+@export var ressource_frequente_id:     String               = ""
+@export var ressource_rare_id:          String               = ""
 @export var event_table:                Dictionary           = {Enums.EntityType.CREATURE: 0.7, Enums.EntityType.BENEDICTION: 0.15, Enums.EntityType.TRAP: 0.15}

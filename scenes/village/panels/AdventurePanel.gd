@@ -281,7 +281,7 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 			UIColors.TYPE_TRAP, XPCard.Motif.LIGHTNING, btier, Translations.T("adv.cat.trap"))
 	_adv_entity_rows(host, cat_vb, bless_p,
 			UIColors.TYPE_BENEDICTION, XPCard.Motif.CROSSES, btier, Translations.T("adv.cat.blessing"))
-	_adv_ingredient_rows(cat_vb, pools["ingredients"])
+	_adv_resource_rows(cat_vb, biome)
 
 	return {"wrapper": wrapper, "panel": panel, "section": section, "arrow": arrow, "glow": glow}
 
@@ -362,17 +362,27 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 # village_tier < 1 (Forge non débloquée) ; un ingrédient JAMAIS obtenu
 # n'apparaît pas (même règle de révélation que les entités — la clé existe
 # dans player.resources dès le premier drop, même retombé à 0 après forge).
-static func _adv_ingredient_rows(parent: VBoxContainer, pool: Array) -> void:
-	if pool.is_empty():
-		return
-	# Lignes absentes (pas grisées) tant que la Forge n'est pas débloquée (Village Tier 1).
-	if (GameData.village.get("maitrise_actuelle", 0) as int) < 1:
-		return
+static func _adv_resource_rows(parent: VBoxContainer, biome: Dictionary) -> void:
+	# Les 2 ressources PROPRES du biome (Chantier 3) : la fréquente (taux fixe) et
+	# la rare (taux croissant selon le palier de la créature tuée → une fourchette).
+	# N'apparaissent qu'une fois OBTENUES (récompense de découverte, comme les
+	# entités). Taux toujours lus dans Balance.DROP_* — jamais en dur ici.
+	var rare_lo := roundi(Balance.rare_drop_rate(0) * 100.0)
+	var rare_hi := roundi(Balance.rare_drop_rate(Balance.DROP_RARE_RATE_BY_TIER.size() - 1) * 100.0)
+	var entries := [
+		{"id": str(biome.get("ressource_frequente_id", "")),
+			"rate": "%d%%" % roundi(Balance.DROP_FREQUENT_RATE * 100.0), "tier": 0},
+		{"id": str(biome.get("ressource_rare_id", "")),
+			"rate": "%d–%d%%" % [rare_lo, rare_hi], "tier": 2},
+	]
 	var nc := UIColors.CARD_NEUTRAL
-	for entry: Dictionary in pool:
-		if not GameData.player["resources"].has(entry.get("id", "")):
+	for entry: Dictionary in entries:
+		var res_id: String = entry["id"]
+		# Ressource non définie pour ce biome, ou pas encore obtenue → pas de ligne.
+		if res_id == "" or not GameData.player["resources"].has(res_id):
 			continue
-		var ec := UIColors.tier_color(int(entry.get("tier", 0)))
+		var res := GameData.get_entity(res_id)
+		var ec := UIColors.tier_color(int(entry["tier"]))
 
 		# Même gabarit visuel que les cartes d'entités (panneau fin + marge).
 		var panel := PanelContainer.new()
@@ -388,31 +398,24 @@ static func _adv_ingredient_rows(parent: VBoxContainer, pool: Array) -> void:
 		pm.add_child(row)
 
 		var cat_lbl := Label.new()
-		cat_lbl.text = Translations.T("adv.cat.ingredient") + " · "
+		cat_lbl.text = Translations.T("adv.cat.resource") + " · "
 		cat_lbl.add_theme_font_size_override("font_size", 11)
 		cat_lbl.add_theme_color_override("font_color", Color(nc.r, nc.g, nc.b, 0.85))
 		row.add_child(cat_lbl)
 
+		var icon := str(res.get("icon", ""))
 		var name_lbl := Label.new()
-		name_lbl.text = Translations.entity_name(entry, entry.get("id", "?") as String)
+		name_lbl.text = (icon + " " if icon != "" else "") + Translations.entity_name(res, res_id)
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_lbl.add_theme_font_size_override("font_size", 11)
 		name_lbl.add_theme_color_override("font_color", ec)
 		row.add_child(name_lbl)
 
-		var qty_min := int(entry.get("qty_min", 1))
-		var qty_max := int(entry.get("qty_max", 1))
-		var qty_lbl := Label.new()
-		qty_lbl.text = ("×%d–%d" % [qty_min, qty_max]) if qty_min != qty_max else ("×%d" % qty_min)
-		qty_lbl.add_theme_font_size_override("font_size", 10)
-		qty_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		row.add_child(qty_lbl)
-
-		var chance_lbl := Label.new()
-		chance_lbl.text = "%d%%" % int(float(entry.get("chance", 0.0)) * 100.0)
-		chance_lbl.add_theme_font_size_override("font_size", 10)
-		chance_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		row.add_child(chance_lbl)
+		var rate_lbl := Label.new()
+		rate_lbl.text = entry["rate"]
+		rate_lbl.add_theme_font_size_override("font_size", 10)
+		rate_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		row.add_child(rate_lbl)
 
 # Affiche la mécanique forte du biome : pill colorée (active) ou verrouillée (tier < Rare).
 # Rien si le biome n'a pas de mécanique définie.

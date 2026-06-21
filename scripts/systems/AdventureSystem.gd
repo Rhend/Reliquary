@@ -403,13 +403,8 @@ func _resolve_victory(enemy: Dictionary) -> void:
 		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, hall_xp
 	)
 
-	# Loot ennemi
-	_drop_loot(enemy)
-	_drop_ingredient_from_creature(enemy)
-
-	# Ingrédients biome (uniquement une fois la Forge débloquée — Village T1)
-	if int(GameData.village.get("maitrise_actuelle", 0)) >= 1:
-		_drop_biome_ingredients()
+	# Ressources de biome : deux tirages indépendants fréquent + rare (Chantier 3)
+	_drop_biome_resources(enemy)
 
 	_stats.combats_won += 1
 
@@ -498,82 +493,40 @@ func _pick_modifier() -> void:
 	current_modifier = {}
 	EventBus.modifier_activated.emit(current_modifier)
 
-# Roule un drop depuis un pool d'entrées.
-# Chaque entrée : { item_id, chance, qty_min?, qty_max? }
-# source_name : affiché dans loot_dropped (nom ennemi ou "Biome").
-func _drop_pool(pool: Array, source_name: String) -> void:
-	if pool.is_empty():
-		return
-	var has_forge := int(GameData.village.get("maitrise_actuelle", 0)) >= 1
-	var drops: Array = []
-	for entry in pool:
-		if randf() >= minf(float(entry.get("chance", 0.0)), 1.0):
-			continue
-		var item_id: String = entry.get("item_id", "")
-		if item_id == "":
-			continue
-		if not has_forge and GameData.get_entity(item_id).get("entity_type", "") == Enums.EntityType.INGREDIENT:
-			continue
-		var qty_min: int = int(entry.get("qty_min", 1))
-		var qty_max: int = int(entry.get("qty_max", qty_min))
-		var qty:     int = randi_range(qty_min, qty_max)
-		GameData.add_resource(item_id, qty)
-		var res := GameData.get_entity(item_id)
-		drops.append({
-			"item_id": item_id,
-			"name":    Translations.entity_name(res, item_id),
-			"qty":     qty
-		})
-	if not drops.is_empty():
-		_stats.loot_total += drops.size()
-		for d in drops:
-			var did: String = d.get("item_id", "")
-			_stats.loot_detail[did] = _stats.loot_detail.get(did, 0) + int(d.get("qty", 1))
-		EventBus.loot_dropped.emit(drops, source_name)
+# ─── Drop de ressources de biome (Chantier 3) ───────────────
 
-# Drop le loot spécifique à l'ennemi vaincu (loot_table de l'ennemi).
-func _drop_loot(enemy: Dictionary) -> void:
-	_drop_pool(enemy.get("loot_table", []), enemy.get("name", "?"))
+# Effectue les DEUX tirages INDÉPENDANTS (fréquent + rare) et retourne les ids
+# de ressources droppées (0 à 2). Pur (ne dépend que de randf + Balance) → unité
+# testable. `creature_tier` ne pilote QUE le taux de la rare ; le fréquent est fixe.
+func roll_biome_drops(freq_id: String, rare_id: String, creature_tier: int) -> Array:
+	var out: Array = []
+	if freq_id != "" and randf() < Balance.DROP_FREQUENT_RATE:
+		out.append(freq_id)
+	if rare_id != "" and randf() < Balance.rare_drop_rate(creature_tier):
+		out.append(rare_id)
+	return out
 
-# Drop un ingrédient standard depuis une créature évolutive (50% de chance).
-# Bloqué tant que la Forge n'est pas débloquée (Village T1).
-func _drop_ingredient_from_creature(enemy: Dictionary) -> void:
-	if int(GameData.village.get("maitrise_actuelle", 0)) < 1:
+# À chaque créature NON-BOSS vaincue : tire les deux ressources propres du biome
+# courant, les crédite (+1 chacune dans player.resources) et publie le drop. Les
+# boss (créatures Uniques) ne droppent aucune ressource de farm.
+func _drop_biome_resources(enemy: Dictionary) -> void:
+	if enemy.get("est_unique", false):
 		return
-	var creature := GameData.get_entity(enemy.get("id", ""))
-	if creature.is_empty() or creature.get("est_unique", false):
-		return
-	var pool := creature.get("ingredients_drop_ids", []) as Array
-	if pool.is_empty() or randf() >= Balance.CREATURE_INGREDIENT_DROP_CHANCE:
-		return
-	var ingredient_id: String = pool[randi() % pool.size()]
-	var ingr := GameData.get_entity(ingredient_id)
-	if ingr.is_empty():
-		return
-	GameData.add_resource(ingredient_id, 1)
-	_stats.loot_detail[ingredient_id] = _stats.loot_detail.get(ingredient_id, 0) + 1
-	_stats.loot_total += 1
-	EventBus.loot_dropped.emit(
-		[{"item_id": ingredient_id, "name": Translations.entity_name(ingr, ingredient_id), "qty": 1}],
-		enemy.get("name", "?")
-	)
-
-# Drop des ingrédients depuis ingredients_drop du biome (via _drop_pool).
-# Disponible uniquement si Village Tier ≥ 1 (appelé depuis _resolve_victory).
-# Les entrées du biome utilisent la clé "id" : on les convertit au format
-# attendu par _drop_pool ("item_id") pour mutualiser le tirage.
-func _drop_biome_ingredients() -> void:
 	var biome := GameData.get_entity(current_biome_id)
-	var pool: Array = []
-	for ingr in biome.get("ingredients_drop", []) as Array:
-		var d := ingr as Dictionary
-		pool.append({
-			"item_id": d.get("id", ""),
-			"chance":  d.get("chance", 0.0),
-			"qty_min": d.get("qty_min", 1),
-			"qty_max": d.get("qty_max", d.get("qty_min", 1)),
-		})
-	_drop_pool(pool, "Biome")
+	var ids := roll_biome_drops(
+		str(biome.get("ressource_frequente_id", "")),
+		str(biome.get("ressource_rare_id", "")),
+		int(enemy.get("maitrise_actuelle", 0)))
+	if ids.is_empty():
+		return
+	var drops: Array = []
+	for res_id: String in ids:
+		GameData.add_resource(res_id, 1)
+		var res := GameData.get_entity(res_id)
+		drops.append({"item_id": res_id, "name": Translations.entity_name(res, res_id), "qty": 1})
+		_stats.loot_detail[res_id] = _stats.loot_detail.get(res_id, 0) + 1
+	_stats.loot_total += drops.size()
+	EventBus.loot_dropped.emit(drops, enemy.get("name", "?"))
 
 # ═══════════════════════════════════════════════════════════
 #  Distribution pondérée des créatures (par zone)
@@ -729,10 +682,11 @@ func _resolve_unique_victory(enemy: Dictionary) -> void:
 		if not passif.is_empty():
 			passif["est_debloque"] = true
 
-	# XP de Maîtrise (distribution standard, produite par palier) + loot
+	# XP de Maîtrise (distribution standard, produite par palier). Pas de ressource
+	# de farm pour un boss (créature Unique) — cf. Chantier 3 ; son loot spécifique
+	# (ingrédient unique ci-dessus) est traité à part.
 	_distribute_mastery_xp(enemy.get("id", ""))
 	GameData.record_encounter(enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, Balance.xp_produced(int(enemy.get("maitrise_actuelle", 0))))
-	_drop_loot(enemy)
 
 	_stats.combats_won += 1
 

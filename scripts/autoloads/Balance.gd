@@ -290,10 +290,23 @@ const DEFAULT_REGEN_PCT: float = 0.0  # régen par défaut entre rencontres (hor
 const MASTERY_COMBAT_ATK_PER_TIER: float = 2.0  # ATK bonus par tier de bestiaire face à l'ennemi
 
 # ═══════════════════════════════════════════════════════════
-#  Drops
+#  Drops de ressources par biome — Chantier 3
+#  (source de vérité : « Référentiel Ressources & Drops »)
 # ═══════════════════════════════════════════════════════════
+# À chaque créature NON-BOSS vaincue, deux tirages INDÉPENDANTS sur les deux
+# ressources propres du biome courant (cf. BiomeData.ressource_frequente_id /
+# ressource_rare_id) : une fréquente (taux fixe) et une rare (taux selon le
+# palier de la créature). Quantité 1 chacune. Les boss (créatures Uniques) ne
+# droppent aucune ressource de farm.
+const DROP_FREQUENT_RATE: float = 0.90  # taux de la ressource fréquente (tout palier)
 
-const CREATURE_INGREDIENT_DROP_CHANCE: float = 0.5  # chance de drop d'ingrédient par créature non-unique
+# Taux de la ressource rare selon le PALIER de la créature tuée (index = palier).
+# Courbe NON linéaire → table adressable, pas une formule. T0..T4.
+const DROP_RARE_RATE_BY_TIER: Array[float] = [0.02, 0.05, 0.10, 0.18, 0.30]
+
+# Taux de drop de la ressource rare pour un palier de créature (clampé à la table).
+static func rare_drop_rate(creature_tier: int) -> float:
+	return DROP_RARE_RATE_BY_TIER[clampi(creature_tier, 0, DROP_RARE_RATE_BY_TIER.size() - 1)]
 
 # ═══════════════════════════════════════════════════════════
 #  Zones
