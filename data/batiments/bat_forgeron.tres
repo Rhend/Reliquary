@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bat_forgeron"
+quartier = "forge"
+nom_affichage_fr = "Forgeron"
+nom_affichage_en = "Blacksmith"
+lore_fr = "Le marteau chante sur l'enclume. Chaque lame forgée ici coûte moins et frappe plus fort."
+lore_en = "The hammer sings on the anvil. Every blade forged here costs less and strikes harder."
+biome_principal_id = "biome_montagne"
+biomes_additionnels = Array[String](["biome_foret", "biome_marecage"])
+gele = false
+bonus_par_palier = {
+0: [{"channel": "forge_points_reduction_arme", "value": 0.05}],
+1: [{"channel": "forge_points_reduction_arme", "value": 0.05}, {"channel": "forge_xp_reduction_arme", "value": 0.05}],
+2: [{"channel": "atk_pct", "value": 0.03}],
+3: [{"channel": "forge_points_reduction_arme", "value": 0.10}, {"channel": "forge_xp_reduction_arme", "value": 0.05}],
+4: [{"channel": "atk_pct", "value": 0.03}],
+5: [{"channel": "forge_points_reduction_arme", "value": 0.10}, {"channel": "forge_xp_reduction_arme", "value": 0.10}]
+}

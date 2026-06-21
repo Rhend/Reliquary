@@ -17,6 +17,7 @@ class EntityType:
 	const FRAGMENT      := "fragment"
 	const RESOURCE      := "resource"
 	const RECIPE        := "recipe"
+	const BUILDING      := "building"
 	# Pseudo-type : le Village n'est pas dans GameData.entities, mais son
 	# évolution transite par le rituel d'ascension avec ce type.
 	const VILLAGE       := "village"

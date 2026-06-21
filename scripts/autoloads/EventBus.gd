@@ -81,6 +81,10 @@ signal fragment_libere(fragment_id: String, biome_id: String)
 # Émis quand le Village passe au Tier suivant.
 @warning_ignore("unused_signal")
 signal village_tier_change(nouveau_tier: int)
+# Émis quand un bâtiment de quartier est amélioré ou une route reconstruite
+# (Chantier 4) → recalcul des bonus de village + rafraîchissement de l'UI.
+@warning_ignore("unused_signal")
+signal village_buildings_changed()
 # Émis quand un biome secondaire est révélé au passage d'un biome à Légendaire.
 @warning_ignore("unused_signal")
 signal biome_revele(biome_id: String)

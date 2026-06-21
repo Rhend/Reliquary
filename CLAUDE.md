@@ -41,10 +41,11 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
+| Quartiers / routes / bâtiments + bonus de village (Chantier 4) | `scripts/systems/VillageBuildings.gd` |
 
 Autoloads (ordre dans project.godot) : UIColors, EventBus, AudioManager, Translations,
 GameData, CycleData, SaveManager, GameSettings, MasterySystem, CombatPlayer,
-AdventureSystem, PassiveSystem, MasteryRegistry, BiomeMechanics, TooltipOverlay.
+AdventureSystem, PassiveSystem, VillageBuildings, MasteryRegistry, BiomeMechanics, TooltipOverlay.
 
 Audio : tout passe par `AudioManager` (autoload). Bruitage ponctuel =
 `AudioManager.play_sfx("nom", volume_db)` ; sons nommés générés en procédural

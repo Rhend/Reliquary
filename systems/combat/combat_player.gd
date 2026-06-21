@@ -71,18 +71,24 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	# cycle (atk_mult/def_mult) et attack_speed_pct fournissent des % ; les futures
 	# sources % (village, Forge, Maîtrise) viendront grossir ces listes — jamais de
 	# produit multiplicatif réintroduit ailleurs.
+	# Bonus % de village (Chantier 4) — empilés ADDITIVEMENT avec les autres %.
+	var v_atk_pct  := VillageBuildings.get_bonus(VillageBuildings.CH_ATK_PCT)
+	var v_def_pct  := VillageBuildings.get_bonus(VillageBuildings.CH_DEF_PCT)
+	var v_hp_pct   := VillageBuildings.get_bonus(VillageBuildings.CH_HP_MAX_PCT)
+	var v_crit_pct := VillageBuildings.get_bonus(VillageBuildings.CH_CRIT_PCT)
+
 	var atk_base: float = float(stats.get("atk", 0)) \
 			+ float(passives.get("atk_bonus", 0.0)) \
 			+ float(equip.get("atk", 0.0)) \
 			+ GameData.get_mastery_combat_bonus(enemy.get("id", ""))
 	var h_atk := StatStacker.final_stat(atk_base,
-			[float(modifier_bonuses.get("atk_mult", 1.0)) - 1.0], "atk")
+			[float(modifier_bonuses.get("atk_mult", 1.0)) - 1.0, v_atk_pct], "atk")
 
 	var def_base: float = float(stats.get("def", 0)) \
 			+ float(passives.get("def_bonus", 0.0)) \
 			+ float(equip.get("def", 0.0))
 	var h_def := StatStacker.final_stat(def_base,
-			[float(modifier_bonuses.get("def_mult", 1.0)) - 1.0], "def")
+			[float(modifier_bonuses.get("def_mult", 1.0)) - 1.0, v_def_pct], "def")
 
 	# attack_speed_pct (équipement, ex. Anneau) accélère la jauge VIT (bonus %).
 	var h_vit := StatStacker.final_stat(float(stats.get("vit", 20)),
@@ -93,7 +99,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 		float(stats.get("hp", 100))
 			+ float(passives.get("hp_bonus", 0.0))
 			+ float(equip.get("hp", 0.0)),
-		[], "hp")
+		[v_hp_pct], "hp")
 
 	var e_hp := float(enemy.get("hp", 50))
 
@@ -105,13 +111,19 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	if not (passive_effects["passive_poison"] as Dictionary).is_empty():
 		extended_options["passive_poison"] = passive_effects["passive_poison"]
 
+	# Village (Chantier 4) : jauge ATB de départ (Tour de Guet). Le filet anti-mort
+	# (Palissade T5) est porté par combat_options (AdventureSystem en gère la
+	# disponibilité à l'échelle de l'expédition) → simplement transmis au resolver.
+	extended_options["hero_gauge_start"] = VillageBuildings.hero_gauge_start(
+			bool(combat_options.get("ambush", false)))
+
 	var hero_stats := {
 		"hp":              current_hp,
 		"hp_max":          h_hp_max,
 		"atk":             h_atk,
 		"def":             h_def,
 		"vit":             h_vit,
-		"crit_chance":     float(stats.get("crit_chance",     Balance.CRIT_CHANCE)),
+		"crit_chance":     float(stats.get("crit_chance",     Balance.CRIT_CHANCE)) + v_crit_pct,
 		"crit_multiplier": float(stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
 	}
 	var enemy_stats := {
@@ -235,8 +247,17 @@ func _finish(winner: String) -> void:
 	EventBus.combat_ended.emit({
 		"victory":           winner == Enums.Actor.HERO,
 		"remaining_hero_hp": _current_hero_hp,
-		"enemy":             _enemy_dict
+		"enemy":             _enemy_dict,
+		"lethal_used":       _lethal_was_used(),
 	})
+
+# Vrai si le filet anti-mort (Palissade T5) a été consommé pendant ce combat :
+# AdventureSystem s'en sert pour décrémenter la disponibilité du cycle.
+func _lethal_was_used() -> bool:
+	for s in _steps:
+		if (s as CombatStep).is_lethal_ignored:
+			return true
+	return false
 
 func _determine_winner() -> String:
 	if _steps.is_empty():

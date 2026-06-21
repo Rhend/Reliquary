@@ -51,6 +51,10 @@ var village: Dictionary = {
 	"fragments_collectes": [],
 	"eclos":               false, # le Village n'existe pas tant qu'il n'a pas éclos (phase préliminaire)
 	"clics_eclosion":      0,     # progression de la phase d'éclosion (→ Balance.ECLOSION_CLICS)
+	# Chantier 4 — Quartiers & bâtiments. Sauvegardés avec le reste du village
+	# (merge tolérant dans SaveManager) : aucune migration requise.
+	"buildings":           {},    # building_id → palier (Balance.BUILDING_TIER_DELABRE = Délabré par défaut)
+	"routes":              {},    # quartier ("hero"/"adventure"/"forge") → bool (route reconstruite ?)
 }
 
 var player: Dictionary = {
@@ -100,6 +104,9 @@ func _load_all_entities() -> void:
 	# Données statiques .tres (sans progression) — écrasent les resources/ si ID partagé
 	_load_tres_folder("res://data/ingredients/", Enums.EntityType.INGREDIENT, false)
 	_load_tres_folder("res://data/fragments/",   Enums.EntityType.FRAGMENT,   false)
+	# Bâtiments de quartier (Chantier 4) : données pures ; leur palier/état vit
+	# dans GameData.village (buildings/routes), pas dans la progression de Maîtrise.
+	_load_tres_folder("res://data/batiments/",   Enums.EntityType.BUILDING,   false)
 	# Héros, passifs et équipements : entités à Maîtrise
 	_load_tres_folder("res://data/hero/",        Enums.EntityType.HERO)
 	_load_tres_folder("res://data/passives/",    Enums.EntityType.PASSIVE)

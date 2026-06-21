@@ -103,6 +103,14 @@ const DISTRICTS: Dictionary = {
 			["district_training", "⚔"],
 		],
 	},
+	"adventure": {
+		"title_key": "district.adventure.title",
+		"rooms": [
+			["district_reliquaire", "🏆"],
+			["district_tour",       "🗼"],
+			["district_palissade",  "🛡"],
+		],
+	},
 	"forge": {
 		"title_key": "district.forge.title",
 		"rooms": [
@@ -171,6 +179,7 @@ func _ready() -> void:
 	EventBus.village_tier_change.connect(_on_village_tier_change)
 	EventBus.biome_revele.connect(_on_biome_revele)
 	EventBus.resources_changed.connect(_on_resources_changed_refresh)
+	EventBus.village_buildings_changed.connect(_on_resources_changed_refresh)
 	EventBus.equipement_evolue.connect(func(_id, _tier): _on_resources_changed_refresh())
 	EventBus.equipment_changed.connect(_on_resources_changed_refresh)
 	EventBus.equipment_unlocked.connect(_on_equipment_unlocked)
@@ -889,9 +898,12 @@ func _fill_panel_content(panel_id: String) -> void:
 		"relic":     _panel_soon("RELIQUE")
 		"tbd":       _panel_soon("?")
 		_:
-			# Pièce de quartier : panneau placeholder (contenu à venir), titré
-			# au nom de la pièce. Tout autre id inconnu reste sans contenu.
-			if _owner_of_room(panel_id) != "":
+			# Pièce de quartier : si elle correspond à un bâtiment (Chantier 4),
+			# panneau de gestion (route + amélioration) ; sinon placeholder titré.
+			var bid := VillageBuildings.building_for_room(panel_id)
+			if bid != "":
+				BuildingPanel.build(self, bid)
+			elif _owner_of_room(panel_id) != "":
 				_panel_soon(Translations.panel_title(panel_id))
 
 # Lance l'aventure sur le biome sélectionné et bascule vers CombatScene.
@@ -1345,7 +1357,8 @@ func _update_badges() -> void:
 
 # Refresh du panneau forge ou héro si ouvert, après un drop de ressources ou une forge.
 func _on_resources_changed_refresh() -> void:
-	if _active_panel_id == "forge" or _active_panel_id == "hero":
+	if _active_panel_id == "forge" or _active_panel_id == "hero" \
+			or VillageBuildings.building_for_room(_active_panel_id) != "":
 		_refresh_active_panel()
 	_update_badges()
 

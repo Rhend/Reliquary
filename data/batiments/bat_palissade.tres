@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bat_palissade"
+quartier = "adventure"
+nom_affichage_fr = "Palissade"
+nom_affichage_en = "Palisade"
+lore_fr = "Des pieux dressés et des remparts de fortune. Ce qui protège le village endurcit aussi celui qui en part."
+lore_en = "Raised stakes and makeshift ramparts. What shields the village also hardens the one who leaves it."
+biome_principal_id = "biome_montagne"
+biomes_additionnels = Array[String](["biome_foret", "biome_marecage"])
+gele = false
+bonus_par_palier = {
+0: [{"channel": "def_pct", "value": 0.05}],
+1: [{"channel": "def_pct", "value": 0.03}],
+2: [{"channel": "hp_max_pct", "value": 0.08}],
+3: [{"channel": "def_pct", "value": 0.04}],
+4: [{"channel": "hp_max_pct", "value": 0.04}],
+5: [{"channel": "def_pct", "value": 0.06}, {"channel": "ignore_first_lethal", "value": 1}]
+}

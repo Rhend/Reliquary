@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bat_armurier"
+quartier = "forge"
+nom_affichage_fr = "Armurier"
+nom_affichage_en = "Armorer"
+lore_fr = "Plaques et mailles patiemment ajustées. Une bonne armure pardonne bien des erreurs."
+lore_en = "Plates and mail patiently fitted. Good armor forgives many a mistake."
+biome_principal_id = "biome_marecage"
+biomes_additionnels = Array[String](["biome_foret", "biome_montagne"])
+gele = false
+bonus_par_palier = {
+0: [{"channel": "forge_points_reduction_armure", "value": 0.05}],
+1: [{"channel": "forge_points_reduction_armure", "value": 0.05}, {"channel": "forge_xp_reduction_armure", "value": 0.05}],
+2: [{"channel": "def_pct", "value": 0.03}],
+3: [{"channel": "forge_points_reduction_armure", "value": 0.10}, {"channel": "forge_xp_reduction_armure", "value": 0.05}],
+4: [{"channel": "def_pct", "value": 0.03}],
+5: [{"channel": "forge_points_reduction_armure", "value": 0.10}, {"channel": "forge_xp_reduction_armure", "value": 0.10}]
+}

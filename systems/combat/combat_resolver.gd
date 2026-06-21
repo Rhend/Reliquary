@@ -52,6 +52,17 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	# ── Options mécaniques ─────────────────────────────────────
 	var use_ambush: bool = options.get("ambush", false)
 
+	# Jauge ATB de DÉPART du héros (Tour de Guet) : fraction 0..1 du seuil d'une
+	# attaque. > 0 → le héros frappe plus tôt (atténue l'embuscade, ou avance le
+	# 1er coup sur toute expédition au palier Tour T5).
+	var hero_gauge_start: float = clampf(float(options.get("hero_gauge_start", 0.0)), 0.0, 1.0)
+
+	# Filet « 1er coup létal annulé » (Palissade T5) : le premier coup qui amènerait
+	# le héros à 0 PV le laisse à 1 PV à la place. Usage UNIQUE — décrémenté ici
+	# pour la durée du combat ; la consommation à l'échelle de l'EXPÉDITION est
+	# gérée par AdventureSystem (qui ne le repasse plus une fois utilisé).
+	var lethal_avail: bool = options.get("ignore_lethal", false)
+
 	# Rail de modification de vitesse : listes de modificateurs {factor, additive,
 	# start, duration} par combattant. factor = multiplicatif (défaut 1,0),
 	# additive = +att/s (défaut 0,0). duration < 0 → permanent sur le combat ;
@@ -73,6 +84,8 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	var poison_dmg_per_stack: float = e_atk * Balance.BIOME_POISON_DMG_PCT
 	var poison_stacks:        int   = 0
 	var poison_turns_left:    int   = 0
+	# Atténuation du venin de biome (Jardin T2) : N stacks effectifs en moins.
+	var poison_stack_reduction: int = int(options.get("poison_stack_reduction", 0))
 
 	# Bouclier d'urgence (Résilience Rare+)
 	var shield_cfg       := options.get("passive_shield", {}) as Dictionary
@@ -99,7 +112,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	# seuil d'une attaque, donc elle frappe à t = 0 (avant le héros). Exprimé
 	# proprement dans le modèle de jauge temps réel. Cohérent avec la simultanéité
 	# (jauge ennemie pleine → e_dt = 0 < h_dt → l'ennemi garde l'initiative).
-	var h_gauge  := 0.0
+	var h_gauge  := Balance.ATTACK_GAUGE * hero_gauge_start
 	var e_gauge: float = Balance.ATTACK_GAUGE if use_ambush else 0.0
 	var sim_time := 0.0
 	var ambush_pending := use_ambush   # marque le 1er coup ennemi comme is_ambush (tag visuel)
@@ -163,6 +176,13 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 				step.is_ambush = true
 				ambush_pending = false
 			h_hp     = float(step.target_hp_after)
+			# Filet anti-mort (Palissade T5) : ce coup létal laisse le héros à 1 PV.
+			if lethal_avail and h_hp <= 0.0:
+				h_hp                   = 1.0
+				step.target_hp_after   = 1
+				step.is_killing_blow   = false
+				step.is_lethal_ignored = true
+				lethal_avail           = false
 			h_shield = maxf(h_shield - float(step.shield_absorbed), 0.0)
 			steps.append(step)
 
@@ -182,17 +202,27 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 				poison_stacks     = mini(poison_stacks + 1, Balance.BIOME_POISON_MAX_STACKS)
 				poison_turns_left = Balance.BIOME_POISON_DURATION
 
-				var pdmg     := float(poison_stacks) * poison_dmg_per_stack
-				var new_h_hp := maxf(h_hp - pdmg, 0.0)
-				var p_step   := CombatStep.new()
-				p_step.is_poison       = true
-				p_step.attacker        = Enums.Actor.ENEMY   # dégâts subis par le héros
-				p_step.damage          = int(maxf(roundf(pdmg), 1.0))
-				p_step.target_hp_after = int(roundf(new_h_hp))
-				p_step.is_killing_blow = (new_h_hp <= 0.0)
-				p_step.time_sec        = sim_time
-				steps.append(p_step)
-				h_hp = new_h_hp
+				# Stacks effectifs après atténuation du Jardin (T2) ; à 0 → pas de tick.
+				var eff_stacks := maxi(poison_stacks - poison_stack_reduction, 0)
+				if eff_stacks > 0:
+					var pdmg     := float(eff_stacks) * poison_dmg_per_stack
+					var new_h_hp := maxf(h_hp - pdmg, 0.0)
+					var p_step   := CombatStep.new()
+					p_step.is_poison       = true
+					p_step.attacker        = Enums.Actor.ENEMY   # dégâts subis par le héros
+					p_step.damage          = int(maxf(roundf(pdmg), 1.0))
+					p_step.target_hp_after = int(roundf(new_h_hp))
+					p_step.is_killing_blow = (new_h_hp <= 0.0)
+					p_step.time_sec        = sim_time
+					# Filet anti-mort (Palissade T5) : même garde-fou sur le venin du marais.
+					if lethal_avail and new_h_hp <= 0.0:
+						new_h_hp                 = 1.0
+						p_step.target_hp_after   = 1
+						p_step.is_killing_blow   = false
+						p_step.is_lethal_ignored = true
+						lethal_avail             = false
+					steps.append(p_step)
+					h_hp = new_h_hp
 
 				poison_turns_left -= 1
 				if poison_turns_left <= 0:

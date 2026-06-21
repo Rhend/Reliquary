@@ -19,3 +19,4 @@ class_name CombatStep extends Resource
 @export var shield_value:         int  = 0     # PV du bouclier au moment de l'activation
 @export var is_passive_poison:    bool = false  # vrai pour un tick de poison passif (Contact Venimeux)
 @export var passive_poison_proc:  bool = false  # Contact Venimeux a proc sur ce coup héros
+@export var is_lethal_ignored:    bool = false  # coup létal annulé par la Palissade T5 (PV ramenés à 1 au lieu de 0)

@@ -78,6 +78,10 @@ var _bless_xp_mult:   float = 1.0
 # Bénédiction de Hâte : modificateur de vitesse du héros en attente, consommé par
 # le PROCHAIN combat (rail de vitesse). {} = aucune. {factor, duration}.
 var _pending_hero_haste: Dictionary = {}
+# Filet anti-mort de l'expédition (Palissade T5) : disponible une fois par cycle.
+# Armé au lancement selon les bâtiments, consommé au 1er coup létal (combat OU
+# piège/saignement). Cf. _survive_lethal et combat_options "ignore_lethal".
+var _lethal_shield_available: bool = false
 
 func _ready() -> void:
 	_encounter_timer          = Timer.new()
@@ -140,6 +144,7 @@ func start_adventure(biome_id: String) -> void:
 	_bleed_remaining = 0
 	_bless_xp_mult   = 1.0
 	_pending_hero_haste = {}
+	_lethal_shield_available = VillageBuildings.has_lethal_shield()
 
 	_pick_modifier()
 
@@ -212,9 +217,12 @@ func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 
 	var combat_options := {
 		"ambush":         _is_first_combat and BiomeMechanics.is_ambush_active(),
-		"poison":         BiomeMechanics.is_mechanic_active("poison"),
+		"poison":         BiomeMechanics.is_mechanic_active("poison") \
+				and not VillageBuildings.poison_immune_for_tier(int(enemy.get("tier", 0))),
 		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
 		"hero_speed_mods": _consume_hero_speed_mods(),
+		"poison_stack_reduction": int(VillageBuildings.get_bonus(VillageBuildings.CH_DEBUFF_REDUCTION)),
+		"ignore_lethal":  _lethal_shield_available,
 	}
 	_is_first_combat = false
 	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses(), combat_options)
@@ -262,16 +270,18 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 # xp_bonus → multiplie l'XP de base du prochain événement.
 func _apply_benediction_effect(bene: Dictionary) -> void:
 	var effect_type := bene.get("effet", "") as String
+	# Amplification des bénédictions par le Jardin (effet additif village).
+	var bless_amp := 1.0 + VillageBuildings.get_bonus(VillageBuildings.CH_BLESS_EFFECT_PCT)
 
 	match effect_type:
 		Enums.BlessEffect.HEAL:
 			var max_hp := get_max_hp()
-			var healed := maxf(0.0, max_hp * Balance.BLESS_HEAL_PCT)
+			var healed := maxf(0.0, max_hp * Balance.BLESS_HEAL_PCT * bless_amp)
 			current_hp  = minf(current_hp + healed, max_hp)
 			EventBus.heal_applied.emit(healed, current_hp)
 
 		Enums.BlessEffect.XP_BONUS:
-			_bless_xp_mult = 1.0 + Balance.BLESS_XP_BONUS_PCT
+			_bless_xp_mult = 1.0 + Balance.BLESS_XP_BONUS_PCT * bless_amp
 
 		Enums.BlessEffect.HASTE:
 			# +valeur % de vitesse d'attaque du héros pendant BLESS_HASTE_DURATION s
@@ -281,7 +291,7 @@ func _apply_benediction_effect(bene: Dictionary) -> void:
 			if pct <= 0.0:
 				pct = Balance.BLESS_HASTE_PCT_DEFAULT
 			_pending_hero_haste = {
-				"factor":   1.0 + pct / 100.0,
+				"factor":   1.0 + (pct / 100.0) * bless_amp,
 				"duration": Balance.BLESS_HASTE_DURATION,
 			}
 
@@ -295,8 +305,10 @@ func _distribute_mastery_xp(event_id: String) -> void:
 		return
 	var event_entity := GameData.get_entity(event_id)
 	var event_tier   := int(event_entity.get("maitrise_actuelle", 0))
-	# Modulée par le modificateur de cycle et la hâte de bénédiction (one-shot).
-	var produced     := Balance.xp_produced(event_tier) * float(current_modifier.get("xp_mult", 1.0)) * _bless_xp_mult
+	# Modulée par le modificateur de cycle, la hâte de bénédiction (one-shot) et le
+	# bonus d'XP distribuée du village (Tour de Guet — additif entre bâtiments XP).
+	var village_xp   := 1.0 + VillageBuildings.get_bonus(VillageBuildings.CH_XP_DISTRIBUTED_PCT)
+	var produced     := Balance.xp_produced(event_tier) * float(current_modifier.get("xp_mult", 1.0)) * _bless_xp_mult * village_xp
 	_bless_xp_mult    = 1.0
 
 	# Pas d'XP à l'entité si créature Unique d'Abysse (statique tier 5)
@@ -354,7 +366,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, Balance.HALL_XP_EVENT
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
-		if current_hp <= 0.0:
+		if current_hp <= 0.0 and not _survive_lethal():
 			_end_adventure(false)
 		else:
 			_apply_regen(hero_id)
@@ -378,6 +390,9 @@ func _on_combat_ended(result: Dictionary) -> void:
 		return
 
 	current_hp = result.get("remaining_hero_hp", 0.0)
+	# Le filet anti-mort consommé en combat (Palissade T5) ne se rearme pas du cycle.
+	if result.get("lethal_used", false):
+		_lethal_shield_available = false
 
 	if combat_unique_en_cours:
 		combat_unique_en_cours = false
@@ -417,11 +432,23 @@ func _resolve_victory(enemy: Dictionary) -> void:
 #  Utilitaires internes
 # ═══════════════════════════════════════════════════════════
 
+# Filet anti-mort de l'expédition (Palissade T5) hors combat : si disponible et
+# que les PV viennent de tomber à 0 (piège, saignement), ramène le héros à 1 PV
+# et consomme le filet. Retourne true s'il a sauvé le héros. (En combat, le même
+# garde-fou est appliqué par CombatResolver via l'option "ignore_lethal".)
+func _survive_lethal() -> bool:
+	if _lethal_shield_available and current_hp <= 0.0:
+		current_hp = 1.0
+		_lethal_shield_available = false
+		return true
+	return false
+
 # Régénère regen_pct% des PV max après chaque rencontre.
-# Sources : modificateur de cycle (regen_pct) + passifs actifs (hp_regen_pct).
+# Sources : modificateur de cycle (regen_pct) + passifs actifs (hp_regen_pct) + village (Maison).
 func _apply_regen(_hero_id: String) -> void:
 	var regen_pct := float(current_modifier.get("regen_pct", Balance.DEFAULT_REGEN_PCT)) \
-			+ PassiveSystem.get_effect("hp_regen_pct")
+			+ PassiveSystem.get_effect("hp_regen_pct") \
+			+ VillageBuildings.get_bonus(VillageBuildings.CH_REGEN_PCT)
 	if regen_pct <= 0.0:
 		return
 	var max_hp := get_max_hp()
@@ -437,7 +464,7 @@ func _tick_bleed() -> void:
 	current_hp  = maxf(current_hp - dmg, 0.0)
 	_bleed_remaining -= 1
 	EventBus.bleed_ticked.emit(dmg, current_hp, _bleed_remaining)
-	if current_hp <= 0.0:
+	if current_hp <= 0.0 and not _survive_lethal():
 		_end_adventure(false)
 
 # Retourne le % de dégâts de piège pour la zone courante.
@@ -452,7 +479,7 @@ func get_max_hp() -> float:
 	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)
 	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
 	var base: float = float(GameData.get_effective_stats("hero").get("hp", 100)) + equip_hp + hp_bonus
-	return StatStacker.final_stat(base, [], "hp")
+	return StatStacker.final_stat(base, [VillageBuildings.get_bonus(VillageBuildings.CH_HP_MAX_PCT)], "hp")
 
 # Programme la prochaine rencontre.
 # Utilise FIRST_ENCOUNTER_DELAY pour la toute première, sinon le délai fourni.
@@ -498,11 +525,12 @@ func _pick_modifier() -> void:
 # Effectue les DEUX tirages INDÉPENDANTS (fréquent + rare) et retourne les ids
 # de ressources droppées (0 à 2). Pur (ne dépend que de randf + Balance) → unité
 # testable. `creature_tier` ne pilote QUE le taux de la rare ; le fréquent est fixe.
-func roll_biome_drops(freq_id: String, rare_id: String, creature_tier: int) -> Array:
+func roll_biome_drops(freq_id: String, rare_id: String, creature_tier: int,
+		rare_bonus: float = 0.0) -> Array:
 	var out: Array = []
 	if freq_id != "" and randf() < Balance.DROP_FREQUENT_RATE:
 		out.append(freq_id)
-	if rare_id != "" and randf() < Balance.rare_drop_rate(creature_tier):
+	if rare_id != "" and randf() < Balance.rare_drop_rate(creature_tier) + rare_bonus:
 		out.append(rare_id)
 	return out
 
@@ -516,7 +544,8 @@ func _drop_biome_resources(enemy: Dictionary) -> void:
 	var ids := roll_biome_drops(
 		str(biome.get("ressource_frequente_id", "")),
 		str(biome.get("ressource_rare_id", "")),
-		int(enemy.get("maitrise_actuelle", 0)))
+		int(enemy.get("maitrise_actuelle", 0)),
+		VillageBuildings.get_bonus(VillageBuildings.CH_DROP_RARE_PCT))  # Joaillier T4
 	if ids.is_empty():
 		return
 	var drops: Array = []
@@ -659,9 +688,12 @@ func start_unique_combat() -> void:
 	_is_first_combat = false
 	CombatPlayer.start_combat(unique_dict, current_hp, get_modifier_bonuses(), {
 		"ambush":         false,
-		"poison":         BiomeMechanics.is_mechanic_active("poison"),
+		"poison":         BiomeMechanics.is_mechanic_active("poison") \
+				and not VillageBuildings.poison_immune_for_tier(int(unique_dict.get("tier", 0))),
 		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
 		"hero_speed_mods": _consume_hero_speed_mods(),
+		"poison_stack_reduction": int(VillageBuildings.get_bonus(VillageBuildings.CH_DEBUFF_REDUCTION)),
+		"ignore_lethal":  _lethal_shield_available,
 	})
 
 # Résout la victoire contre la créature Unique : flags, ingrédient, passif, signal.

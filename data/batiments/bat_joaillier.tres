@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bat_joaillier"
+quartier = "forge"
+nom_affichage_fr = "Joaillier"
+nom_affichage_en = "Jeweler"
+lore_fr = "Sertir une pierre, c'est emprisonner un peu de chance. Les anneaux d'ici brillent d'un éclat tranchant."
+lore_en = "To set a gem is to trap a sliver of fortune. The rings made here gleam with a cutting edge."
+biome_principal_id = "biome_foret"
+biomes_additionnels = Array[String](["biome_marecage", "biome_montagne"])
+gele = false
+bonus_par_palier = {
+0: [{"channel": "forge_points_reduction_anneau", "value": 0.05}],
+1: [{"channel": "forge_points_reduction_anneau", "value": 0.05}, {"channel": "forge_xp_reduction_anneau", "value": 0.05}],
+2: [{"channel": "crit_pct", "value": 0.02}],
+3: [{"channel": "forge_points_reduction_anneau", "value": 0.10}, {"channel": "forge_xp_reduction_anneau", "value": 0.05}],
+4: [{"channel": "drop_rare_pct", "value": 0.01}],
+5: [{"channel": "forge_points_reduction_anneau", "value": 0.10}, {"channel": "forge_xp_reduction_anneau", "value": 0.10}]
+}

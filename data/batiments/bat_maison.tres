@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bat_maison"
+quartier = "hero"
+nom_affichage_fr = "Maison"
+nom_affichage_en = "House"
+lore_fr = "Un toit, un foyer, un lit. Le héros y récupère entre deux dangers, et le repos vaut bien des potions."
+lore_en = "A roof, a hearth, a bed. The hero recovers here between dangers, and rest is worth many potions."
+biome_principal_id = "biome_foret"
+biomes_additionnels = Array[String](["biome_marecage", "biome_montagne"])
+gele = false
+bonus_par_palier = {
+0: [{"channel": "regen_pct", "value": 0.20}],
+1: [{"channel": "hp_max_pct", "value": 0.03}],
+2: [{"channel": "regen_pct", "value": 0.05}],
+3: [{"channel": "hp_max_pct", "value": 0.06}],
+4: [{"channel": "regen_pct", "value": 0.03}],
+5: [{"channel": "hp_max_pct", "value": 0.10}, {"channel": "regen_pct", "value": 0.02}]
+}

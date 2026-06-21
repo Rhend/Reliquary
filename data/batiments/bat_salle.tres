@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bat_salle"
+quartier = "hero"
+nom_affichage_fr = "Salle d'entraînement"
+nom_affichage_en = "Training Hall"
+lore_fr = "Mannequins de bois et poids de pierre. La sueur d'aujourd'hui est la puissance de demain."
+lore_en = "Wooden dummies and stone weights. Today's sweat is tomorrow's power."
+biome_principal_id = "biome_montagne"
+biomes_additionnels = Array[String](["biome_foret", "biome_marecage"])
+gele = false
+bonus_par_palier = {
+0: [{"channel": "atk_pct", "value": 0.03}],
+1: [{"channel": "def_pct", "value": 0.03}],
+2: [{"channel": "atk_pct", "value": 0.05}],
+3: [{"channel": "def_pct", "value": 0.05}],
+4: [{"channel": "atk_pct", "value": 0.08}],
+5: [{"channel": "def_pct", "value": 0.08}, {"channel": "crit_pct", "value": 0.02}]
+}

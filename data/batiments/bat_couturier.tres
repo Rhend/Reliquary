@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bat_couturier"
+quartier = "forge"
+nom_affichage_fr = "Couturier"
+nom_affichage_en = "Tailor"
+lore_fr = "Ceintures et boucliers de tissu renforcé attendent des étoffes que ces terres ne fournissent pas encore."
+lore_en = "Belts and reinforced cloth shields await fabrics these lands cannot yet provide."
+biome_principal_id = ""
+biomes_additionnels = Array[String]([])
+gele = true
+bonus_par_palier = {}

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bat_tour"
+quartier = "adventure"
+nom_affichage_fr = "Tour de Guet"
+nom_affichage_en = "Watchtower"
+lore_fr = "D'en haut, on voit venir le danger. Le héros part mieux préparé, et l'expérience rapportée vaut davantage."
+lore_en = "From up high, danger is seen coming. The hero sets out better prepared, and the lore brought back is worth more."
+biome_principal_id = "biome_marecage"
+biomes_additionnels = Array[String](["biome_foret", "biome_montagne"])
+gele = false
+bonus_par_palier = {
+0: [{"channel": "xp_distributed_pct", "value": 0.05}],
+1: [{"channel": "ambush_gauge_start_pct", "value": 0.25}],
+2: [{"channel": "xp_distributed_pct", "value": 0.05}],
+3: [{"channel": "ambush_gauge_start_pct", "value": 0.50}],
+4: [{"channel": "xp_distributed_pct", "value": 0.10}],
+5: [{"channel": "xp_distributed_pct", "value": 0.10}, {"channel": "all_expedition_gauge_start_pct", "value": 0.25}]
+}
