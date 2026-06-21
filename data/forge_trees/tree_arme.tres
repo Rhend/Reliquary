@@ -1,0 +1,63 @@
+[gd_resource type="Resource" script_class="ForgeTreeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/ForgeTreeData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "tree_arme"
+equipment_id = "equipment_arme"
+nodes = [{
+"id": "arme_s1_tranchant1", "type": "mineur", "strate": 1, "stat": "atk", "root": true,
+"adj": ["arme_s1_tranchant2", "arme_s1_affutage"], "pos": Vector2(280, 60),
+"nom_fr": "Tranchant I", "nom_en": "Edge I"
+}, {
+"id": "arme_s1_tranchant2", "type": "mineur", "strate": 1, "stat": "atk",
+"adj": ["arme_s1_tranchant3"], "pos": Vector2(185, 140),
+"nom_fr": "Tranchant II", "nom_en": "Edge II"
+}, {
+"id": "arme_s1_tranchant3", "type": "mineur", "strate": 1, "stat": "atk",
+"adj": ["arme_s1_mordant"], "pos": Vector2(280, 205),
+"nom_fr": "Tranchant III", "nom_en": "Edge III"
+}, {
+"id": "arme_s1_affutage", "type": "mineur", "strate": 1, "stat": "atb",
+"adj": ["arme_s1_mordant"], "pos": Vector2(385, 140),
+"nom_fr": "Affûtage", "nom_en": "Whetting"
+}, {
+"id": "arme_s1_mordant", "type": "notable", "strate": 1, "stat": "atk",
+"adj": ["arme_s2_tranchant4"], "pos": Vector2(370, 225),
+"nom_fr": "Mordant", "nom_en": "Bite",
+"effect": {"kind": "stat_pct", "stat": "crit", "value": 0.01}
+}, {
+"id": "arme_s2_tranchant4", "type": "mineur", "strate": 2, "stat": "atk",
+"adj": ["arme_s2_lourdeur", "arme_s2_precision"], "pos": Vector2(280, 315),
+"nom_fr": "Tranchant IV", "nom_en": "Edge IV"
+}, {
+"id": "arme_s2_lourdeur", "type": "mineur", "strate": 2, "stat": "atk",
+"adj": ["arme_s2_briseur"], "pos": Vector2(175, 375),
+"nom_fr": "Lourdeur", "nom_en": "Heft",
+"effect": {"kind": "stat_pct", "stat": "atb", "value": -0.05}
+}, {
+"id": "arme_s2_precision", "type": "mineur", "strate": 2, "stat": "crit",
+"adj": ["arme_s2_saignee"], "pos": Vector2(385, 375),
+"nom_fr": "Précision", "nom_en": "Precision"
+}, {
+"id": "arme_s2_saignee", "type": "mineur", "strate": 2, "stat": "",
+"adj": ["arme_s2_fendoir"], "pos": Vector2(450, 435),
+"nom_fr": "Saignée mineure", "nom_en": "Minor Bleed",
+"effect": {"kind": "residual", "chance": 1.0, "damage_pct": 0.10, "duration": 2}
+}, {
+"id": "arme_s2_briseur", "type": "notable", "strate": 2, "stat": "atk",
+"adj": ["arme_s2_elan"], "pos": Vector2(150, 450),
+"nom_fr": "Briseur de garde", "nom_en": "Guard Breaker",
+"effect": {"kind": "def_ignore", "value": 0.05}
+}, {
+"id": "arme_s2_elan", "type": "notable", "strate": 2, "stat": "",
+"adj": ["arme_s2_fendoir"], "pos": Vector2(260, 470),
+"nom_fr": "Élan", "nom_en": "Momentum",
+"effect": {"kind": "cond_atk_hp_above", "hp_frac": 0.80}
+}, {
+"id": "arme_s2_fendoir", "type": "keystone", "strate": 2, "stat": "",
+"adj": [], "pos": Vector2(370, 510),
+"nom_fr": "Fendoir", "nom_en": "Cleaver",
+"effect": {"kind": "endurcissement_counter", "value": 0.15}
+}]

@@ -70,7 +70,10 @@ var player: Dictionary = {
 		"talisman": ""
 	},
 	"equipment_inventory": [],
-	"bestiary": {}   # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
+	"bestiary": {},  # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
+	# Forge (Chantier 5) : equipment_id → { points: int, nodes: [node_id] }.
+	# Sauvegardé automatiquement (sous-dict de player).
+	"forge": {}
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -107,6 +110,9 @@ func _load_all_entities() -> void:
 	# Bâtiments de quartier (Chantier 4) : données pures ; leur palier/état vit
 	# dans GameData.village (buildings/routes), pas dans la progression de Maîtrise.
 	_load_tres_folder("res://data/batiments/",   Enums.EntityType.BUILDING,   false)
+	# Arbres de Forge (Chantier 5) : définition statique ; les points/nœuds acquis
+	# vivent dans GameData.player.forge, pas dans la progression de Maîtrise.
+	_load_tres_folder("res://data/forge_trees/", Enums.EntityType.FORGE_TREE, false)
 	# Héros, passifs et équipements : entités à Maîtrise
 	_load_tres_folder("res://data/hero/",        Enums.EntityType.HERO)
 	_load_tres_folder("res://data/passives/",    Enums.EntityType.PASSIVE)
@@ -208,7 +214,7 @@ func _validate_entities() -> void:
 		# Toute entité affichée à l'écran doit avoir un nom.
 		# `name` est accepté en repli (convention des passifs, ex-JSON), et les
 		# placeholders pas encore débloqués (est_debloque = false) sont ignorés.
-		if etype not in [Enums.EntityType.RESOURCE, Enums.EntityType.RECIPE] \
+		if etype not in [Enums.EntityType.RESOURCE, Enums.EntityType.RECIPE, Enums.EntityType.FORGE_TREE] \
 				and e.get("est_debloque", true) \
 				and str(e.get("nom_affichage_fr", "")) == "" \
 				and str(e.get("name", "")) == "":

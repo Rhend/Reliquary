@@ -86,8 +86,12 @@ func add_xp_to_entity(entity_id: String, produced_xp: float) -> void:
 	if xp_gained <= 0.0:
 		return
 	var xp_before := float(entity.get("xp_maitrise_actuelle", 0.0))
-	# Plafond mou = coût + buffer ; tout ce qui dépasse est perdu.
+	# Plafond mou = coût + buffer ; tout ce qui dépasse est perdu. EXCEPTION :
+	# l'équipement n'a PAS de buffer (Chantier 5) — l'XP excédentaire s'accumule
+	# sans cap et se convertira en points de Forge au passage de palier.
 	var ceiling   := cost * (1.0 + Balance.EVOLVE_BUFFER_CAP)
+	if entity.get("entity_type", "") == Enums.EntityType.EQUIPMENT:
+		ceiling = INF
 	var xp_after  := minf(xp_before + xp_gained, ceiling)
 	if xp_after <= xp_before:
 		return  # buffer déjà plein → rien à créditer

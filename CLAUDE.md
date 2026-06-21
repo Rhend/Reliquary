@@ -42,10 +42,19 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
 | Quartiers / routes / bâtiments + bonus de village (Chantier 4) | `scripts/systems/VillageBuildings.gd` |
+| Forge : palier d'équipement (XP, sans ingrédient) + arbre de nœuds + bonus (Chantier 5) | `scripts/systems/ForgeSystem.gd` |
 
 Autoloads (ordre dans project.godot) : UIColors, EventBus, AudioManager, Translations,
 GameData, CycleData, SaveManager, GameSettings, MasterySystem, CombatPlayer,
-AdventureSystem, PassiveSystem, VillageBuildings, MasteryRegistry, BiomeMechanics, TooltipOverlay.
+AdventureSystem, PassiveSystem, VillageBuildings, ForgeSystem, MasteryRegistry, BiomeMechanics, TooltipOverlay.
+
+Forge (Chantier 5) : l'équipement évolue par XP (MasterySystem, buffer DÉSACTIVÉ pour
+l'équipement) — PLUS d'ingrédient pour le palier (`recettes_evolution` est mort). Le
+passage de palier ouvre une strate de l'arbre + octroie des points (lot + conversion de
+l'XP excédentaire). Les nœuds (`data/forge_trees/*.tres`, `ForgeTreeData`) s'achètent aux
+points sous connexité + gate de strate ; seuls les keystones consomment l'ingrédient rare
+du biome. Bonus % par stat via l'agrégateur additif ; effets de règle fournis au combat.
+UI : `ForgePanel` (palier/points) + `ForgeTreeOverlay` (arbre spatial).
 
 Audio : tout passe par `AudioManager` (autoload). Bruitage ponctuel =
 `AudioManager.play_sfx("nom", volume_db)` ; sons nommés générés en procédural

@@ -1,0 +1,61 @@
+[gd_resource type="Resource" script_class="ForgeTreeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/ForgeTreeData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "tree_armure"
+equipment_id = "equipment_armure"
+nodes = [{
+"id": "armure_s1_plastron1", "type": "mineur", "strate": 1, "stat": "def", "root": true,
+"adj": ["armure_s1_plastron2", "armure_s1_garde"], "pos": Vector2(280, 60),
+"nom_fr": "Plastron I", "nom_en": "Breastplate I"
+}, {
+"id": "armure_s1_plastron2", "type": "mineur", "strate": 1, "stat": "def",
+"adj": ["armure_s1_vitalite"], "pos": Vector2(185, 140),
+"nom_fr": "Plastron II", "nom_en": "Breastplate II"
+}, {
+"id": "armure_s1_garde", "type": "mineur", "strate": 1, "stat": "def",
+"adj": ["armure_s1_carapace"], "pos": Vector2(385, 140),
+"nom_fr": "Garde", "nom_en": "Guard"
+}, {
+"id": "armure_s1_vitalite", "type": "mineur", "strate": 1, "stat": "hp",
+"adj": ["armure_s1_carapace"], "pos": Vector2(240, 210),
+"nom_fr": "Vitalité", "nom_en": "Vitality"
+}, {
+"id": "armure_s1_carapace", "type": "notable", "strate": 1, "stat": "def",
+"adj": ["armure_s2_m1"], "pos": Vector2(345, 220),
+"nom_fr": "Carapace", "nom_en": "Carapace",
+"effect": {"kind": "stat_pct", "stat": "hp", "value": 0.10}
+}, {
+"id": "armure_s2_m1", "type": "mineur", "strate": 2, "stat": "def",
+"adj": ["armure_s2_m2", "armure_s2_m3", "armure_s2_m4"], "pos": Vector2(280, 315),
+"nom_fr": "Rivetage", "nom_en": "Riveting"
+}, {
+"id": "armure_s2_m2", "type": "mineur", "strate": 2, "stat": "def",
+"adj": ["armure_s2_resilience"], "pos": Vector2(180, 375),
+"nom_fr": "Renfort", "nom_en": "Reinforcement"
+}, {
+"id": "armure_s2_m3", "type": "mineur", "strate": 2, "stat": "hp",
+"adj": ["armure_s2_endurance"], "pos": Vector2(385, 375),
+"nom_fr": "Robustesse", "nom_en": "Sturdiness"
+}, {
+"id": "armure_s2_m4", "type": "mineur", "strate": 2, "stat": "hp",
+"adj": ["armure_s2_endurance"], "pos": Vector2(300, 405),
+"nom_fr": "Ténacité", "nom_en": "Tenacity"
+}, {
+"id": "armure_s2_resilience", "type": "notable", "strate": 2, "stat": "def",
+"adj": ["armure_s2_filtre"], "pos": Vector2(160, 450),
+"nom_fr": "Résilience", "nom_en": "Resilience",
+"effect": {"kind": "stat_pct", "stat": "regen", "value": 0.05}
+}, {
+"id": "armure_s2_endurance", "type": "notable", "strate": 2, "stat": "hp",
+"adj": ["armure_s2_filtre"], "pos": Vector2(395, 450),
+"nom_fr": "Endurance", "nom_en": "Endurance",
+"effect": {"kind": "per_tier", "stat": "hp", "value": 0.05}
+}, {
+"id": "armure_s2_filtre", "type": "keystone", "strate": 2, "stat": "",
+"adj": [], "pos": Vector2(280, 510),
+"nom_fr": "Filtre", "nom_en": "Filter",
+"effect": {"kind": "poison_stack_reduction", "value": 1}
+}]

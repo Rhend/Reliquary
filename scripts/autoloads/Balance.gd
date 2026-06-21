@@ -322,6 +322,68 @@ const VILLAGE_ROUTE_COSTS: Dictionary = {
 # route Forge). Aligné sur MENU_ITEMS de Village.gd (Forge = tier_min 1).
 const FORGE_HUB_UNLOCK_VILLAGE_TIER: int = 1
 
+# ═══════════════════════════════════════════════════════════
+#  Forge — Évolution & arbre d'équipement (Chantier 5)
+#  Sources : « Forge » (structure) + « Équilibrage final Équipement »
+# ═══════════════════════════════════════════════════════════
+# L'équipement est une entité à Maîtrise (XP par l'usage, cf. Chantier 2). Son
+# passage de palier N'EXIGE PAS d'ingrédient : il (1) ouvre une STRATE de l'arbre
+# et (2) octroie un LOT de points de Forge. L'arbre s'achète aux points ; SEULS
+# les keystones consomment en plus l'ingrédient rare du biome de l'équipement.
+# VS : strates 1-2 uniquement (équipement plafonné à Rare/T2).
+
+# Lot de points octroyé en ATTEIGNANT un palier (clé = palier atteint).
+# Couvre à lui seul tout l'arbre non-keystone (marge ~16 %/strate).
+const FORGE_PALIER_POINT_LOTS: Dictionary = {
+	1: 120,   # T0 → T1 (ouvre strate 1)
+	2: 290,   # T1 → T2 (ouvre strate 2)
+	# post-VS : 3 → 570, 4 → 1250, 5 → 1610
+}
+
+# Conversion de l'XP EXCÉDENTAIRE (au-delà du seuil du palier) en points de Forge,
+# RÉALISÉE au passage de palier : points += floor(overflow_xp / FORGE_XP_PER_POINT).
+# Le buffer borné du Chantier 2 ne s'applique PAS à l'équipement (XP non cappée,
+# tout l'excédent se convertit). Alimente les keystones / récompense le farm.
+const FORGE_XP_PER_POINT: float = 25.0
+
+# Coût en points par (strate, type de nœud). Strate absente / type absent → nœud
+# indisponible. (post-VS : S3 50/120/150 · S4 90/210/260 · S5 160/380/450)
+const FORGE_NODE_POINT_COST: Dictionary = {
+	1: { "mineur": 15, "notable": 40 },
+	2: { "mineur": 28, "notable": 70, "keystone": 90 },
+}
+
+# Bonus de stat en % par (strate, type). Le % DÉCROÎT par strate (la stat nue et
+# le nombre de nœuds montent → apport absolu régulier). Keystone = 0 (nœud de
+# RÈGLE, pas de % de stat). (post-VS : S3 0.07/0.16 · S4 0.05/0.12 · S5 0.04/0.09)
+const FORGE_NODE_STAT_PCT: Dictionary = {
+	1: { "mineur": 0.15, "notable": 0.33, "keystone": 0.0 },
+	2: { "mineur": 0.10, "notable": 0.22, "keystone": 0.0 },
+}
+
+# Ingrédient rare du biome consommé par un KEYSTONE selon sa strate (en plus des
+# points). SEUL usage de l'ingrédient dans la Forge — incitatif, jamais bloquant.
+const FORGE_KEYSTONE_INGREDIENT_QTY: Dictionary = {
+	2: 3,
+	# post-VS : 3 → 6 · 4 → 10 · 5 → 15
+}
+
+# Coût en points d'un nœud (strate, type), 0 si indéfini.
+static func forge_node_point_cost(strate: int, node_type: String) -> int:
+	return int((FORGE_NODE_POINT_COST.get(strate, {}) as Dictionary).get(node_type, 0))
+
+# Bonus de stat % d'un nœud (strate, type), 0.0 si indéfini.
+static func forge_node_stat_pct(strate: int, node_type: String) -> float:
+	return float((FORGE_NODE_STAT_PCT.get(strate, {}) as Dictionary).get(node_type, 0.0))
+
+# Lot de points octroyé en atteignant `tier`, 0 si aucun.
+static func forge_palier_lot(tier: int) -> int:
+	return int(FORGE_PALIER_POINT_LOTS.get(tier, 0))
+
+# Quantité d'ingrédient rare requise par un keystone de cette strate, 0 si aucune.
+static func forge_keystone_ingredient_qty(strate: int) -> int:
+	return int(FORGE_KEYSTONE_INGREDIENT_QTY.get(strate, 0))
+
 # ─── Éclosion : naissance du Village (phase préliminaire, pré-T0) ───
 # Progression requise pour faire éclore le Village en T0 et débloquer
 # les expéditions (remplace l'ancien clicker d'XP menant à T1).

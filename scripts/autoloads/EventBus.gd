@@ -122,6 +122,10 @@ signal equipment_unlocked(equipment_id: String)
 # Émis après la forge d'un équipement (passage au palier suivant).
 @warning_ignore("unused_signal")
 signal equipement_evolue(equipment_id: String, nouveau_palier: int)
+# Émis quand un nœud d'arbre de Forge est acheté, ou les points de Forge changent
+# (Chantier 5) → recalcul des bonus de Forge + rafraîchissement de l'UI.
+@warning_ignore("unused_signal")
+signal forge_tree_changed(equipment_id: String)
 
 # ── Sauvegarde ──────────────────────────────────────────────
 

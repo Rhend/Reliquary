@@ -1332,10 +1332,10 @@ func _update_badges() -> void:
 				hero_alert = true
 				break
 
-	# forge : un équipement avec XP pleine
+	# forge : un équipement prêt à évoluer (XP-seuil atteint, Chantier 5)
 	var forge_alert := false
-	for entry in ForgePanel.BIOME_EQUIP:
-		if GameData.equipment_xp_full(entry[1] as String):
+	for entry in ForgePanel.EQUIPS:
+		if ForgeSystem.can_evolve_equipment(entry[0] as String):
 			forge_alert = true
 			break
 

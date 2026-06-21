@@ -1,0 +1,61 @@
+[gd_resource type="Resource" script_class="ForgeTreeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/ForgeTreeData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "tree_anneau"
+equipment_id = "equipment_anneau"
+nodes = [{
+"id": "anneau_s1_oeilvif1", "type": "mineur", "strate": 1, "stat": "crit", "root": true,
+"adj": ["anneau_s1_oeilvif2", "anneau_s1_reflexe"], "pos": Vector2(280, 60),
+"nom_fr": "Œil vif I", "nom_en": "Keen Eye I"
+}, {
+"id": "anneau_s1_oeilvif2", "type": "mineur", "strate": 1, "stat": "crit",
+"adj": ["anneau_s1_aubaine"], "pos": Vector2(185, 140),
+"nom_fr": "Œil vif II", "nom_en": "Keen Eye II"
+}, {
+"id": "anneau_s1_reflexe", "type": "mineur", "strate": 1, "stat": "atb",
+"adj": ["anneau_s1_embuscade"], "pos": Vector2(385, 140),
+"nom_fr": "Réflexe", "nom_en": "Reflex"
+}, {
+"id": "anneau_s1_aubaine", "type": "mineur", "strate": 1, "stat": "drop",
+"adj": ["anneau_s1_embuscade"], "pos": Vector2(240, 210),
+"nom_fr": "Aubaine", "nom_en": "Windfall"
+}, {
+"id": "anneau_s1_embuscade", "type": "notable", "strate": 1, "stat": "crit",
+"adj": ["anneau_s2_m1"], "pos": Vector2(345, 220),
+"nom_fr": "Embuscade complice", "nom_en": "Complicit Ambush",
+"effect": {"kind": "gauge_start", "value": 0.10}
+}, {
+"id": "anneau_s2_m1", "type": "mineur", "strate": 2, "stat": "crit",
+"adj": ["anneau_s2_m2", "anneau_s2_m3", "anneau_s2_m4"], "pos": Vector2(280, 315),
+"nom_fr": "Œil perçant", "nom_en": "Piercing Eye"
+}, {
+"id": "anneau_s2_m2", "type": "mineur", "strate": 2, "stat": "crit",
+"adj": ["anneau_s2_coupchanceux"], "pos": Vector2(180, 375),
+"nom_fr": "Acuité", "nom_en": "Acuity"
+}, {
+"id": "anneau_s2_m3", "type": "mineur", "strate": 2, "stat": "atb",
+"adj": ["anneau_s2_tempo"], "pos": Vector2(385, 375),
+"nom_fr": "Prestesse", "nom_en": "Nimbleness"
+}, {
+"id": "anneau_s2_m4", "type": "mineur", "strate": 2, "stat": "atb",
+"adj": ["anneau_s2_tempo"], "pos": Vector2(300, 405),
+"nom_fr": "Cadence", "nom_en": "Cadence"
+}, {
+"id": "anneau_s2_coupchanceux", "type": "notable", "strate": 2, "stat": "crit",
+"adj": ["anneau_s2_initiative"], "pos": Vector2(160, 450),
+"nom_fr": "Coup chanceux", "nom_en": "Lucky Strike",
+"effect": {"kind": "crit_mult", "value": 0.20}
+}, {
+"id": "anneau_s2_tempo", "type": "notable", "strate": 2, "stat": "atb",
+"adj": ["anneau_s2_initiative"], "pos": Vector2(395, 450),
+"nom_fr": "Tempo", "nom_en": "Tempo",
+"effect": {"kind": "per_tier", "stat": "atb", "value": 0.05}
+}, {
+"id": "anneau_s2_initiative", "type": "keystone", "strate": 2, "stat": "",
+"adj": [], "pos": Vector2(280, 510),
+"nom_fr": "Initiative", "nom_en": "Initiative",
+"effect": {"kind": "ambush_negate"}
+}]

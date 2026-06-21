@@ -71,11 +71,14 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	# cycle (atk_mult/def_mult) et attack_speed_pct fournissent des % ; les futures
 	# sources % (village, Forge, Maîtrise) viendront grossir ces listes — jamais de
 	# produit multiplicatif réintroduit ailleurs.
-	# Bonus % de village (Chantier 4) — empilés ADDITIVEMENT avec les autres %.
-	var v_atk_pct  := VillageBuildings.get_bonus(VillageBuildings.CH_ATK_PCT)
-	var v_def_pct  := VillageBuildings.get_bonus(VillageBuildings.CH_DEF_PCT)
-	var v_hp_pct   := VillageBuildings.get_bonus(VillageBuildings.CH_HP_MAX_PCT)
-	var v_crit_pct := VillageBuildings.get_bonus(VillageBuildings.CH_CRIT_PCT)
+	# Bonus % de village (Chantier 4) + nœuds de Forge (Chantier 5) — empilés
+	# ADDITIVEMENT avec les autres % (jamais de produit séquentiel).
+	var v_atk_pct  := VillageBuildings.get_bonus(VillageBuildings.CH_ATK_PCT)  + ForgeSystem.get_stat_bonus("atk_pct")
+	var v_def_pct  := VillageBuildings.get_bonus(VillageBuildings.CH_DEF_PCT)  + ForgeSystem.get_stat_bonus("def_pct")
+	var v_hp_pct   := VillageBuildings.get_bonus(VillageBuildings.CH_HP_MAX_PCT) + ForgeSystem.get_stat_bonus("hp_max_pct")
+	var v_crit_pct := VillageBuildings.get_bonus(VillageBuildings.CH_CRIT_PCT) + ForgeSystem.get_stat_bonus("crit_pct")
+	var f_atb_pct  := ForgeSystem.get_stat_bonus("atb_pct")
+	var frules     := ForgeSystem.combat_rules()
 
 	var atk_base: float = float(stats.get("atk", 0)) \
 			+ float(passives.get("atk_bonus", 0.0)) \
@@ -90,9 +93,9 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	var h_def := StatStacker.final_stat(def_base,
 			[float(modifier_bonuses.get("def_mult", 1.0)) - 1.0, v_def_pct], "def")
 
-	# attack_speed_pct (équipement, ex. Anneau) accélère la jauge VIT (bonus %).
+	# attack_speed_pct (équipement, ex. Anneau) + nœuds ATB de Forge → jauge VIT.
 	var h_vit := StatStacker.final_stat(float(stats.get("vit", 20)),
-			[float(equip.get("attack_speed_pct", 0.0)) / 100.0], "vit")
+			[float(equip.get("attack_speed_pct", 0.0)) / 100.0, f_atb_pct], "vit")
 
 	# HP maximum du héros (pour le calcul du seuil de bouclier)
 	var h_hp_max := StatStacker.final_stat(
@@ -111,11 +114,25 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	if not (passive_effects["passive_poison"] as Dictionary).is_empty():
 		extended_options["passive_poison"] = passive_effects["passive_poison"]
 
-	# Village (Chantier 4) : jauge ATB de départ (Tour de Guet). Le filet anti-mort
-	# (Palissade T5) est porté par combat_options (AdventureSystem en gère la
-	# disponibilité à l'échelle de l'expédition) → simplement transmis au resolver.
-	extended_options["hero_gauge_start"] = VillageBuildings.hero_gauge_start(
-			bool(combat_options.get("ambush", false)))
+	# Jauge ATB de départ : Village (Tour de Guet) + Forge (Embuscade complice), %
+	# additifs. Le filet anti-mort (Palissade T5) et l'atténuation de venin sont
+	# portés par combat_options (gérés à l'échelle de l'expédition par AdventureSystem).
+	extended_options["hero_gauge_start"] = clampf(
+			VillageBuildings.hero_gauge_start(bool(combat_options.get("ambush", false)))
+			+ float(frules.get("gauge_start", 0.0)), 0.0, 1.0)
+
+	# Effets de règle des nœuds de Forge passés au resolver.
+	extended_options["hero_def_ignore_pct"]        = float(frules.get("def_ignore_pct", 0.0))
+	extended_options["endurcissement_counter_pct"] = float(frules.get("endurcissement_counter_pct", 0.0))
+	extended_options["cond_atk_hp_above"]          = frules.get("cond_atk_hp_above", [])
+	# Dégâts résiduels (Saignée) via le rail du poison passif, si libre.
+	var residual := frules.get("residual", {}) as Dictionary
+	if not residual.is_empty() and (extended_options.get("passive_poison", {}) as Dictionary).is_empty():
+		extended_options["passive_poison"] = {
+			"chance":          float(residual.get("chance", 1.0)),
+			"damage_per_turn": h_atk * float(residual.get("damage_pct", 0.0)),
+			"duration_turns":  int(residual.get("duration", 2)),
+		}
 
 	var hero_stats := {
 		"hp":              current_hp,
@@ -124,7 +141,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 		"def":             h_def,
 		"vit":             h_vit,
 		"crit_chance":     float(stats.get("crit_chance",     Balance.CRIT_CHANCE)) + v_crit_pct,
-		"crit_multiplier": float(stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER)),
+		"crit_multiplier": float(stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER)) + float(frules.get("crit_mult", 0.0)),
 	}
 	var enemy_stats := {
 		"hp":              e_hp,

@@ -72,9 +72,16 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	var h_mods: Array = options.get("hero_speed_mods",  [])
 	var e_mods: Array = options.get("enemy_speed_mods", [])
 
-	# Endurcissement biome (Montagne)
+	# Endurcissement biome (Montagne). Le contre-mitigation de Forge (Fendoir) ne
+	# s'applique QUE sous Endurcissement : dégâts héros ×(1 + counter) dans ce cas.
 	var use_endurcissement:   bool  = options.get("endurcissement", false)
-	var endurcissement_mult:  float = (1.0 - Balance.MONTAGNE_ENDURCISSEMENT_REDUCTION) if use_endurcissement else 1.0
+	var endur_counter:        float = float(options.get("endurcissement_counter_pct", 0.0))
+	var endurcissement_mult:  float = (1.0 - Balance.MONTAGNE_ENDURCISSEMENT_REDUCTION) * (1.0 + endur_counter) if use_endurcissement else 1.0
+
+	# Nœuds de Forge sur les coups du héros : ignore une fraction de la DEF ennemie
+	# (Briseur de garde), et bonus d'ATK conditionnel selon les PV (Élan).
+	var hero_def_ignore: float = clampf(float(options.get("hero_def_ignore_pct", 0.0)), 0.0, 1.0)
+	var cond_atk_list:   Array  = options.get("cond_atk_hp_above", [])
 
 	# Poison biome (Marécage Putride) — mécanique HOSTILE : le marais toxique
 	# empoisonne le HÉROS (et non l'inverse). Chaque coup ennemi renouvelle le
@@ -152,7 +159,15 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		if hero_first:
 			# ── Tour héros ───────────────────────────────────────
 			h_gauge -= Balance.ATTACK_GAUGE
-			var step := _make_hero_step(h_atk, e_def, e_hp, h_crit_chance, h_crit_mult, endurcissement_mult)
+			# ATK conditionnelle (Élan : +% si PV > seuil) évaluée sur les PV courants.
+			var h_atk_eff := h_atk
+			if h_hp_max > 0.0 and not cond_atk_list.is_empty():
+				var hp_frac := h_hp / h_hp_max
+				for c: Dictionary in cond_atk_list:
+					if hp_frac > float(c.get("hp_frac", 1.0)):
+						h_atk_eff *= (1.0 + float(c.get("pct", 0.0)))
+			# DEF ennemie ignorée d'une fraction (Briseur de garde).
+			var step := _make_hero_step(h_atk_eff, e_def * (1.0 - hero_def_ignore), e_hp, h_crit_chance, h_crit_mult, endurcissement_mult)
 			step.time_sec = sim_time
 			e_hp = float(step.target_hp_after)
 			steps.append(step)

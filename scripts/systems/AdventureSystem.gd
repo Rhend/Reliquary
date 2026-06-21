@@ -215,13 +215,18 @@ func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 	)
 	EventBus.adventure_event_resolved.emit(enc_data)
 
+	var fr := ForgeSystem.combat_rules()
 	var combat_options := {
-		"ambush":         _is_first_combat and BiomeMechanics.is_ambush_active(),
+		# Embuscade subie, sauf si annulée par la Forge (Initiative, Anneau).
+		"ambush":         _is_first_combat and BiomeMechanics.is_ambush_active() \
+				and not bool(fr.get("ambush_negate", false)),
 		"poison":         BiomeMechanics.is_mechanic_active("poison") \
 				and not VillageBuildings.poison_immune_for_tier(int(enemy.get("tier", 0))),
 		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
 		"hero_speed_mods": _consume_hero_speed_mods(),
-		"poison_stack_reduction": int(VillageBuildings.get_bonus(VillageBuildings.CH_DEBUFF_REDUCTION)),
+		# Atténuation du venin : Jardin (village) + Filtre (Forge), cumulées.
+		"poison_stack_reduction": int(VillageBuildings.get_bonus(VillageBuildings.CH_DEBUFF_REDUCTION)) \
+				+ int(fr.get("poison_stack_reduction", 0)),
 		"ignore_lethal":  _lethal_shield_available,
 	}
 	_is_first_combat = false
@@ -448,7 +453,8 @@ func _survive_lethal() -> bool:
 func _apply_regen(_hero_id: String) -> void:
 	var regen_pct := float(current_modifier.get("regen_pct", Balance.DEFAULT_REGEN_PCT)) \
 			+ PassiveSystem.get_effect("hp_regen_pct") \
-			+ VillageBuildings.get_bonus(VillageBuildings.CH_REGEN_PCT)
+			+ VillageBuildings.get_bonus(VillageBuildings.CH_REGEN_PCT) \
+			+ ForgeSystem.get_stat_bonus("regen_pct")
 	if regen_pct <= 0.0:
 		return
 	var max_hp := get_max_hp()
@@ -479,7 +485,8 @@ func get_max_hp() -> float:
 	var equip_hp = GameData.get_equipment_bonuses().get("hp", 0.0)
 	var hp_bonus = PassiveSystem.get_combat_bonuses().get("hp_bonus", 0.0)
 	var base: float = float(GameData.get_effective_stats("hero").get("hp", 100)) + equip_hp + hp_bonus
-	return StatStacker.final_stat(base, [VillageBuildings.get_bonus(VillageBuildings.CH_HP_MAX_PCT)], "hp")
+	return StatStacker.final_stat(base,
+			[VillageBuildings.get_bonus(VillageBuildings.CH_HP_MAX_PCT) + ForgeSystem.get_stat_bonus("hp_max_pct")], "hp")
 
 # Programme la prochaine rencontre.
 # Utilise FIRST_ENCOUNTER_DELAY pour la toute première, sinon le délai fourni.
@@ -545,7 +552,8 @@ func _drop_biome_resources(enemy: Dictionary) -> void:
 		str(biome.get("ressource_frequente_id", "")),
 		str(biome.get("ressource_rare_id", "")),
 		int(enemy.get("maitrise_actuelle", 0)),
-		VillageBuildings.get_bonus(VillageBuildings.CH_DROP_RARE_PCT))  # Joaillier T4
+		VillageBuildings.get_bonus(VillageBuildings.CH_DROP_RARE_PCT) \
+				+ ForgeSystem.get_stat_bonus("drop_rare_pct"))  # Joaillier T4 + Aubaine (Anneau)
 	if ids.is_empty():
 		return
 	var drops: Array = []
@@ -686,13 +694,15 @@ func start_unique_combat() -> void:
 		unique_dict["id"], unique_dict["name"], "Créature", current_biome_id, 0.0
 	)
 	_is_first_combat = false
+	var fr := ForgeSystem.combat_rules()
 	CombatPlayer.start_combat(unique_dict, current_hp, get_modifier_bonuses(), {
 		"ambush":         false,
 		"poison":         BiomeMechanics.is_mechanic_active("poison") \
 				and not VillageBuildings.poison_immune_for_tier(int(unique_dict.get("tier", 0))),
 		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
 		"hero_speed_mods": _consume_hero_speed_mods(),
-		"poison_stack_reduction": int(VillageBuildings.get_bonus(VillageBuildings.CH_DEBUFF_REDUCTION)),
+		"poison_stack_reduction": int(VillageBuildings.get_bonus(VillageBuildings.CH_DEBUFF_REDUCTION)) \
+				+ int(fr.get("poison_stack_reduction", 0)),
 		"ignore_lethal":  _lethal_shield_available,
 	})
 
