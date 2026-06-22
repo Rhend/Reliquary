@@ -83,6 +83,20 @@ func route_built(quartier: String) -> bool:
 func building_for_room(room_panel_id: String) -> String:
 	return ROOM_TO_BUILDING.get(room_panel_id, "")
 
+# Nombre de bâtiments RECONSTRUITS (palier T0 ou plus), tous quartiers confondus.
+# Critère de LARGEUR pour la montée automatique du Village. Délabré ne compte pas ;
+# les routes ne sont PAS des bâtiments → jamais comptées. Un bâtiment gelé reste
+# Délabré (non reconstructible) donc s'exclut naturellement.
+func count_buildings_tier0_plus() -> int:
+	var n := 0
+	for eid in GameData.entities:
+		var b: Dictionary = GameData.entities[eid]
+		if b.get("entity_type", "") != Enums.EntityType.BUILDING:
+			continue
+		if building_tier(eid) >= 0:
+			n += 1
+	return n
+
 # ═══════════════════════════════════════════════════════════
 #  Coûts
 # ═══════════════════════════════════════════════════════════
@@ -183,6 +197,9 @@ func upgrade_building(building_id: String) -> int:
 	buildings[building_id] = new_tier
 	GameData.village["buildings"] = buildings
 	refresh_bonuses()
+	# Largeur de reconstruction modifiée → le Village peut monter de palier
+	# AUTOMATIQUEMENT (Délabré → T0 fait franchir un seuil). Émet village_tier_change.
+	GameData.recompute_village_tier()
 	EventBus.resources_changed.emit()
 	EventBus.village_buildings_changed.emit()
 	return new_tier

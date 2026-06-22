@@ -349,36 +349,29 @@ func reconcile_equipment_unlocks() -> void:
 					and str(player["equipped"].get(EQUIP_SLOT_KEYS[slot_idx], "")) == eid:
 				player["equipped"][EQUIP_SLOT_KEYS[slot_idx]] = ""
 
-# Palier max du Village : nombre de paliers payables en Fragments, borné par le
-# plafond DUR global (Balance.GLOBAL_MAX_TIER) — garde-fou « Palier Max atteint ».
+# Palier max du Village : plafond DUR global (« Palier Max atteint »).
 func village_max_tier() -> int:
-	return mini(Balance.VILLAGE_FRAGMENT_COSTS.size(), Balance.GLOBAL_MAX_TIER)
+	return Balance.GLOBAL_MAX_TIER
 
-# Retourne true si le Village peut passer au palier de Maîtrise suivant.
-# Condition unique : Fragments collectés ≥ coût du palier courant (Balance.VILLAGE_FRAGMENT_COSTS).
-func can_upgrade_village() -> bool:
-	var current := int(village.get("maitrise_actuelle", 0))
-	if current >= village_max_tier():
-		return false
-	var req := Balance.VILLAGE_FRAGMENT_COSTS[current]
-	return village.get("fragments_collectes", []).size() >= req
+# Largeur courante : nombre de bâtiments du Village reconstruits (palier T0+).
+func village_building_count() -> int:
+	return VillageBuildings.count_buildings_tier0_plus()
 
-# Passe le Village au palier de Maîtrise suivant. Retourne false si impossible.
-# Les Fragments dépensés (VILLAGE_FRAGMENT_COSTS[palier courant]) sont CONSOMMÉS :
-# ils sont retirés de fragments_collectes (compteur de Fragments en réserve). Le
-# flag est_collecte du Fragment, lui, reste à true → aucune re-libération possible
-# (uncollected_fragment_for se base sur est_collecte, pas sur cette liste).
-func upgrade_village() -> bool:
-	if not can_upgrade_village():
-		return false
+# Recalcule le palier du Village d'après le critère de LARGEUR (bâtiments T0+) et le
+# fait monter AUTOMATIQUEMENT si un ou plusieurs seuils sont franchis. Strictement
+# croissant (ne redescend jamais), borné par village_max_tier(). Émet
+# village_tier_change pour CHAQUE palier franchi (déclenche le déblocage du secteur
+# associé : Forge à Peu Commun, Sanctuaire à Rare). Appelé quand un bâtiment passe
+# Délabré → T0+ (seul événement qui change le total). Pas de clic, pas de coût.
+func recompute_village_tier() -> void:
+	if not village.get("eclos", false):
+		return
 	var current := int(village.get("maitrise_actuelle", 0))
-	var cost: int = Balance.VILLAGE_FRAGMENT_COSTS[current]
-	var collectes: Array = village.get("fragments_collectes", [])
-	for _i in mini(cost, collectes.size()):
-		collectes.pop_front()
-	village["maitrise_actuelle"] = current + 1
-	EventBus.village_tier_change.emit(village["maitrise_actuelle"])
-	return true
+	var target := mini(Balance.village_tier_for_building_count(village_building_count()), village_max_tier())
+	while current < target:
+		current += 1
+		village["maitrise_actuelle"] = current
+		EventBus.village_tier_change.emit(current)
 
 # ═══════════════════════════════════════════════════════════
 #  Accesseurs — Entités

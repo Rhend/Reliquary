@@ -262,12 +262,39 @@ const CREATURE_CAP_PROFONDEUR: Dictionary = {
 }
 
 # ═══════════════════════════════════════════════════════════
-#  Village — coût en Fragments pour chaque palier de Maîtrise
+#  Village — montée AUTOMATIQUE du palier (critère de LARGEUR)
 # ═══════════════════════════════════════════════════════════
-# Fragments requis pour passer du palier n au palier n+1 (index = palier source).
-# Palier 0→1 : 1 fragment, 1→2 : 2, …, 4→5 : 5.
+# Le Village est la SEULE entité à évolution NON manuelle : ni XP, ni ressource
+# dépensée, ni Fragment, ni buffer. Il monte de palier AUTOMATIQUEMENT dès qu'assez
+# de bâtiments sont reconstruits (palier T0 ou plus), comptés transversalement à
+# TOUS les quartiers. Strictement croissant, jamais de redescente. Les ROUTES ne
+# sont pas des bâtiments : elles ne comptent jamais. Source : Système d'Expéditions
+# §8 + Gestion du Village §9.
+#
+# Seuils de LARGEUR (nb de bâtiments T0+) requis pour ATTEINDRE le palier visé :
+#   → T1 Peu Commun = 4 (ouvre la Forge) · → T2 Rare = 8 (ouvre le Sanctuaire).
+# Valeurs de réglage, à ajuster en playtest.
+const VILLAGE_SEUIL_PEU_COMMUN: int = 4   # bâtiments T0+ pour → T1 (Peu Commun)
+const VILLAGE_SEUIL_RARE:       int = 8   # bâtiments T0+ pour → T2 (Rare)
 
-const VILLAGE_FRAGMENT_COSTS: Array[int] = [1, 2, 3, 4, 5]
+# Seuil de largeur requis pour ATTEINDRE chaque palier (clé = palier visé ≥ 1).
+# Hors VS (réservé, non actif sous GLOBAL_MAX_TIER) : → T3 basculera sur un critère
+# de PROFONDEUR (bâtiments à T2+ ≥ 6), la largeur saturant à 10 bâtiments posés.
+const VILLAGE_WIDTH_THRESHOLDS: Dictionary = {
+	1: VILLAGE_SEUIL_PEU_COMMUN,
+	2: VILLAGE_SEUIL_RARE,
+}
+
+# Palier de Village atteignable pour un nombre de bâtiments T0+ (largeur), borné par
+# le plafond DUR global. Monte tant que le seuil du palier suivant est franchi.
+static func village_tier_for_building_count(count: int) -> int:
+	var tier := 0
+	for t in range(1, GLOBAL_MAX_TIER + 1):
+		if count >= int(VILLAGE_WIDTH_THRESHOLDS.get(t, 9999999)):
+			tier = t
+		else:
+			break
+	return tier
 
 # Paliers de Maîtrise d'un biome qui libèrent un Fragment de Mémoire (un
 # Fragment non collecté du biome par jalon atteint). Source unique de la

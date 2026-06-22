@@ -309,11 +309,11 @@ func _build_hub() -> void:
 	_ring.ring_color  = tcolor
 	_ring.ring_radius = RING_RADIUS
 	_ring.tier        = village_maitrise
-	# Progression de l'anneau : fragments collectés / coût du palier courant
-	var frag_count: int = (GameData.village.get("fragments_collectes", []) as Array).size()
+	# Progression de l'anneau : LARGEUR (bâtiments T0+) / seuil du palier suivant.
 	if village_maitrise < GameData.village_max_tier():
-		var frag_cost := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise]
-		_ring.fill_fraction = minf(1.0, float(frag_count) / float(frag_cost))
+		var need := int(Balance.VILLAGE_WIDTH_THRESHOLDS.get(village_maitrise + 1, 0))
+		var have := VillageBuildings.count_buildings_tier0_plus()
+		_ring.fill_fraction = minf(1.0, float(have) / float(need)) if need > 0 else 1.0
 	else:
 		_ring.fill_fraction = 1.0
 	_center(_ring, Vector2.ZERO, Vector2(diam, diam))
@@ -679,36 +679,22 @@ func _build_village_conditions(container: VBoxContainer, village_maitrise: int, 
 	spacer.custom_minimum_size = Vector2(0.0, 6.0)
 	container.add_child(spacer)
 
-	var frag_need := Balance.VILLAGE_FRAGMENT_COSTS[village_maitrise]
-	var frag_have: int = (GameData.village.get("fragments_collectes", []) as Array).size()
-	var met := frag_have >= frag_need
+	# Critère de LARGEUR : nombre de bâtiments reconstruits (T0+). La montée du
+	# Village est AUTOMATIQUE dès que le seuil est atteint — aucun bouton.
+	var need := int(Balance.VILLAGE_WIDTH_THRESHOLDS.get(village_maitrise + 1, 0))
+	var have := VillageBuildings.count_buildings_tier0_plus()
+	var met := need > 0 and have >= need
 	var row := Label.new()
-	row.text = "%s%s  %d / %d" % ["✓ " if met else "• ", Translations.T("village.cond.fragments"), frag_have, frag_need]
+	row.text = "%s%s  %d / %d" % ["✓ " if met else "• ", Translations.T("village.cond.buildings"), have, need]
 	row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_font_size_override("font_size", 11)
 	row.add_theme_color_override("font_color", UIColors.LOG_VICTORY if met else UIColors.TEXT_MUTED)
-	# Les Labels ignorent la souris par défaut → STOP pour que le tooltip
-	# « comment obtenir des Fragments » soit accessible au survol.
+	# STOP pour que le tooltip explicatif soit accessible au survol.
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
-	UIHelpers.register_tooltip(row, Translations.T("village.frag.tt_title"),
-			Translations.T("village.frag.tt_body") % [frag_have, frag_need], vcolor)
+	UIHelpers.register_tooltip(row, Translations.T("village.cond.buildings"),
+			Translations.T("village.buildings.tt_body") % [have, need], vcolor)
 	container.add_child(row)
-
-	if GameData.can_upgrade_village():
-		var next_color := UIColors.tier_color(village_maitrise + 1)
-		var ubtn := UIHelpers.evolve_button("▲  " + Translations.T("village.evolve_btn"),
-				next_color, 11)
-		ubtn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		ubtn.custom_minimum_size = Vector2(200.0, 26.0)
-		UIHelpers.register_tooltip(ubtn, Translations.T("village.evolve_btn"),
-				Translations.T("village.evolve.tt_body") \
-						% GameData.get_tier_name(village_maitrise + 1), next_color)
-		ubtn.pressed.connect(func() -> void:
-			if GameData.upgrade_village():
-				_rebuild_hub()
-		)
-		container.add_child(ubtn)
 
 # ─── Panneau droite ───────────────────────────────────────────
 # Ouvre le panneau JRPG pour panel_id. Re-clic sur le même id → ferme (toggle).

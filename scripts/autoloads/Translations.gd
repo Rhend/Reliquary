@@ -78,6 +78,8 @@ const STRINGS: Dictionary = {
 
 		# ── Conditions Village ────────────────────────────────
 		"village.cond.fragments": "Fragments",
+		"village.cond.buildings": "Bâtiments reconstruits",
+		"village.buildings.tt_body": "Le Village grandit TOUT SEUL : il monte de palier dès qu'assez de bâtiments sont reconstruits (palier Commun ou plus), tous quartiers confondus. Aucun clic, aucun coût.\n\nReconstruits : %d  ·  Requis pour le prochain palier : %d",
 		"village.frag.tt_title":  "Fragments de Mémoire",
 		"village.frag.tt_body":   "Un biome libère un Fragment quand il atteint un nouveau jalon :\nRare, puis Légendaire, puis Unique.\nPartez en expédition pour faire gagner de l'XP à vos biomes,\npuis faites-les évoluer.\n\nCollectés : %d  ·  Requis pour le prochain palier : %d",
 		"village.cond.xp":        "XP Village",
@@ -444,6 +446,8 @@ const STRINGS: Dictionary = {
 
 		# ── Conditions Village ────────────────────────────────
 		"village.cond.fragments": "Fragments",
+		"village.cond.buildings": "Buildings rebuilt",
+		"village.buildings.tt_body": "The Village grows ON ITS OWN: it ranks up as soon as enough buildings are rebuilt (Common tier or higher), across all quarters. No click, no cost.\n\nRebuilt: %d  ·  Required for the next tier: %d",
 		"village.frag.tt_title":  "Memory Fragments",
 		"village.frag.tt_body":   "A biome frees a Fragment when it reaches a new milestone:\nRare, then Legendary, then Unique.\nGo on expeditions to earn XP for your biomes,\nthen evolve them.\n\nCollected: %d  ·  Required for the next tier: %d",
 		"village.cond.xp":        "Village XP",

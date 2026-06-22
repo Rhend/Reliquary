@@ -152,16 +152,21 @@ func _test_hall_familiarity_capped() -> void:
 			"compteur de rencontres continue d'avancer")
 
 func _test_village_capped() -> void:
-	print("\n[TEST 8] Village plafonné")
+	print("\n[TEST 8] Village plafonné (montée automatique par largeur)")
 	var cap := Balance.GLOBAL_MAX_TIER
 	_assert(GameData.village_max_tier() == cap, "village_max_tier() = %d" % cap,
 			"obtenu %d" % GameData.village_max_tier())
+	# Largeur énorme → le palier calculé reste borné au plafond DUR global.
+	_assert(Balance.village_tier_for_building_count(9999) == cap,
+			"village_tier_for_building_count plafonné à GLOBAL_MAX_TIER",
+			"obtenu %d" % Balance.village_tier_for_building_count(9999))
+	# recompute_village_tier ne dépasse jamais le plafond, même au plafond.
 	var tier_save := int(GameData.village.get("maitrise_actuelle", 0))
-	var frags_save = GameData.village.get("fragments_collectes", []).duplicate()
+	var eclos_save = GameData.village.get("eclos", false)
+	GameData.village["eclos"] = true
 	GameData.village["maitrise_actuelle"] = cap
-	# Pile de fragments largement suffisante pour un palier suivant hypothétique.
-	GameData.village["fragments_collectes"] = range(99)
-	var blocked := not GameData.can_upgrade_village()
+	GameData.recompute_village_tier()
+	var blocked := int(GameData.village.get("maitrise_actuelle", 0)) == cap
 	GameData.village["maitrise_actuelle"] = tier_save
-	GameData.village["fragments_collectes"] = frags_save
-	_assert(blocked, "can_upgrade_village = false au plafond malgré les fragments")
+	GameData.village["eclos"] = eclos_save
+	_assert(blocked, "recompute_village_tier ne dépasse pas le plafond")
