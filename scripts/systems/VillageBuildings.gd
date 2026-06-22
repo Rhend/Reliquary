@@ -197,9 +197,6 @@ func upgrade_building(building_id: String) -> int:
 	buildings[building_id] = new_tier
 	GameData.village["buildings"] = buildings
 	refresh_bonuses()
-	# Largeur de reconstruction modifiée → le Village peut monter de palier
-	# AUTOMATIQUEMENT (Délabré → T0 fait franchir un seuil). Émet village_tier_change.
-	GameData.recompute_village_tier()
 	EventBus.resources_changed.emit()
 	EventBus.village_buildings_changed.emit()
 	return new_tier

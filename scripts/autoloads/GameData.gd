@@ -359,28 +359,32 @@ func village_building_count() -> int:
 	return VillageBuildings.count_buildings_tier0_plus()
 
 # Enregistre une créature de farm vaincue (hors boss) : incrémente le compteur de
-# kills puis réévalue le palier du Village (seuil Commun → Peu Commun).
+# kills (condition Commun → Peu Commun). NE fait PAS monter le Village — l'évolution
+# est MANUELLE (comme toute entité), déclenchée par le joueur via upgrade_village().
 func register_creature_kill() -> void:
 	village["kills_total"] = int(village.get("kills_total", 0)) + 1
-	recompute_village_tier()
 
-# Recalcule le palier du Village d'après l'état du monde (kills pour → Peu Commun,
-# bâtiments T0+ pour → Rare) et le fait monter AUTOMATIQUEMENT si un ou plusieurs
-# seuils sont franchis. Strictement croissant (ne redescend jamais), borné par
-# village_max_tier(). Émet village_tier_change pour CHAQUE palier franchi (déclenche
-# le déblocage du secteur : Forge à Peu Commun, Sanctuaire à Rare). Appelé sur deux
-# événements seulement : un kill, ou un bâtiment qui passe Délabré → T0+.
-func recompute_village_tier() -> void:
-	if not village.get("eclos", false):
-		return
+# Le Village peut-il évoluer MAINTENANT ? La CONDITION dépend du palier (kills ≥ seuil
+# pour → Peu Commun, bâtiments T0+ ≥ seuil pour → Rare). C'est un GATE, pas une montée
+# automatique : tant que le joueur ne déclenche pas upgrade_village(), le Village reste
+# à son palier même si la condition est remplie.
+func can_upgrade_village() -> bool:
 	var current := int(village.get("maitrise_actuelle", 0))
-	var target := mini(
-			Balance.village_target_tier(int(village.get("kills_total", 0)), village_building_count()),
-			village_max_tier())
-	while current < target:
-		current += 1
-		village["maitrise_actuelle"] = current
-		EventBus.village_tier_change.emit(current)
+	if current >= village_max_tier():
+		return false
+	return Balance.village_target_tier(
+			int(village.get("kills_total", 0)), village_building_count()) > current
+
+# Fait évoluer le Village d'UN palier (action MANUELLE du joueur). Aucun coût consommé
+# (la condition kills/bâtiments est le seul gate). Émet village_tier_change → déblocage
+# du secteur (Forge à Peu Commun, Sanctuaire à Rare). Retourne false si la condition
+# n'est pas remplie.
+func upgrade_village() -> bool:
+	if not can_upgrade_village():
+		return false
+	village["maitrise_actuelle"] = int(village.get("maitrise_actuelle", 0)) + 1
+	EventBus.village_tier_change.emit(village["maitrise_actuelle"])
+	return true
 
 # ═══════════════════════════════════════════════════════════
 #  Accesseurs — Entités

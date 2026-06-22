@@ -686,8 +686,8 @@ func _build_village_conditions(container: VBoxContainer, village_maitrise: int, 
 	spacer.custom_minimum_size = Vector2(0.0, 6.0)
 	container.add_child(spacer)
 
-	# Montée AUTOMATIQUE (aucun bouton). Critère selon le palier : kills à Commun,
-	# bâtiments T0+ à Peu Commun.
+	# Condition d'évolution selon le palier (kills à Commun, bâtiments T0+ à Peu
+	# Commun). C'est un GATE : l'évolution reste MANUELLE (bouton ci-dessous).
 	var prog := _village_progress()
 	var have := int(prog[0])
 	var need := int(prog[1])
@@ -705,6 +705,22 @@ func _build_village_conditions(container: VBoxContainer, village_maitrise: int, 
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
 	UIHelpers.register_tooltip(row, label, tt_body % [have, need], vcolor)
 	container.add_child(row)
+
+	# Bouton ÉVOLUER MANUEL : apparaît quand la condition est remplie. Le joueur
+	# déclenche la montée — jamais automatique (atteindre le seuil ne fait rien seul).
+	if GameData.can_upgrade_village():
+		var next_color := UIColors.tier_color(village_maitrise + 1)
+		var ubtn := UIHelpers.evolve_button("▲  " + Translations.T("village.evolve_btn"),
+				next_color, 11)
+		ubtn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		ubtn.custom_minimum_size = Vector2(200.0, 26.0)
+		UIHelpers.register_tooltip(ubtn, Translations.T("village.evolve_btn"),
+				Translations.T("village.evolve.tt_body") % GameData.get_tier_name(village_maitrise + 1),
+				next_color)
+		# Montée d'UN palier ; village_tier_change → _on_village_tier_change rebâtit le
+		# hub (nouvelle couleur, secteur débloqué) et déclenche la sauvegarde.
+		ubtn.pressed.connect(func() -> void: GameData.upgrade_village())
+		container.add_child(ubtn)
 
 # ─── Panneau droite ───────────────────────────────────────────
 # Ouvre le panneau JRPG pour panel_id. Re-clic sur le même id → ferme (toggle).
