@@ -399,6 +399,12 @@ func _build_hub() -> void:
 func _build_district_links(unlocked: Array, n: int, vp: Vector2, tcolor: Color) -> void:
 	if n <= 0:
 		return
+	# Les ROUTES (le petit chemin qui part d'un hub vers son quartier de gestion)
+	# n'apparaissent QU'UNE FOIS la Forge débloquée (Village ≥ Peu Commun). Avant ce
+	# jalon, aucun ingrédient ne tombe → impossible de reconstruire une route → on
+	# ne l'affiche pas du tout. Les HUBS (hexagones) restent visibles, eux.
+	if village_tier() < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
+		return
 	for owner_id in DISTRICTS:
 		var idx := -1
 		for i in n:
