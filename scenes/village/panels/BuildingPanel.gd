@@ -46,11 +46,10 @@ static func build(host: Village, building_id: String) -> void:
 		_add_note(host, Translations.T("building.frozen"), UIColors.TEXT_MUTED)
 		return
 
-	var quartier := str(b.get("quartier", ""))
-	if not VillageBuildings.route_built(quartier):
-		_add_route_card(host, quartier)
-		return
-
+	# La route est désormais une action de NIVEAU QUARTIER (B1) : quand un
+	# BuildingPanel s'ouvre, la route du quartier est déjà reconstruite (Village
+	# affiche sinon la carte de route via build_route_card). On ne gère plus la
+	# route ici — uniquement bonus + amélioration.
 	_add_bonuses_card(host, building_id)
 	_add_upgrade_card(host, building_id)
 
@@ -77,13 +76,15 @@ static func _add_header(host: Village, b: Dictionary, building_id: String) -> vo
 	host.rp_content.add_child(row)
 
 # ═══════════════════════════════════════════════════════════
-#  Route (gate de quartier)
+#  Route (gate de quartier — rendu au NIVEAU QUARTIER, B1)
 # ═══════════════════════════════════════════════════════════
+# Appelé par Village._fill_panel_content quand on ouvre une pièce d'un quartier
+# dont la route n'est pas encore reconstruite (et la Forge est débloquée). La
+# carte est owner-scopée : identique quelle que soit la pièce ouverte. La visibilité
+# (gate Forge) est gérée EN AMONT par Village.
 
-static func _add_route_card(host: Village, quartier: String) -> void:
+static func build_route_card(host: Village, quartier: String) -> void:
 	var cost := VillageBuildings.route_cost(quartier)
-	var locked_forge := quartier == "forge" \
-			and int(GameData.village.get("maitrise_actuelle", 0)) < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER
 
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel",
@@ -107,16 +108,6 @@ static func _add_route_card(host: Village, quartier: String) -> void:
 	hint.add_theme_font_size_override("font_size", 11)
 	hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	vb.add_child(hint)
-
-	if locked_forge:
-		var lk := Label.new()
-		lk.text = Translations.T("building.route.forge_locked")
-		lk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		lk.add_theme_font_size_override("font_size", 11)
-		lk.add_theme_color_override("font_color", UIColors.INGREDIENT_MISSING)
-		vb.add_child(lk)
-		host.rp_content.add_child(card)
-		return
 
 	vb.add_child(_cost_block(cost))
 

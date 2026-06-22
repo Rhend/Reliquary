@@ -547,6 +547,11 @@ func roll_biome_drops(freq_id: String, rare_id: String, creature_tier: int,
 func _drop_biome_resources(enemy: Dictionary) -> void:
 	if enemy.get("est_unique", false):
 		return
+	# B2 : on ne droppe AUCUN ingrédient tant que la Forge n'est pas débloquée
+	# (Village ≥ Peu Commun). Avant ce jalon, l'équipement n'est pas encore en jeu
+	# et les ressources n'auraient aucun usage. Gate en amont des deux tirages.
+	if int(GameData.village.get("maitrise_actuelle", 0)) < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
+		return
 	var biome := GameData.get_entity(current_biome_id)
 	var ids := roll_biome_drops(
 		str(biome.get("ressource_frequente_id", "")),

@@ -14,7 +14,6 @@ func _ready() -> void:
 	_test_speed_modifier()
 	_test_endurcissement()
 	_test_poison_biome()
-	_test_bouclier()
 	_test_poison_passif()
 	_test_garde_fou_max_steps()
 	_test_def_reduction_curve()
@@ -161,35 +160,43 @@ func _test_endurcissement() -> void:
 			"dégâts héros ×0.8", "damage=%d" % (hero_steps[0] as CombatStep).damage)
 
 # Poison biome (Marécage) : mécanique HOSTILE — le marais empoisonne le HÉROS.
-# Des ticks is_poison (portés par l'ennemi) rongent les PV du héros.
+# Poison de biome — HORLOGE TEMPS RÉEL : chaque coup ennemi applique un stack
+# (durée de vie BIOME_POISON_STACK_DURATION) ; une horloge globale inflige, tous
+# les BIOME_POISON_TICK_INTERVAL s, par_stack × (stacks vivants), borné MAX_STACKS.
 func _test_poison_biome() -> void:
-	print("\n[TEST] Poison de biome (Marécage)")
+	print("\n[TEST] Poison de biome (Marécage, horloge temps réel)")
+	# ATK ennemi 40 → par_stack = round(40 × 0.05) = 2 (rend le modulo significatif).
+	var per_stack := int(maxf(roundf(40.0 * Balance.BIOME_POISON_DMG_PCT), 1.0))
+	# Combat long : héros increvable (gros PV), ennemi increvable (gros PV) → on
+	# observe l'horloge sur la durée sans fin de combat prématurée.
 	var steps := CombatResolver.resolve(
-			_hero({"atk": 10.0, "hp": 600.0}), _enemy({"hp": 5000.0, "atk": 20.0}), {"poison": true})
+			_hero({"atk": 1.0, "hp": 100000.0, "hp_max": 100000.0, "def": 0.0}),
+			_enemy({"hp": 1000000.0, "atk": 40.0}), {"poison": true})
 	var poison_steps := steps.filter(func(s): return (s as CombatStep).is_poison)
 	_assert(not poison_steps.is_empty(), "des ticks de poison sont produits")
-	var first_p := poison_steps[0] as CombatStep
-	_assert(first_p.attacker == "enemy", "le poison de biome frappe le héros (porté par l'ennemi)")
-	# 1er tick = 1 stack = ATK ENNEMI × BIOME_POISON_DMG_PCT (20 × 0.05 = 1)
-	var expected := int(maxf(roundf(20.0 * Balance.BIOME_POISON_DMG_PCT), 1.0))
-	_assert(int(first_p.damage) == expected,
-			"dégâts du 1er tick = 1 stack (ATK ennemi)", "damage=%d" % first_p.damage)
+	_assert((poison_steps[0] as CombatStep).attacker == "enemy",
+			"le poison de biome frappe le héros (porté par l'ennemi)")
+	# Chaque tick = par_stack × stacks vivants ∈ [1, MAX_STACKS].
+	var in_range := poison_steps.all(func(s):
+			var d := int((s as CombatStep).damage)
+			return d >= per_stack and d <= per_stack * Balance.BIOME_POISON_MAX_STACKS and d % per_stack == 0)
+	_assert(in_range, "chaque tick = par_stack × stacks vivants (≤ MAX_STACKS)")
 
-# Bouclier d'urgence : proc une seule fois sous le seuil de PV, absorbe les dégâts.
-func _test_bouclier() -> void:
-	print("\n[TEST] Bouclier d'urgence (Résilience)")
-	var shield_cfg := {"available": true, "threshold": 0.99, "value_pct": 0.50}
-	var steps := CombatResolver.resolve(
-			_hero({"atk": 2.0, "hp": 100.0, "hp_max": 100.0}),
-			_enemy({"hp": 300.0, "atk": 10.0}),
-			{"passive_shield": shield_cfg})
-	var procs := steps.filter(func(s): return (s as CombatStep).is_shield_proc)
-	_assert(procs.size() == 1, "le bouclier proc exactement une fois",
-			"procs=%d" % procs.size())
-	_assert(int((procs[0] as CombatStep).shield_value) == 50,
-			"valeur du bouclier = 50 %% des PV max")
-	var absorbed := steps.filter(func(s): return (s as CombatStep).shield_absorbed > 0)
-	_assert(not absorbed.is_empty(), "des dégâts sont absorbés ensuite")
+	# Un stack ISOLÉ produit exactement 2 ticks espacés de TICK_INTERVAL : ennemi
+	# très lent (un seul coup avant la fenêtre de 2 ticks), héros sans ATK ni mort.
+	var iso := CombatResolver.resolve(
+			_hero({"atk": 0.0, "hp": 1000000.0, "hp_max": 1000000.0, "def": 0.0}),
+			_enemy({"hp": 1000000.0, "atk": 40.0, "vit": 1.0}), {"poison": true})
+	var iso_ticks := iso.filter(func(s): return (s as CombatStep).is_poison)
+	_assert(iso_ticks.size() >= 2, "un stack isolé produit au moins 2 ticks",
+			"ticks=%d" % iso_ticks.size())
+	if iso_ticks.size() >= 2:
+		var t0: float = (iso_ticks[0] as CombatStep).time_sec
+		var t1: float = (iso_ticks[1] as CombatStep).time_sec
+		_assert(absf((t1 - t0) - Balance.BIOME_POISON_TICK_INTERVAL) < 0.01,
+				"intervalle entre 2 ticks = TICK_INTERVAL", "gap=%.2f" % (t1 - t0))
+		_assert(int((iso_ticks[0] as CombatStep).damage) == per_stack,
+				"1er tick d'un stack isolé = par_stack (1 stack vivant)")
 
 # Poison passif (Contact Venimeux) : chance 1.0 → proc à chaque coup héros.
 func _test_poison_passif() -> void:

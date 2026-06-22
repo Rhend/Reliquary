@@ -10,8 +10,8 @@ lore_fr = "Tu t'eveilles sans nom et sans souvenir, mais avec la certitude que q
 lore_en = "You awaken with no name and no memory, yet with the certainty that something has been waiting for you here. The village recognizes you - even if you don't recognize yourself yet."
 nom_affichage_en = "Hero"
 passifs_par_palier = {}
-crit_chance = 0.20
-crit_multiplier = 2.0
+crit_chance = 0.05
+crit_multiplier = 1.8
 
 maitrise_actuelle = 0
 xp_maitrise_actuelle = 0.0

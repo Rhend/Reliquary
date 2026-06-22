@@ -113,12 +113,21 @@ func _process(delta: float) -> void:
 	var k := 1.0 - exp(-FOLLOW_SPEED * delta)
 	_panel.global_position = _panel.global_position.lerp(_target_pos(), k)
 
-# Position cible : curseur + offset, clampée aux bords du viewport.
+# Position cible : sous-droite du curseur, mais BASCULE au-dessus / à gauche
+# quand ça déborde d'un bord — au lieu de clamper PAR-DESSUS l'élément survolé.
+# Sans ça, sur un bouton ancré en bas (fin d'expédition), le tooltip se faisait
+# clamper sur le bouton et masquait/gênait le clic (B5).
 func _target_pos() -> Vector2:
 	var mp  := _panel.get_viewport().get_mouse_position()
 	var vp  := _panel.get_viewport_rect().size
 	var ps  := _panel.size
 	var pos := mp + OFFSET
+	# Débordement en bas → afficher au-dessus du curseur (hors hitbox d'un bouton bas).
+	if pos.y + ps.y + MARGIN_PAD > vp.y:
+		pos.y = mp.y - ps.y - OFFSET.y
+	# Débordement à droite → afficher à gauche du curseur.
+	if pos.x + ps.x + MARGIN_PAD > vp.x:
+		pos.x = mp.x - ps.x - OFFSET.x
 	pos.x = clampf(pos.x, MARGIN_PAD, vp.x - ps.x - MARGIN_PAD)
 	pos.y = clampf(pos.y, MARGIN_PAD, vp.y - ps.y - MARGIN_PAD)
 	return pos

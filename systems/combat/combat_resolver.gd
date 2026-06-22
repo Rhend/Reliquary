@@ -18,15 +18,14 @@
 #
 # Options supplémentaires (options dict) :
 #   "ambush"         (bool)   — tour ennemi gratuit avant le cycle VIT
-#   "poison"         (bool)   — poison biome (Marécage Putride)
+#   "poison"         (bool)   — poison biome (Marécage Putride), horloge temps réel
 #   "endurcissement" (bool)   — dégâts héros −20 % (Montagne Rare+)
-#   "passive_shield" (dict)   — config bouclier d'urgence (Résilience Rare+)
 #   "passive_poison" (dict)   — config poison on-hit (Contact Venimeux Rare+)
 # ============================================================
 class_name CombatResolver
 
 # Équilibrage centralisé dans Balance.gd (jauge, critique, dégâts min,
-# poison de biome & bouclier d'urgence).
+# poison de biome temps réel).
 const MAX_STEPS: int = 500  # garde-fou anti-boucle infinie (non-balance)
 
 static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
@@ -34,7 +33,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	var steps: Array = []
 
 	var h_hp     := float(hero_stats.get("hp",     100))
-	var h_hp_max := float(hero_stats.get("hp_max", h_hp))  # pour le seuil du bouclier
+	var h_hp_max := float(hero_stats.get("hp_max", h_hp))  # pour les conditions de PV (Élan)
 	var h_atk    := float(hero_stats.get("atk",    10))
 	var h_def    := float(hero_stats.get("def",    5))
 	# vit brute → cadence en attaques/seconde (référentiel ATB temps réel).
@@ -84,26 +83,19 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 	var cond_atk_list:   Array  = options.get("cond_atk_hp_above", [])
 
 	# Poison biome (Marécage Putride) — mécanique HOSTILE : le marais toxique
-	# empoisonne le HÉROS (et non l'inverse). Chaque coup ennemi renouvelle le
-	# venin ; les ticks rongent ensuite les PV du héros. Dégâts basés sur l'ATK
-	# de l'ennemi (sa morsure venimeuse).
+	# empoisonne le HÉROS (et non l'inverse). Chaque coup ennemi applique un STACK
+	# de venin ; une horloge GLOBALE temps réel (par cible) ronge ensuite les PV du
+	# héros tous les BIOME_POISON_TICK_INTERVAL secondes, des dégâts proportionnels
+	# au nombre de stacks vivants à l'instant du tic. Dégâts basés sur l'ATK de
+	# l'ennemi (sa morsure venimeuse). Source : Référentiel des statistiques de combat.
 	var use_poison:           bool  = options.get("poison", false)
 	var poison_dmg_per_stack: float = e_atk * Balance.BIOME_POISON_DMG_PCT
-	var poison_stacks:        int   = 0
-	var poison_turns_left:    int   = 0
+	# Stacks vivants = liste des instants d'EXPIRATION (application + STACK_DURATION).
+	var poison_stack_expiries: Array = []
+	# Prochain tic de l'horloge globale (INF = horloge arrêtée, aucun stack vivant).
+	var poison_next_tick: float = INF
 	# Atténuation du venin de biome (Jardin T2) : N stacks effectifs en moins.
 	var poison_stack_reduction: int = int(options.get("poison_stack_reduction", 0))
-
-	# Bouclier d'urgence (Résilience Rare+)
-	var shield_cfg       := options.get("passive_shield", {}) as Dictionary
-	var h_shield:        float = 0.0
-	var shield_available: bool = false
-	var shield_threshold: float = Balance.SHIELD_THRESHOLD_DEFAULT
-	var shield_value_pct: float = 0.0
-	if not shield_cfg.is_empty() and shield_cfg.get("available", false):
-		shield_available  = true
-		shield_threshold  = float(shield_cfg.get("threshold", Balance.SHIELD_THRESHOLD_DEFAULT))
-		shield_value_pct  = float(shield_cfg.get("value_pct", Balance.SHIELD_VALUE_PCT_DEFAULT))
 
 	# Poison passif (Contact Venimeux Rare+)
 	var pp_cfg          := options.get("passive_poison", {}) as Dictionary
@@ -140,15 +132,56 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		var hero_first := h_dt <= e_dt + Balance.SIMULTANEITY_EPS
 		var strike_dt := h_dt if hero_first else e_dt
 
-		# Prochaine frontière de modificateur (début/fin de fenêtre) → l'aps change.
+		# Événements « avance seule » (pas de frappe) : frontière de modificateur de
+		# vitesse (l'aps change) OU tic de l'horloge de poison de biome. On prend le
+		# plus proche ; s'il précède la prochaine frappe, on avance le temps/les jauges
+		# jusque-là puis on recommence (recalcul des aps après une frontière, dégâts
+		# de venin après un tic).
 		var bnd_t := minf(_next_mod_boundary(h_mods, sim_time), _next_mod_boundary(e_mods, sim_time))
 		var bnd_dt := bnd_t - sim_time
-		if bnd_dt < strike_dt - 1.0e-9:
-			# On atteint une frontière avant toute frappe : avance le temps et les
-			# jauges (aux aps courants), puis recalcule les aps à l'itération suivante.
-			sim_time += bnd_dt
-			h_gauge  += h_aps_t * bnd_dt
-			e_gauge  += e_aps_t * bnd_dt
+		var poison_dt := poison_next_tick - sim_time if poison_next_tick < INF else INF
+		var adv_is_poison := poison_dt < bnd_dt
+		var adv_dt := poison_dt if adv_is_poison else bnd_dt
+		if adv_dt < strike_dt - 1.0e-9:
+			sim_time += adv_dt
+			h_gauge  += h_aps_t * adv_dt
+			e_gauge  += e_aps_t * adv_dt
+			if adv_is_poison:
+				# ── Tic de l'horloge de poison de biome (cible = héros) ──
+				# Dégâts = % ATK source × stacks VIVANTS à cet instant (≤ MAX),
+				# atténués par le Jardin (T2). Le venin ignore tout (mécanique hostile).
+				var living := 0
+				for ex in poison_stack_expiries:
+					if float(ex) >= sim_time - 1.0e-9:
+						living += 1
+				var eff_stacks := maxi(mini(living, Balance.BIOME_POISON_MAX_STACKS) - poison_stack_reduction, 0)
+				if eff_stacks > 0 and h_hp > 0.0:
+					var pdmg     := float(eff_stacks) * poison_dmg_per_stack
+					var new_h_hp := maxf(h_hp - pdmg, 0.0)
+					var p_step   := CombatStep.new()
+					p_step.is_poison       = true
+					p_step.attacker        = Enums.Actor.ENEMY   # dégâts subis par le héros
+					p_step.damage          = int(maxf(roundf(pdmg), 1.0))
+					p_step.target_hp_after = int(roundf(new_h_hp))
+					p_step.is_killing_blow = (new_h_hp <= 0.0)
+					p_step.time_sec        = sim_time
+					# Filet anti-mort (Palissade T5) : le venin létal laisse le héros à 1 PV.
+					if lethal_avail and new_h_hp <= 0.0:
+						new_h_hp                 = 1.0
+						p_step.target_hp_after   = 1
+						p_step.is_killing_blow   = false
+						p_step.is_lethal_ignored = true
+						lethal_avail             = false
+					steps.append(p_step)
+					h_hp = new_h_hp
+				# Retirer les stacks dont c'était le dernier tic, puis replanifier
+				# l'horloge (ou l'arrêter s'il ne reste aucun stack vivant).
+				var still_alive: Array = []
+				for ex in poison_stack_expiries:
+					if float(ex) > sim_time + 1.0e-9:
+						still_alive.append(ex)
+				poison_stack_expiries = still_alive
+				poison_next_tick = sim_time + Balance.BIOME_POISON_TICK_INTERVAL if not poison_stack_expiries.is_empty() else INF
 			continue
 
 		# Avance le temps simulé et les deux jauges (l'un atteint pile le seuil).
@@ -183,7 +216,7 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 		else:
 			# ── Tour ennemi ──────────────────────────────────────
 			e_gauge -= Balance.ATTACK_GAUGE
-			var step := _make_enemy_step(e_atk, h_def, h_hp, h_shield, e_crit_chance, e_crit_mult)
+			var step := _make_enemy_step(e_atk, h_def, h_hp, e_crit_chance, e_crit_mult)
 			step.time_sec = sim_time
 			# Le tout premier coup ennemi sous Embuscade est tagué is_ambush (frappe
 			# à t = 0 via la jauge pleine). Tag visuel seulement, coup normal.
@@ -198,54 +231,24 @@ static func resolve(hero_stats: Dictionary, enemy_stats: Dictionary,
 				step.is_killing_blow   = false
 				step.is_lethal_ignored = true
 				lethal_avail           = false
-			h_shield = maxf(h_shield - float(step.shield_absorbed), 0.0)
 			steps.append(step)
 
-			# Vérifier déclenchement bouclier post-coup ennemi
-			if shield_available and h_hp > 0.0 and h_hp_max > 0.0:
-				if h_hp / h_hp_max < shield_threshold:
-					h_shield         = h_hp_max * shield_value_pct
-					shield_available = false
-					step.is_shield_proc = true
-					step.shield_value   = int(h_shield)
-
-			# Poison biome (Marécage) : le coup ennemi envenime le héros, puis le
-			# venin lui inflige des dégâts (DoT). La cible est le HÉROS — c'est une
-			# mécanique HOSTILE, pas un avantage. Le poison ignore le bouclier.
-			# Le tick partage l'instant du coup ennemi (suivi immédiat).
+			# Poison biome (Marécage) : le coup ennemi APPLIQUE un stack de venin sur
+			# le héros (durée de vie propre) et démarre l'horloge globale si besoin.
+			# Les dégâts ne tombent QU'aux tics de l'horloge (cf. branche d'avance
+			# ci-dessus). Mécanique HOSTILE : la cible est le héros.
 			if use_poison and h_hp > 0.0:
-				poison_stacks     = mini(poison_stacks + 1, Balance.BIOME_POISON_MAX_STACKS)
-				poison_turns_left = Balance.BIOME_POISON_DURATION
+				poison_stack_expiries.append(sim_time + Balance.BIOME_POISON_STACK_DURATION)
+				# Plafond de stacks : retirer le plus ancien (expiration la plus proche).
+				if poison_stack_expiries.size() > Balance.BIOME_POISON_MAX_STACKS:
+					poison_stack_expiries.sort()
+					poison_stack_expiries.pop_front()
+				# Démarrer l'horloge globale si elle est à l'arrêt.
+				if poison_next_tick == INF:
+					poison_next_tick = sim_time + Balance.BIOME_POISON_TICK_INTERVAL
 
-				# Stacks effectifs après atténuation du Jardin (T2) ; à 0 → pas de tick.
-				var eff_stacks := maxi(poison_stacks - poison_stack_reduction, 0)
-				if eff_stacks > 0:
-					var pdmg     := float(eff_stacks) * poison_dmg_per_stack
-					var new_h_hp := maxf(h_hp - pdmg, 0.0)
-					var p_step   := CombatStep.new()
-					p_step.is_poison       = true
-					p_step.attacker        = Enums.Actor.ENEMY   # dégâts subis par le héros
-					p_step.damage          = int(maxf(roundf(pdmg), 1.0))
-					p_step.target_hp_after = int(roundf(new_h_hp))
-					p_step.is_killing_blow = (new_h_hp <= 0.0)
-					p_step.time_sec        = sim_time
-					# Filet anti-mort (Palissade T5) : même garde-fou sur le venin du marais.
-					if lethal_avail and new_h_hp <= 0.0:
-						new_h_hp                 = 1.0
-						p_step.target_hp_after   = 1
-						p_step.is_killing_blow   = false
-						p_step.is_lethal_ignored = true
-						lethal_avail             = false
-					steps.append(p_step)
-					h_hp = new_h_hp
-
-				poison_turns_left -= 1
-				if poison_turns_left <= 0:
-					poison_stacks     = 0
-					poison_turns_left = 0
-
-				if h_hp <= 0.0:
-					break
+			if h_hp <= 0.0:
+				break
 
 			# Tick de tous les poisons passifs actifs après coup ennemi
 			if use_passive_poison and passive_poisons.size() > 0 and e_hp > 0.0:
@@ -337,25 +340,18 @@ static func _make_hero_step(atk: float, target_def: float, target_hp: float,
 	step.is_crit         = is_crit
 	return step
 
-# Step ennemi : dégâts avec absorption bouclier héros.
-# shield_absorbed est mis à jour dans le step ; les HP héros réels = target_hp - (raw - absorbed).
+# Step ennemi : dégâts simples sur le héros (DEF = seul levier défensif).
 static func _make_enemy_step(atk: float, target_def: float,
-		target_hp: float, current_shield: float,
-		crit_chance: float, crit_mult: float) -> CombatStep:
+		target_hp: float, crit_chance: float, crit_mult: float) -> CombatStep:
 	var is_crit  := randf() < crit_chance
 	var raw      := Balance.mitigated_damage(atk, target_def) * (crit_mult if is_crit else 1.0)
-	var raw_dmg  := roundf(maxf(raw, Balance.MIN_DAMAGE))
-
-	# Absorption bouclier
-	var absorbed  := minf(raw_dmg, current_shield)
-	var actual_dmg := raw_dmg - absorbed
-	var new_hp    := maxf(target_hp - actual_dmg, 0.0)
+	var damage   := int(roundf(maxf(raw, Balance.MIN_DAMAGE)))
+	var new_hp   := maxf(target_hp - float(damage), 0.0)
 
 	var step := CombatStep.new()
 	step.attacker        = Enums.Actor.ENEMY
-	step.damage          = int(actual_dmg)   # dégâts réels reçus par les HP
+	step.damage          = damage
 	step.target_hp_after = int(roundf(new_hp))
 	step.is_killing_blow = (new_hp <= 0.0)
 	step.is_crit         = is_crit
-	step.shield_absorbed = int(absorbed)
 	return step

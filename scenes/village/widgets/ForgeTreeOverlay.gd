@@ -18,6 +18,7 @@ const NODE_SIZE  := Vector2(58.0, 58.0)
 
 var _layer: Control = null   # conteneur pannable (canvas de liens + boutons de nœuds)
 var _pan_offset := Vector2.ZERO
+var _centered := false        # vue centrée sur l'arbre à la 1re ouverture (B6)
 var _dragging := false
 
 const GLYPH := { "mineur": "●", "notable": "◆", "keystone": "✦" }
@@ -87,8 +88,26 @@ func _build() -> void:
 	area.gui_input.connect(_on_area_input)
 	root.add_child(area)
 
+	var nodes: Array = tree.get("nodes", [])
+
+	# Centrage initial (B6) : à la 1re ouverture, on cale le centre de la boîte
+	# englobante des nœuds sur le centre de la zone d'arbre (sinon l'arbre part
+	# en haut-gauche et on ne voit rien). Les panoramiques ultérieurs (achat →
+	# reconstruction) conservent l'offset de l'utilisateur.
+	if not _centered and not nodes.is_empty():
+		var mn := Vector2(INF, INF)
+		var mx := Vector2(-INF, -INF)
+		for n in nodes:
+			var p := n.get("pos", Vector2.ZERO) as Vector2
+			mn = mn.min(p)
+			mx = mx.max(p)
+		var tree_center := (mn + mx) * 0.5
+		var area_center := Vector2(BOARD_SIZE.x - 24.0, BOARD_SIZE.y - 80.0) * 0.5
+		_pan_offset = area_center - tree_center
+		_centered = true
+
 	_layer = _Canvas.new()
-	(_layer as _Canvas).tree_nodes = tree.get("nodes", [])
+	(_layer as _Canvas).tree_nodes = nodes
 	(_layer as _Canvas).owned = _owned_set()
 	(_layer as _Canvas).link_color = ec
 	_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -96,7 +115,7 @@ func _build() -> void:
 	_layer.size = BOARD_SIZE
 	area.add_child(_layer)
 
-	for node in tree.get("nodes", []):
+	for node in nodes:
 		_layer.add_child(_node_button(node, tier))
 
 func _header(equip: Dictionary, tier: int, ec: Color) -> Control:

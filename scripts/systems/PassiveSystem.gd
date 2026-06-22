@@ -6,10 +6,10 @@
 #      → lus depuis tier_effects[tier].effects (ancien format compatible)
 #      → cumulés dans _active_effects, consultés via get_combat_bonuses()
 #
-#   2. Effets conditionnels (bouclier d'urgence, poison on-hit)
+#   2. Effets conditionnels (poison on-hit)
 #      → lus depuis tier_effects[tier].conditional_effects (nouveau champ)
 #      → passés à CombatResolver via get_passive_combat_effects()
-#      → cooldowns gérés par passive_cooldowns (persistants entre combats)
+#      → cooldowns génériques gérés par passive_cooldowns (persistants entre combats)
 #
 # Rétrocompatibilité : les passifs sans conditional_effects sont ignorés
 # par la partie conditionnelle, sans impact sur les bonus plats.
@@ -19,8 +19,8 @@ extends Node
 # Cache des effets plats cumulés : effect_id → valeur totale (float).
 var _active_effects: Dictionary = {}
 
-# Cooldowns par passif : passive_id → cycles restants avant réutilisation.
-# Géré par set_shield_cooldown() et décrémenté par decrement_cooldowns().
+# Cooldowns génériques par passif : passive_id → cycles restants avant réutilisation.
+# Décrémenté par decrement_cooldowns() (persistant entre combats via SaveManager).
 var passive_cooldowns: Dictionary = {}
 
 func _ready() -> void:
@@ -89,10 +89,9 @@ func get_effect(effect_id: String) -> float:
 # h_atk : ATK effective du héros, nécessaire pour calculer les dégâts de poison passif.
 #
 # Résultat :
-#   "shield"         → {} si aucun bouclier actif, sinon config complète
 #   "passive_poison" → {} si pas de Contact Venimeux, sinon config complète
 func get_passive_combat_effects(h_atk: float) -> Dictionary:
-	var result := { "shield": {}, "passive_poison": {} }
+	var result := { "passive_poison": {} }
 
 	for pid in _get_all_active_passive_ids():
 		var passive := GameData.get_entity(pid)
@@ -105,15 +104,6 @@ func get_passive_combat_effects(h_atk: float) -> Dictionary:
 		var cond_effects: Array = te_list[tier].get("conditional_effects", [])
 		for ce in cond_effects:
 			match ce.get("trigger", ""):
-				"hp_below_percent":
-					if ce.get("effect", "") == "shield" and result["shield"].is_empty():
-						result["shield"] = {
-							"threshold":      float(ce.get("threshold", 0.30)),
-							"value_pct":      float(ce.get("value", 0.15)),
-							"available":      passive_cooldowns.get(pid, 0) <= 0,
-							"passive_id":     pid,
-							"cooldown_cycles": int(ce.get("cooldown_cycles", 1))
-						}
 				"on_hit":
 					if ce.get("effect", "") == "poison" and result["passive_poison"].is_empty():
 						result["passive_poison"] = {
@@ -127,8 +117,8 @@ func get_passive_combat_effects(h_atk: float) -> Dictionary:
 #  Gestion des cooldowns
 # ═══════════════════════════════════════════════════════════
 
-# Enregistre le cooldown d'un passif à bouclier (appelé par CombatPlayer après résolution).
-func set_shield_cooldown(passive_id: String, cycles: int) -> void:
+# Enregistre un cooldown générique sur un passif (cycles avant réutilisation).
+func set_passive_cooldown(passive_id: String, cycles: int) -> void:
 	if not passive_id.is_empty():
 		passive_cooldowns[passive_id] = cycles
 

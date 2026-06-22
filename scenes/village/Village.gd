@@ -898,13 +898,23 @@ func _fill_panel_content(panel_id: String) -> void:
 		"relic":     _panel_soon("RELIQUE")
 		"tbd":       _panel_soon("?")
 		_:
-			# Pièce de quartier : si elle correspond à un bâtiment (Chantier 4),
-			# panneau de gestion (route + amélioration) ; sinon placeholder titré.
-			var bid := VillageBuildings.building_for_room(panel_id)
-			if bid != "":
-				BuildingPanel.build(self, bid)
-			elif _owner_of_room(panel_id) != "":
-				_panel_soon(Translations.panel_title(panel_id))
+			# Pièce de quartier (Chantier 4 / B1). La ROUTE est une action de
+			# NIVEAU QUARTIER : elle n'apparaît qu'une fois la Forge débloquée
+			# (Village ≥ Peu Commun, moment où les ingrédients tombent — cf. B2) et
+			# gate l'accès à la gestion des bâtiments du quartier.
+			var owner := _owner_of_room(panel_id)
+			if owner == "":
+				return
+			if village_tier() < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
+				_panel_locked_note(Translations.T("district.forge_locked"))
+			elif not VillageBuildings.route_built(owner):
+				BuildingPanel.build_route_card(self, owner)
+			else:
+				var bid := VillageBuildings.building_for_room(panel_id)
+				if bid != "":
+					BuildingPanel.build(self, bid)
+				else:
+					_panel_soon(Translations.panel_title(panel_id))
 
 # Lance l'aventure sur le biome sélectionné et bascule vers CombatScene.
 func start_selected_expedition() -> void:
@@ -919,6 +929,16 @@ func _panel_soon(label: String) -> void:
 	var lbl := Label.new()
 	lbl.text = Translations.T("village.soon") % label
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	rp_content.add_child(lbl)
+
+# Note verrouillée (texte déjà localisé) — ex. quartier débloqué avec la Forge (B1).
+func _panel_locked_note(text: String) -> void:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	rp_content.add_child(lbl)

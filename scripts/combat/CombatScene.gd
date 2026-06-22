@@ -97,7 +97,6 @@ var _unique_panel: Control = null
 # ─── État ────────────────────────────────────────────────────
 var _cycle_xp:    float = 0.0
 var _navigating:  bool  = false
-var _hero_shield: float = 0.0
 
 # ─── Jauges ATB honnêtes (refonte temps réel) ───────────────
 # Chaque barre se remplit en continu à la cadence RÉELLE de son combattant
@@ -110,8 +109,9 @@ var _haste_tween: Dictionary = {true: null, false: null}   # ordonnancement on/o
 
 # ─── Polish combat ──────────────────────────────────────────
 var _danger_pulse_tween: Tween   = null   # pulse PV critique (item 5)
-var _shield_state_pill:  Control = null   # pill bouclier bleue  (item 8)
-var _poison_state_pill:  Control = null   # pill venin violette  (item 8)
+var _poison_state_pill:  Control = null   # pill venin violette ennemie (Contact Venimeux)
+var _hero_poison_pill:   Control = null   # pill poison PERSISTANTE du héros (B3)
+var _hero_poison_token:  int     = 0      # invalide les masquages différés obsolètes
 var _haste_pill: Dictionary = {true: null, false: null}   # pill « Rapide » par camp
 var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
 var _stinger:            Control = null   # bandeau d'événement piège/bénédiction
@@ -806,7 +806,6 @@ func _on_combat_started(hero_id: String, enemy: Dictionary,
 	_charge_atb(false, CombatPlayer.enemy_atb_interval)
 	_hide_action(_hero_action)
 	_hide_action(_enemy_action)
-	_hero_shield = 0.0
 	_stop_danger_pulse()
 	_clear_state_pills()
 	_clear_haste()
@@ -937,6 +936,7 @@ func _on_step_ended(step: CombatStep) -> void:
 		# Poison de biome (Marécage) : le marais toxique ronge le HÉROS.
 		_hero_bar.update_hp(float(step.target_hp_after))
 		_hero_bar.poison(step.damage)
+		_mark_hero_poisoned()   # B3 : indicateur persistant le temps de l'altération
 		_add_log("[color=%s]%s[/color] [color=%s]-%d[/color]"
 				% [_hex(UIColors.TIER_EPIQUE), Translations.T("combat.poison"), _hex(UIColors.LOG_DEFEAT), step.damage],
 				["status", "attack"])
@@ -960,11 +960,6 @@ func _on_step_ended(step: CombatStep) -> void:
 			_update_poison_pill(true)
 	else:
 		_enemy_fighter.play_attack()
-		if step.shield_absorbed > 0:
-			_hero_shield = maxf(_hero_shield - float(step.shield_absorbed), 0.0)
-			_update_shield_pill(int(_hero_shield))
-			_add_log("[color=%s]%s[/color]"
-					% [_hex(UIColors.SHIELD), Translations.T("combat.shield_absorb") % step.shield_absorbed], ["defense", "status"])
 		if step.damage > 0:
 			_hero_bar.update_hp(float(step.target_hp_after))
 			_hero_bar.damage(step.damage, step.is_crit)
@@ -974,13 +969,6 @@ func _on_step_ended(step: CombatStep) -> void:
 				_kill_impact(_hero_bar)
 			_fighter_take(_hero_fighter, step.is_killing_blow)
 			_check_danger_pulse()
-		elif step.shield_absorbed > 0:
-			_hero_bar.update_hp(float(step.target_hp_after))
-		if step.is_shield_proc:
-			_hero_shield = float(step.shield_value)
-			# La pill persistante 🛡 sous la barre du héros suffit (plus de toast centré).
-			_update_shield_pill(int(_hero_shield))
-			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.SHIELD), Translations.T("combat.shield_proc")], ["defense", "status"])
 		_log_attack(_enemy_name.text, step.damage, step.is_crit, ["monster", "attack"])
 
 	# Jauge ATB : seul l'attaquant qui vient de frapper voit sa jauge se vider et
@@ -1614,20 +1602,34 @@ func _clear_state_pills() -> void:
 	if _enemy_states:
 		for child in _enemy_states.get_children():
 			child.queue_free()
-	_shield_state_pill = null
 	_poison_state_pill = null
+	_hero_poison_pill  = null
+	_hero_poison_token += 1   # invalide tout masquage de poison héros en vol
 	# Les pills de hâte sont des enfants de _hero_states/_enemy_states (libérés
 	# ci-dessus) : on annule juste les références pour éviter tout pointeur mort.
 	_haste_pill[true]  = null
 	_haste_pill[false] = null
 
-func _update_shield_pill(value: int) -> void:
-	_shield_state_pill = _set_persistent_pill(
-			_shield_state_pill, _hero_states, value > 0, "🛡 %d" % value, UIColors.SHIELD)
-
 func _update_poison_pill(active: bool) -> void:
 	_poison_state_pill = _set_persistent_pill(
 			_poison_state_pill, _enemy_states, active, Translations.T("combat.venom_pill"), UIColors.POISON)
+
+# B3 : le héros empoisonné garde un indicateur PERSISTANT le temps de l'altération,
+# et non un simple flash par tick. Chaque tick rafraîchit la pill puis réarme un
+# délai de masquage > l'intervalle entre deux ticks (en temps de lecture) → aucun
+# clignotement entre ticks ; la pill disparaît peu après le DERNIER tick (fin de
+# l'effet) faute de réarmement.
+func _mark_hero_poisoned() -> void:
+	_hero_poison_pill = _set_persistent_pill(_hero_poison_pill, _hero_states, true,
+			"☠ " + Translations.T("combat.poison"), UIColors.POISON)
+	_hero_poison_token += 1
+	var token := _hero_poison_token
+	var speed := maxf(GameSettings.combat_speed, 0.01)
+	var delay := Balance.BIOME_POISON_TICK_INTERVAL / speed * 1.3 + 0.3
+	get_tree().create_timer(delay).timeout.connect(func() -> void:
+		if is_instance_valid(self) and token == _hero_poison_token:
+			_hero_poison_pill = _set_persistent_pill(_hero_poison_pill, _hero_states, false, "", UIColors.POISON)
+	)
 
 # Pose / met à jour / retire une pill d'état PERSISTANTE (bouclier, venin). La
 # référence est passée puis renvoyée (GDScript ne passe pas les membres par

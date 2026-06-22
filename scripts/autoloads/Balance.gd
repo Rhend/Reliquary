@@ -15,21 +15,22 @@
 #
 # Ce qui N'EST PAS ici (volontairement) :
 #   • Tables d'événements par biome       → .tres des biomes
-#   • Configs de passifs (bouclier/poison)→ .tres des passifs
+#   • Configs de passifs (poison on-hit)  → .tres des passifs
 #   • Cadence/timings & animations        → AdventureSystem / CombatPlayer
 # ============================================================
 class_name Balance
 
 # ═══════════════════════════════════════════════════════════
 #  Stats du héros par palier de Maîtrise [T0..T5]
-#  Source de vérité (spec "Fondations du jeu").
-#  T3-T5 extrapolés à ~×1.7/tier HP/ATK, ×2.0 DEF.
+#  Source de vérité : le BESTIAIRE (100/18/10 à T0). T0→T4 = valeurs
+#  Bestiaire ; T5 extrapolé à la même raison (×1.5 PV/ATK/DEF arrondi)
+#  puisque le Bestiaire s'arrête à T4.
 # ═══════════════════════════════════════════════════════════
 
-const HERO_HP_PER_TIER:  Array[int] = [150, 230, 390, 650, 1085, 1815]
-const HERO_ATK_PER_TIER: Array[int] = [20,  32,  55,  90,  150,  245]
-const HERO_DEF_PER_TIER: Array[int] = [3,   5,   9,   16,  30,   55]
-const HERO_VIT: int = 20  # constant à tous les paliers
+const HERO_HP_PER_TIER:  Array[int] = [100, 150, 225, 338, 506, 759]
+const HERO_ATK_PER_TIER: Array[int] = [18,  27,  40,  60,  90,  135]
+const HERO_DEF_PER_TIER: Array[int] = [10,  15,  22,  33,  50,  75]
+const HERO_VIT: int = 20  # constant à tous les paliers → 1.0 att/s
 
 # Palier de Maîtrise qu'un biome doit atteindre pour livrer son équipement
 # (obtenu au palier Commun/T0). Progression : T0 découverte → T1 équipement
@@ -108,7 +109,7 @@ const ATTACK_GAUGE: float = 1.0
 const SIMULTANEITY_EPS: float = 0.01  # 1 centième de seconde
 
 const GAUGE_THRESHOLD: float = 100.0  # LEGACY (ancien référentiel par ticks) — plus utilisé par le resolver
-const CRIT_CHANCE:     float = 0.20   # probabilité de coup critique
+const CRIT_CHANCE:     float = 0.05   # probabilité de coup critique (fallback = base héros)
 const CRIT_MULTIPLIER: float = 1.8    # multiplicateur de dégâts en cas de critique
 const MIN_DAMAGE:      float = 1.0    # plancher de dégâts : un coup inflige toujours ≥ 1
 
@@ -142,14 +143,18 @@ static func mitigated_damage(atk: float, def_val: float) -> float:
 # ─── Endurcissement de biome (Montagne) ─────────────────────
 const MONTAGNE_ENDURCISSEMENT_REDUCTION: float = 0.20  # réduction des dégâts héros (−20 %)
 
-# ─── Poison de biome (Marécage Putride) ──────────────────────
-const BIOME_POISON_DMG_PCT:   float = 0.05  # % de l'ATK héros infligé par stack
-const BIOME_POISON_MAX_STACKS: int  = 3     # stacks maximum
-const BIOME_POISON_DURATION:   int  = 3     # tours avant expiration des stacks
-
-# ─── Bouclier d'urgence (défauts si la config du passif est incomplète) ──
-const SHIELD_THRESHOLD_DEFAULT: float = 0.30  # % PV max déclenchant le bouclier
-const SHIELD_VALUE_PCT_DEFAULT: float = 0.15  # % PV max absorbé par le bouclier
+# ─── Poison de biome (Marécage Putride) — modèle à TICKS temps réel ─────────
+# Le combat est ATB temps réel : plus de notion de « tour ». Le poison de biome
+# tourne sur une HORLOGE GLOBALE par cible (le héros). À chaque tic, on inflige
+# BIOME_POISON_DMG_PCT × ATK_source × (nombre de stacks VIVANTS à cet instant).
+# Un stack rejoint l'horloge en cours mais garde sa durée de vie propre
+# (BIOME_POISON_STACK_DURATION à partir de son application) → un stack isolé
+# produit 2 ticks (t+2, t+4). Empilement additif et parallèle, plafonné.
+# Source de vérité : « Référentiel des statistiques de combat ».
+const BIOME_POISON_DMG_PCT:       float = 0.05  # % de l'ATK source infligé / tick / stack vivant
+const BIOME_POISON_MAX_STACKS:    int   = 3     # stacks maximum
+const BIOME_POISON_TICK_INTERVAL: float = 2.0   # secondes réelles entre deux tics de l'horloge
+const BIOME_POISON_STACK_DURATION: float = 4.0  # secondes réelles : durée de vie d'un stack
 
 # ═══════════════════════════════════════════════════════════
 #  Progression — Maîtrise (ex-mastery_config.json)
@@ -213,6 +218,9 @@ const HALL_XP_EVENT: float = 5.0
 const DEFAULT_XP_COEF: float = 1.0
 const ENTITY_XP_COEF: Dictionary = {
 	Enums.EntityType.HERO: 0.05,
+	# Équipement : plus lent que les créatures (×1.0), plus rapide que le biome
+	# effectif → stoppe le fusage de palier. Constante de réglage (playtest).
+	Enums.EntityType.EQUIPMENT: 0.4,
 }
 
 # ═══════════════════════════════════════════════════════════

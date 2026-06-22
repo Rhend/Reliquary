@@ -14,6 +14,14 @@ const EQUIP_SLOTS: Array = [
 	["armure", "🛡",  "equipment_armure", "Armure"],
 ]
 
+# Biome où chaque slot livre son équipement (B7 — placeholder informatif).
+# Arme → Montagne · Armure → Marécage · Anneau → Forêt.
+const SLOT_BIOME: Dictionary = {
+	"arme":   "biome_montagne",
+	"armure": "biome_marecage",
+	"anneau": "biome_foret",
+}
+
 # Point d'entrée : peuple host.rp_content avec la fiche du héros actif.
 static func build(host: Village) -> void:
 	var c        := GameData.get_entity("hero")
@@ -59,6 +67,14 @@ static func build(host: Village) -> void:
 	var vit_bonus := int(round(StatStacker.final_stat(float(vit_base),
 			[float(eq.get("attack_speed_pct", 0.0)) / 100.0], "vit") - float(vit_base)))
 
+	# Crit du héros : chance de base (.tres) + bonus Village/Forge (même point
+	# d'application qu'au combat, cf. combat_player v_crit_pct).
+	var crit_base  := float(c.get("crit_chance", Balance.CRIT_CHANCE))
+	var crit_bonus := VillageBuildings.get_bonus(VillageBuildings.CH_CRIT_PCT) \
+			+ ForgeSystem.get_stat_bonus("crit_pct")
+	var crit_total := maxf(crit_base + crit_bonus, 0.0)
+	var crit_mult  := float(c.get("crit_multiplier", Balance.CRIT_MULTIPLIER))
+
 	var stats_row := HBoxContainer.new()
 	stats_row.add_theme_constant_override("separation", 24)
 	stats_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -87,6 +103,29 @@ static func build(host: Village) -> void:
 		detail.add_theme_font_size_override("font_size", 10)
 		detail.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		grp.add_child(detail)
+		# DEF : tooltip d'impact concret (% de dégâts absorbés, courbe verrouillée).
+		if str(row[0]) == Translations.T("hero.stat.def"):
+			var red_pct := int(round(Balance.def_reduction(float(row[1])) * 100.0))
+			_attach_stat_tooltip(grp, str(row[0]), Translations.T("hero.stat.def_tt") % red_pct, row[4] as Color)
+
+	# CRIT : stat en % (B4a) + tooltip d'impact sur le DPS moyen.
+	var crit_grp := HBoxContainer.new()
+	crit_grp.add_theme_constant_override("separation", 4)
+	stats_row.add_child(crit_grp)
+	var crit_kl := Label.new()
+	crit_kl.text = Translations.T("hero.stat.crit") + " :"
+	crit_kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	crit_grp.add_child(crit_kl)
+	var crit_vl := Label.new()
+	crit_vl.text = "%d%%" % int(round(crit_total * 100.0))
+	crit_vl.add_theme_font_size_override("font_size", 14)
+	crit_vl.add_theme_color_override("font_color", UIColors.TIER_EPIQUE)
+	crit_grp.add_child(crit_vl)
+	# DPS moyen ×(1 + chance × (mult − 1)) → bonus moyen en %.
+	var crit_dps := int(round(crit_total * (crit_mult - 1.0) * 100.0))
+	_attach_stat_tooltip(crit_grp, Translations.T("hero.stat.crit"),
+			Translations.T("hero.stat.crit_tt") % [int(round(crit_total * 100.0)), "%.1f" % crit_mult, crit_dps],
+			UIColors.TIER_EPIQUE)
 
 	if tier < hero_max:
 		if can_ev:
@@ -101,25 +140,24 @@ static func build(host: Village) -> void:
 		ml.add_theme_color_override("font_color", UIColors.FILTER_ON)
 		stats_body.add_child(ml)
 
-	# ── ÉQUIPEMENT ────────────────────────────────────────────
-	# Section INVISIBLE tant qu'aucun équipement n'est obtenu : son
-	# apparition est la récompense du premier biome monté à Peu Commun.
-	var unlocked_slots: Array = []
+	# ── ÉQUIPEMENT (B7) ───────────────────────────────────────
+	# Les 3 slots sont TOUJOURS affichés. Tant que l'équipement n'est pas livré
+	# (est_debloque faux), un PLACEHOLDER indique dans quel biome aller le chercher.
+	var equip_sec := UIHelpers.collapsible_section(Translations.T("hero.section.equip"), tcolor, true, host.panel_ui_state())
+	host.rp_content.add_child(equip_sec["wrapper"])
+	var equip_body := equip_sec["body"] as VBoxContainer
 	for entry in EQUIP_SLOTS:
-		var equip := GameData.get_entity(entry[2] as String)
+		var slot_key:  String = entry[0]
+		var slot_icon: String = entry[1]
+		var equip_id:  String = entry[2]
+		var slot_name: String = Translations.equip_slot_name(slot_key)
+		var equip := GameData.get_entity(equip_id)
 		if not equip.is_empty() and equip.get("est_debloque", false):
-			unlocked_slots.append(entry)
-	if not unlocked_slots.is_empty():
-		var equip_sec := UIHelpers.collapsible_section(Translations.T("hero.section.equip"), tcolor, true, host.panel_ui_state())
-		host.rp_content.add_child(equip_sec["wrapper"])
-		var equip_body := equip_sec["body"] as VBoxContainer
-		for entry in unlocked_slots:
-			var slot_key:  String = entry[0]
-			var slot_icon: String = entry[1]
-			var equip_id:  String = entry[2]
-			var slot_name: String = Translations.equip_slot_name(slot_key)
 			equip_body.add_child(_equip_slot_card(host, slot_key, slot_icon,
-					slot_name, equip_id, GameData.get_entity(equip_id), tcolor))
+					slot_name, equip_id, equip, tcolor))
+		else:
+			equip_body.add_child(_equip_placeholder_card(slot_icon, slot_name,
+					SLOT_BIOME.get(slot_key, "") as String))
 
 	# ── PASSIFS ───────────────────────────────────────────────
 	# Même règle que l'Équipement : la section n'apparaît qu'avec son
@@ -456,6 +494,53 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 		vb.add_child(eff_lbl)
 
 	return margin
+
+# Branche un tooltip d'impact sur un groupe de stat : les labels enfants laissent
+# passer le survol (IGNORE) pour que le conteneur reçoive mouse_entered/exited.
+static func _attach_stat_tooltip(grp: Control, title: String, body: String, color: Color) -> void:
+	grp.mouse_filter = Control.MOUSE_FILTER_STOP
+	for child in grp.get_children():
+		(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UIHelpers.register_tooltip(grp, title, body, color)
+
+# Placeholder d'un slot dont l'équipement n'est pas encore livré (B7) : carte
+# grisée avec icône + slot + « À débloquer », tooltip indiquant le biome source.
+static func _equip_placeholder_card(slot_icon: String, slot_name: String, biome_id: String) -> Control:
+	var card := PanelContainer.new()
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.03, 0.18, 1, 6))
+	var m := UIHelpers.margin_of(8)
+	card.add_child(m)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	m.add_child(row)
+
+	var icon := Label.new()
+	icon.text = slot_icon
+	icon.modulate = Color(1, 1, 1, 0.45)
+	icon.add_theme_font_size_override("font_size", 16)
+	row.add_child(icon)
+
+	var sl := Label.new()
+	sl.text = slot_name
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sl.add_theme_font_size_override("font_size", 12)
+	sl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	row.add_child(sl)
+
+	var lock := Label.new()
+	lock.text = "🔒 " + Translations.T("hero.equip.placeholder")
+	lock.add_theme_font_size_override("font_size", 11)
+	lock.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	row.add_child(lock)
+
+	var biome := GameData.get_entity(biome_id)
+	var bname := Translations.entity_name(biome, biome_id) if not biome.is_empty() else biome_id
+	var bc := UIColors.tier_color(int(biome.get("maitrise_actuelle", 0))) if not biome.is_empty() else UIColors.TEXT_MUTED
+	UIHelpers.add_hover_feedback(card)
+	UIHelpers.register_tooltip(card, slot_name,
+			Translations.T("hero.equip.placeholder_tt") % bname, bc)
+	return card
 
 # Carte d'équipement — DA commune entity_xp_card (même pattern que passifs/biomes).
 static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: String,

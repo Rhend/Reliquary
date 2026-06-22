@@ -97,7 +97,7 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	var h_vit := StatStacker.final_stat(float(stats.get("vit", 20)),
 			[float(equip.get("attack_speed_pct", 0.0)) / 100.0, f_atb_pct], "vit")
 
-	# HP maximum du héros (pour le calcul du seuil de bouclier)
+	# HP maximum du héros (référence pour les conditions de PV, ex. Élan)
 	var h_hp_max := StatStacker.final_stat(
 		float(stats.get("hp", 100))
 			+ float(passives.get("hp_bonus", 0.0))
@@ -106,11 +106,9 @@ func start_combat(enemy: Dictionary, current_hp: float,
 
 	var e_hp := float(enemy.get("hp", 50))
 
-	# Effets conditionnels des passifs (bouclier + poison passif)
+	# Effets conditionnels des passifs (poison passif on-hit)
 	var passive_effects := PassiveSystem.get_passive_combat_effects(h_atk)
 	var extended_options := combat_options.duplicate()
-	if not (passive_effects["shield"] as Dictionary).is_empty():
-		extended_options["passive_shield"] = passive_effects["shield"]
 	if not (passive_effects["passive_poison"] as Dictionary).is_empty():
 		extended_options["passive_poison"] = passive_effects["passive_poison"]
 
@@ -170,15 +168,6 @@ func start_combat(enemy: Dictionary, current_hp: float,
 	# Fenêtres de hâte (feedback visuel) en secondes de lecture.
 	_hero_haste  = _haste_window(extended_options.get("hero_speed_mods",  []), speed)
 	_enemy_haste = _haste_window(extended_options.get("enemy_speed_mods", []), speed)
-
-	# Enregistrer le cooldown du bouclier si il a procé pendant la résolution
-	var shield_cfg := extended_options.get("passive_shield", {}) as Dictionary
-	var shield_pid: String = shield_cfg.get("passive_id", "")
-	if not shield_pid.is_empty():
-		for s in _steps:
-			if (s as CombatStep).is_shield_proc:
-				PassiveSystem.set_shield_cooldown(shield_pid, int(shield_cfg.get("cooldown_cycles", 1)))
-				break
 
 	EventBus.combat_started.emit("hero", enemy, current_hp, e_hp)
 	_play_next()

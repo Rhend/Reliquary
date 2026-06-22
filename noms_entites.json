@@ -62,7 +62,6 @@
     { "id": "passive_combat_mastery", "fr": "Maîtrise du Combat", "en": "Combat Mastery" },
     { "id": "passive_regeneration",   "fr": "Régénération",       "en": "Regeneration" },
     { "id": "passive_resistance",     "fr": "Résistance",         "en": "Resistance" },
-    { "id": "passive_resilience",     "fr": "Résilience",         "en": "Resilience" },
     { "id": "passive_fortification",  "fr": "Fortification",      "en": "Fortification" },
     { "id": "passive_poison_touch",   "fr": "Contact Venimeux",   "en": "Venom Touch" }
   ],
