@@ -156,10 +156,10 @@ func _test_village_capped() -> void:
 	var cap := Balance.GLOBAL_MAX_TIER
 	_assert(GameData.village_max_tier() == cap, "village_max_tier() = %d" % cap,
 			"obtenu %d" % GameData.village_max_tier())
-	# Largeur énorme → le palier calculé reste borné au plafond DUR global.
-	_assert(Balance.village_tier_for_building_count(9999) == cap,
-			"village_tier_for_building_count plafonné à GLOBAL_MAX_TIER",
-			"obtenu %d" % Balance.village_tier_for_building_count(9999))
+	# Kills + bâtiments énormes → le palier calculé reste borné au plafond DUR global.
+	_assert(Balance.village_target_tier(9999, 9999) == cap,
+			"village_target_tier plafonné à GLOBAL_MAX_TIER",
+			"obtenu %d" % Balance.village_target_tier(9999, 9999))
 	# recompute_village_tier ne dépasse jamais le plafond, même au plafond.
 	var tier_save := int(GameData.village.get("maitrise_actuelle", 0))
 	var eclos_save = GameData.village.get("eclos", false)

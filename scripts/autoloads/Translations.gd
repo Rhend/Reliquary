@@ -78,6 +78,8 @@ const STRINGS: Dictionary = {
 
 		# ── Conditions Village ────────────────────────────────
 		"village.cond.fragments": "Fragments",
+		"village.cond.kills":     "Créatures vaincues",
+		"village.kills.tt_body":  "Le Village grandit TOUT SEUL. Premier palier : vaincre assez de créatures en expédition débloque la Forge (et active les drops). Aucun clic, aucun coût.\n\nVaincues : %d  ·  Requis pour le prochain palier : %d",
 		"village.cond.buildings": "Bâtiments reconstruits",
 		"village.buildings.tt_body": "Le Village grandit TOUT SEUL : il monte de palier dès qu'assez de bâtiments sont reconstruits (palier Commun ou plus), tous quartiers confondus. Aucun clic, aucun coût.\n\nReconstruits : %d  ·  Requis pour le prochain palier : %d",
 		"village.frag.tt_title":  "Fragments de Mémoire",
@@ -307,6 +309,7 @@ const STRINGS: Dictionary = {
 		"building.route.title":        "Route à reconstruire",
 		"building.route.hint":         "Reconstruisez la route pour accéder à la couche gestion de ce quartier (ses bâtiments).",
 		"building.route.forge_locked": "La route de la Forge se reconstruit une fois le hub Forge débloqué (Village Peu Commun).",
+		"building.route.craftsmen_locked": "Pas encore d'artisans assez expérimentés, et rien ne se récolte avant la Forge. Reconstruire les routes s'ouvrira au Village Peu Commun.",
 		"building.route.btn":          "Reconstruire la route",
 		"building.bonuses.title":      "Bonus actifs",
 		"building.bonuses.none":       "Reconstruisez ce bâtiment pour débloquer ses bonus.",
@@ -445,6 +448,8 @@ const STRINGS: Dictionary = {
 
 		# ── Conditions Village ────────────────────────────────
 		"village.cond.fragments": "Fragments",
+		"village.cond.kills":     "Creatures defeated",
+		"village.kills.tt_body":  "The Village grows ON ITS OWN. First tier: defeating enough creatures on expeditions unlocks the Forge (and activates drops). No click, no cost.\n\nDefeated: %d  ·  Required for the next tier: %d",
 		"village.cond.buildings": "Buildings rebuilt",
 		"village.buildings.tt_body": "The Village grows ON ITS OWN: it ranks up as soon as enough buildings are rebuilt (Common tier or higher), across all quarters. No click, no cost.\n\nRebuilt: %d  ·  Required for the next tier: %d",
 		"village.frag.tt_title":  "Memory Fragments",
@@ -674,6 +679,7 @@ const STRINGS: Dictionary = {
 		"building.route.title":        "Road to rebuild",
 		"building.route.hint":         "Rebuild the road to access this quarter's management layer (its buildings).",
 		"building.route.forge_locked": "The Forge road can be rebuilt once the Forge hub is unlocked (Village Uncommon).",
+		"building.route.craftsmen_locked": "No craftsmen experienced enough yet, and nothing is harvested before the Forge. Rebuilding roads opens at Village Uncommon.",
 		"building.route.btn":          "Rebuild the road",
 		"building.bonuses.title":      "Active bonuses",
 		"building.bonuses.none":       "Rebuild this building to unlock its bonuses.",

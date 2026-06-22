@@ -271,30 +271,25 @@ const CREATURE_CAP_PROFONDEUR: Dictionary = {
 # sont pas des bâtiments : elles ne comptent jamais. Source : Système d'Expéditions
 # §8 + Gestion du Village §9.
 #
-# Seuils de LARGEUR (nb de bâtiments T0+) requis pour ATTEINDRE le palier visé :
-#   → T1 Peu Commun = 4 (ouvre la Forge) · → T2 Rare = 8 (ouvre le Sanctuaire).
-# Valeurs de réglage, à ajuster en playtest.
-const VILLAGE_SEUIL_PEU_COMMUN: int = 4   # bâtiments T0+ pour → T1 (Peu Commun)
-const VILLAGE_SEUIL_RARE:       int = 8   # bâtiments T0+ pour → T2 (Rare)
+# Le CRITÈRE change selon le palier visé (contrainte : aucun drop avant la Forge,
+# donc le 1er palier ne peut pas dépendre des bâtiments, qui exigent des drops) :
+#   → T1 Peu Commun : compteur de KILLS ≥ 50 (ouvre la Forge + active les drops).
+#   → T2 Rare       : bâtiments à T0+ ≥ 8  (ouvre le Sanctuaire).
+# Valeurs de réglage (le débit ~12 combats/min est provisoire → le seuil kills suivra
+# son recalibrage). Hors VS (réservé, non actif sous GLOBAL_MAX_TIER) : → T3 Épique
+# basculera sur la PROFONDEUR (bâtiments à T2+ ≥ 6).
+const VILLAGE_SEUIL_PEU_COMMUN_KILLS: int = 50  # kills pour → T1 (Peu Commun)
+const VILLAGE_SEUIL_RARE_BATIMENTS:   int = 8   # bâtiments T0+ pour → T2 (Rare)
 
-# Seuil de largeur requis pour ATTEINDRE chaque palier (clé = palier visé ≥ 1).
-# Hors VS (réservé, non actif sous GLOBAL_MAX_TIER) : → T3 basculera sur un critère
-# de PROFONDEUR (bâtiments à T2+ ≥ 6), la largeur saturant à 10 bâtiments posés.
-const VILLAGE_WIDTH_THRESHOLDS: Dictionary = {
-	1: VILLAGE_SEUIL_PEU_COMMUN,
-	2: VILLAGE_SEUIL_RARE,
-}
-
-# Palier de Village atteignable pour un nombre de bâtiments T0+ (largeur), borné par
-# le plafond DUR global. Monte tant que le seuil du palier suivant est franchi.
-static func village_tier_for_building_count(count: int) -> int:
+# Palier de Village atteignable selon l'état du monde (kills + bâtiments T0+), borné
+# par le plafond DUR global. Strictement séquentiel : T2 exige d'abord T1.
+static func village_target_tier(kills: int, building_count: int) -> int:
 	var tier := 0
-	for t in range(1, GLOBAL_MAX_TIER + 1):
-		if count >= int(VILLAGE_WIDTH_THRESHOLDS.get(t, 9999999)):
-			tier = t
-		else:
-			break
-	return tier
+	if kills >= VILLAGE_SEUIL_PEU_COMMUN_KILLS:
+		tier = 1
+	if tier >= 1 and building_count >= VILLAGE_SEUIL_RARE_BATIMENTS:
+		tier = 2
+	return mini(tier, GLOBAL_MAX_TIER)
 
 # Paliers de Maîtrise d'un biome qui libèrent un Fragment de Mémoire (un
 # Fragment non collecté du biome par jalon atteint). Source unique de la

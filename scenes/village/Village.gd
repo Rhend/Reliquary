@@ -309,11 +309,11 @@ func _build_hub() -> void:
 	_ring.ring_color  = tcolor
 	_ring.ring_radius = RING_RADIUS
 	_ring.tier        = village_maitrise
-	# Progression de l'anneau : LARGEUR (bâtiments T0+) / seuil du palier suivant.
+	# Progression de l'anneau : critère du palier suivant (kills à Commun, bâtiments
+	# T0+ à Peu Commun) sur son seuil.
 	if village_maitrise < GameData.village_max_tier():
-		var need := int(Balance.VILLAGE_WIDTH_THRESHOLDS.get(village_maitrise + 1, 0))
-		var have := VillageBuildings.count_buildings_tier0_plus()
-		_ring.fill_fraction = minf(1.0, float(have) / float(need)) if need > 0 else 1.0
+		var prog := _village_progress()
+		_ring.fill_fraction = minf(1.0, float(prog[0]) / float(prog[1])) if prog[1] > 0 else 1.0
 	else:
 		_ring.fill_fraction = 1.0
 	_center(_ring, Vector2.ZERO, Vector2(diam, diam))
@@ -674,26 +674,36 @@ func _animate_hub_entrance() -> void:
 
 # ─── Conditions d'évolution du Village ────────────────────────
 # Affiche le compteur de fragments et le bouton Évoluer si la condition est remplie.
+# Progression du palier courant vers le suivant : [have, need]. Critère PAR PALIER —
+# kills (Commun → Peu Commun), puis bâtiments T0+ (Peu Commun → Rare).
+func _village_progress() -> Array:
+	if village_tier() == 0:
+		return [int(GameData.village.get("kills_total", 0)), Balance.VILLAGE_SEUIL_PEU_COMMUN_KILLS]
+	return [VillageBuildings.count_buildings_tier0_plus(), Balance.VILLAGE_SEUIL_RARE_BATIMENTS]
+
 func _build_village_conditions(container: VBoxContainer, village_maitrise: int, vcolor: Color) -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0.0, 6.0)
 	container.add_child(spacer)
 
-	# Critère de LARGEUR : nombre de bâtiments reconstruits (T0+). La montée du
-	# Village est AUTOMATIQUE dès que le seuil est atteint — aucun bouton.
-	var need := int(Balance.VILLAGE_WIDTH_THRESHOLDS.get(village_maitrise + 1, 0))
-	var have := VillageBuildings.count_buildings_tier0_plus()
+	# Montée AUTOMATIQUE (aucun bouton). Critère selon le palier : kills à Commun,
+	# bâtiments T0+ à Peu Commun.
+	var prog := _village_progress()
+	var have := int(prog[0])
+	var need := int(prog[1])
+	var is_kills := village_maitrise == 0
+	var label := Translations.T("village.cond.kills" if is_kills else "village.cond.buildings")
+	var tt_body := Translations.T("village.kills.tt_body" if is_kills else "village.buildings.tt_body")
 	var met := need > 0 and have >= need
 	var row := Label.new()
-	row.text = "%s%s  %d / %d" % ["✓ " if met else "• ", Translations.T("village.cond.buildings"), have, need]
+	row.text = "%s%s  %d / %d" % ["✓ " if met else "• ", label, have, need]
 	row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_font_size_override("font_size", 11)
 	row.add_theme_color_override("font_color", UIColors.LOG_VICTORY if met else UIColors.TEXT_MUTED)
 	# STOP pour que le tooltip explicatif soit accessible au survol.
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
-	UIHelpers.register_tooltip(row, Translations.T("village.cond.buildings"),
-			Translations.T("village.buildings.tt_body") % [have, need], vcolor)
+	UIHelpers.register_tooltip(row, label, tt_body % [have, need], vcolor)
 	container.add_child(row)
 
 # ─── Panneau droite ───────────────────────────────────────────

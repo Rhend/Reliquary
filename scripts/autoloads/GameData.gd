@@ -47,8 +47,9 @@ var pending_evolution: Dictionary = {}
 var last_freed_fragment_biome: String = ""
 
 var village: Dictionary = {
-	"maitrise_actuelle":   0,     # 0→5 — palier de Maîtrise du Village, progressé par Fragments
+	"maitrise_actuelle":   0,     # 0→5 — palier de Maîtrise du Village (montée AUTO, critère par palier)
 	"fragments_collectes": [],
+	"kills_total":         0,     # créatures de farm vaincues (hors boss) — seuil Commun→Peu Commun
 	"eclos":               false, # le Village n'existe pas tant qu'il n'a pas éclos (phase préliminaire)
 	"clics_eclosion":      0,     # progression de la phase d'éclosion (→ Balance.ECLOSION_CLICS)
 	# Chantier 4 — Quartiers & bâtiments. Sauvegardés avec le reste du village
@@ -357,17 +358,25 @@ func village_max_tier() -> int:
 func village_building_count() -> int:
 	return VillageBuildings.count_buildings_tier0_plus()
 
-# Recalcule le palier du Village d'après le critère de LARGEUR (bâtiments T0+) et le
-# fait monter AUTOMATIQUEMENT si un ou plusieurs seuils sont franchis. Strictement
-# croissant (ne redescend jamais), borné par village_max_tier(). Émet
-# village_tier_change pour CHAQUE palier franchi (déclenche le déblocage du secteur
-# associé : Forge à Peu Commun, Sanctuaire à Rare). Appelé quand un bâtiment passe
-# Délabré → T0+ (seul événement qui change le total). Pas de clic, pas de coût.
+# Enregistre une créature de farm vaincue (hors boss) : incrémente le compteur de
+# kills puis réévalue le palier du Village (seuil Commun → Peu Commun).
+func register_creature_kill() -> void:
+	village["kills_total"] = int(village.get("kills_total", 0)) + 1
+	recompute_village_tier()
+
+# Recalcule le palier du Village d'après l'état du monde (kills pour → Peu Commun,
+# bâtiments T0+ pour → Rare) et le fait monter AUTOMATIQUEMENT si un ou plusieurs
+# seuils sont franchis. Strictement croissant (ne redescend jamais), borné par
+# village_max_tier(). Émet village_tier_change pour CHAQUE palier franchi (déclenche
+# le déblocage du secteur : Forge à Peu Commun, Sanctuaire à Rare). Appelé sur deux
+# événements seulement : un kill, ou un bâtiment qui passe Délabré → T0+.
 func recompute_village_tier() -> void:
 	if not village.get("eclos", false):
 		return
 	var current := int(village.get("maitrise_actuelle", 0))
-	var target := mini(Balance.village_tier_for_building_count(village_building_count()), village_max_tier())
+	var target := mini(
+			Balance.village_target_tier(int(village.get("kills_total", 0)), village_building_count()),
+			village_max_tier())
 	while current < target:
 		current += 1
 		village["maitrise_actuelle"] = current
