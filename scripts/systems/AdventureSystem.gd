@@ -73,6 +73,8 @@ var _stats := CycleStats.new()  # stats du cycle courant
 
 # Saignement : ticks restants (dégâts par tick = Balance.BLEED_DMG_PCT × PV max).
 var _bleed_remaining: int   = 0
+# Type du dernier événement tiré (C2 : casse les séries de non-créatures). "" au départ.
+var _last_event_type: String = ""
 # Bénédiction XP : multiplicateur d'XP de base appliqué UNE fois sur le prochain événement.
 var _bless_xp_mult:   float = 1.0
 # Bénédiction de Hâte : modificateur de vitesse du héros en attente, consommé par
@@ -142,6 +144,7 @@ func start_adventure(biome_id: String) -> void:
 	# Réinitialise les statistiques et états temporaires du cycle
 	_stats           = CycleStats.new()
 	_bleed_remaining = 0
+	_last_event_type = ""
 	_bless_xp_mult   = 1.0
 	_pending_hero_haste = {}
 	_lethal_shield_available = VillageBuildings.has_lethal_shield()
@@ -449,9 +452,11 @@ func _survive_lethal() -> bool:
 	return false
 
 # Régénère regen_pct% des PV max après chaque rencontre.
-# Sources : modificateur de cycle (regen_pct) + passifs actifs (hp_regen_pct) + village (Maison).
+# Sources : régén de BASE (C3, hors bâtiment) + modificateur de cycle (regen_pct)
+# + passifs actifs (hp_regen_pct) + village (Maison) + Forge. Toutes ADDITIVES.
 func _apply_regen(_hero_id: String) -> void:
-	var regen_pct := float(current_modifier.get("regen_pct", Balance.DEFAULT_REGEN_PCT)) \
+	var regen_pct := Balance.BASE_REGEN_PCT \
+			+ float(current_modifier.get("regen_pct", Balance.DEFAULT_REGEN_PCT)) \
 			+ PassiveSystem.get_effect("hp_regen_pct") \
 			+ VillageBuildings.get_bonus(VillageBuildings.CH_REGEN_PCT) \
 			+ ForgeSystem.get_stat_bonus("regen_pct")
@@ -499,7 +504,19 @@ func _schedule_next_encounter(delay: float = 1.0) -> void:
 	_encounter_timer.start()
 
 # Tire le type de rencontre selon les probabilités du biome.
+# C2 : JAMAIS deux non-créatures (piège/bénédiction confondus) consécutives — une
+# créature sépare toujours deux événements de statut. Casse les séries frustrantes
+# (6 pièges → mort, 5 bénédictions → full vie gratuit) sans brider créature→créature.
 func _roll_encounter_type() -> String:
+	var t := _draw_encounter_type()
+	if t != Enums.EntityType.CREATURE \
+			and _last_event_type != "" and _last_event_type != Enums.EntityType.CREATURE:
+		t = Enums.EntityType.CREATURE
+	_last_event_type = t
+	return t
+
+# Tirage brut selon la table d'événements du biome (sans mémoire de séquence).
+func _draw_encounter_type() -> String:
 	# Distribution standard pour toutes les zones (Surface, Profondeur, Abysse).
 	var biome      = GameData.get_entity(current_biome_id)
 	var base_table = biome.get("event_table", {

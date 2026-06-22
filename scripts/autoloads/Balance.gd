@@ -213,11 +213,11 @@ const HALL_XP_EVENT: float = 5.0
 # XP reçue = XP produite × coef. Tout type absent → DEFAULT_XP_COEF (×1.0 :
 # créatures, pièges, bénédictions, biomes, passifs). Le héros est isolé et
 # réglable individuellement.
-# ⚠ PROVISOIRE : coef héros ×0.05 peut-être trop bas — marge 0.08–0.10 sans
-# toucher au reste.
+# ⚠ Réglage : coef héros relevé à ×0.15 (Chantier 7 — montait trop lentement à
+# ×0.05). Source de vérité alignée : Notion « Référentiel XP & Progression » + Fondations.
 const DEFAULT_XP_COEF: float = 1.0
 const ENTITY_XP_COEF: Dictionary = {
-	Enums.EntityType.HERO: 0.05,
+	Enums.EntityType.HERO: 0.15,
 	# Équipement : plus lent que les créatures (×1.0), plus rapide que le biome
 	# effectif → stoppe le fusage de palier. Constante de réglage (playtest).
 	Enums.EntityType.EQUIPMENT: 0.4,
@@ -404,7 +404,11 @@ const ECLOSION_CLIC_VALUE: int = 1
 #  Régénération
 # ═══════════════════════════════════════════════════════════
 
-const DEFAULT_REGEN_PCT: float = 0.0  # régen par défaut entre rencontres (hors modificateur)
+const DEFAULT_REGEN_PCT: float = 0.0  # fallback du modificateur de cycle (hors base)
+# Régénération de BASE entre rencontres, HORS bâtiment (Chantier 7 — C3). Garantit
+# qu'un héros T0 sans village (pas de Maison → CH_REGEN_PCT = 0) tienne la durée
+# d'une expédition. S'ADDITIONNE à la Maison / aux passifs / au Forge. Réglage.
+const BASE_REGEN_PCT: float = 0.15  # 15 % des PV max régénérés après chaque rencontre
 
 # ═══════════════════════════════════════════════════════════
 #  Bonus de maîtrise au combat (familiarité du bestiaire)

@@ -534,6 +534,9 @@ func _phase5_celebration() -> void:
 			bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
 			bonus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			# C4 : le texte s'écoule sur TOUTE la largeur du panneau (500 − 2×14 de
+			# marge), pour qu'autowrap ne coupe pas les phrases sur une largeur réduite.
+			bonus.custom_minimum_size  = Vector2(472.0, 0.0)
 			bonus.add_theme_font_size_override("font_size", 17)
 			bonus.add_theme_color_override("font_color", Color.WHITE)
 			bonus.add_theme_constant_override("outline_size", 3)

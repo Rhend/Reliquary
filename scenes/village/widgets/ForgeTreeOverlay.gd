@@ -60,13 +60,17 @@ func _build() -> void:
 			_close())
 	add_child(dim)
 
-	# Plateau centré.
+	# Plateau CENTRÉ à l'écran (C8). Ancrage au centre + offsets ±demi-taille :
+	# robuste à la taille de fenêtre, sans position absolue (l'ancien calcul par
+	# get_viewport_rect au moment du build plaçait le plateau hors écran).
 	var board := PanelContainer.new()
 	board.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.10, 0.70, 2, 10))
 	board.custom_minimum_size = BOARD_SIZE
 	board.set_anchors_preset(Control.PRESET_CENTER)
-	board.size = BOARD_SIZE
-	board.position = (get_viewport_rect().size - BOARD_SIZE) * 0.5
+	board.offset_left   = -BOARD_SIZE.x * 0.5
+	board.offset_top    = -BOARD_SIZE.y * 0.5
+	board.offset_right  =  BOARD_SIZE.x * 0.5
+	board.offset_bottom =  BOARD_SIZE.y * 0.5
 	add_child(board)
 
 	var root := VBoxContainer.new()

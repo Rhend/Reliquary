@@ -81,32 +81,32 @@ static func build(host: Village) -> void:
 	stats_body.add_child(stats_row)
 
 	for row: Array in [
-		[Translations.T("hero.stat.atk"), atk_base + atk_bonus, atk_base, atk_bonus, UIColors.STAT_ATK],
-		[Translations.T("hero.stat.def"), def_base + def_bonus, def_base, def_bonus, UIColors.STAT_DEF],
-		[Translations.T("hero.stat.hp"),  hp_base  + hp_bonus,  hp_base,  hp_bonus,  UIColors.STAT_HP ],
-		[Translations.T("hero.stat.vit"), vit_base + vit_bonus, vit_base, vit_bonus, UIColors.FILTER_ON],
+		["atk", Translations.T("hero.stat.atk"), atk_base + atk_bonus, atk_base, atk_bonus, UIColors.STAT_ATK],
+		["def", Translations.T("hero.stat.def"), def_base + def_bonus, def_base, def_bonus, UIColors.STAT_DEF],
+		["hp",  Translations.T("hero.stat.hp"),  hp_base  + hp_bonus,  hp_base,  hp_bonus,  UIColors.STAT_HP ],
+		["vit", Translations.T("hero.stat.vit"), vit_base + vit_bonus, vit_base, vit_bonus, UIColors.FILTER_ON],
 	]:
 		var grp := HBoxContainer.new()
 		grp.add_theme_constant_override("separation", 4)
 		stats_row.add_child(grp)
 		var kl := Label.new()
-		kl.text = str(row[0]) + " :"
+		kl.text = str(row[1]) + " :"
 		kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		grp.add_child(kl)
 		var vl := Label.new()
-		vl.text = str(row[1])
+		vl.text = str(row[2])
 		vl.add_theme_font_size_override("font_size", 14)
-		vl.add_theme_color_override("font_color", row[4])
+		vl.add_theme_color_override("font_color", row[5])
 		grp.add_child(vl)
 		var detail := Label.new()
-		detail.text = "(%d + %d)" % [row[2], row[3]]
+		detail.text = "(%d + %d)" % [row[3], row[4]]
 		detail.add_theme_font_size_override("font_size", 10)
 		detail.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		grp.add_child(detail)
-		# DEF : tooltip d'impact concret (% de dégâts absorbés, courbe verrouillée).
-		if str(row[0]) == Translations.T("hero.stat.def"):
-			var red_pct := int(round(Balance.def_reduction(float(row[1])) * 100.0))
-			_attach_stat_tooltip(grp, str(row[0]), Translations.T("hero.stat.def_tt") % red_pct, row[4] as Color)
+		# Tooltip d'impact concret par stat (C6).
+		var tt := _stat_tooltip_body(str(row[0]), int(row[2]), crit_mult)
+		if tt != "":
+			_attach_stat_tooltip(grp, str(row[1]), tt, row[5] as Color)
 
 	# CRIT : stat en % (B4a) + tooltip d'impact sur le DPS moyen.
 	var crit_grp := HBoxContainer.new()
@@ -494,6 +494,22 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 		vb.add_child(eff_lbl)
 
 	return margin
+
+# Corps du tooltip d'impact d'une stat (C6 — HP/VIT/ATK/DEF), "" si aucun.
+static func _stat_tooltip_body(key: String, total: int, crit_mult: float) -> String:
+	match key:
+		"atk":
+			# Fourchette de dégâts par coup : normal (ATK) → critique (ATK × mult).
+			return Translations.T("hero.stat.atk_tt") % [total, int(round(float(total) * crit_mult))]
+		"def":
+			# % de dégâts absorbés (courbe verrouillée, fonction pure réutilisée).
+			return Translations.T("hero.stat.def_tt") % int(round(Balance.def_reduction(float(total)) * 100.0))
+		"hp":
+			return Translations.T("hero.stat.hp_tt")
+		"vit":
+			# Cadence d'attaque : frappes/s = vit / VIT_PER_APS.
+			return Translations.T("hero.stat.vit_tt") % ("%.1f" % (float(total) / Balance.VIT_PER_APS))
+	return ""
 
 # Branche un tooltip d'impact sur un groupe de stat : les labels enfants laissent
 # passer le survol (IGNORE) pour que le conteneur reçoive mouse_entered/exited.
