@@ -78,18 +78,16 @@ static func _add_header(host: Village, b: Dictionary, building_id: String) -> vo
 #  Route — section EN HAUT du panneau de hub (Héros/Expédition/Forge)
 # ═══════════════════════════════════════════════════════════
 # Appelée en tête de HeroPanel/AdventurePanel/ForgePanel (quartier = "hero"/
-# "adventure"/"forge"). Trois états :
-#   • route déjà reconstruite → RIEN (le chemin est affiché sur la carte du hub).
-#   • Forge débloquée (Village ≥ Peu Commun) → bouton « Reconstruire la route » + coût.
-#   • avant (T0) → message : les artisans ne sont pas encore assez expérimentés.
-# Reconstruire la route fait APPARAÎTRE le chemin (host.refresh_hub_after_route).
+# "adventure"/"forge"). Deux états :
+#   • route déjà reconstruite → RIEN (le chemin est dessiné sur la carte du hub).
+#   • sinon → bouton « Reconstruire la route » + coût (actif si payable).
+# Héros & Expédition sont reconstructibles dès T0 (onboarding, Option A) ; la Forge
+# est gatée structurellement (son hub n'apparaît qu'à Peu Commun). Reconstruire la
+# route fait APPARAÎTRE le chemin (host.refresh_hub_after_route).
 
 static func build_route_section(host: Village, quartier: String) -> void:
 	if VillageBuildings.route_built(quartier):
 		return  # route faite → le chemin est dessiné ; plus rien à afficher ici
-
-	var forge_unlocked := int(GameData.village.get("maitrise_actuelle", 0)) \
-			>= Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER
 
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel",
@@ -106,17 +104,6 @@ static func build_route_section(host: Village, quartier: String) -> void:
 	title.add_theme_font_size_override("font_size", 13)
 	title.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 	vb.add_child(title)
-
-	if not forge_unlocked:
-		# T0 : pas encore d'artisans assez expérimentés → message, pas de bouton.
-		var locked := Label.new()
-		locked.text = Translations.T("building.route.craftsmen_locked")
-		locked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		locked.add_theme_font_size_override("font_size", 11)
-		locked.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		vb.add_child(locked)
-		host.rp_content.add_child(card)
-		return
 
 	var hint := Label.new()
 	hint.text = Translations.T("building.route.hint")

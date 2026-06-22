@@ -549,12 +549,13 @@ func _pick_modifier() -> void:
 # Effectue les DEUX tirages INDÉPENDANTS (fréquent + rare) et retourne les ids
 # de ressources droppées (0 à 2). Pur (ne dépend que de randf + Balance) → unité
 # testable. `creature_tier` ne pilote QUE le taux de la rare ; le fréquent est fixe.
+# `allow_rare` = false court-circuite le tirage rare (gate Forge, cf. Option A).
 func roll_biome_drops(freq_id: String, rare_id: String, creature_tier: int,
-		rare_bonus: float = 0.0) -> Array:
+		rare_bonus: float = 0.0, allow_rare: bool = true) -> Array:
 	var out: Array = []
 	if freq_id != "" and randf() < Balance.DROP_FREQUENT_RATE:
 		out.append(freq_id)
-	if rare_id != "" and randf() < Balance.rare_drop_rate(creature_tier) + rare_bonus:
+	if allow_rare and rare_id != "" and randf() < Balance.rare_drop_rate(creature_tier) + rare_bonus:
 		out.append(rare_id)
 	return out
 
@@ -564,18 +565,20 @@ func roll_biome_drops(freq_id: String, rare_id: String, creature_tier: int,
 func _drop_biome_resources(enemy: Dictionary) -> void:
 	if enemy.get("est_unique", false):
 		return
-	# B2 : on ne droppe AUCUN ingrédient tant que la Forge n'est pas débloquée
-	# (Village ≥ Peu Commun). Avant ce jalon, l'équipement n'est pas encore en jeu
-	# et les ressources n'auraient aucun usage. Gate en amont des deux tirages.
-	if int(GameData.village.get("maitrise_actuelle", 0)) < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
-		return
+	# Option A (onboarding) : la ressource FRÉQUENTE tombe dès T0 — c'est le carburant
+	# pour reconstruire routes & bâtiments et faire monter le Village vers Peu Commun.
+	# La ressource RARE, elle, reste gatée jusqu'au déblocage de la Forge (Village ≥
+	# Peu Commun) : elle n'a d'usage qu'à la Forge (keystones).
+	var allow_rare := int(GameData.village.get("maitrise_actuelle", 0)) \
+			>= Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER
 	var biome := GameData.get_entity(current_biome_id)
 	var ids := roll_biome_drops(
 		str(biome.get("ressource_frequente_id", "")),
 		str(biome.get("ressource_rare_id", "")),
 		int(enemy.get("maitrise_actuelle", 0)),
 		VillageBuildings.get_bonus(VillageBuildings.CH_DROP_RARE_PCT) \
-				+ ForgeSystem.get_stat_bonus("drop_rare_pct"))  # Joaillier T4 + Aubaine (Anneau)
+				+ ForgeSystem.get_stat_bonus("drop_rare_pct"),  # Joaillier T4 + Aubaine (Anneau)
+		allow_rare)
 	if ids.is_empty():
 		return
 	var drops: Array = []

@@ -494,15 +494,9 @@ func _build_bottom_bar() -> Control:
 	bar.add_theme_constant_override("separation", 8)
 
 	# Bandeau de butin du cycle : encaisse les pastilles venues de la créature.
-	# C7 : aucun ingrédient ne tombe tant que la Forge n'est pas débloquée (Village
-	# ≥ Peu Commun — cf. B2) → le bandeau Butins n'a aucun intérêt à ce stade. On le
-	# masque (espaceur pour garder le bouton de fin d'expédition à droite).
-	if int(GameData.village.get("maitrise_actuelle", 0)) >= Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
-		bar.add_child(_build_loot_banner())
-	else:
-		var spacer := Control.new()
-		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bar.add_child(spacer)
+	# La ressource fréquente tombe dès T0 (onboarding, Option A) → le bandeau est
+	# utile dès le départ.
+	bar.add_child(_build_loot_banner())
 
 	# Le compteur « XP ce cycle » a été retiré (l'espace est rendu à la zone de
 	# combat). _xp_label reste null : _update_xp_label() est inerte (garde de
