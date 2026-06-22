@@ -14,6 +14,10 @@ static func build(host: Village) -> void:
 	var tier   := host.village_tier()
 	var tcolor := UIColors.tier_color(tier)
 
+	# Route du quartier Expédition (tout en haut) : reconstruire fait apparaître
+	# le chemin vers le quartier de gestion.
+	BuildingPanel.build_route_section(host, "adventure")
+
 	# Invalide la sélection si l'entité n'existe plus (pas d'auto-select)
 	if not host.adv_selected_biome_id.is_empty() and GameData.get_entity(host.adv_selected_biome_id).is_empty():
 		host.adv_selected_biome_id = ""

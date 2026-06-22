@@ -399,13 +399,12 @@ func _build_hub() -> void:
 func _build_district_links(unlocked: Array, n: int, vp: Vector2, tcolor: Color) -> void:
 	if n <= 0:
 		return
-	# Les ROUTES (le petit chemin qui part d'un hub vers son quartier de gestion)
-	# n'apparaissent QU'UNE FOIS la Forge débloquée (Village ≥ Peu Commun). Avant ce
-	# jalon, aucun ingrédient ne tombe → impossible de reconstruire une route → on
-	# ne l'affiche pas du tout. Les HUBS (hexagones) restent visibles, eux.
-	if village_tier() < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
-		return
 	for owner_id in DISTRICTS:
+		# Le CHEMIN (route) n'apparaît qu'une fois la route RECONSTRUITE depuis le
+		# panneau du hub. Avant : aucun filament/boule/quartier (rien à reconstruire
+		# tant qu'on n'a pas de ressources — gate Forge géré dans la section route).
+		if not VillageBuildings.route_built(owner_id):
+			continue
 		var idx := -1
 		for i in n:
 			if (unlocked[i] as Array)[4] == owner_id:
@@ -904,23 +903,15 @@ func _fill_panel_content(panel_id: String) -> void:
 		"relic":     _panel_soon("RELIQUE")
 		"tbd":       _panel_soon("?")
 		_:
-			# Pièce de quartier (Chantier 4 / B1). La ROUTE est une action de
-			# NIVEAU QUARTIER : elle n'apparaît qu'une fois la Forge débloquée
-			# (Village ≥ Peu Commun, moment où les ingrédients tombent — cf. B2) et
-			# gate l'accès à la gestion des bâtiments du quartier.
-			var owner := _owner_of_room(panel_id)
-			if owner == "":
-				return
-			if village_tier() < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
-				_panel_locked_note(Translations.T("district.forge_locked"))
-			elif not VillageBuildings.route_built(owner):
-				BuildingPanel.build_route_card(self, owner)
-			else:
-				var bid := VillageBuildings.building_for_room(panel_id)
-				if bid != "":
-					BuildingPanel.build(self, bid)
-				else:
-					_panel_soon(Translations.panel_title(panel_id))
+			# Pièce de quartier (Chantier 4). On n'y accède QUE si le chemin existe
+			# (route reconstruite) → la gestion de la route vit dans le panneau du
+			# hub (BuildingPanel.build_route_section), plus ici. Pièce = bâtiment →
+			# panneau de gestion ; sinon placeholder titré.
+			var bid := VillageBuildings.building_for_room(panel_id)
+			if bid != "":
+				BuildingPanel.build(self, bid)
+			elif _owner_of_room(panel_id) != "":
+				_panel_soon(Translations.panel_title(panel_id))
 
 # Lance l'aventure sur le biome sélectionné et bascule vers CombatScene.
 func start_selected_expedition() -> void:
@@ -939,15 +930,14 @@ func _panel_soon(label: String) -> void:
 	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	rp_content.add_child(lbl)
 
-# Note verrouillée (texte déjà localisé) — ex. quartier débloqué avec la Forge (B1).
-func _panel_locked_note(text: String) -> void:
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	rp_content.add_child(lbl)
+# Appelé par la section route d'un panneau de hub après une reconstruction réussie :
+# reconstruit le hub (le chemin/filament du quartier apparaît) puis rouvre le panneau
+# courant (la section route y disparaît, la route étant désormais faite).
+func refresh_hub_after_route() -> void:
+	var was_open := _active_panel_id
+	_rebuild_hub()
+	if was_open != "":
+		_open_panel(was_open)
 
 # ─── Village ──────────────────────────────────────────────────
 

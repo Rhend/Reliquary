@@ -46,10 +46,9 @@ static func build(host: Village, building_id: String) -> void:
 		_add_note(host, Translations.T("building.frozen"), UIColors.TEXT_MUTED)
 		return
 
-	# La route est désormais une action de NIVEAU QUARTIER (B1) : quand un
-	# BuildingPanel s'ouvre, la route du quartier est déjà reconstruite (Village
-	# affiche sinon la carte de route via build_route_card). On ne gère plus la
-	# route ici — uniquement bonus + amélioration.
+	# La route se reconstruit depuis le panneau du HUB (build_route_section) et son
+	# chemin doit exister pour qu'on accède à cette pièce → ici la route est toujours
+	# faite. On ne gère que bonus + amélioration.
 	_add_bonuses_card(host, building_id)
 	_add_upgrade_card(host, building_id)
 
@@ -76,15 +75,21 @@ static func _add_header(host: Village, b: Dictionary, building_id: String) -> vo
 	host.rp_content.add_child(row)
 
 # ═══════════════════════════════════════════════════════════
-#  Route (gate de quartier — rendu au NIVEAU QUARTIER, B1)
+#  Route — section EN HAUT du panneau de hub (Héros/Expédition/Forge)
 # ═══════════════════════════════════════════════════════════
-# Appelé par Village._fill_panel_content quand on ouvre une pièce d'un quartier
-# dont la route n'est pas encore reconstruite (et la Forge est débloquée). La
-# carte est owner-scopée : identique quelle que soit la pièce ouverte. La visibilité
-# (gate Forge) est gérée EN AMONT par Village.
+# Appelée en tête de HeroPanel/AdventurePanel/ForgePanel (quartier = "hero"/
+# "adventure"/"forge"). Trois états :
+#   • route déjà reconstruite → RIEN (le chemin est affiché sur la carte du hub).
+#   • Forge débloquée (Village ≥ Peu Commun) → bouton « Reconstruire la route » + coût.
+#   • avant (T0) → message : les artisans ne sont pas encore assez expérimentés.
+# Reconstruire la route fait APPARAÎTRE le chemin (host.refresh_hub_after_route).
 
-static func build_route_card(host: Village, quartier: String) -> void:
-	var cost := VillageBuildings.route_cost(quartier)
+static func build_route_section(host: Village, quartier: String) -> void:
+	if VillageBuildings.route_built(quartier):
+		return  # route faite → le chemin est dessiné ; plus rien à afficher ici
+
+	var forge_unlocked := int(GameData.village.get("maitrise_actuelle", 0)) \
+			>= Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER
 
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel",
@@ -102,6 +107,17 @@ static func build_route_card(host: Village, quartier: String) -> void:
 	title.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 	vb.add_child(title)
 
+	if not forge_unlocked:
+		# T0 : pas encore d'artisans assez expérimentés → message, pas de bouton.
+		var locked := Label.new()
+		locked.text = Translations.T("building.route.craftsmen_locked")
+		locked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		locked.add_theme_font_size_override("font_size", 11)
+		locked.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		vb.add_child(locked)
+		host.rp_content.add_child(card)
+		return
+
 	var hint := Label.new()
 	hint.text = Translations.T("building.route.hint")
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -109,11 +125,13 @@ static func build_route_card(host: Village, quartier: String) -> void:
 	hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	vb.add_child(hint)
 
-	vb.add_child(_cost_block(cost))
+	vb.add_child(_cost_block(VillageBuildings.route_cost(quartier)))
 
 	var can := VillageBuildings.can_rebuild_route(quartier)
 	vb.add_child(_action_btn(Translations.T("building.route.btn"), can,
-			func() -> void: VillageBuildings.rebuild_route(quartier)))
+			func() -> void:
+				if VillageBuildings.rebuild_route(quartier):
+					host.refresh_hub_after_route()))
 	host.rp_content.add_child(card)
 
 # ═══════════════════════════════════════════════════════════

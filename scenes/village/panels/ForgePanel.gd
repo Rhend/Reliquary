@@ -21,6 +21,9 @@ static func build(host: Village) -> void:
 	if int(GameData.village.get("maitrise_actuelle", 0)) < 1:
 		_build_locked(host)
 		return
+	# Route du quartier Forge (tout en haut) : reconstruire fait apparaître le
+	# chemin vers le quartier de gestion (forgeron/armurier/joaillier/couturier).
+	BuildingPanel.build_route_section(host, "forge")
 	for e in EQUIPS:
 		_build_equip_section(host, e[0] as String, e[1] as String)
 
