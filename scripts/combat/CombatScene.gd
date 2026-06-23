@@ -22,9 +22,6 @@ class_name CombatScene extends Control
 # remettre LOG_ENABLED à true suffit pour le réactiver.
 const LOG_ENABLED := false
 
-# ─── Filtres du journal ──────────────────────────────────────
-const LOG_TAB_KEYS: Array[String] = ["all", "hero", "monster", "attack", "defense", "heal", "status"]
-
 # ─── Nœuds racine ────────────────────────────────────────────
 var _shaker: Control          # conteneur décalé pour le shake d'écran
 var _hero_bg:     BiomeBackground   # fond ambiance Ville (côté héros, gauche)
@@ -57,10 +54,7 @@ var _enemy_stats_panel: PanelContainer
 var _enemy_stats_rows:  VBoxContainer
 
 # ─── Journal ─────────────────────────────────────────────────
-var _log_vbox:    VBoxContainer
-var _log_entries: Array = []          # [{node: RichTextLabel, tags: Array}]
-var _log_filter:  String = "all"
-var _tab_buttons: Dictionary = {}     # nom → Button
+var _log := CombatLog.new()           # journal à onglets (concern extrait)
 
 # ─── Barre de bas ────────────────────────────────────────────
 var _xp_label: Label
@@ -152,7 +146,7 @@ func _build_ui() -> void:
 	root.add_child(_build_combat_area())
 	root.add_child(_build_combatant_bars())
 	if LOG_ENABLED:
-		root.add_child(_build_log())
+		root.add_child(_log.build())
 	root.add_child(_build_bottom_bar())
 
 	_build_zone_label()
@@ -425,55 +419,6 @@ func _build_combatant_bars() -> Control:
 	_hero_states  = _hero_bar.states_row
 	_enemy_states = _enemy_bar.states_row
 	return m
-
-# ── Journal à onglets ──────────────────────────────────────
-func _build_log() -> Control:
-	var outer := VBoxContainer.new()
-	outer.add_theme_constant_override("separation", 4)
-	outer.custom_minimum_size = Vector2(0, 180)
-
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 4)
-	outer.add_child(tabs)
-	var tab_labels := Translations.log_tabs()
-	for i in LOG_TAB_KEYS.size():
-		var key := LOG_TAB_KEYS[i]
-		var b := Button.new()
-		b.text = tab_labels[i]
-		b.toggle_mode = true
-		b.button_pressed = (key == _log_filter)
-		b.flat = true
-		b.focus_mode = Control.FOCUS_NONE
-		b.add_theme_font_size_override("font_size", 11)
-		var is_active := (key == _log_filter)
-		var tc := UIColors.FILTER_ON if is_active else UIColors.TEXT_MUTED
-		b.add_theme_color_override("font_color",         tc)
-		b.add_theme_color_override("font_pressed_color", UIColors.FILTER_ON)
-		b.add_theme_color_override("font_hover_color",   Color(1, 1, 1, 0.75))
-		b.add_theme_stylebox_override("normal",   UIHelpers.card_style(tc, 0.0 if not is_active else 0.12, 0.0 if not is_active else 0.50, 1 if is_active else 0, 4))
-		b.add_theme_stylebox_override("pressed",  UIHelpers.card_style(UIColors.FILTER_ON, 0.12, 0.50, 1, 4))
-		b.add_theme_stylebox_override("hover",    UIHelpers.card_style(UIColors.TEXT_MUTED, 0.08, 0.30, 0, 4))
-		b.pressed.connect(_set_filter.bind(key))
-		tabs.add_child(b)
-		_tab_buttons[key] = b
-
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical   = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var panel := PanelContainer.new()
-	panel.size_flags_vertical   = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.CARD_NEUTRAL, 0.05, 0.30, 1, 4))
-	outer.add_child(panel)
-	var m := UIHelpers.margin_of(6)
-	panel.add_child(m)
-	m.add_child(scroll)
-
-	_log_vbox = VBoxContainer.new()
-	_log_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_log_vbox.add_theme_constant_override("separation", 2)
-	scroll.add_child(_log_vbox)
-	return outer
 
 # ── Barre de bas ───────────────────────────────────────────
 # Bandeau de butin (gauche) ↔ bouton fin d'expédition (droite).
@@ -1323,22 +1268,11 @@ func _hide_action(lbl: Label) -> void:
 	if box is PanelContainer:
 		box.visible = false
 
-# Ajoute une entrée de log (la plus récente en haut), taguée pour le filtre.
-# No-op tant que LOG_ENABLED est false (journal non construit).
+# Wrapper fin vers CombatLog — no-op tant que LOG_ENABLED est false (journal
+# non construit, cf. _build_bottom_bar). Les sites d'appel restent inchangés.
 func _add_log(bbcode: String, tags: Array) -> void:
-	if not LOG_ENABLED:
-		return
-	var rt := RichTextLabel.new()
-	rt.bbcode_enabled = true
-	rt.fit_content    = true
-	rt.scroll_active  = false
-	rt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rt.add_theme_font_size_override("normal_font_size", 12)
-	rt.text = bbcode
-	_log_vbox.add_child(rt)
-	_log_vbox.move_child(rt, 0)
-	_log_entries.push_front({"node": rt, "tags": tags})
-	rt.visible = _matches_filter(tags)
+	if LOG_ENABLED:
+		_log.add(bbcode, tags)
 
 func _log_attack(attacker_name: String, dmg: int, is_crit: bool, tags: Array) -> void:
 	var is_hero_attacker := "hero" in tags
@@ -1353,21 +1287,6 @@ func _log_attack(attacker_name: String, dmg: int, is_crit: bool, tags: Array) ->
 	else:
 		dmg_part = "[color=%s]-%d[/color]" % [_hex(UIColors.LOG_DEFEAT), dmg]
 	_add_log("%s%s → %s" % [prefix, name_part, dmg_part], tags)
-
-func _set_filter(tab: String) -> void:
-	_log_filter = tab
-	for tab_name: String in _tab_buttons:
-		var b: Button = _tab_buttons[tab_name]
-		var active := (tab_name == tab)
-		b.button_pressed = active
-		var tc := UIColors.FILTER_ON if active else UIColors.TEXT_MUTED
-		b.add_theme_color_override("font_color", tc)
-		b.add_theme_stylebox_override("normal", UIHelpers.card_style(tc, 0.12 if active else 0.0, 0.50 if active else 0.0, 1 if active else 0, 4))
-	for entry: Dictionary in _log_entries:
-		entry["node"].visible = _matches_filter(entry["tags"])
-
-func _matches_filter(tags: Array) -> bool:
-	return _log_filter == "all" or _log_filter in tags
 
 # ═══════════════════════════════════════════════════════════
 #  Zone + Créature Unique (overlays conservés)
