@@ -14,6 +14,7 @@ extends Node
 const BG_DARK := Color(0.06, 0.07, 0.11)
 const BG_CARD := Color(0.10, 0.11, 0.16)
 const BG_BAR  := Color(0.07, 0.07, 0.12)
+const PANEL_BG_DARK := Color(0.05, 0.06, 0.10)   # fond de panneau quasi noir (combat, rituel) — alpha posé au site
 
 # ── Barres de PV — Héros (vert → jaune → rouge → rouge vif) ─
 const HP_HIGH     := Color(0.18, 0.82, 0.32)   # > 60 %
@@ -79,6 +80,10 @@ const TIER_UNIQUE     := Color(1.00, 0.10, 0.18)   # 5 — Unique
 const ZONE_SURFACE    := Color(0.30, 0.70, 1.00)   # bleu
 const ZONE_PROFONDEUR := Color(0.72, 0.28, 1.00)   # violet
 const ZONE_ABYSSE     := Color(0.88, 0.18, 0.12)   # rouge
+
+# ── Village / éclosion ──────────────────────────────────────
+const VILLAGE_NASCENT := Color(0.38, 0.38, 0.52)   # teinte du village naissant (palier 0)
+const ENERGY_ACCENT   := Color(0.70, 0.85, 1.0)    # accent bleu clair des liens/boules d'énergie
 
 # ── Carte neutre (sans rareté native) ───────────────────────
 const CARD_NEUTRAL := Color(0.42, 0.52, 0.68)   # acier-bleu sobre, ni tier ni catégorie

@@ -11,7 +11,7 @@ class_name EnergyLink extends Control
 
 var start_point: Vector2 = Vector2.ZERO
 var end_point:   Vector2 = Vector2.ZERO
-var accent:      Color   = Color(0.70, 0.85, 1.0)
+var accent:      Color   = UIColors.ENERGY_ACCENT
 # false : filament diffus et flottant (lien latent, non emprunté).
 # true  : lien CONSISTANT (quartier établi) — trait net, ondulation calme.
 var solid:       bool    = false

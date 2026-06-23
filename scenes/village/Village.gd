@@ -37,7 +37,7 @@ const HUB_PANEL_SCALE  := 0.72
 # Échelle du hub au repos (sans panneau). < 1 : on « dézoome » légèrement pour
 # laisser respirer l'espace autour du village (préfigure l'espace explorable).
 const HUB_BASE_SCALE   := 0.85
-const TIER_0_COLOR := Color(0.38, 0.38, 0.52)
+const TIER_0_COLOR := UIColors.VILLAGE_NASCENT
 
 # ─── Éveil (phase d'éclosion) ─────────────────────────────────
 # L'orbe se réchauffe vers cette couleur à mesure que l'âme s'éveille.
@@ -410,7 +410,7 @@ func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Co
 	link.size  = vp
 	# Teinte lumineuse douce (énergie) dérivée de la couleur du palier : reste
 	# cohérent avec le hub tout en restant visible même aux paliers ternes.
-	link.accent = tcolor.lerp(Color(0.70, 0.85, 1.0), 0.45)
+	link.accent = tcolor.lerp(UIColors.ENERGY_ACCENT, 0.45)
 	# Départ JUSTE HORS du cercle de l'owner (sinon masqué par l'hexagone) ;
 	# arrivée plus loin sur le même axe radial, dans l'espace.
 	link.start_point = owner_center + outward * DISTRICT_LINK_START

@@ -15,7 +15,7 @@ class_name VillageBackdrop
 extends Control
 
 var _tier := 0
-var _tint := Color(0.38, 0.38, 0.52)
+var _tint := UIColors.VILLAGE_NASCENT
 var _t    := 0.0
 
 # Sprites radiaux générés une fois : falloff long pour le halo,

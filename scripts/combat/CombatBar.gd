@@ -307,7 +307,7 @@ func _draw_seg(track: Rect2, from_f: float, to_f: float, col: Color) -> void:
 func _draw() -> void:
 	var r := Rect2(Vector2.ZERO, size)
 	# ── Plaque + cadre biseauté (old school) ──────────────────
-	draw_rect(r, Color(0.05, 0.06, 0.10, 0.92))
+	draw_rect(r, Color(UIColors.PANEL_BG_DARK, 0.92))
 	draw_rect(r, Color(0, 0, 0, 0.65), false, 3.0)
 	var inner := Rect2(Vector2(2.0, 2.0), size - Vector2(4.0, 4.0))
 	draw_rect(inner, Color(camp_color.r, camp_color.g, camp_color.b, 0.55), false, 2.0)

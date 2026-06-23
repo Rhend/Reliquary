@@ -9,7 +9,7 @@ class_name EnergyBoule extends Control
 
 signal clicked
 
-var accent: Color = Color(0.70, 0.85, 1.0)
+var accent: Color = UIColors.ENERGY_ACCENT
 
 var _t: float = 0.0
 var _hovered: bool = false

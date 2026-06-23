@@ -102,7 +102,7 @@ func _build_entity_card() -> void:
 	var from_color := UIColors.tier_color(from_tier)
 
 	_card_style = StyleBoxFlat.new()
-	_card_style.bg_color      = Color(0.05, 0.06, 0.10, 0.94)
+	_card_style.bg_color      = Color(UIColors.PANEL_BG_DARK, 0.94)
 	_card_style.border_color  = Color(from_color.r, from_color.g, from_color.b, 0.80)
 	_card_style.set_border_width_all(2)
 	_card_style.set_corner_radius_all(14)
@@ -484,7 +484,7 @@ func _phase5_celebration() -> void:
 		var to_color := _accent_color()
 
 		var panel_style := StyleBoxFlat.new()
-		panel_style.bg_color     = Color(0.05, 0.06, 0.10, 0.92)
+		panel_style.bg_color     = Color(UIColors.PANEL_BG_DARK, 0.92)
 		panel_style.border_color = Color(to_color.r, to_color.g, to_color.b, 0.55)
 		panel_style.set_border_width_all(1)
 		panel_style.set_corner_radius_all(10)
