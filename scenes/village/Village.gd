@@ -622,7 +622,7 @@ func _build_village_conditions(container: VBoxContainer, village_maitrise: int, 
 	# En-tête contextuel : annonce que c'est l'objectif pour monter de palier.
 	var hdr := UIHelpers.label(
 			Translations.T("village.cond.ready" if met else "village.cond.header"),
-			10, Color(accent.r, accent.g, accent.b, 0.95))
+			13, Color(accent.r, accent.g, accent.b, 0.95))
 	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container.add_child(hdr)
@@ -631,18 +631,18 @@ func _build_village_conditions(container: VBoxContainer, village_maitrise: int, 
 	# d'XP du jeu) : icône + libellé + compteur, bordure d'accent épaisse.
 	var card := UIHelpers.xp_panel(accent, frac, 0.14, 0.95, 2, 8)
 	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	card.custom_minimum_size = Vector2(280.0, 0.0)
-	var m := UIHelpers.margin_of(8)
+	card.custom_minimum_size = Vector2(212.0, 0.0)
+	var m := UIHelpers.margin_of(6)
 	card.add_child(m)
 	var hb := HBoxContainer.new()
 	hb.alignment = BoxContainer.ALIGNMENT_CENTER
-	hb.add_theme_constant_override("separation", 10)
+	hb.add_theme_constant_override("separation", 8)
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	m.add_child(hb)
-	var ic := UIHelpers.label("✓" if met else icon, 20, accent)
+	var ic := UIHelpers.label("✓" if met else icon, 15, accent)
 	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(ic)
-	var txt := UIHelpers.label("%s   %d / %d" % [label, have, need], 14, Color.WHITE)
+	var txt := UIHelpers.label("%s   %d / %d" % [label, have, need], 12, Color.WHITE)
 	txt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(txt)
 	UIHelpers.register_tooltip(card, label, tt_body % [have, need], accent)
