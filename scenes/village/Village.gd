@@ -257,20 +257,14 @@ func _build_birth() -> void:
 	add_child(orb)
 	_birth_orb = orb
 
-	_xp_label = Label.new()
-	_xp_label.text = "%d / %d" % [clics, needed]
+	_xp_label = UIHelpers.label("%d / %d" % [clics, needed], 15, TIER_0_COLOR.lightened(0.3))
 	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_xp_label.add_theme_font_size_override("font_size", 15)
-	_xp_label.add_theme_color_override("font_color", TIER_0_COLOR.lightened(0.3))
 	_center(_xp_label, Vector2(0.0, 56.0), Vector2(160.0, 24.0))
 	add_child(_xp_label)
 
-	var flavor := Label.new()
-	flavor.text = Translations.T("birth.flavor")
+	var flavor := UIHelpers.label(Translations.T("birth.flavor"), 12, UIColors.TEXT_MUTED)
 	flavor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	flavor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	flavor.add_theme_font_size_override("font_size", 12)
-	flavor.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	_center(flavor, Vector2(0.0, 92.0), Vector2(320.0, 44.0))
 	add_child(flavor)
 
@@ -330,12 +324,9 @@ func _build_hub() -> void:
 	center_box.grow_vertical   = Control.GROW_DIRECTION_BOTH
 	_hub_root.add_child(center_box)
 
-	var lname := Label.new()
-	lname.text = Translations.T("village.tier_label")
+	var lname := UIHelpers.label(Translations.T("village.tier_label"), 24, tcolor)
 	lname.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lname.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lname.add_theme_font_size_override("font_size", 24)
-	lname.add_theme_color_override("font_color", tcolor)
 	lname.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
 	lname.add_theme_constant_override("shadow_offset_y", 2)
 	center_box.add_child(lname)
@@ -347,11 +338,8 @@ func _build_hub() -> void:
 	center_box.add_child(tier_row)
 
 	tier_row.add_child(_ornament_line(tcolor))
-	var ltier := Label.new()
-	ltier.text = GameData.get_tier_name(village_maitrise)
+	var ltier := UIHelpers.label(GameData.get_tier_name(village_maitrise), 15, tcolor.lerp(Color.WHITE, 0.40))
 	ltier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ltier.add_theme_font_size_override("font_size", 15)
-	ltier.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.40))
 	tier_row.add_child(ltier)
 	tier_row.add_child(_ornament_line(tcolor))
 
@@ -360,12 +348,9 @@ func _build_hub() -> void:
 	if village_maitrise < GameData.village_max_tier():
 		_build_village_conditions(center_box, village_maitrise, tcolor)
 	else:
-		var max_lbl := Label.new()
-		max_lbl.text = Translations.T("tier.max_rank")
+		var max_lbl := UIHelpers.label(Translations.T("tier.max_rank"), 12, tcolor.lerp(Color.WHITE, 0.40))
 		max_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		max_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		max_lbl.add_theme_font_size_override("font_size", 12)
-		max_lbl.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.40))
 		center_box.add_child(max_lbl)
 
 	# ── HexItems : tous gated uniformément par village_maitrise ──
@@ -695,12 +680,10 @@ func _build_village_conditions(container: VBoxContainer, village_maitrise: int, 
 	var label := Translations.T("village.cond.kills" if is_kills else "village.cond.buildings")
 	var tt_body := Translations.T("village.kills.tt_body" if is_kills else "village.buildings.tt_body")
 	var met := need > 0 and have >= need
-	var row := Label.new()
-	row.text = "%s%s  %d / %d" % ["✓ " if met else "• ", label, have, need]
+	var row := UIHelpers.label("%s%s  %d / %d" % ["✓ " if met else "• ", label, have, need],
+			11, UIColors.LOG_VICTORY if met else UIColors.TEXT_MUTED)
 	row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_font_size_override("font_size", 11)
-	row.add_theme_color_override("font_color", UIColors.LOG_VICTORY if met else UIColors.TEXT_MUTED)
 	# STOP pour que le tooltip explicatif soit accessible au survol.
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
 	UIHelpers.register_tooltip(row, label, tt_body % [have, need], vcolor)
@@ -858,12 +841,9 @@ func _build_panel_frame(panel_id: String) -> void:
 	_rp_root.add_child(frame)
 
 	# Titre
-	_rp_title = Label.new()
-	_rp_title.text = Translations.panel_title(panel_id)
+	_rp_title = UIHelpers.label(Translations.panel_title(panel_id), 16, Color.WHITE)
 	_rp_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_rp_title.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	_rp_title.add_theme_font_size_override("font_size", 16)
-	_rp_title.add_theme_color_override("font_color", Color.WHITE)
 	_rp_title.anchor_left   = 0.0; _rp_title.anchor_right  = 1.0
 	_rp_title.anchor_top    = 0.0; _rp_title.anchor_bottom = 0.0
 	_rp_title.offset_left   = 6;   _rp_title.offset_right  = -40
@@ -935,11 +915,8 @@ func start_selected_expedition() -> void:
 
 # Panneau générique "Bientôt disponible" pour les fonctionnalités non implémentées.
 func _panel_soon(label: String) -> void:
-	var lbl := Label.new()
-	lbl.text = Translations.T("village.soon") % label
+	var lbl := UIHelpers.label(Translations.T("village.soon") % label, 13, UIColors.TEXT_MUTED)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	rp_content.add_child(lbl)
 
 # Appelé par la section route d'un panneau de hub après une reconstruction réussie :
@@ -1026,12 +1003,9 @@ func show_banner(text: String, accent: Color, bg: Color, hold: float, fade: floa
 	banner.add_theme_stylebox_override("panel", style)
 	add_child(banner)
 
-	var lbl := Label.new()
-	lbl.text = text
+	var lbl := UIHelpers.label(text, 16, accent)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	lbl.add_theme_font_size_override("font_size", 16)
-	lbl.add_theme_color_override("font_color", accent)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	banner.add_child(lbl)
 
@@ -1073,10 +1047,7 @@ func _build_debug_tier_buttons() -> void:
 	add_child(row)
 
 	row.add_child(_debug_tier_btn("−", -1))
-	_debug_tier_lbl = Label.new()
-	_debug_tier_lbl.text = "Tier %d" % village_tier()
-	_debug_tier_lbl.add_theme_font_size_override("font_size", 11)
-	_debug_tier_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	_debug_tier_lbl = UIHelpers.label("Tier %d" % village_tier(), 11, UIColors.TEXT_MUTED)
 	_debug_tier_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(_debug_tier_lbl)
 	row.add_child(_debug_tier_btn("+", 1))
@@ -1177,14 +1148,11 @@ func _show_birth_phrase(text: String, final: bool) -> void:
 		ot.tween_property(old, "modulate:a", 0.0, 0.3)
 		ot.tween_callback(old.queue_free)
 
-	var lbl := Label.new()
-	lbl.text = text
+	var lbl := UIHelpers.label(text, 19 if final else 15,
+			ECLOSION_AWAKEN_COLOR if final else TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, 0.7))
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl.add_theme_font_size_override("font_size", 19 if final else 15)
-	lbl.add_theme_color_override("font_color",
-			ECLOSION_AWAKEN_COLOR if final else TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, 0.7))
 	lbl.modulate.a = 0.0
 	lbl.scale = Vector2(0.96, 0.96)
 	lbl.resized.connect(func() -> void: lbl.pivot_offset = lbl.size * 0.5)
@@ -1210,13 +1178,11 @@ func _show_birth_whisper() -> void:
 	if pool.is_empty():
 		return
 
-	var lbl := Label.new()
-	lbl.text = pool[randi() % pool.size()] as String
+	var lbl := UIHelpers.label(pool[randi() % pool.size()] as String, 13,
+			TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, 0.45))
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", TIER_0_COLOR.lerp(ECLOSION_AWAKEN_COLOR, 0.45))
 	lbl.add_theme_constant_override("outline_size", 3)
 	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	lbl.modulate.a    = 0.0

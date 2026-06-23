@@ -300,11 +300,8 @@ func _fill_stats_panel(panel: PanelContainer, rows: VBoxContainer, color: Color,
 	_style_mini_panel(panel, color)
 	for c in rows.get_children():
 		c.free()
-	var tier_lbl := Label.new()
-	tier_lbl.text = GameData.get_tier_name(tier).to_upper()
+	var tier_lbl := UIHelpers.label(GameData.get_tier_name(tier).to_upper(), 10, color)
 	tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tier_lbl.add_theme_font_size_override("font_size", 10)
-	tier_lbl.add_theme_color_override("font_color", color)
 	rows.add_child(tier_lbl)
 	# Filet séparateur teinté sous le titre.
 	var sep := ColorRect.new()
@@ -337,18 +334,12 @@ func _refresh_hero_stats(htier: int) -> void:
 func _add_stat_row(rows: VBoxContainer, label: String, value: int, color: Color) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var l := Label.new()
-	l.text = label
+	var l := UIHelpers.label(label, 11, color)
 	l.custom_minimum_size = Vector2(34, 0)
-	l.add_theme_font_size_override("font_size", 11)
-	l.add_theme_color_override("font_color", color)
 	row.add_child(l)
-	var v := Label.new()
-	v.text = str(value)
+	var v := UIHelpers.label(str(value), 11, Color.WHITE)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.horizontal_alignment  = HORIZONTAL_ALIGNMENT_RIGHT
-	v.add_theme_font_size_override("font_size", 11)
-	v.add_theme_color_override("font_color", Color.WHITE)
 	row.add_child(v)
 	rows.add_child(row)
 
@@ -373,13 +364,10 @@ func _build_column(is_hero: bool) -> Control:
 	var action_box := PanelContainer.new()
 	action_box.visible = false
 	action_box.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.12, 0.50, 1, 8))
-	var action := Label.new()
-	action.text = "—"
+	var action := UIHelpers.label("—", 14, UIColors.TEXT_MUTED)
 	action.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	action.add_theme_font_size_override("font_size", 14)
 	action.add_theme_constant_override("outline_size", 3)
 	action.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	action.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	action_box.add_child(action)
 	var action_center := CenterContainer.new()
 	action_center.add_child(action_box)
@@ -530,10 +518,7 @@ func _build_bottom_bar() -> Control:
 	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_flee_btn.add_child(inner)
 
-	var label := Label.new()
-	label.text = Translations.T("combat.end_btn")
-	label.add_theme_font_size_override("font_size", 15)
-	label.add_theme_color_override("font_color", tcolor)
+	var label := UIHelpers.label(Translations.T("combat.end_btn"), 15, tcolor)
 	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	inner.add_child(label)
@@ -544,9 +529,7 @@ func _build_bottom_bar() -> Control:
 	_evolve_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_evolve_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_evolve_badge.visible = false
-	_evolve_badge_lbl = Label.new()
-	_evolve_badge_lbl.add_theme_font_size_override("font_size", 13)
-	_evolve_badge_lbl.add_theme_color_override("font_color", Color.WHITE)
+	_evolve_badge_lbl = UIHelpers.label("", 13, Color.WHITE)
 	_evolve_badge_lbl.add_theme_constant_override("outline_size", 3)
 	_evolve_badge_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	# IGNORE : sans ça, le label (STOP par défaut) vole le survol au bouton dès
@@ -586,11 +569,8 @@ func _build_loot_banner() -> Control:
 	inner.alignment = BoxContainer.ALIGNMENT_BEGIN
 	m.add_child(inner)
 
-	var title := Label.new()
-	title.text = Translations.T("combat.loot.title")
+	var title := UIHelpers.label(Translations.T("combat.loot.title"), 12, UIColors.LOG_LOOT)
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 12)
-	title.add_theme_color_override("font_color", UIColors.LOG_LOOT)
 	inner.add_child(title)
 
 	_loot_row = HBoxContainer.new()
@@ -598,11 +578,8 @@ func _build_loot_banner() -> Control:
 	_loot_row.add_theme_constant_override("separation", 6)
 	inner.add_child(_loot_row)
 
-	_loot_hint = Label.new()
-	_loot_hint.text = Translations.T("combat.loot.empty")
+	_loot_hint = UIHelpers.label(Translations.T("combat.loot.empty"), 12, UIColors.TEXT_MUTED)
 	_loot_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_loot_hint.add_theme_font_size_override("font_size", 12)
-	_loot_hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	_loot_row.add_child(_loot_hint)
 	return wrap
 
@@ -1090,13 +1067,10 @@ func _make_loot_badge(color: Color, initial: String, diameter: int) -> Control:
 	st.shadow_color = Color(0, 0, 0, 0.40)
 	st.shadow_size  = 4
 	badge.add_theme_stylebox_override("panel", st)
-	var lbl := Label.new()
-	lbl.text = initial
+	var lbl := UIHelpers.label(initial, int(diameter * 0.5), Color(0.06, 0.06, 0.09))
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lbl.add_theme_font_size_override("font_size", int(diameter * 0.5))
-	lbl.add_theme_color_override("font_color", Color(0.06, 0.06, 0.09))
 	badge.add_child(lbl)
 	return badge
 
@@ -1167,18 +1141,12 @@ func _loot_land(item_id: String, item_name: String, qty: int, color: Color, init
 	box.add_theme_constant_override("separation", 5)
 	# Badge dimensionné au max de la hauteur utile du bandeau (≈ 42 − 2×6).
 	box.add_child(_make_loot_badge(color, initial, 30))
-	var nm := Label.new()
-	nm.text = item_name
+	var nm := UIHelpers.label(item_name, 14, Color.WHITE)
 	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	nm.add_theme_font_size_override("font_size", 14)
-	nm.add_theme_color_override("font_color", Color.WHITE)
 	box.add_child(nm)
-	var cnt := Label.new()
-	cnt.text    = "×%d" % qty
+	var cnt := UIHelpers.label("×%d" % qty, 14, UIColors.LOG_LOOT)
 	cnt.visible = qty > 1
 	cnt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	cnt.add_theme_font_size_override("font_size", 14)
-	cnt.add_theme_color_override("font_color", UIColors.LOG_LOOT)
 	box.add_child(cnt)
 	_loot_row.add_child(box)
 	_loot_pellets[item_id] = {"box": box, "count": cnt, "qty": qty}
@@ -1275,28 +1243,19 @@ func _show_event_stinger(title: String, name_txt: String, detail: String,
 	vb.add_theme_constant_override("separation", 2)
 	m.add_child(vb)
 
-	var kind_lbl := Label.new()
-	kind_lbl.text = title
+	var kind_lbl := UIHelpers.label(title, 12, color.lightened(0.25))
 	kind_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	kind_lbl.add_theme_font_size_override("font_size", 12)
-	kind_lbl.add_theme_color_override("font_color", color.lightened(0.25))
 	vb.add_child(kind_lbl)
 
-	var name_lbl := Label.new()
-	name_lbl.text = name_txt.to_upper()
+	var name_lbl := UIHelpers.label(name_txt.to_upper(), 24, Color.WHITE)
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 24)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	name_lbl.add_theme_constant_override("outline_size", 6)
 	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 	vb.add_child(name_lbl)
 
 	if detail != "":
-		var detail_lbl := Label.new()
-		detail_lbl.text = detail
+		var detail_lbl := UIHelpers.label(detail, 17, color.lightened(0.30))
 		detail_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		detail_lbl.add_theme_font_size_override("font_size", 17)
-		detail_lbl.add_theme_color_override("font_color", color.lightened(0.30))
 		detail_lbl.add_theme_constant_override("outline_size", 4)
 		detail_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 		vb.add_child(detail_lbl)
@@ -1495,11 +1454,10 @@ func _show_unique_indicator() -> void:
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 6)
 	_unique_panel.add_child(vb)
-	var lbl := Label.new()
-	lbl.text = Translations.T("combat.unique_beaten" if already_beaten else "combat.unique_watches") % nom
+	var lbl := UIHelpers.label(
+			Translations.T("combat.unique_beaten" if already_beaten else "combat.unique_watches") % nom,
+			13, UIColors.TEXT_MUTED if already_beaten else color)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED if already_beaten else color)
 	vb.add_child(lbl)
 	var btn := Button.new()
 	btn.text = Translations.T("combat.unique_refight" if already_beaten else "combat.unique_fight") % nom
@@ -1662,11 +1620,7 @@ func _make_state_pill_node(text: String, color: Color) -> Control:
 	var box := PanelContainer.new()
 	box.add_theme_stylebox_override("panel", UIHelpers.card_style(color, 0.18, 0.70, 1, 6))
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", color)
-	box.add_child(lbl)
+	box.add_child(UIHelpers.label(text, 11, color))
 	return box
 
 # Pill transitoire (toast) ajouté SOUS la barre d'un combattant : pop-in, puis
