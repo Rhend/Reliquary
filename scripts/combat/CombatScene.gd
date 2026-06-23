@@ -105,7 +105,7 @@ var _hero_poison_pill:   Control = null   # pill poison PERSISTANTE du héros (B
 var _hero_poison_token:  int     = 0      # invalide les masquages différés obsolètes
 var _haste_pill: Dictionary = {true: null, false: null}   # pill « Rapide » par camp
 var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
-var _stinger:            Control = null   # bandeau d'événement piège/bénédiction
+var _stinger := CombatStinger.new(self)   # bandeau d'événement piège/bénédiction (extrait)
 
 # ═══════════════════════════════════════════════════════════
 func _ready() -> void:
@@ -622,7 +622,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			UIHelpers.register_tooltip(_enemy_name, tname, trap_tt, UIColors.TYPE_TRAP)
 			var trap_detail := Translations.T("combat.stinger.ignored") if ignored \
 					else Translations.T("combat.stinger.trap_dmg") % tdmg
-			_show_event_stinger(Translations.T("combat.stinger.trap"), tname,
+			_stinger.show(Translations.T("combat.stinger.trap"), tname,
 					trap_detail, UIColors.TYPE_TRAP, not ignored)
 			AudioManager.play_sfx("trap_appear", -4.0)
 			if not ignored:
@@ -650,7 +650,7 @@ func _on_event_resolved(event_data: Dictionary) -> void:
 			UIHelpers.register_tooltip(_enemy_name, bname,
 				Translations.T("combat.bless_tt") % bdesc,
 				UIColors.TYPE_BENEDICTION)
-			_show_event_stinger(Translations.T("combat.stinger.bless"), bname,
+			_stinger.show(Translations.T("combat.stinger.bless"), bname,
 					bdesc, UIColors.TYPE_BENEDICTION, false)
 			AudioManager.play_sfx("benediction_appear", -5.0)
 			_add_log("[color=%s]%s[/color]" % [_hex(UIColors.TYPE_BENEDICTION), bname], ["status"])
@@ -969,96 +969,8 @@ func _states_for_entity(entity: Dictionary) -> HBoxContainer:
 #  Animation cooldown / shake / feed
 # ═══════════════════════════════════════════════════════════
 
-# ─── Stinger d'événement (piège / bénédiction) ──────────────
-# Bandeau central impossible à rater : flash plein écran teinté +
-# slam-in (scale TRANS_BACK), maintien ~AFFICHAGE_EVENEMENT, fondu.
-# Résout « je ne vois jamais les pièges/bénédictions » : sans journal,
-# le seul indice était le nom dans la colonne ennemie pendant 2,5 s.
-func _show_event_stinger(title: String, name_txt: String, detail: String,
-		color: Color, danger: bool) -> void:
-	if is_instance_valid(_stinger):
-		_stinger.queue_free()
-
-	# Flash plein écran teinté (rouge danger / vert bénédiction).
-	var flash := ColorRect.new()
-	flash.color = Color(color.r, color.g, color.b, 0.18)
-	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
-	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	flash.z_index = 90
-	add_child(flash)
-	var ftw := create_tween()
-	ftw.tween_property(flash, "color:a", 0.0, 0.5).set_ease(Tween.EASE_OUT)
-	ftw.tween_callback(flash.queue_free)
-
-	# Bandeau centré dans le tiers haut de la zone de combat.
-	var holder := CenterContainer.new()
-	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
-	holder.anchor_bottom = 0.58
-	holder.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-	holder.z_index       = 95
-	add_child(holder)
-	_stinger = holder
-
-	var panel := PanelContainer.new()
-	var ps := StyleBoxFlat.new()
-	ps.bg_color     = Color(0.04, 0.05, 0.09, 0.94)
-	ps.border_color = Color(color.r, color.g, color.b, 0.95)
-	ps.set_border_width_all(2)
-	ps.set_corner_radius_all(12)
-	ps.shadow_color = Color(color.r, color.g, color.b, 0.35)
-	ps.shadow_size  = 16
-	panel.add_theme_stylebox_override("panel", ps)
-	holder.add_child(panel)
-
-	var m := MarginContainer.new()
-	m.add_theme_constant_override("margin_left", 22)
-	m.add_theme_constant_override("margin_right", 22)
-	m.add_theme_constant_override("margin_top", 10)
-	m.add_theme_constant_override("margin_bottom", 12)
-	panel.add_child(m)
-
-	var vb := VBoxContainer.new()
-	vb.alignment = BoxContainer.ALIGNMENT_CENTER
-	vb.add_theme_constant_override("separation", 2)
-	m.add_child(vb)
-
-	var kind_lbl := UIHelpers.label(title, 12, color.lightened(0.25))
-	kind_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(kind_lbl)
-
-	var name_lbl := UIHelpers.label(name_txt.to_upper(), 24, Color.WHITE)
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_constant_override("outline_size", 6)
-	name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	vb.add_child(name_lbl)
-
-	if detail != "":
-		var detail_lbl := UIHelpers.label(detail, 17, color.lightened(0.30))
-		detail_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		detail_lbl.add_theme_constant_override("outline_size", 4)
-		detail_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-		vb.add_child(detail_lbl)
-
-	if danger:
-		_screen_shake()
-
-	# Slam-in → maintien → fondu de sortie.
-	holder.modulate.a = 0.0
-	var tw := create_tween()
-	tw.tween_callback(func() -> void:
-		panel.pivot_offset = panel.size * 0.5
-		panel.scale = Vector2(1.35, 1.35)
-	)
-	tw.set_parallel(true)
-	tw.tween_property(holder, "modulate:a", 1.0, 0.12).set_ease(Tween.EASE_OUT)
-	tw.tween_property(panel, "scale", Vector2.ONE, 0.40) \
-			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	# set_parallel(false) : tout ce qui suit redevient séquentiel (chain()
-	# ne chaînerait que le tweener suivant, le fondu partirait trop tôt).
-	tw.set_parallel(false)
-	tw.tween_interval(maxf(Balance.AFFICHAGE_EVENEMENT - 0.3, 0.6))
-	tw.tween_property(holder, "modulate:a", 0.0, 0.30).set_ease(Tween.EASE_IN)
-	tw.tween_callback(holder.queue_free)
+# Le stinger d'événement (piège / bénédiction) vit dans CombatStinger
+# (scripts/combat/CombatStinger.gd) — cf. membre _stinger.
 
 # Shake d'écran : translation X/Y amortie sur ~350ms puis retour.
 # strength : 1.0 = coup normal, ~1.7 = critique (plus ample + vertical).
