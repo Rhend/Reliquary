@@ -35,11 +35,8 @@ static func build(host: Village, building_id: String) -> void:
 	# Lore
 	var lore := Translations.entity_lore(b)
 	if lore != "":
-		var ll := Label.new()
-		ll.text = lore
+		var ll := UIHelpers.label(lore, 11, UIColors.TEXT_MUTED)
 		ll.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		ll.add_theme_font_size_override("font_size", 11)
-		ll.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		host.rp_content.add_child(ll)
 
 	if b.get("gele", false):
@@ -64,11 +61,8 @@ static func _add_header(host: Village, b: Dictionary, building_id: String) -> vo
 	row.add_theme_constant_override("separation", 8)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	var name_lbl := Label.new()
-	name_lbl.text = Translations.entity_name(b, building_id)
+	var name_lbl := UIHelpers.label(Translations.entity_name(b, building_id), 16, tcolor.lerp(Color.WHITE, 0.30))
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 16)
-	name_lbl.add_theme_color_override("font_color", tcolor.lerp(Color.WHITE, 0.30))
 	row.add_child(name_lbl)
 
 	row.add_child(_tier_pill(tier))
@@ -99,28 +93,18 @@ static func build_route_section(host: Village, quartier: String) -> void:
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	m.add_child(vb)
 
-	var title := Label.new()
-	title.text = Translations.T("building.route.title")
-	title.add_theme_font_size_override("font_size", 13)
-	title.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
-	vb.add_child(title)
+	vb.add_child(UIHelpers.label(Translations.T("building.route.title"), 13, UIColors.TEXT_HEADER))
 
 	# Avant la Forge (Village < Peu Commun) : aucun drop → rien à reconstruire.
 	if int(GameData.village.get("maitrise_actuelle", 0)) < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
-		var locked := Label.new()
-		locked.text = Translations.T("building.route.craftsmen_locked")
+		var locked := UIHelpers.label(Translations.T("building.route.craftsmen_locked"), 11, UIColors.TEXT_MUTED)
 		locked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		locked.add_theme_font_size_override("font_size", 11)
-		locked.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		vb.add_child(locked)
 		host.rp_content.add_child(card)
 		return
 
-	var hint := Label.new()
-	hint.text = Translations.T("building.route.hint")
+	var hint := UIHelpers.label(Translations.T("building.route.hint"), 11, UIColors.TEXT_MUTED)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.add_theme_font_size_override("font_size", 11)
-	hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	vb.add_child(hint)
 
 	vb.add_child(_cost_block(VillageBuildings.route_cost(quartier)))
@@ -148,21 +132,14 @@ static func _add_bonuses_card(host: Village, building_id: String) -> void:
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	m.add_child(vb)
 
-	var head := Label.new()
-	head.text = Translations.T("building.bonuses.title")
-	head.add_theme_font_size_override("font_size", 12)
-	head.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
-	vb.add_child(head)
+	vb.add_child(UIHelpers.label(Translations.T("building.bonuses.title"), 12, UIColors.TEXT_HEADER))
 
 	var effects := VillageBuildings.building_effects(building_id, tier)
 	if effects.is_empty():
-		var none := Label.new()
 		# Reliquaire (registre des succès) ou bâtiment encore Délabré.
-		none.text = Translations.T("building.bonuses.none") if tier < 0 \
-				else Translations.T("building.bonuses.registry")
+		var none := UIHelpers.label(Translations.T("building.bonuses.none") if tier < 0 \
+				else Translations.T("building.bonuses.registry"), 11, UIColors.TEXT_MUTED)
 		none.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		none.add_theme_font_size_override("font_size", 11)
-		none.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		vb.add_child(none)
 	else:
 		for ch in effects:
@@ -190,11 +167,9 @@ static func _add_upgrade_card(host: Village, building_id: String) -> void:
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	m.add_child(vb)
 
-	var head := Label.new()
-	head.text = Translations.T("building.upgrade.title") % GameData.get_tier_name(next_tier)
-	head.add_theme_font_size_override("font_size", 12)
-	head.add_theme_color_override("font_color", nc.lerp(Color.WHITE, 0.25))
-	vb.add_child(head)
+	vb.add_child(UIHelpers.label(
+			Translations.T("building.upgrade.title") % GameData.get_tier_name(next_tier),
+			12, nc.lerp(Color.WHITE, 0.25)))
 
 	# Bonus débloqués au palier suivant (incréments bruts du .tres).
 	var gained: Array = (GameData.get_entity(building_id).get("bonus_par_palier", {}) as Dictionary).get(next_tier, [])
@@ -233,24 +208,13 @@ static func _cost_block(cost: Dictionary) -> Control:
 		row.add_theme_constant_override("separation", 6)
 		m.add_child(row)
 
-		var check := Label.new()
-		check.text = "✓" if ok else "✗"
-		check.add_theme_font_size_override("font_size", 12)
-		check.add_theme_color_override("font_color", ic)
-		row.add_child(check)
+		row.add_child(UIHelpers.label("✓" if ok else "✗", 12, ic))
 
-		var nl := Label.new()
-		nl.text = Translations.entity_name(res, rid)
+		var nl := UIHelpers.label(Translations.entity_name(res, rid), 11, ic)
 		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		nl.add_theme_font_size_override("font_size", 11)
-		nl.add_theme_color_override("font_color", ic)
 		row.add_child(nl)
 
-		var ql := Label.new()
-		ql.text = "%d / %d" % [have, need]
-		ql.add_theme_font_size_override("font_size", 11)
-		ql.add_theme_color_override("font_color", ic)
-		row.add_child(ql)
+		row.add_child(UIHelpers.label("%d / %d" % [have, need], 11, ic))
 		vb.add_child(card)
 	return vb
 
@@ -276,11 +240,8 @@ static func _action_btn(label: String, enabled: bool, on_press: Callable) -> But
 
 # Ligne décrivant un effet (canal + valeur), localisée.
 static func _effect_label(channel: String, value: float, color: Color) -> Label:
-	var lbl := Label.new()
-	lbl.text = "•  " + _effect_text(channel, value)
+	var lbl := UIHelpers.label("•  " + _effect_text(channel, value), 11, color)
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", color)
 	return lbl
 
 # Texte localisé d'un effet selon son canal.
@@ -299,12 +260,9 @@ static func _effect_text(channel: String, value: float) -> String:
 	return channel
 
 static func _add_note(host: Village, text: String, color: Color) -> void:
-	var lbl := Label.new()
-	lbl.text = text
+	var lbl := UIHelpers.label(text, 12, color)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl.add_theme_font_size_override("font_size", 12)
-	lbl.add_theme_color_override("font_color", color)
 	host.rp_content.add_child(lbl)
 
 # Pilule « palier » (Délabré ou nom du palier) aux couleurs du tier.
@@ -318,11 +276,9 @@ static func _tier_pill(tier: int) -> Control:
 	m.add_theme_constant_override("margin_top", 1)
 	m.add_theme_constant_override("margin_bottom", 1)
 	pill.add_child(m)
-	var lbl := Label.new()
-	lbl.text = Translations.T("building.delabre") if tier < 0 else GameData.get_tier_name(tier)
-	lbl.add_theme_font_size_override("font_size", 10)
-	lbl.add_theme_color_override("font_color", tc.lerp(Color.WHITE, 0.25))
-	m.add_child(lbl)
+	m.add_child(UIHelpers.label(
+			Translations.T("building.delabre") if tier < 0 else GameData.get_tier_name(tier),
+			10, tc.lerp(Color.WHITE, 0.25)))
 	return pill
 
 # Couleur d'un palier de bâtiment ; Délabré (-1) → gris discret.

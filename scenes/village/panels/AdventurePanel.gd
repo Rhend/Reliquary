@@ -35,17 +35,11 @@ static func build(host: Village) -> void:
 		var vb := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 3)
 		m.add_child(vb)
-		var lbl1 := Label.new()
-		lbl1.text = "⚔  " + Translations.T("adv.running.expedition")
+		var lbl1 := UIHelpers.label("⚔  " + Translations.T("adv.running.expedition"), 14, tcolor)
 		lbl1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl1.add_theme_font_size_override("font_size", 14)
-		lbl1.add_theme_color_override("font_color", tcolor)
 		vb.add_child(lbl1)
-		var lbl2 := Label.new()
-		lbl2.text = "%s  —  %s" % [rname, zone_str]
+		var lbl2 := UIHelpers.label("%s  —  %s" % [rname, zone_str], 11, UIColors.TEXT_MUTED)
 		lbl2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl2.add_theme_font_size_override("font_size", 11)
-		lbl2.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		vb.add_child(lbl2)
 		host.rp_content.add_child(info)
 		# Pas de bouton de départ quand une expédition tourne déjà
@@ -60,14 +54,11 @@ static func build(host: Village) -> void:
 	placeholder.custom_minimum_size   = Vector2(0, 52)
 	placeholder.visible = no_biome_selected and not AdventureSystem.is_running
 	placeholder.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.25, 1, 6))
-	var ph_lbl := Label.new()
-	ph_lbl.text = Translations.T("adv.biome_placeholder")
+	var ph_lbl := UIHelpers.label(Translations.T("adv.biome_placeholder"), 13, UIColors.TEXT_MUTED)
 	ph_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ph_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	ph_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ph_lbl.size_flags_vertical   = Control.SIZE_EXPAND_FILL
-	ph_lbl.add_theme_font_size_override("font_size", 13)
-	ph_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	placeholder.add_child(ph_lbl)
 	host.rp_content.add_child(placeholder)
 
@@ -235,21 +226,15 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 			+ (pools["traps"] as Array) + (pools["benedictions"] as Array)
 	var disc_total := full_pool.size()
 	var disc_found := MasteryRegistry.count_discovered(full_pool)
-	var count_lbl := Label.new()
-	count_lbl.text = Translations.T("adv.entities_count") % [disc_found, disc_total]
-	count_lbl.add_theme_font_size_override("font_size", 10)
-	count_lbl.add_theme_color_override("font_color",
-			UIColors.LOG_VICTORY if disc_found >= disc_total else UIColors.TEXT_MUTED)
-	header.add_child(count_lbl)
+	header.add_child(UIHelpers.label(
+			Translations.T("adv.entities_count") % [disc_found, disc_total], 10,
+			UIColors.LOG_VICTORY if disc_found >= disc_total else UIColors.TEXT_MUTED))
 
 	# Flèche d'accordéon, à droite de l'en-tête du template.
-	var arrow := Label.new()
 	# Sélection ⇔ accordéon déplié : à la (re)construction, le biome déjà
 	# sélectionné repart déplié (même invariant que le toggle au clic).
 	var is_selected := host.adv_selected_biome_id == biome_id
-	arrow.text = "  ▼" if is_selected else "  ▶"
-	arrow.add_theme_font_size_override("font_size", 10)
-	arrow.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	var arrow := UIHelpers.label("  ▼" if is_selected else "  ▶", 10, UIColors.TEXT_MUTED)
 	header.add_child(arrow)
 
 	# ── Section catégories (repliée par défaut, sauf biome sélectionné) ──
@@ -343,12 +328,8 @@ static func _adv_entity_rows(host: Village, parent: VBoxContainer, pool: Array, 
 		# Préfixe de catégorie (« Créature »…) en couleur, greffé à droite de
 		# l'en-tête pour ne pas déséquilibrer le bloc central.
 		if cat_label != "":
-			var cat_lbl := Label.new()
-			cat_lbl.text = cat_label
-			cat_lbl.add_theme_font_size_override("font_size", 10)
-			cat_lbl.add_theme_color_override("font_color",
-					Color(color.r, color.g, color.b, 0.85))
-			header.add_child(cat_lbl)
+			header.add_child(UIHelpers.label(cat_label, 10,
+					Color(color.r, color.g, color.b, 0.85)))
 
 		# Tooltip de l'entité.
 		UIHelpers.register_tooltip(panel, disp_name,
@@ -401,25 +382,16 @@ static func _adv_resource_rows(parent: VBoxContainer, biome: Dictionary) -> void
 		row.add_theme_constant_override("separation", 6)
 		pm.add_child(row)
 
-		var cat_lbl := Label.new()
-		cat_lbl.text = Translations.T("adv.cat.resource") + " · "
-		cat_lbl.add_theme_font_size_override("font_size", 11)
-		cat_lbl.add_theme_color_override("font_color", Color(nc.r, nc.g, nc.b, 0.85))
-		row.add_child(cat_lbl)
+		row.add_child(UIHelpers.label(Translations.T("adv.cat.resource") + " · ", 11,
+				Color(nc.r, nc.g, nc.b, 0.85)))
 
 		var icon := str(res.get("icon", ""))
-		var name_lbl := Label.new()
-		name_lbl.text = (icon + " " if icon != "" else "") + Translations.entity_name(res, res_id)
+		var name_lbl := UIHelpers.label(
+				(icon + " " if icon != "" else "") + Translations.entity_name(res, res_id), 11, ec)
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_lbl.add_theme_font_size_override("font_size", 11)
-		name_lbl.add_theme_color_override("font_color", ec)
 		row.add_child(name_lbl)
 
-		var rate_lbl := Label.new()
-		rate_lbl.text = entry["rate"]
-		rate_lbl.add_theme_font_size_override("font_size", 10)
-		rate_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		row.add_child(rate_lbl)
+		row.add_child(UIHelpers.label(entry["rate"], 10, UIColors.TEXT_MUTED))
 
 # Affiche la mécanique forte du biome : pill colorée (active) ou verrouillée (tier < Rare).
 # Rien si le biome n'a pas de mécanique définie.
@@ -458,12 +430,10 @@ static func _adv_mechanic_row(parent: VBoxContainer, biome: Dictionary) -> void:
 	icon_lbl.add_theme_font_size_override("font_size", 11)
 	hb.add_child(icon_lbl)
 
-	var text_lbl := Label.new()
-	text_lbl.text = ("%s  —  %s" % [mname, mdesc]) if active \
-			else (Translations.T("adv.mechanic_locked") % mname)
+	var text_lbl := UIHelpers.label(
+			("%s  —  %s" % [mname, mdesc]) if active else (Translations.T("adv.mechanic_locked") % mname),
+			11, pill_color)
 	text_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_lbl.add_theme_font_size_override("font_size", 11)
-	text_lbl.add_theme_color_override("font_color", pill_color)
 	hb.add_child(text_lbl)
 
 	var mtooltip := mdesc if active else Translations.T("adv.mechanic_tt_locked")
@@ -534,21 +504,15 @@ static func _adv_next_milestone_row(parent: VBoxContainer, biome_id: String, bio
 	icon.add_theme_stylebox_override("panel", ist)
 	icon.custom_minimum_size  = Vector2(16, 16)
 	icon.size_flags_vertical  = Control.SIZE_SHRINK_BEGIN
-	var bang := Label.new()
-	bang.text = "!"
+	var bang := UIHelpers.label("!", 10, tcolor)
 	bang.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	bang.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	bang.add_theme_font_size_override("font_size", 10)
-	bang.add_theme_color_override("font_color", tcolor)
 	icon.add_child(bang)
 	hb.add_child(icon)
 
-	var text_lbl := Label.new()
-	text_lbl.text = _milestone_text(ms)
+	var text_lbl := UIHelpers.label(_milestone_text(ms), 11, tcolor)
 	text_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_lbl.add_theme_font_size_override("font_size", 11)
-	text_lbl.add_theme_color_override("font_color", tcolor)
 	hb.add_child(text_lbl)
 
 	UIHelpers.register_tooltip(pill,
