@@ -78,6 +78,8 @@ const STRINGS: Dictionary = {
 
 		# ── Conditions Village ────────────────────────────────
 		"village.cond.fragments": "Fragments",
+		"village.cond.header":    "▾  PROCHAIN PALIER  ▾",
+		"village.cond.ready":     "✦  PRÊT À ÉVOLUER  ✦",
 		"village.cond.kills":     "Créatures vaincues",
 		"village.kills.tt_body":  "Le Village grandit TOUT SEUL. Premier palier : vaincre assez de créatures en expédition débloque la Forge (et active les drops). Aucun clic, aucun coût.\n\nVaincues : %d  ·  Requis pour le prochain palier : %d",
 		"village.cond.buildings": "Bâtiments reconstruits",
@@ -448,6 +450,8 @@ const STRINGS: Dictionary = {
 
 		# ── Conditions Village ────────────────────────────────
 		"village.cond.fragments": "Fragments",
+		"village.cond.header":    "▾  NEXT TIER  ▾",
+		"village.cond.ready":     "✦  READY TO EVOLVE  ✦",
 		"village.cond.kills":     "Creatures defeated",
 		"village.kills.tt_body":  "The Village grows ON ITS OWN. First tier: defeating enough creatures on expeditions unlocks the Forge (and activates drops). No click, no cost.\n\nDefeated: %d  ·  Required for the next tier: %d",
 		"village.cond.buildings": "Buildings rebuilt",

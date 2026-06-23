@@ -599,9 +599,9 @@ func _village_progress() -> Array:
 		return [int(GameData.village.get("kills_total", 0)), Balance.VILLAGE_SEUIL_PEU_COMMUN_KILLS]
 	return [VillageBuildings.count_buildings_tier0_plus(), Balance.VILLAGE_SEUIL_RARE_BATIMENTS]
 
-func _build_village_conditions(container: VBoxContainer, village_maitrise: int, vcolor: Color) -> void:
+func _build_village_conditions(container: VBoxContainer, village_maitrise: int, _vcolor: Color) -> void:
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0.0, 6.0)
+	spacer.custom_minimum_size = Vector2(0.0, 8.0)
 	container.add_child(spacer)
 
 	# Condition d'évolution selon le palier (kills à Commun, bâtiments T0+ à Peu
@@ -613,14 +613,58 @@ func _build_village_conditions(container: VBoxContainer, village_maitrise: int, 
 	var label := Translations.T("village.cond.kills" if is_kills else "village.cond.buildings")
 	var tt_body := Translations.T("village.kills.tt_body" if is_kills else "village.buildings.tt_body")
 	var met := need > 0 and have >= need
-	var row := UIHelpers.label("%s%s  %d / %d" % ["✓ " if met else "• ", label, have, need],
-			11, UIColors.LOG_VICTORY if met else UIColors.TEXT_MUTED)
-	row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# STOP pour que le tooltip explicatif soit accessible au survol.
-	row.mouse_filter = Control.MOUSE_FILTER_STOP
-	UIHelpers.register_tooltip(row, label, tt_body % [have, need], vcolor)
-	container.add_child(row)
+	# Accent VOYANT : ambre tant que l'objectif est en cours, vert une fois atteint
+	# (impossible à rater contre le fond sombre du hub, même au palier Commun gris).
+	var accent := UIColors.LOG_VICTORY if met else UIColors.FILTER_ON
+	var frac := (clampf(float(have) / float(need), 0.0, 1.0) if need > 0 else 0.0)
+	var icon := "⚔" if is_kills else "🏠"
+
+	# En-tête contextuel : annonce que c'est l'objectif pour monter de palier.
+	var hdr := UIHelpers.label(
+			Translations.T("village.cond.ready" if met else "village.cond.header"),
+			10, Color(accent.r, accent.g, accent.b, 0.95))
+	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.add_child(hdr)
+
+	# Carte d'objectif qui SE REMPLIT avec la progression (même DA que les cartes
+	# d'XP du jeu) : icône + libellé + compteur, bordure d'accent épaisse.
+	var card := UIHelpers.xp_panel(accent, frac, 0.14, 0.95, 2, 8)
+	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	card.custom_minimum_size = Vector2(280.0, 0.0)
+	var m := UIHelpers.margin_of(8)
+	card.add_child(m)
+	var hb := HBoxContainer.new()
+	hb.alignment = BoxContainer.ALIGNMENT_CENTER
+	hb.add_theme_constant_override("separation", 10)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	m.add_child(hb)
+	var ic := UIHelpers.label("✓" if met else icon, 20, accent)
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(ic)
+	var txt := UIHelpers.label("%s   %d / %d" % [label, have, need], 14, Color.WHITE)
+	txt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(txt)
+	UIHelpers.register_tooltip(card, label, tt_body % [have, need], accent)
+	container.add_child(card)
+
+	# Respiration douce tant que l'objectif n'est pas atteint : attire l'œil sans
+	# agresser (le bouton ÉVOLUER prend le relais une fois la condition remplie).
+	# Pivot recentré à chaque (re)dimensionnement ; tween lié à la carte (auto-tué
+	# au rebuild du hub), avec repli `ready` si la carte n'est pas encore dans l'arbre.
+	if not met:
+		card.resized.connect(func() -> void: card.pivot_offset = card.size * 0.5)
+		var start_pulse := func() -> void:
+			card.pivot_offset = card.size * 0.5
+			var pulse := card.create_tween().set_loops()
+			pulse.tween_property(card, "scale", Vector2(1.03, 1.03), 1.1) \
+					.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			pulse.tween_property(card, "scale", Vector2.ONE, 1.1) \
+					.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		if card.is_inside_tree():
+			start_pulse.call()
+		else:
+			card.ready.connect(start_pulse, CONNECT_ONE_SHOT)
 
 	# Bouton ÉVOLUER MANUEL : apparaît quand la condition est remplie. Le joueur
 	# déclenche la montée — jamais automatique (atteindre le seuil ne fait rien seul).
