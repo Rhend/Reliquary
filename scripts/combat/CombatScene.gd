@@ -78,8 +78,7 @@ var _loot := CombatLootBanner.new(self)  # bandeau de butin (concern extrait)
 var _xp_fx_layer:    Control                # couche plein écran pour les halos de palier
 
 # ─── Overlays (zone + Unique) ────────────────────────────────
-var _zone_panel:   PanelContainer = null   # petit panneau strate, centré sur la barre VS
-var _zone_label:   Label   = null
+var _zonemech := CombatZoneMechanic.new(self)   # bandeaux strate + mécanique (extrait)
 var _unique_panel: Control = null
 
 # ─── État ────────────────────────────────────────────────────
@@ -101,7 +100,6 @@ var _poison_state_pill:  Control = null   # pill venin violette ennemie (Contact
 var _hero_poison_pill:   Control = null   # pill poison PERSISTANTE du héros (B3)
 var _hero_poison_token:  int     = 0      # invalide les masquages différés obsolètes
 var _haste_pill: Dictionary = {true: null, false: null}   # pill « Rapide » par camp
-var _mechanic_label:     Label   = null   # badge mécanique forte permanente (item 4)
 var _stinger := CombatStinger.new(self)   # bandeau d'événement piège/bénédiction (extrait)
 
 # ═══════════════════════════════════════════════════════════
@@ -143,8 +141,7 @@ func _build_ui() -> void:
 		root.add_child(_log.build())
 	root.add_child(_build_bottom_bar())
 
-	_build_zone_label()
-	_build_mechanic_label()
+	_zonemech.build()
 
 	# Couche FX pour les halos de palier : par-dessus la zone de combat, sous les
 	# stingers (z 90+). Transparente à la souris.
@@ -428,7 +425,7 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_update_xp_label()
 	_loot.reset()
 	_refresh_evolve_counter()
-	_update_zone_label(AdventureSystem.zone_courante)
+	_zonemech.update_zone(AdventureSystem.zone_courante)
 	if AdventureSystem.zone_courante == Enums.Zone.ABYSSE:
 		_show_unique_indicator()
 
@@ -466,27 +463,23 @@ func _on_adventure_started(_biome_id: String) -> void:
 	_enemy_bar.set_hp(0, 1)
 	_hide_action(_enemy_action)
 
-	if _mechanic_label:
-		_mechanic_label.visible = false
+	_zonemech.hide_mechanic()
 	match BiomeMechanics.active_mechanic:
 		"ambush":
 			var ac := UIColors.MECH_AMBUSH
 			_push_under_bar_pill(_hero_states, Translations.mech_name("ambush"), ac)
-			_show_mechanic_label("⚡ " + Translations.mech_name("ambush"), ac)
-			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("ambush"),
-					Translations.mech_desc("ambush"), ac)
+			_zonemech.show_mechanic("⚡ " + Translations.mech_name("ambush"), ac,
+					Translations.mech_name("ambush"), Translations.mech_desc("ambush"))
 		"poison":
 			var pc := UIColors.MECH_POISON
 			_push_under_bar_pill(_hero_states, Translations.mech_name("poison"), pc)
-			_show_mechanic_label("☠ " + Translations.mech_name("poison"), pc)
-			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("poison"),
-					Translations.mech_desc("poison"), pc)
+			_zonemech.show_mechanic("☠ " + Translations.mech_name("poison"), pc,
+					Translations.mech_name("poison"), Translations.mech_desc("poison"))
 		"endurcissement":
 			var ec := UIColors.MECH_ENDURANCE
 			_push_under_bar_pill(_hero_states, Translations.mech_name("endurcissement"), ec)
-			_show_mechanic_label("🗻 " + Translations.mech_name("endurcissement"), ec)
-			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("endurcissement"),
-					Translations.mech_desc("endurcissement"), ec)
+			_zonemech.show_mechanic("🗻 " + Translations.mech_name("endurcissement"), ec,
+					Translations.mech_name("endurcissement"), Translations.mech_desc("endurcissement"))
 
 func _on_event_resolved(event_data: Dictionary) -> void:
 	match event_data.get("type", ""):
@@ -927,60 +920,6 @@ func _log_attack(attacker_name: String, dmg: int, is_crit: bool, tags: Array) ->
 #  Zone + Créature Unique (overlays conservés)
 # ═══════════════════════════════════════════════════════════
 
-# Petit panneau de strate (Surface/Profondeur/Abysse) centré en haut de l'arène,
-# par-dessus la barre oblique VS. Auto-dimensionné à son texte (grow symétrique
-# autour du centre). Le style (teinte de bordure) est posé par _update_zone_label.
-func _build_zone_label() -> void:
-	_zone_panel = PanelContainer.new()
-	_zone_panel.anchor_left = 0.5; _zone_panel.anchor_right = 0.5
-	_zone_panel.anchor_top  = 0.0; _zone_panel.anchor_bottom = 0.0
-	_zone_panel.offset_top  = 8
-	_zone_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_zone_panel.grow_vertical   = Control.GROW_DIRECTION_END
-	_zone_panel.mouse_filter = Control.MOUSE_FILTER_PASS
-
-	_zone_label = Label.new()
-	_zone_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_zone_label.add_theme_font_size_override("font_size", 13)
-	_zone_label.add_theme_constant_override("outline_size", 3)
-	_zone_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	_zone_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_zone_panel.add_child(_zone_label)
-	add_child(_zone_panel)
-
-func _build_mechanic_label() -> void:
-	_mechanic_label = Label.new()
-	_mechanic_label.anchor_left  = 1.0; _mechanic_label.anchor_right  = 1.0
-	_mechanic_label.anchor_top   = 0.0; _mechanic_label.anchor_bottom = 0.0
-	_mechanic_label.offset_left  = -170; _mechanic_label.offset_right = -6
-	_mechanic_label.offset_top   = 6;    _mechanic_label.offset_bottom = 30
-	_mechanic_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_mechanic_label.add_theme_font_size_override("font_size", 13)
-	_mechanic_label.mouse_filter = Control.MOUSE_FILTER_PASS
-	_mechanic_label.visible = false
-	add_child(_mechanic_label)
-
-func _update_zone_label(zone: Enums.Zone) -> void:
-	if not _zone_label or not _zone_panel:
-		return
-	var idx   := clampi(int(zone), 0, 2)
-	var color := UIColors.zone_color(idx)
-	_zone_label.text = "◆ " + Translations.zone_name(idx)
-	_zone_label.add_theme_color_override("font_color", color)
-
-	# Panneau sombre à bordure teintée strate, avec un peu d'air autour du texte.
-	var s := StyleBoxFlat.new()
-	s.bg_color     = Color(UIColors.BG_DARK.r, UIColors.BG_DARK.g, UIColors.BG_DARK.b, 0.88)
-	s.border_color = Color(color.r, color.g, color.b, 0.85)
-	s.set_border_width_all(1)
-	s.set_corner_radius_all(7)
-	s.content_margin_left = 14; s.content_margin_right = 14
-	s.content_margin_top = 3;   s.content_margin_bottom = 3
-	_zone_panel.add_theme_stylebox_override("panel", s)
-
-	UIHelpers.register_tooltip(_zone_panel, Translations.zone_name(idx),
-			Translations.zone_tooltip(idx), color)
-
 func _show_unique_indicator() -> void:
 	if _unique_panel != null:
 		return
@@ -1063,17 +1002,6 @@ func _navigate_to_summary() -> void:
 		return
 	_navigating = true
 	UIHelpers.fade_to_scene(self, "res://scenes/cycle/CycleSummaryScreen.tscn")
-
-# ═══════════════════════════════════════════════════════════
-#  Polish combat — item 4 (badge mécanique forte)
-# ═══════════════════════════════════════════════════════════
-
-func _show_mechanic_label(text: String, color: Color) -> void:
-	if not _mechanic_label:
-		return
-	_mechanic_label.text = text
-	_mechanic_label.add_theme_color_override("font_color", color)
-	_mechanic_label.visible = true
 
 # ═══════════════════════════════════════════════════════════
 #  Polish combat — item 5 (pulse PV danger ≤30 %)
