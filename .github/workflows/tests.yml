@@ -1,10 +1,11 @@
 # CI — lance les tests headless du projet à chaque push / pull request.
 #
-# Quatre suites :
+# Cinq suites :
 #   • TestScriptsLoad     — smoke test : tous les scripts compilent avec les autoloads
 #   • TestCombatResolver  — unités : résolution de combat (crit, poison, bouclier…)
 #   • TestExpeditionFlow  — boucle d'expédition : stats de cycle + résumé
 #   • TestTierCap         — garde-fou plafond dur global (T2) : XP / évolution / Hall / Village
+#   • TestDropSystem      — drops de biome : taux/quantité fréquent + rare, gating Forge
 # Chaque scène de test quitte avec un code ≠ 0 en cas d'échec.
 
 name: tests
@@ -43,3 +44,6 @@ jobs:
 
       - name: TestTierCap (plafond dur global T2)
         run: $GODOT --headless --path . res://tests/TestTierCap.tscn
+
+      - name: TestDropSystem (drops de biome)
+        run: $GODOT --headless --path . res://tests/TestDropSystem.tscn

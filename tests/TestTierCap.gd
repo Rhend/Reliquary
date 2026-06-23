@@ -152,7 +152,7 @@ func _test_hall_familiarity_capped() -> void:
 			"compteur de rencontres continue d'avancer")
 
 func _test_village_capped() -> void:
-	print("\n[TEST 8] Village plafonné (montée automatique par largeur)")
+	print("\n[TEST 8] Village plafonné (montée MANUELLE bornée au plafond)")
 	var cap := Balance.GLOBAL_MAX_TIER
 	_assert(GameData.village_max_tier() == cap, "village_max_tier() = %d" % cap,
 			"obtenu %d" % GameData.village_max_tier())
@@ -160,13 +160,17 @@ func _test_village_capped() -> void:
 	_assert(Balance.village_target_tier(9999, 9999) == cap,
 			"village_target_tier plafonné à GLOBAL_MAX_TIER",
 			"obtenu %d" % Balance.village_target_tier(9999, 9999))
-	# recompute_village_tier ne dépasse jamais le plafond, même au plafond.
+	# Au plafond, l'évolution MANUELLE est refusée même condition remplie : can_upgrade
+	# renvoie false et upgrade_village() ne fait pas dépasser le plafond.
 	var tier_save := int(GameData.village.get("maitrise_actuelle", 0))
-	var eclos_save = GameData.village.get("eclos", false)
-	GameData.village["eclos"] = true
+	var kills_save := int(GameData.village.get("kills_total", 0))
+	GameData.village["kills_total"] = 9999
 	GameData.village["maitrise_actuelle"] = cap
-	GameData.recompute_village_tier()
+	_assert(not GameData.can_upgrade_village(),
+			"can_upgrade_village() = false au plafond")
+	_assert(not GameData.upgrade_village(),
+			"upgrade_village() refuse au plafond")
 	var blocked := int(GameData.village.get("maitrise_actuelle", 0)) == cap
 	GameData.village["maitrise_actuelle"] = tier_save
-	GameData.village["eclos"] = eclos_save
-	_assert(blocked, "recompute_village_tier ne dépasse pas le plafond")
+	GameData.village["kills_total"] = kills_save
+	_assert(blocked, "upgrade_village() ne dépasse pas le plafond")
