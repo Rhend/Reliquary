@@ -525,14 +525,10 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	wrapper.add_theme_constant_override("separation", 2)
 	wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# ── Stats actuelles ───────────────────────────────────────
+	# ── Stats actuelles (formatage centralisé — cf. ForgePanel._stats_line) ──
 	var stats_dict := equip.get("stats_par_palier", {}) as Dictionary
 	var stats_at   := stats_dict.get(etier, stats_dict.get(0, {})) as Dictionary
-	var stat_parts: PackedStringArray = []
-	if int(stats_at.get("atk", 0)) != 0:              stat_parts.append(Translations.T("hero.stat.atk") + " +%d" % int(stats_at["atk"]))
-	if int(stats_at.get("def", 0)) != 0:              stat_parts.append(Translations.T("hero.stat.def") + " +%d" % int(stats_at["def"]))
-	if int(stats_at.get("hp", 0)) != 0:               stat_parts.append(Translations.T("hero.stat.hp") + " +%d" % int(stats_at["hp"]))
-	if int(stats_at.get("attack_speed_pct", 0)) != 0: stat_parts.append("VIT +%d%%" % int(stats_at["attack_speed_pct"]))
+	var stats_line := ForgePanel._stats_line(stats_at)
 
 	# ── Carte XP unifiée (DA commune) ─────────────────────────
 	# Les stats sont injectées à l'intérieur de la carte, sous le header,
@@ -546,12 +542,12 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	hdr.add_child(UIHelpers.label(slot_name, 10, UIColors.TEXT_MUTED))
 
 	# Injecter les stats dans la carte : reparenter le header dans un VBox
-	if stat_parts.size() > 0:
+	if not stats_line.is_empty():
 		var mg  := hdr.get_parent()  # MarginContainer de entity_xp_card
 		var vb  := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 3)
 		hdr.reparent(vb)
-		vb.add_child(UIHelpers.label("  ".join(stat_parts), 11, UIColors.TEXT_MUTED))
+		vb.add_child(UIHelpers.label(stats_line, 11, UIColors.TEXT_MUTED))
 		mg.add_child(vb)
 
 	# ── Indicateur forge (visible uniquement si barre pleine) ──
@@ -560,8 +556,8 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 
 	# Tooltip JRPG
 	var tt := Translations.T("hero.equip.tt_slot") % [slot_name, GameData.get_tier_name(etier)]
-	if stat_parts.size() > 0:
-		tt += "\n" + "  ".join(stat_parts)
+	if not stats_line.is_empty():
+		tt += "\n" + stats_line
 	UIHelpers.register_tooltip(xpcard, enom, tt, ec, Translations.entity_lore(equip))
 
 	return wrapper
