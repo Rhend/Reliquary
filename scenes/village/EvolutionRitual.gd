@@ -130,21 +130,15 @@ func _build_entity_card() -> void:
 	margin.add_child(vb)
 
 	# Icône d'entité — remplit l'espace mort de l'ancienne carte.
-	_icon_lbl = Label.new()
-	_icon_lbl.text = _entity_icon()
+	_icon_lbl = UIHelpers.label(_entity_icon(), 44, from_color.lightened(0.25))
 	_icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_icon_lbl.add_theme_font_size_override("font_size", 44)
-	_icon_lbl.add_theme_color_override("font_color", from_color.lightened(0.25))
 	vb.add_child(_icon_lbl)
 
 	# Nom AU PALIER DE DÉPART : certaines entités changent de nom en évoluant ;
 	# le nouveau nom est révélé au morph de palier (_finish_tier_replacement).
 	var display_name := _entity_name_at(from_tier)
-	_name_lbl = Label.new()
-	_name_lbl.text = display_name.to_upper()
+	_name_lbl = UIHelpers.label(display_name.to_upper(), 21, Color.WHITE)
 	_name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_lbl.add_theme_font_size_override("font_size", 21)
-	_name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	_name_lbl.add_theme_constant_override("outline_size", 4)
 	_name_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	vb.add_child(_name_lbl)
@@ -163,11 +157,8 @@ func _build_entity_card() -> void:
 	chip_m.add_theme_constant_override("margin_bottom", 3)
 	chip.add_child(chip_m)
 
-	_from_tier_lbl = Label.new()
-	_from_tier_lbl.text = GameData.get_tier_name(from_tier).to_upper()
+	_from_tier_lbl = UIHelpers.label(GameData.get_tier_name(from_tier).to_upper(), 13, from_color.lightened(0.20))
 	_from_tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_from_tier_lbl.add_theme_font_size_override("font_size", 13)
-	_from_tier_lbl.add_theme_color_override("font_color", from_color.lightened(0.20))
 	chip_m.add_child(_from_tier_lbl)
 
 	add_child(card)
@@ -177,11 +168,10 @@ func _build_tier_label() -> void:
 	var to_tier := _params.get("to_tier", 1) as int
 	var accent  := _accent_color()
 
-	_tier_label = Label.new()
-	_tier_label.text                 = Translations.T("ritual.eclosion_title") if _params.get("eclosion", false) else GameData.get_tier_name(to_tier).to_upper()
+	_tier_label = UIHelpers.label(
+			Translations.T("ritual.eclosion_title") if _params.get("eclosion", false) else GameData.get_tier_name(to_tier).to_upper(),
+			64, accent.lightened(0.35))
 	_tier_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tier_label.add_theme_font_size_override("font_size", 64)
-	_tier_label.add_theme_color_override("font_color", accent.lightened(0.35))
 	_tier_label.add_theme_constant_override("outline_size", 8)
 	_tier_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.85))
 	# En haut de l'écran (~100px depuis le top), centré horizontalement (±320px)
@@ -398,11 +388,8 @@ func _start_tier_descent() -> void:
 	var from_rect := _from_tier_lbl.get_global_rect()
 
 	# Créer un clone du grand texte en positionnement absolu (anchor 0,0)
-	var clone := Label.new()
-	clone.text                 = _tier_label.text
+	var clone := UIHelpers.label(_tier_label.text, 64, _accent_color().lightened(0.35))
 	clone.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	clone.add_theme_font_size_override("font_size", 64)
-	clone.add_theme_color_override("font_color", _accent_color().lightened(0.35))
 	clone.add_theme_constant_override("outline_size", 8)
 	clone.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.85))
 	clone.anchor_left   = 0.0; clone.anchor_right  = 0.0
@@ -529,16 +516,13 @@ func _phase5_celebration() -> void:
 			built_rows.append(r)
 
 		if not bonus_text.is_empty():
-			var bonus := Label.new()
-			bonus.text                 = bonus_text
+			var bonus := UIHelpers.label(bonus_text, 17, Color.WHITE)
 			bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
 			bonus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			# C4 : le texte s'écoule sur TOUTE la largeur du panneau (500 − 2×14 de
 			# marge), pour qu'autowrap ne coupe pas les phrases sur une largeur réduite.
 			bonus.custom_minimum_size  = Vector2(472.0, 0.0)
-			bonus.add_theme_font_size_override("font_size", 17)
-			bonus.add_theme_color_override("font_color", Color.WHITE)
 			bonus.add_theme_constant_override("outline_size", 3)
 			bonus.add_theme_constant_override("line_spacing", 6)
 			bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
@@ -688,29 +672,20 @@ func _build_stat_row(data: Dictionary) -> Dictionary:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
 
-	var name_lbl := Label.new()
-	name_lbl.text = str(data["label"])
+	var name_lbl := UIHelpers.label(str(data["label"]), 16, color)
 	name_lbl.custom_minimum_size  = Vector2(70.0, 0.0)
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	name_lbl.add_theme_font_size_override("font_size", 16)
-	name_lbl.add_theme_color_override("font_color", color)
 	row.add_child(name_lbl)
 
-	var value_lbl := Label.new()
-	value_lbl.text = str(int(data["before"])) + str(data["suffix"])
+	var value_lbl := UIHelpers.label(str(int(data["before"])) + str(data["suffix"]), 22, Color.WHITE)
 	value_lbl.custom_minimum_size  = Vector2(76.0, 0.0)
 	value_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	value_lbl.add_theme_font_size_override("font_size", 22)
-	value_lbl.add_theme_color_override("font_color", Color.WHITE)
 	value_lbl.add_theme_constant_override("outline_size", 3)
 	value_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	row.add_child(value_lbl)
 
-	var bonus_lbl := Label.new()
-	bonus_lbl.text = "+%d%s" % [int(data["after"]) - int(data["before"]), data["suffix"]]
+	var bonus_lbl := UIHelpers.label("+%d%s" % [int(data["after"]) - int(data["before"]), data["suffix"]], 17, UIColors.TEXT_BONUS)
 	bonus_lbl.custom_minimum_size = Vector2(70.0, 0.0)
-	bonus_lbl.add_theme_font_size_override("font_size", 17)
-	bonus_lbl.add_theme_color_override("font_color", UIColors.TEXT_BONUS)
 	row.add_child(bonus_lbl)
 
 	return {"row": row, "value": value_lbl, "bonus": bonus_lbl,

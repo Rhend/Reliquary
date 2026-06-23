@@ -58,11 +58,7 @@ static func _build_equip_section(host: Village, equip_id: String, icon: String) 
 
 	# Points de Forge
 	var pts := ForgeSystem.points(equip_id)
-	var pts_lbl := Label.new()
-	pts_lbl.text = Translations.T("forge.points") % pts
-	pts_lbl.add_theme_font_size_override("font_size", 12)
-	pts_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	body.add_child(pts_lbl)
+	body.add_child(UIHelpers.label(Translations.T("forge.points") % pts, 12, UIColors.FILTER_ON))
 
 	# Bouton d'évolution (rituel) si prêt
 	if not at_max and ForgeSystem.can_evolve_equipment(equip_id):
@@ -77,11 +73,8 @@ static func _build_equip_section(host: Village, equip_id: String, icon: String) 
 		)
 		body.add_child(ebtn)
 	elif at_max:
-		var maxl := Label.new()
-		maxl.text = Translations.T("forge.equip.max_rank")
+		var maxl := UIHelpers.label(Translations.T("forge.equip.max_rank"), 11, UIColors.TIER_LEGENDAIRE)
 		maxl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		maxl.add_theme_font_size_override("font_size", 11)
-		maxl.add_theme_color_override("font_color", UIColors.TIER_LEGENDAIRE)
 		body.add_child(maxl)
 
 	# Accès à l'arbre (spatial) — actif dès l'activation de l'arbre (équip. T1).
@@ -121,18 +114,12 @@ static func _build_locked(host: Village) -> void:
 	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon_lbl.add_theme_font_size_override("font_size", 36)
 	vb.add_child(icon_lbl)
-	var title_lbl := Label.new()
-	title_lbl.text = Translations.T("forge.locked.title")
+	var title_lbl := UIHelpers.label(Translations.T("forge.locked.title"), 14, UIColors.TEXT_HEADER)
 	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_lbl.add_theme_font_size_override("font_size", 14)
-	title_lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 	vb.add_child(title_lbl)
-	var hint := Label.new()
-	hint.text = Translations.T("forge.locked.hint")
+	var hint := UIHelpers.label(Translations.T("forge.locked.hint"), 11, UIColors.TEXT_MUTED)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.add_theme_font_size_override("font_size", 11)
-	hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	vb.add_child(hint)
 	host.rp_content.add_child(card)
 
@@ -154,13 +141,10 @@ static func _locked_equip_card(equip: Dictionary, equip_id: String) -> Control:
 	var biome      := GameData.get_entity(str(equip.get("biome_source_id", "")))
 	var biome_name := Translations.entity_name(biome, str(equip.get("biome_source_id", "")))
 	var tier_name  := GameData.get_tier_name(Balance.EQUIPMENT_UNLOCK_BIOME_TIER)
-	var lbl := Label.new()
-	lbl.text = Translations.T("forge.equip.locked") \
-			% [Translations.entity_name(equip, equip_id), biome_name, tier_name]
+	var lbl := UIHelpers.label(Translations.T("forge.equip.locked") \
+			% [Translations.entity_name(equip, equip_id), biome_name, tier_name], 12, UIColors.TEXT_MUTED)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl.add_theme_font_size_override("font_size", 12)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	m.add_child(lbl)
 	return card
