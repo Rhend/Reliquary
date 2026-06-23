@@ -487,14 +487,6 @@ func get_equipment_bonuses() -> Dictionary:
 			bonuses[key] = bonuses.get(key, 0.0) + float(item_stats[key])
 	return bonuses
 
-# Retourne la recette (Array de {ingredient_id, quantite}) pour le palier cible,
-# ou [] si aucune recette n'est définie.
-func get_forge_recipe(equipment_id: String, target_tier: int) -> Array:
-	var equip := get_entity(equipment_id)
-	if equip.is_empty():
-		return []
-	return (equip.get("recettes_evolution", {}) as Dictionary).get(target_tier, []) as Array
-
 # ═══════════════════════════════════════════════════════════
 #  Hall des Évolutions (Bestiaire)
 # ═══════════════════════════════════════════════════════════

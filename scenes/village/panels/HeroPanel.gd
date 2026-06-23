@@ -552,7 +552,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 
 	# ── Indicateur forge (visible uniquement si barre pleine) ──
 	if not at_max and MasterySystem.can_evolve(equip_id):
-		wrapper.add_child(_forge_ready_panel(equip_id, etier, ec))
+		wrapper.add_child(_forge_ready_panel(ec))
 
 	# Tooltip JRPG
 	var tt := Translations.T("hero.equip.tt_slot") % [slot_name, GameData.get_tier_name(etier)]
@@ -562,41 +562,22 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 
 	return wrapper
 
-# Panneau "Forge Requise" ou liste d'ingrédients quand la barre XP est pleine.
-static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Control:
+# Indicateur quand la barre d'XP de l'équipement est pleine. L'équipement évolue
+# par la MAÎTRISE à la Forge (XP, sans ingrédient — cf. ForgeSystem) : ce bloc
+# renvoie le joueur vers le quartier de la Forge. Tant que la Forge n'est pas
+# débloquée (Village < Peu Commun), il rappelle qu'il faut d'abord l'ouvrir.
+static func _forge_ready_panel(ec: Color) -> Control:
+	var forge_unlocked := int(GameData.village.get("maitrise_actuelle", 0)) >= 1
 	var body := PanelContainer.new()
 	body.add_theme_stylebox_override("panel", UIHelpers.card_style(ec, 0.04, 0.30, 1, 3))
 	var m := UIHelpers.margin_of(6)
 	body.add_child(m)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 3)
-	m.add_child(vb)
-
-	if int(GameData.village.get("maitrise_actuelle", 0)) < 1:
-		var lbl := UIHelpers.label(Translations.T("hero.forge_required"), 12, UIColors.TEXT_MUTED)
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		vb.add_child(lbl)
-	else:
-		var recipe := GameData.get_forge_recipe(equip_id, etier + 1)
-		if recipe.is_empty():
-			return body
-		vb.add_child(UIHelpers.label(Translations.T("hero.forge_ready"), 11, UIColors.LOG_VICTORY))
-		for req in recipe:
-			var ingr_id  := req.get("ingredient_id", "") as String
-			var needed   := int(req.get("quantite", 1))
-			var ingr     := GameData.get_entity(ingr_id)
-			var have     := int(GameData.player["resources"].get(ingr_id, 0))
-			var ingr_nom := Translations.entity_name(ingr, ingr_id)
-			var ok       := have >= needed
-			var ic       := UIColors.INGREDIENT_OK if ok else UIColors.INGREDIENT_MISSING
-			var row      := HBoxContainer.new()
-			row.add_theme_constant_override("separation", 4)
-			vb.add_child(row)
-			var il := UIHelpers.label("  %s" % ingr_nom, 11, ic)
-			il.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			row.add_child(il)
-			row.add_child(UIHelpers.label("%d / %d" % [have, needed], 11, ic))
-
+	var lbl := UIHelpers.label(
+			Translations.T("hero.forge_ready") if forge_unlocked else Translations.T("hero.forge_required"),
+			11, UIColors.LOG_VICTORY if forge_unlocked else UIColors.TEXT_MUTED)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	m.add_child(lbl)
 	return body
 
 # Retourne la liste d'effets pour le palier t, ou les effets de base si absent.
