@@ -32,6 +32,21 @@ static func clear_children(node: Node) -> void:
 		child.queue_free()
 
 # ═══════════════════════════════════════════════════════════
+#  Texte
+# ═══════════════════════════════════════════════════════════
+
+# Label stylé en une ligne : pose texte + taille de police + couleur.
+# Centralise le boilerplate Label.new()/add_theme_*_override répété ~150× dans
+# le projet. Le caller peut ensuite poser ses props supplémentaires (alignement,
+# size_flags, autowrap…) sur le Label retourné.
+static func label(text: String, size: int, color: Color) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	return l
+
+# ═══════════════════════════════════════════════════════════
 #  Styles
 # ═══════════════════════════════════════════════════════════
 

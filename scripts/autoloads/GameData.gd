@@ -495,49 +495,6 @@ func get_forge_recipe(equipment_id: String, target_tier: int) -> Array:
 		return []
 	return (equip.get("recettes_evolution", {}) as Dictionary).get(target_tier, []) as Array
 
-# Retourne true si l'équipement peut être forgé au palier suivant.
-# Conditions : XP barre pleine (MasterySystem) + ingrédients disponibles.
-func can_forge(equipment_id: String) -> bool:
-	var equip := get_entity(equipment_id)
-	if equip.is_empty():
-		return false
-	var current := int(equip.get("maitrise_actuelle", 0))
-	if current >= get_max_tier_for_type(Enums.EntityType.EQUIPMENT):
-		return false
-	if not MasterySystem.can_evolve(equipment_id):
-		return false
-	var recipe := get_forge_recipe(equipment_id, current + 1)
-	if recipe.is_empty():
-		return false
-	for req in recipe:
-		var ingr_id := req.get("ingredient_id", "") as String
-		if ingr_id.is_empty() or int(player["resources"].get(ingr_id, 0)) < int(req.get("quantite", 1)):
-			return false
-	return true
-
-# Retourne true si l'XP de l'équipement est pleine (barre remplie) pour le palier suivant.
-func equipment_xp_full(equipment_id: String) -> bool:
-	return MasterySystem.can_evolve(equipment_id)
-
-# Forge l'équipement au palier suivant : consomme les ingrédients, monte le palier, reset XP.
-# Retourne false si impossible.
-func forge(equipment_id: String) -> bool:
-	if not can_forge(equipment_id):
-		return false
-	var equip   := get_entity(equipment_id)
-	var current := int(equip.get("maitrise_actuelle", 0))
-	var recipe  := get_forge_recipe(equipment_id, current + 1)
-	for req in recipe:
-		var ingr_id := req.get("ingredient_id", "") as String
-		var consume := int(req.get("quantite", 1))
-		player["resources"][ingr_id] = maxi(0, int(player["resources"].get(ingr_id, 0)) - consume)
-	equip["maitrise_actuelle"]           = current + 1
-	equip["xp_maitrise_actuelle"]        = 0.0
-	equip["xp_maitrise_palier_suivant"]  = palier_suivant_cost(Enums.EntityType.EQUIPMENT, current + 1)
-	EventBus.equipement_evolue.emit(equipment_id, current + 1)
-	EventBus.resources_changed.emit()
-	return true
-
 # ═══════════════════════════════════════════════════════════
 #  Hall des Évolutions (Bestiaire)
 # ═══════════════════════════════════════════════════════════

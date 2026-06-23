@@ -97,16 +97,8 @@ static func build(host: Village) -> void:
 		kl.text = str(row[1]) + " :"
 		kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		grp.add_child(kl)
-		var vl := Label.new()
-		vl.text = str(row[2])
-		vl.add_theme_font_size_override("font_size", 14)
-		vl.add_theme_color_override("font_color", row[5])
-		grp.add_child(vl)
-		var detail := Label.new()
-		detail.text = "(%d + %d)" % [row[3], row[4]]
-		detail.add_theme_font_size_override("font_size", 10)
-		detail.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		grp.add_child(detail)
+		grp.add_child(UIHelpers.label(str(row[2]), 14, row[5]))
+		grp.add_child(UIHelpers.label("(%d + %d)" % [row[3], row[4]], 10, UIColors.TEXT_MUTED))
 		# Tooltip d'impact concret par stat (C6).
 		var tt := _stat_tooltip_body(str(row[0]), int(row[2]), crit_mult)
 		if tt != "":
@@ -120,11 +112,7 @@ static func build(host: Village) -> void:
 	crit_kl.text = Translations.T("hero.stat.crit") + " :"
 	crit_kl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	crit_grp.add_child(crit_kl)
-	var crit_vl := Label.new()
-	crit_vl.text = "%d%%" % int(round(crit_total * 100.0))
-	crit_vl.add_theme_font_size_override("font_size", 14)
-	crit_vl.add_theme_color_override("font_color", UIColors.TIER_EPIQUE)
-	crit_grp.add_child(crit_vl)
+	crit_grp.add_child(UIHelpers.label("%d%%" % int(round(crit_total * 100.0)), 14, UIColors.TIER_EPIQUE))
 	# DPS moyen ×(1 + chance × (mult − 1)) → bonus moyen en %.
 	var crit_dps := int(round(crit_total * (crit_mult - 1.0) * 100.0))
 	_attach_stat_tooltip(crit_grp, Translations.T("hero.stat.crit"),
@@ -137,11 +125,8 @@ static func build(host: Village) -> void:
 				"hero", Translations.entity_name(c, "hero"),
 				c.get("entity_type", Enums.EntityType.CREATURE) as String, tier))
 	else:
-		var ml := Label.new()
-		ml.text = Translations.T("tier.max_level")
+		var ml := UIHelpers.label(Translations.T("tier.max_level"), 11, UIColors.FILTER_ON)
 		ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		ml.add_theme_font_size_override("font_size", 11)
-		ml.add_theme_color_override("font_color", UIColors.FILTER_ON)
 		stats_body.add_child(ml)
 
 	# ── ÉQUIPEMENT (B7) ───────────────────────────────────────
@@ -270,11 +255,7 @@ static func _biome_header(bname: String, bc: Color) -> Control:
 	line1.color               = Color(bc, 0.55)
 	line1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hb.add_child(line1)
-	var lbl := Label.new()
-	lbl.text = bname.to_upper()
-	lbl.add_theme_font_size_override("font_size", 10)
-	lbl.add_theme_color_override("font_color", Color(bc, 0.85))
-	hb.add_child(lbl)
+	hb.add_child(UIHelpers.label(bname.to_upper(), 10, Color(bc, 0.85)))
 	var line2 := ColorRect.new()
 	line2.custom_minimum_size   = Vector2(0, 1)
 	line2.color                 = Color(bc, 0.30)
@@ -306,24 +287,11 @@ static func _ingredient_chip(e: Dictionary, qty: int, bname: String, bc: Color) 
 	m.add_child(row)
 
 	if is_unique:
-		var star := Label.new()
-		star.text = "✦"
-		star.add_theme_font_size_override("font_size", 10)
-		star.add_theme_color_override("font_color", UIColors.TIER_LEGENDAIRE)
-		row.add_child(star)
+		row.add_child(UIHelpers.label("✦", 10, UIColors.TIER_LEGENDAIRE))
 
-	var nl := Label.new()
-	nl.text = nom
-	nl.add_theme_font_size_override("font_size", 11)
-	nl.add_theme_color_override("font_color",
-			UIColors.TIER_LEGENDAIRE if is_unique else UIColors.TEXT_HEADER)
-	row.add_child(nl)
-
-	var ql := Label.new()
-	ql.text = "×%d" % qty
-	ql.add_theme_font_size_override("font_size", 12)
-	ql.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	row.add_child(ql)
+	row.add_child(UIHelpers.label(nom, 11,
+			UIColors.TIER_LEGENDAIRE if is_unique else UIColors.TEXT_HEADER))
+	row.add_child(UIHelpers.label("×%d" % qty, 12, UIColors.FILTER_ON))
 
 	UIHelpers.add_hover_feedback(chip)
 	var tt := Translations.T("forge.ingr.tt_stock") % [bname, qty]
@@ -396,20 +364,14 @@ static func _passive_card(host: Village, pdata: Dictionary, _tcolor: Color) -> C
 		var desc := Translations.effect_desc(effect)
 		if desc.is_empty():
 			continue
-		var eff_lbl := Label.new()
-		eff_lbl.text = desc
+		var eff_lbl := UIHelpers.label(desc, 10, UIColors.TEXT_MUTED)
 		eff_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		eff_lbl.add_theme_font_size_override("font_size", 10)
-		eff_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		eff_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		body.add_child(eff_lbl)
 
 	# Cascade des paliers non encore atteints
 	if has_evos:
-		var unlock_hdr := Label.new()
-		unlock_hdr.text = Translations.T("hero.passive.unlock_hdr")
-		unlock_hdr.add_theme_font_size_override("font_size", 9)
-		unlock_hdr.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+		var unlock_hdr := UIHelpers.label(Translations.T("hero.passive.unlock_hdr"), 9, UIColors.TEXT_MUTED)
 		unlock_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		body.add_child(unlock_hdr)
 
@@ -472,17 +434,13 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_child(hb)
 
-	var name_lbl := Label.new()
-	name_lbl.text = "→  " + tn
+	var name_lbl := UIHelpers.label("→  " + tn, 11, tc)
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 11)
-	name_lbl.add_theme_color_override("font_color", tc)
 	hb.add_child(name_lbl)
 
-	var xp_lbl := Label.new()
-	xp_lbl.text = Translations.T("tier.max_rank") if is_max else "%s / %s XP" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(xp_need)]
-	xp_lbl.add_theme_font_size_override("font_size", 9)
-	xp_lbl.add_theme_color_override("font_color", tc if is_max else UIColors.TEXT_MUTED)
+	var xp_lbl := UIHelpers.label(
+			Translations.T("tier.max_rank") if is_max else "%s / %s XP" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(xp_need)],
+			9, tc if is_max else UIColors.TEXT_MUTED)
 	xp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hb.add_child(xp_lbl)
 
@@ -490,10 +448,7 @@ static func _evo_row(t: int, base_rarity: int, pdata: Dictionary) -> Control:
 	for effect in _tier_effects(pdata, t):
 		var desc := Translations.effect_desc(effect)
 		if desc.is_empty(): continue
-		var eff_lbl := Label.new()
-		eff_lbl.text = desc
-		eff_lbl.add_theme_font_size_override("font_size", 9)
-		eff_lbl.add_theme_color_override("font_color", tc.darkened(0.2))
+		var eff_lbl := UIHelpers.label(desc, 9, tc.darkened(0.2))
 		eff_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vb.add_child(eff_lbl)
 
@@ -541,18 +496,11 @@ static func _equip_placeholder_card(slot_icon: String, slot_name: String, biome_
 	icon.add_theme_font_size_override("font_size", 16)
 	row.add_child(icon)
 
-	var sl := Label.new()
-	sl.text = slot_name
+	var sl := UIHelpers.label(slot_name, 12, UIColors.TEXT_MUTED)
 	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sl.add_theme_font_size_override("font_size", 12)
-	sl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	row.add_child(sl)
 
-	var lock := Label.new()
-	lock.text = "🔒 " + Translations.T("hero.equip.placeholder")
-	lock.add_theme_font_size_override("font_size", 11)
-	lock.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	row.add_child(lock)
+	row.add_child(UIHelpers.label("🔒 " + Translations.T("hero.equip.placeholder"), 11, UIColors.TEXT_MUTED))
 
 	var biome := GameData.get_entity(biome_id)
 	var bname := Translations.entity_name(biome, biome_id) if not biome.is_empty() else biome_id
@@ -595,11 +543,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 	wrapper.add_child(xpcard)
 
 	# Étiquette de slot ajoutée à droite du header
-	var slot_lbl := Label.new()
-	slot_lbl.text = slot_name
-	slot_lbl.add_theme_font_size_override("font_size", 10)
-	slot_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	hdr.add_child(slot_lbl)
+	hdr.add_child(UIHelpers.label(slot_name, 10, UIColors.TEXT_MUTED))
 
 	# Injecter les stats dans la carte : reparenter le header dans un VBox
 	if stat_parts.size() > 0:
@@ -607,11 +551,7 @@ static func _equip_slot_card(_host: Village, _slot_key: String, slot_icon: Strin
 		var vb  := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 3)
 		hdr.reparent(vb)
-		var stats_lbl := Label.new()
-		stats_lbl.text = "  ".join(stat_parts)
-		stats_lbl.add_theme_font_size_override("font_size", 11)
-		stats_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-		vb.add_child(stats_lbl)
+		vb.add_child(UIHelpers.label("  ".join(stat_parts), 11, UIColors.TEXT_MUTED))
 		mg.add_child(vb)
 
 	# ── Indicateur forge (visible uniquement si barre pleine) ──
@@ -637,21 +577,14 @@ static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Contr
 	m.add_child(vb)
 
 	if int(GameData.village.get("maitrise_actuelle", 0)) < 1:
-		var lbl := Label.new()
-		lbl.text = Translations.T("hero.forge_required")
+		var lbl := UIHelpers.label(Translations.T("hero.forge_required"), 12, UIColors.TEXT_MUTED)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 12)
-		lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 		vb.add_child(lbl)
 	else:
 		var recipe := GameData.get_forge_recipe(equip_id, etier + 1)
 		if recipe.is_empty():
 			return body
-		var hdr_lbl := Label.new()
-		hdr_lbl.text = Translations.T("hero.forge_ready")
-		hdr_lbl.add_theme_font_size_override("font_size", 11)
-		hdr_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY)
-		vb.add_child(hdr_lbl)
+		vb.add_child(UIHelpers.label(Translations.T("hero.forge_ready"), 11, UIColors.LOG_VICTORY))
 		for req in recipe:
 			var ingr_id  := req.get("ingredient_id", "") as String
 			var needed   := int(req.get("quantite", 1))
@@ -663,17 +596,10 @@ static func _forge_ready_panel(equip_id: String, etier: int, ec: Color) -> Contr
 			var row      := HBoxContainer.new()
 			row.add_theme_constant_override("separation", 4)
 			vb.add_child(row)
-			var il := Label.new()
-			il.text = "  %s" % ingr_nom
+			var il := UIHelpers.label("  %s" % ingr_nom, 11, ic)
 			il.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			il.add_theme_font_size_override("font_size", 11)
-			il.add_theme_color_override("font_color", ic)
 			row.add_child(il)
-			var ql := Label.new()
-			ql.text = "%d / %d" % [have, needed]
-			ql.add_theme_font_size_override("font_size", 11)
-			ql.add_theme_color_override("font_color", ic)
-			row.add_child(ql)
+			row.add_child(UIHelpers.label("%d / %d" % [have, needed], 11, ic))
 
 	return body
 

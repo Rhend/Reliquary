@@ -216,20 +216,14 @@ func _build_banner(col: VBoxContainer, rtext: String, rcolor: Color,
 	_banner_box.modulate.a = 0.0
 	zone.add_child(_banner_box)
 
-	var title := Label.new()
-	title.text = "✦   %s   ✦" % rtext.to_upper()
+	var title := UIHelpers.label("✦   %s   ✦" % rtext.to_upper(), 30, rcolor.lightened(0.30))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color", rcolor.lightened(0.30))
 	title.add_theme_constant_override("outline_size", 8)
 	title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.65))
 	_banner_box.add_child(title)
 
-	var sub := Label.new()
-	sub.text = Translations.T("cycle.title") % biome_name.to_upper()
+	var sub := UIHelpers.label(Translations.T("cycle.title") % biome_name.to_upper(), 12, UIColors.TEXT_HEADER)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_font_size_override("font_size", 12)
-	sub.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 	_banner_box.add_child(sub)
 
 	# Shine périodique + burst de révélation, par-dessus le titre.
@@ -281,18 +275,12 @@ func _stat_chip(row: HBoxContainer, icon: String, value: float,
 	vb.add_theme_constant_override("separation", 0)
 	m.add_child(vb)
 
-	var val_lbl := Label.new()
-	val_lbl.text = fmt.call(0.0)
+	var val_lbl := UIHelpers.label(fmt.call(0.0), 19, color.lightened(0.25))
 	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	val_lbl.add_theme_font_size_override("font_size", 19)
-	val_lbl.add_theme_color_override("font_color", color.lightened(0.25))
 	vb.add_child(val_lbl)
 
-	var name_lbl := Label.new()
-	name_lbl.text = "%s %s" % [icon, label.to_upper()]
+	var name_lbl := UIHelpers.label("%s %s" % [icon, label.to_upper()], 10, UIColors.TEXT_MUTED)
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 10)
-	name_lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	vb.add_child(name_lbl)
 
 	_counters.append({"label": val_lbl, "chip": chip, "to": value, "fmt": fmt})
@@ -362,24 +350,13 @@ func _discovery_new_row(cat_label: String, cat_color: Color, nom: String) -> Con
 	m.add_child(hb)
 
 	if cat_label != "":
-		var cl := Label.new()
-		cl.text = cat_label + " · "
-		cl.add_theme_font_size_override("font_size", 12)
-		cl.add_theme_color_override("font_color", Color(cat_color, 0.85))
-		hb.add_child(cl)
+		hb.add_child(UIHelpers.label(cat_label + " · ", 12, Color(cat_color, 0.85)))
 
-	var nl := Label.new()
-	nl.text = nom
+	var nl := UIHelpers.label(nom, 12, Color.WHITE)
 	nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	nl.add_theme_font_size_override("font_size", 12)
-	nl.add_theme_color_override("font_color", Color.WHITE)
 	hb.add_child(nl)
 
-	var badge := Label.new()
-	badge.text = Translations.T("cycle.discovery.new")
-	badge.add_theme_font_size_override("font_size", 10)
-	badge.add_theme_color_override("font_color", UIColors.SELECTION_GOLD)
-	hb.add_child(badge)
+	hb.add_child(UIHelpers.label(Translations.T("cycle.discovery.new"), 10, UIColors.SELECTION_GOLD))
 	return panel
 
 # Ligne « ★ Créature unique vaincue · Nom » (couleur Unique).
@@ -391,11 +368,8 @@ func _unique_beaten_row(nom: String) -> Control:
 
 	var m := UIHelpers.margin_of(6)
 	panel.add_child(m)
-	var lbl := Label.new()
-	lbl.text = "★  %s · %s" % [Translations.T("cycle.discovery.unique_beaten"), nom]
-	lbl.add_theme_font_size_override("font_size", 12)
-	lbl.add_theme_color_override("font_color", UIColors.TIER_UNIQUE.lightened(0.25))
-	m.add_child(lbl)
+	m.add_child(UIHelpers.label("★  %s · %s" % [Translations.T("cycle.discovery.unique_beaten"), nom],
+			12, UIColors.TIER_UNIQUE.lightened(0.25)))
 	return panel
 
 # ── Section 2 : Ressources collectées (puces) ──────────────
@@ -436,17 +410,8 @@ func _section_loot(vb: VBoxContainer, data: Dictionary, tcolor: Color) -> void:
 		hb.add_theme_constant_override("separation", 8)
 		m.add_child(hb)
 
-		var nl := Label.new()
-		nl.text = ("✦ %s" % nom) if is_unique else nom
-		nl.add_theme_font_size_override("font_size", 12)
-		nl.add_theme_color_override("font_color", Color.WHITE)
-		hb.add_child(nl)
-
-		var ql := Label.new()
-		ql.text = "×%d" % qty
-		ql.add_theme_font_size_override("font_size", 12)
-		ql.add_theme_color_override("font_color", ic)
-		hb.add_child(ql)
+		hb.add_child(UIHelpers.label(("✦ %s" % nom) if is_unique else nom, 12, Color.WHITE))
+		hb.add_child(UIHelpers.label("×%d" % qty, 12, ic))
 
 # ── Section 3 : Répartition XP ─────────────────────────────
 # Section ABSENTE si aucune entité n'a gagné d'XP ce cycle.
@@ -559,17 +524,9 @@ func _evolution_card(vb: VBoxContainer, entity_id: String, entity: Dictionary) -
 	info.add_theme_constant_override("separation", 2)
 	hb.add_child(info)
 
-	var name_lbl := Label.new()
-	name_lbl.text = nom
-	name_lbl.add_theme_font_size_override("font_size", 14)
-	name_lbl.add_theme_color_override("font_color", Color.WHITE)
-	info.add_child(name_lbl)
-
-	var tier_lbl := Label.new()
-	tier_lbl.text = "%s  →  %s" % [GameData.get_tier_name(tier), GameData.get_tier_name(tier + 1)]
-	tier_lbl.add_theme_font_size_override("font_size", 11)
-	tier_lbl.add_theme_color_override("font_color", nc)
-	info.add_child(tier_lbl)
+	info.add_child(UIHelpers.label(nom, 14, Color.WHITE))
+	info.add_child(UIHelpers.label(
+			"%s  →  %s" % [GameData.get_tier_name(tier), GameData.get_tier_name(tier + 1)], 11, nc))
 
 	var btn := Button.new()
 	btn.text = Translations.T("btn.evolve")
@@ -797,10 +754,7 @@ func _xp_card(icon: String, label: String, tier: int,
 	var card := built["card"] as XPCard
 	var header := built["header"] as HBoxContainer
 
-	var gain_lbl := Label.new()
-	gain_lbl.text = "+0 XP"
-	gain_lbl.add_theme_font_size_override("font_size", 12)
-	gain_lbl.add_theme_color_override("font_color", UIColors.LOG_VICTORY)
+	var gain_lbl := UIHelpers.label("+0 XP", 12, UIColors.LOG_VICTORY)
 	header.add_child(gain_lbl)
 
 	return {"container": card, "card": card, "xp_label": gain_lbl}
