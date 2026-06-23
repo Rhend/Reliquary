@@ -10,8 +10,9 @@
 #      (créature / bénédiction / piège) selon la table du biome.
 #   4. Les rencontres de type créature délèguent à CombatPlayer et
 #      attendent le signal combat_ended avant de continuer.
-#   5. Après chaque rencontre, le héros régénère REGEN_PCT de
-#      ses PV max (modifiable par le modificateur de cycle).
+#   5. UNIQUEMENT après un COMBAT GAGNÉ (Chantier 8 — D1), le héros régénère
+#      REGEN_PCT de ses PV max (bonus Maison + passifs/Forge, additifs). Aucune
+#      régén après un piège ou une bénédiction.
 #
 # Modificateurs de cycle :
 #   Tirés aléatoirement au lancement, ils durent tout le cycle.
@@ -252,7 +253,7 @@ func _consume_hero_speed_mods() -> Array:
 # ─── Rencontre Bénédiction ────────────────────────────────────
 
 # Tire une bénédiction aléatoire et applique son effet immédiatement.
-func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> void:
+func _handle_benediction_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 	var biome       = GameData.get_entity(current_biome_id)
 	var benedictions = biome.get("benedictions", [])
 
@@ -268,7 +269,7 @@ func _handle_benediction_encounter(hero_id: String, enc_data: Dictionary) -> voi
 		_stats.positive_events += 1
 
 	EventBus.adventure_event_resolved.emit(enc_data)
-	_apply_regen(hero_id)
+	# Pas de régén ici (Chantier 8 — D1) : une bénédiction n'est pas un combat gagné.
 	_tick_bleed()
 	if is_running:
 		_schedule_next_encounter(Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION)
@@ -336,7 +337,7 @@ func _distribute_mastery_xp(event_id: String) -> void:
 # ─── Rencontre Piège ──────────────────────────────────────────
 
 # Tire un piège aléatoire et applique ses dégâts (sauf si modificateur "Fantôme").
-func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
+func _handle_trap_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 	var biome = GameData.get_entity(current_biome_id)
 	var traps = biome.get("pieges", [])
 
@@ -361,7 +362,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 			trap.get("id", ""), trap.get("nom_affichage_fr", "?"), "Piège", current_biome_id, Balance.HALL_XP_EVENT
 		)
 		EventBus.adventure_event_resolved.emit(enc_data)
-		_apply_regen(hero_id)
+		# Pas de régén ici (Chantier 8 — D1) : un piège n'est pas un combat gagné.
 		_schedule_next_encounter(Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION)
 	else:
 		_stats.events          += 1
@@ -377,7 +378,7 @@ func _handle_trap_encounter(hero_id: String, enc_data: Dictionary) -> void:
 		if current_hp <= 0.0 and not _survive_lethal():
 			_end_adventure(false)
 		else:
-			_apply_regen(hero_id)
+			# Pas de régén ici (Chantier 8 — D1) : un piège n'est pas un combat gagné.
 			_tick_bleed()
 			if is_running:
 				_schedule_next_encounter(Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION)
@@ -454,9 +455,11 @@ func _survive_lethal() -> bool:
 		return true
 	return false
 
-# Régénère regen_pct% des PV max après chaque rencontre.
-# Sources : régén de BASE (C3, hors bâtiment) + modificateur de cycle (regen_pct)
-# + passifs actifs (hp_regen_pct) + village (Maison) + Forge. Toutes ADDITIVES.
+# Régénère regen_pct% des PV max — appelé UNIQUEMENT après un combat gagné
+# (Chantier 8 — D1 ; PAS après un piège ni une bénédiction). Sources ADDITIVES :
+# Maison (CH_REGEN_PCT) + modificateur de cycle (regen_pct, dormant) + passifs
+# actifs (hp_regen_pct) + Forge. Base héros = 0 (Balance.BASE_REGEN_PCT).
+# Plafonné aux PV max (pas d'over-heal).
 func _apply_regen(_hero_id: String) -> void:
 	var regen_pct := Balance.BASE_REGEN_PCT \
 			+ float(current_modifier.get("regen_pct", Balance.DEFAULT_REGEN_PCT)) \
@@ -549,14 +552,18 @@ func _pick_modifier() -> void:
 
 # ─── Drop de ressources de biome (Chantier 3) ───────────────
 
-# Effectue les DEUX tirages INDÉPENDANTS (fréquent + rare) et retourne les ids
-# de ressources droppées (0 à 2). Pur (ne dépend que de randf + Balance) → unité
-# testable. `creature_tier` ne pilote QUE le taux de la rare ; le fréquent est fixe.
+# Effectue les DEUX tirages INDÉPENDANTS (fréquent + rare) et retourne la liste
+# des ids droppés. Pur (ne dépend que de randf + Balance) → unité testable.
+# `creature_tier` ne pilote QUE le taux de la rare. La FRÉQUENTE, quand elle tombe,
+# est répétée 1-4 fois (quantité uniforme, Chantier 8 — D2) → l'appelant agrège les
+# occurrences en quantité. La RARE reste +1.
 func roll_biome_drops(freq_id: String, rare_id: String, creature_tier: int,
 		rare_bonus: float = 0.0) -> Array:
 	var out: Array = []
 	if freq_id != "" and randf() < Balance.DROP_FREQUENT_RATE:
-		out.append(freq_id)
+		var qty := randi_range(Balance.DROP_FREQUENT_QTY_MIN, Balance.DROP_FREQUENT_QTY_MAX)
+		for _i in qty:
+			out.append(freq_id)
 	if rare_id != "" and randf() < Balance.rare_drop_rate(creature_tier) + rare_bonus:
 		out.append(rare_id)
 	return out
@@ -582,13 +589,19 @@ func _drop_biome_resources(enemy: Dictionary) -> void:
 				+ ForgeSystem.get_stat_bonus("drop_rare_pct"))  # Joaillier T4 + Aubaine (Anneau)
 	if ids.is_empty():
 		return
-	var drops: Array = []
+	# La fréquente peut tomber en 1-4 exemplaires (D2) → ids la répète. On agrège les
+	# occurrences en quantité par ressource pour un seul crédit/affichage par ressource.
+	var qty_by_id: Dictionary = {}
 	for res_id: String in ids:
-		GameData.add_resource(res_id, 1)
+		qty_by_id[res_id] = int(qty_by_id.get(res_id, 0)) + 1
+	var drops: Array = []
+	for res_id: String in qty_by_id:
+		var qty: int = qty_by_id[res_id]
+		GameData.add_resource(res_id, qty)
 		var res := GameData.get_entity(res_id)
-		drops.append({"item_id": res_id, "name": Translations.entity_name(res, res_id), "qty": 1})
-		_stats.loot_detail[res_id] = _stats.loot_detail.get(res_id, 0) + 1
-	_stats.loot_total += drops.size()
+		drops.append({"item_id": res_id, "name": Translations.entity_name(res, res_id), "qty": qty})
+		_stats.loot_detail[res_id] = _stats.loot_detail.get(res_id, 0) + qty
+		_stats.loot_total += qty
 	EventBus.loot_dropped.emit(drops, enemy.get("name", "?"))
 
 # ═══════════════════════════════════════════════════════════

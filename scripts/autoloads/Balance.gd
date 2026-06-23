@@ -427,10 +427,13 @@ const ECLOSION_CLIC_VALUE: int = 1
 # ═══════════════════════════════════════════════════════════
 
 const DEFAULT_REGEN_PCT: float = 0.0  # fallback du modificateur de cycle (hors base)
-# Régénération de BASE entre rencontres, HORS bâtiment (Chantier 7 — C3). Garantit
-# qu'un héros T0 sans village (pas de Maison → CH_REGEN_PCT = 0) tienne la durée
-# d'une expédition. S'ADDITIONNE à la Maison / aux passifs / au Forge. Réglage.
-const BASE_REGEN_PCT: float = 0.15  # 15 % des PV max régénérés après chaque rencontre
+# Régénération de BASE (Chantier 8 — D1). DÉCISION : le héros n'a AUCUNE régén de
+# base. La régén est entièrement un bonus de la MAISON (et plus tard de certains
+# équipements) et ne se déclenche QU'APRÈS UN COMBAT GAGNÉ (cf. AdventureSystem
+# `_apply_regen`, appelé uniquement depuis la résolution de victoire). Un héros T0
+# sans Maison construite = zéro régén (attrait de progression voulu). Conservé à 0
+# dans l'agrégateur additif Maison + passifs + cycle + Forge.
+const BASE_REGEN_PCT: float = 0.0
 
 # ═══════════════════════════════════════════════════════════
 #  Bonus de maîtrise au combat (familiarité du bestiaire)
@@ -445,9 +448,13 @@ const MASTERY_COMBAT_ATK_PER_TIER: float = 2.0  # ATK bonus par tier de bestiair
 # À chaque créature NON-BOSS vaincue, deux tirages INDÉPENDANTS sur les deux
 # ressources propres du biome courant (cf. BiomeData.ressource_frequente_id /
 # ressource_rare_id) : une fréquente (taux fixe) et une rare (taux selon le
-# palier de la créature). Quantité 1 chacune. Les boss (créatures Uniques) ne
-# droppent aucune ressource de farm.
-const DROP_FREQUENT_RATE: float = 0.90  # taux de la ressource fréquente (tout palier)
+# palier de la créature). Les boss (créatures Uniques) ne droppent aucune
+# ressource de farm. La RARE tombe en +1 ; la FRÉQUENTE tombe en quantité tirée
+# uniformément dans [DROP_FREQUENT_QTY_MIN, DROP_FREQUENT_QTY_MAX] (Chantier 8 — D2).
+const DROP_FREQUENT_RATE: float = 0.60  # taux de la ressource fréquente (tout palier)
+# Quantité de ressource fréquente quand le drop réussit : entier uniforme inclusif.
+const DROP_FREQUENT_QTY_MIN: int = 1
+const DROP_FREQUENT_QTY_MAX: int = 4
 
 # Taux de la ressource rare selon le PALIER de la créature tuée (index = palier).
 # Courbe NON linéaire → table adressable, pas une formule. T0..T4.

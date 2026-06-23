@@ -1,6 +1,6 @@
 extends Node
 # Tests du système de drop de ressources (Chantier 3) :
-#   • constantes de taux (fréquent 90 %, rare par palier non linéaire),
+#   • constantes de taux (fréquent 60 % en quantité 1-4, rare par palier non linéaire),
 #   • clamp du taux rare hors bornes,
 #   • mapping biome → (ressource fréquente, rare) en donnée + ressources chargées,
 #   • taux empiriques (statistique seedée) + INDÉPENDANCE des deux tirages,
@@ -39,8 +39,11 @@ func _run_all() -> void:
 
 func _test_constants() -> void:
 	print("[TEST 1] Constantes de taux")
-	_assert(is_equal_approx(Balance.DROP_FREQUENT_RATE, 0.90), "taux fréquent = 0.90",
+	_assert(is_equal_approx(Balance.DROP_FREQUENT_RATE, 0.60), "taux fréquent = 0.60",
 			"obtenu %.3f" % Balance.DROP_FREQUENT_RATE)
+	_assert(Balance.DROP_FREQUENT_QTY_MIN == 1 and Balance.DROP_FREQUENT_QTY_MAX == 4,
+			"quantité fréquente = [1, 4]",
+			"obtenu [%d, %d]" % [Balance.DROP_FREQUENT_QTY_MIN, Balance.DROP_FREQUENT_QTY_MAX])
 	var expected := [0.02, 0.05, 0.10, 0.18, 0.30]
 	var ok := Balance.DROP_RARE_RATE_BY_TIER.size() == expected.size()
 	if ok:
@@ -79,25 +82,40 @@ func _test_rates_and_independence() -> void:
 	seed(20260620)
 	var n := 40000
 	for tier in [0, 2, 4]:
-		var freq_hits := 0
+		var freq_hits := 0    # nb de tirages où la fréquente est présente (≥1)
+		var freq_units := 0   # nb total d'exemplaires de fréquente (pour la moyenne 1-4)
 		var rare_hits := 0
 		var both_hits := 0
 		for i in n:
 			var ids := AdventureSystem.roll_biome_drops("res_fourrure", "res_venin", tier)
-			var got_f := "res_fourrure" in ids
+			var f_count := ids.count("res_fourrure")
+			var got_f := f_count > 0
 			var got_r := "res_venin" in ids
-			if got_f: freq_hits += 1
+			if got_f:
+				freq_hits += 1
+				freq_units += f_count
+				_assert_qty_range(f_count)  # chaque drop fréquent ∈ [1, 4]
 			if got_r: rare_hits += 1
 			if got_f and got_r: both_hits += 1
 		var f_rate := float(freq_hits) / n
 		var r_rate := float(rare_hits) / n
 		var both_rate := float(both_hits) / n
 		var exp_r := Balance.rare_drop_rate(tier)
-		_assert(absf(f_rate - 0.90) < 0.02, "T%d : fréquent ≈ 0.90" % tier, "obtenu %.3f" % f_rate)
+		_assert(absf(f_rate - 0.60) < 0.02, "T%d : fréquent ≈ 0.60" % tier, "obtenu %.3f" % f_rate)
 		_assert(absf(r_rate - exp_r) < 0.02, "T%d : rare ≈ %.2f" % [tier, exp_r], "obtenu %.3f" % r_rate)
+		# Quantité moyenne par drop fréquent ≈ 2.5 (uniforme 1-4).
+		var avg_qty := float(freq_units) / maxi(freq_hits, 1)
+		_assert(absf(avg_qty - 2.5) < 0.05, "T%d : qté moyenne fréquente ≈ 2.5" % tier,
+				"obtenu %.3f" % avg_qty)
 		# Indépendance : P(les deux) ≈ P(fréquent) × P(rare).
-		_assert(absf(both_rate - 0.90 * exp_r) < 0.02,
-				"T%d : indépendance P(2) ≈ %.3f" % [tier, 0.90 * exp_r], "obtenu %.3f" % both_rate)
+		_assert(absf(both_rate - 0.60 * exp_r) < 0.02,
+				"T%d : indépendance P(2) ≈ %.3f" % [tier, 0.60 * exp_r], "obtenu %.3f" % both_rate)
+
+# Marque un échec si une quantité de fréquente sort de [1, 4] (un seul assert agrégé
+# par appel serait trop bruyant : on n'enregistre QUE les violations).
+func _assert_qty_range(qty: int) -> void:
+	if qty < Balance.DROP_FREQUENT_QTY_MIN or qty > Balance.DROP_FREQUENT_QTY_MAX:
+		_assert(false, "quantité fréquente hors [1, 4]", "obtenu %d" % qty)
 
 func _test_boss_excluded() -> void:
 	print("\n[TEST 5] Boss (créature Unique) → aucun drop de farm")
