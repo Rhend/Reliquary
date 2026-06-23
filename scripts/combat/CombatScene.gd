@@ -610,19 +610,19 @@ func _on_adventure_started(_biome_id: String) -> void:
 		_mechanic_label.visible = false
 	match BiomeMechanics.active_mechanic:
 		"ambush":
-			var ac := Color(1.0, 0.42, 0.10)
+			var ac := UIColors.MECH_AMBUSH
 			_push_under_bar_pill(_hero_states, Translations.mech_name("ambush"), ac)
 			_show_mechanic_label("⚡ " + Translations.mech_name("ambush"), ac)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("ambush"),
 					Translations.mech_desc("ambush"), ac)
 		"poison":
-			var pc := UIColors.POISON
+			var pc := UIColors.MECH_POISON
 			_push_under_bar_pill(_hero_states, Translations.mech_name("poison"), pc)
 			_show_mechanic_label("☠ " + Translations.mech_name("poison"), pc)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("poison"),
 					Translations.mech_desc("poison"), pc)
 		"endurcissement":
-			var ec := Color(0.80, 0.55, 0.25)
+			var ec := UIColors.MECH_ENDURANCE
 			_push_under_bar_pill(_hero_states, Translations.mech_name("endurcissement"), ec)
 			_show_mechanic_label("🗻 " + Translations.mech_name("endurcissement"), ec)
 			UIHelpers.register_tooltip(_mechanic_label, Translations.mech_name("endurcissement"),

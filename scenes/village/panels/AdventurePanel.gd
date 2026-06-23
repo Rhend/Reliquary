@@ -397,9 +397,9 @@ static func _adv_resource_rows(parent: VBoxContainer, biome: Dictionary) -> void
 # Rien si le biome n'a pas de mécanique définie.
 static func _adv_mechanic_row(parent: VBoxContainer, biome: Dictionary) -> void:
 	const MECH_COLORS: Dictionary = {
-		"ambush":         Color(0.90, 0.35, 0.35),
-		"poison":         Color(0.40, 0.80, 0.30),
-		"endurcissement": Color(0.80, 0.55, 0.25),
+		"ambush":         UIColors.MECH_AMBUSH,
+		"poison":         UIColors.MECH_POISON,
+		"endurcissement": UIColors.MECH_ENDURANCE,
 	}
 	var mech_id := biome.get("mecanique_forte_id", "") as String
 	if mech_id == "" or not MECH_COLORS.has(mech_id):

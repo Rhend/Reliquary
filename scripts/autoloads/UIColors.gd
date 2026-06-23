@@ -60,6 +60,11 @@ const HASTE        := Color(0.25, 0.95, 0.85)   # hâte (jauge ATB accélérée 
 const SHIELD := Color(0.30, 0.70, 1.00)   # bouclier / absorption
 const POISON := Color(0.62, 0.15, 0.78)   # poison / venin / saignement (DoT)
 
+# ── Mécaniques fortes de biome (couleur unique panneau ↔ combat) ──
+const MECH_AMBUSH    := Color(0.90, 0.35, 0.35)   # embuscade — rouge
+const MECH_POISON    := POISON                     # poison — violet (cf. États de combat)
+const MECH_ENDURANCE := Color(0.80, 0.55, 0.25)   # endurcissement — brun-orangé
+
 # ── Forge / Recettes ────────────────────────────────────────
 const INGREDIENT_OK      := Color(0.35, 0.85, 0.35)
 const INGREDIENT_MISSING := Color(0.85, 0.35, 0.35)
