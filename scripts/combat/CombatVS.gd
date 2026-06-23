@@ -45,10 +45,7 @@ func _ready() -> void:
 	_vs_box.add_theme_stylebox_override("panel", _vs_style)
 	_apply_accent()
 
-	var lbl := Label.new()
-	lbl.text = "VS"
-	lbl.add_theme_font_size_override("font_size", 28)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
+	var lbl := UIHelpers.label("VS", 28, UIColors.TEXT_HEADER)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_vs_box.add_child(lbl)
 	add_child(_vs_box)

@@ -81,23 +81,17 @@ func _make_slot(slot_key: String, icon: String, equip_id: String,
 			UIHelpers.card_style(ec, 0.12, 0.70, 1, 6))
 	add_child(box)
 
-	var ico := Label.new()
-	ico.text = icon
+	var ico := UIHelpers.label(icon, 15, ec.lerp(Color.WHITE, 0.35))
 	ico.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ico.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ico.add_theme_font_size_override("font_size", 15)
-	ico.add_theme_color_override("font_color", ec.lerp(Color.WHITE, 0.35))
 	box.add_child(ico)
 
 	# Nom du slot sous la case : identification immédiate.
 	var slot_name := Translations.equip_slot_name(slot_key)
-	var name_lbl  := Label.new()
-	name_lbl.text = slot_name
+	var name_lbl  := UIHelpers.label(slot_name, 9, Color(ec, 0.85))
 	name_lbl.custom_minimum_size  = Vector2(100.0, 0.0)
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_lbl.add_theme_font_size_override("font_size", 9)
-	name_lbl.add_theme_color_override("font_color", Color(ec, 0.85))
 	add_child(name_lbl)
 
 	var tt := Translations.T("hero.equip.tt_slot") \

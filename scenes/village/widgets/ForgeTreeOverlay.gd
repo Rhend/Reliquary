@@ -126,24 +126,12 @@ func _header(equip: Dictionary, tier: int, ec: Color) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 
-	var name_lbl := Label.new()
-	name_lbl.text = Translations.entity_name(equip, equipment_id)
+	var name_lbl := UIHelpers.label(Translations.entity_name(equip, equipment_id), 15, ec.lerp(Color.WHITE, 0.3))
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.add_theme_font_size_override("font_size", 15)
-	name_lbl.add_theme_color_override("font_color", ec.lerp(Color.WHITE, 0.3))
 	row.add_child(name_lbl)
 
-	var tier_lbl := Label.new()
-	tier_lbl.text = GameData.get_tier_name(tier)
-	tier_lbl.add_theme_font_size_override("font_size", 11)
-	tier_lbl.add_theme_color_override("font_color", ec.lerp(Color.WHITE, 0.25))
-	row.add_child(tier_lbl)
-
-	var pts_lbl := Label.new()
-	pts_lbl.text = Translations.T("forge.points") % ForgeSystem.points(equipment_id)
-	pts_lbl.add_theme_font_size_override("font_size", 12)
-	pts_lbl.add_theme_color_override("font_color", UIColors.FILTER_ON)
-	row.add_child(pts_lbl)
+	row.add_child(UIHelpers.label(GameData.get_tier_name(tier), 11, ec.lerp(Color.WHITE, 0.25)))
+	row.add_child(UIHelpers.label(Translations.T("forge.points") % ForgeSystem.points(equipment_id), 12, UIColors.FILTER_ON))
 
 	var close_btn := Button.new()
 	close_btn.text = "✕"

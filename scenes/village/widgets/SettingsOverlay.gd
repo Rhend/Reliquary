@@ -62,11 +62,8 @@ func _build() -> void:
 	# ── En-tête ───────────────────────────────────────────────
 	var hdr := HBoxContainer.new()
 	vb.add_child(hdr)
-	var title_lbl := Label.new()
-	title_lbl.text = Translations.T("settings.title")
+	var title_lbl := UIHelpers.label(Translations.T("settings.title"), 16, Color.WHITE)
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_lbl.add_theme_font_size_override("font_size", 16)
-	title_lbl.add_theme_color_override("font_color", Color.WHITE)
 	hdr.add_child(title_lbl)
 	var close_btn := Button.new()
 	close_btn.text = "✕"
@@ -92,17 +89,10 @@ func _build() -> void:
 	var fs_row := HBoxContainer.new()
 	fs_row.add_theme_constant_override("separation", 10)
 	vb.add_child(fs_row)
-	var fs_lbl := Label.new()
-	fs_lbl.text = Translations.T("settings.fullscreen")
+	var fs_lbl := UIHelpers.label(Translations.T("settings.fullscreen"), 13, UIColors.TEXT_HEADER)
 	fs_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fs_lbl.add_theme_font_size_override("font_size", 13)
-	fs_lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 	fs_row.add_child(fs_lbl)
-	var fs_hint := Label.new()
-	fs_hint.text = "F11"
-	fs_hint.add_theme_font_size_override("font_size", 11)
-	fs_hint.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	fs_row.add_child(fs_hint)
+	fs_row.add_child(UIHelpers.label("F11", 11, UIColors.TEXT_MUTED))
 	var fs_check := CheckButton.new()
 	fs_check.button_pressed = GameSettings.fullscreen
 	fs_check.toggled.connect(func(v: bool) -> void: GameSettings.set_fullscreen(v))
@@ -172,21 +162,14 @@ func _sep() -> ColorRect:
 	return sep
 
 func _section(text: String) -> Label:
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
-	return lbl
+	return UIHelpers.label(text, 11, UIColors.TEXT_MUTED)
 
 # Ligne "label + slider 0..1 + pourcentage" ; on_change reçoit la valeur.
 func _slider(label: String, initial: float, on_change: Callable) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var lbl := Label.new()
-	lbl.text                = label
+	var lbl := UIHelpers.label(label, 13, UIColors.TEXT_HEADER)
 	lbl.custom_minimum_size = Vector2(72, 0)
-	lbl.add_theme_font_size_override("font_size", 13)
-	lbl.add_theme_color_override("font_color", UIColors.TEXT_HEADER)
 	row.add_child(lbl)
 	var slider := HSlider.new()
 	slider.min_value             = 0.0
@@ -195,12 +178,9 @@ func _slider(label: String, initial: float, on_change: Callable) -> Control:
 	slider.value                 = initial
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(slider)
-	var pct := Label.new()
-	pct.text                 = "%d %%" % int(initial * 100)
+	var pct := UIHelpers.label("%d %%" % int(initial * 100), 12, UIColors.TEXT_MUTED)
 	pct.custom_minimum_size  = Vector2(42, 0)
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	pct.add_theme_font_size_override("font_size", 12)
-	pct.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
 	row.add_child(pct)
 	slider.value_changed.connect(func(v: float) -> void:
 		pct.text = "%d %%" % int(v * 100)

@@ -70,18 +70,13 @@ var _punch_tw:  Tween
 # construire la bande (avant que la barre n'entre dans l'arbre, donc avant
 # _ready). Le rattachement à l'arbre se fait dans _ready.
 func _init() -> void:
-	name_label = Label.new()
-	name_label.add_theme_font_size_override("font_size", 16)
-	name_label.add_theme_color_override("font_color", Color.WHITE)
+	name_label = UIHelpers.label("—", 16, Color.WHITE)
 	name_label.add_theme_constant_override("outline_size", 3)
 	name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	name_label.text = "—"
 	name_label.clip_text = true
 
-	_hp_label = Label.new()
+	_hp_label = UIHelpers.label("", 14, Color(0.85, 0.90, 1.0))
 	_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_hp_label.add_theme_font_size_override("font_size", 14)
-	_hp_label.add_theme_color_override("font_color", Color(0.85, 0.90, 1.0))
 	_hp_label.add_theme_constant_override("outline_size", 3)
 	_hp_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	_hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE

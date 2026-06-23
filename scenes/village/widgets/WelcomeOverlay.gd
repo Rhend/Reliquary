@@ -64,11 +64,8 @@ func _build() -> void:
 	mg.add_child(vb)
 
 	# ── Titre ─────────────────────────────────────────────────
-	var title_lbl := Label.new()
-	title_lbl.text = Translations.T("welcome.title")
+	var title_lbl := UIHelpers.label(Translations.T("welcome.title"), 22, UIColors.TIER_PEU_COMMUN)
 	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_lbl.add_theme_font_size_override("font_size", 22)
-	title_lbl.add_theme_color_override("font_color", UIColors.TIER_PEU_COMMUN)
 	vb.add_child(title_lbl)
 
 	vb.add_child(_sep())

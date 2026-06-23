@@ -65,14 +65,11 @@ func _build_title() -> void:
 	label_box.position = center - Vector2(130.0, 32.0)
 	label_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(label_box)
-	var title := Label.new()
-	title.text = title_text
+	var title := UIHelpers.label(title_text, 20, ring_color.lerp(Color.WHITE, 0.30))
 	title.set_anchors_preset(Control.PRESET_FULL_RECT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", ring_color.lerp(Color.WHITE, 0.30))
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
 	title.add_theme_constant_override("shadow_offset_y", 2)
 	label_box.add_child(title)

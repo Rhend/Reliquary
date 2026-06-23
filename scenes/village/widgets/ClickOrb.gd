@@ -23,12 +23,9 @@ func _ready() -> void:
 	ico.mouse_filter  = Control.MOUSE_FILTER_IGNORE
 	add_child(ico)
 
-	var lbl := Label.new()
-	lbl.text = "CLIC"
+	var lbl := UIHelpers.label("CLIC", 9, tier_color)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 9)
-	lbl.add_theme_color_override("font_color", tier_color)
 	lbl.anchor_left   = 0.0; lbl.anchor_right  = 1.0
 	lbl.anchor_top    = 0.0; lbl.anchor_bottom = 0.0
 	lbl.offset_top    = 52;  lbl.offset_bottom = 74
