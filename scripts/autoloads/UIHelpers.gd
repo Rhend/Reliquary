@@ -65,6 +65,20 @@ static func card_style(color: Color, bg_alpha: float = 0.07,
 	s.set_corner_radius_all(corner_radius)
 	return s
 
+# Scintillement néon partagé (cadre de panel, contour des XPCard) : reste à 1.0
+# la plupart du temps, puis « grésille » ~0.6 s par cycle (créneaux rapides entre
+# sombre et clair) avant de se rallumer franchement. `t` = horloge locale du nœud.
+static func neon_flicker(t: float) -> float:
+	const PERIOD := 3.8   # un épisode de grésillement toutes les ~3.8 s
+	const WINDOW := 0.6   # durée d'un épisode (~0.5–0.7 s)
+	var ph := fmod(t, PERIOD)
+	if ph < PERIOD - WINDOW:
+		return 1.0
+	var u := (ph - (PERIOD - WINDOW)) / WINDOW     # 0→1 sur la fenêtre
+	# Créneaux rapides + plancher qui remonte : le tube se rallume en bafouillant.
+	var buzz: float = 1.0 if sin(u * TAU * 11.0) > 0.0 else lerpf(0.35, 0.85, u)
+	return buzz
+
 # Texture radiale blanche → transparente (dégradé interpolé par le GPU :
 # aucun banding, contrairement à des disques concentriques empilés).
 # `offsets`/`alphas` décrivent le falloff du centre (0.0) au bord (1.0).
@@ -237,8 +251,14 @@ static func xp_panel(fill_color: Color, xp_fill: float,
 	card.xp_fill    = clampf(xp_fill, 0.0, 1.0)
 	card.fill_color = fill_color
 	card.motif      = motif
-	card.add_theme_stylebox_override("panel",
-			card_style(fill_color, bg_alpha, border_alpha, border_width, corner_radius))
+	# Le contour est désormais le NÉON dessiné par XPCard lui-même : on retire la
+	# bordure du stylebox (on garde fond + coins arrondis) et on transmet rayon +
+	# épaisseur pour que le tube néon épouse exactement la carte.
+	var sb := card_style(fill_color, bg_alpha, border_alpha, border_width, corner_radius)
+	sb.set_border_width_all(0)
+	card.add_theme_stylebox_override("panel", sb)
+	card.corner_rad = float(corner_radius)
+	card.border_w   = float(border_width)
 	return card
 
 # Carte XP standard d'une entité — DA UNIQUE du jeu pour ce motif.

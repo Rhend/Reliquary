@@ -18,18 +18,15 @@ var _tier := 0
 var _tint := UIColors.VILLAGE_NASCENT
 var _t    := 0.0
 
-# Sprites radiaux générés une fois : falloff long pour le halo,
-# cœur serré + jupe douce pour les poussières.
+# Sprite radial généré une fois : falloff long pour le halo central.
+# (Les poussières sont désormais dessinées en carrés, sans texture.)
 var _halo_tex: GradientTexture2D
-var _dust_tex: GradientTexture2D
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_halo_tex = UIHelpers.radial_glow_tex(256,
 			[0.0, 0.28, 0.60, 1.0], [1.0, 0.62, 0.22, 0.0])
-	_dust_tex = UIHelpers.radial_glow_tex(64,
-			[0.0, 0.20, 0.55, 1.0], [1.0, 0.80, 0.22, 0.0])
 
 # Met à jour le palier et la couleur d'ambiance (couleur de tier du Village).
 func set_tier(tier: int, tint: Color) -> void:
@@ -85,7 +82,11 @@ func _draw() -> void:
 		if a <= 0.005:
 			continue
 
-		# Jupe lumineuse douce + cœur net antialiasé.
+		# Poussières CARRÉES : halo carré doux + cœur net (deux rects centrés).
 		var rad := 1.6 + 3.2 * depth
-		_blit(_dust_tex, pos, rad * 3.4, Color(_tint.lightened(0.25), a * 0.55))
-		draw_circle(pos, rad * 0.55, Color(_tint.lightened(0.65), a), true, -1.0, true)
+		var glow_s := rad * 2.4
+		draw_rect(Rect2(pos - Vector2(glow_s, glow_s) * 0.5, Vector2(glow_s, glow_s)),
+				Color(_tint.lightened(0.25), a * 0.40))
+		var core_s := rad * 1.1
+		draw_rect(Rect2(pos - Vector2(core_s, core_s) * 0.5, Vector2(core_s, core_s)),
+				Color(_tint.lightened(0.65), a))

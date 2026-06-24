@@ -37,6 +37,11 @@ const HUB_PANEL_SCALE  := 0.72
 # Échelle du hub au repos (sans panneau). < 1 : on « dézoome » légèrement pour
 # laisser respirer l'espace autour du village (préfigure l'espace explorable).
 const HUB_BASE_SCALE   := 0.85
+# Zoom molette (exploration libre) : le repos (HUB_BASE_SCALE) est le zoom MAX
+# (on ne grossit pas au-delà) ; on peut dézoomer jusqu'à HUB_MIN_SCALE pour voir
+# l'ensemble des quartiers. WHEEL_STEP = facteur par cran de molette.
+const HUB_MIN_SCALE    := 0.35
+const ZOOM_WHEEL_STEP  := 1.12
 const TIER_0_COLOR := UIColors.VILLAGE_NASCENT
 
 # La phase d'éclosion (orbe cliquable → éveil → éclosion) vit dans
@@ -122,6 +127,7 @@ var _hex_items            : Dictionary = {}   # panel_id → HexItem, pour gére
 # ─── Espace explorable (dézoom + pan libre autour de la place centrale) ──
 var _pan                  := Vector2.ZERO      # décalage de déplacement du hub (drag souris)
 var _panning              := false             # vrai pendant un glisser-déposer de l'espace
+var _zoom                 := HUB_BASE_SCALE    # échelle d'exploration courante (molette), ≤ HUB_BASE_SCALE
 # ─── Dimension Village : quartiers (graphe de cercles) ──────────
 # Tout est indexé par owner_id (cf. DISTRICTS) pour supporter N quartiers.
 # _district_open survit aux reconstructions du hub (source de vérité « ouvert ? ») ;
@@ -309,7 +315,7 @@ func _build_hub() -> void:
 	# Dézoom de repos : hub réduit, centré (pivot au milieu du canvas) et
 	# décalé du pan courant (l'espace reste là où le joueur l'a laissé).
 	_hub_root.pivot_offset = vp * 0.5
-	_hub_root.scale = Vector2.ONE * HUB_BASE_SCALE
+	_hub_root.scale = Vector2.ONE * _zoom
 	_hub_root.position = _pan
 
 	_animate_hub_entrance()
@@ -530,9 +536,9 @@ func _reveal_district(owner_id: String, animate: bool) -> void:
 				.set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 		var vp := get_viewport_rect().size
-		# Offset d'exploration (état SANS panneau) : centre dc plein écran. Mémorisé
-		# dans _pan pour que la fermeture d'un panneau y revienne bien recentrée.
-		_pan = HUB_BASE_SCALE * (vp * 0.5 - dc)
+		# Offset d'exploration (état SANS panneau) : centre dc plein écran à l'échelle
+		# de zoom courante. Mémorisé dans _pan pour la fermeture d'un panneau.
+		_pan = _zoom * (vp * 0.5 - dc)
 		# Cible réelle de la caméra : si un panneau est ouvert, le hub est réduit
 		# (HUB_PANEL_SCALE) et recentré dans l'espace libre à GAUCHE — il faut donc
 		# centrer dc dans cet espace, pas au milieu de l'écran (même calcul que
@@ -613,6 +619,9 @@ func _input(event: InputEvent) -> void:
 			_panning = mb.pressed and _hub_root != null \
 					and _settings_overlay == null \
 					and not _point_over_panel(mb.position)
+		elif mb.pressed and (mb.button_index == MOUSE_BUTTON_WHEEL_UP \
+				or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			_zoom_at(mb.position, mb.button_index == MOUSE_BUTTON_WHEEL_UP)
 	elif event is InputEventMouseMotion and _panning and _hub_root != null:
 		_hub_root.position += (event as InputEventMouseMotion).relative
 		# En exploration libre (aucun panneau), l'offset de pan est mémorisé ;
@@ -625,6 +634,27 @@ func _input(event: InputEvent) -> void:
 func _point_over_panel(global_pos: Vector2) -> bool:
 	return _rp_root != null \
 			and Rect2(_rp_root.global_position, _rp_root.size).has_point(global_pos)
+
+# Zoom molette en EXPLORATION LIBRE (aucun panneau, Paramètres fermés). Le repos
+# (HUB_BASE_SCALE) est le zoom MAX ; on dézoome jusqu'à HUB_MIN_SCALE. Le point
+# sous le curseur reste fixe (zoom ancré). Pan/zoom mémorisés dans _pan/_zoom.
+func _zoom_at(cursor: Vector2, zoom_in: bool) -> void:
+	if _hub_root == null or _settings_overlay != null or _rp_root != null:
+		return
+	var s_old := _hub_root.scale.x
+	var s_new := clampf(s_old * (ZOOM_WHEEL_STEP if zoom_in else 1.0 / ZOOM_WHEEL_STEP),
+			HUB_MIN_SCALE, HUB_BASE_SCALE)
+	if is_equal_approx(s_new, s_old):
+		return
+	# Garder le point écran `cursor` au même endroit du monde après changement
+	# d'échelle (cf. transform Control : screen = pos + pivot + s·(p − pivot)).
+	var pivot := _hub_root.pivot_offset
+	var ratio := s_new / s_old
+	_hub_root.scale    = Vector2.ONE * s_new
+	_hub_root.position = cursor - pivot - (cursor - _hub_root.position - pivot) * ratio
+	_zoom = s_new
+	_pan  = _hub_root.position
+	get_viewport().set_input_as_handled()
 
 # Fine ligne horizontale décorative (ornement du nom de palier).
 func _ornament_line(color: Color) -> ColorRect:
@@ -821,8 +851,8 @@ func _close_panel() -> void:
 
 	var ht := create_tween().set_parallel(true) \
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	ht.tween_property(_hub_root, "scale", Vector2.ONE * HUB_BASE_SCALE, 0.25)
-	# Retour à l'espace exploré (pan conservé).
+	ht.tween_property(_hub_root, "scale", Vector2.ONE * _zoom, 0.25)
+	# Retour à l'espace exploré (pan + zoom conservés).
 	ht.tween_property(_hub_root, "position", _pan, 0.25)
 
 # Met à jour l'état is_selected de tous les HexItems selon le panneau ouvert.

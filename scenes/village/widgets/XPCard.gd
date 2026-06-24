@@ -14,7 +14,12 @@ const GAIN_COLOR := Color(1.00, 0.88, 0.20)
 var xp_fill    := 0.0
 var fill_color := Color.WHITE
 var motif: int = Motif.BUBBLES
-var _t         := 0.0
+var _t         := randf() * 6.0   # phase aléatoire : grésillement désynchronisé entre cartes
+
+# Contour néon (dessiné par la carte) : rayon des coins + épaisseur du trait,
+# renseignés par UIHelpers.xp_panel pour épouser exactement la carte.
+var corner_rad := 4.0
+var border_w   := 1.0
 
 # Segment XP gagné :
 #   gain_start ≥ 0  → fraction où commence le segment or (= avant_frac du cycle)
@@ -107,8 +112,8 @@ func spawn_completion_sparks() -> void:
 		])
 
 func _process(delta: float) -> void:
-	if xp_fill <= 0.0 and _sparks.is_empty():
-		return
+	# Toujours animer : le contour néon (pulsation + grésillement) vit en permanence,
+	# indépendamment du remplissage de la barre.
 	_t += delta
 	if not _sparks.is_empty():
 		for s: Array in _sparks:
@@ -121,6 +126,11 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	_draw_sparks()
+	_draw_fill()
+	_draw_neon_contour()
+
+# Remplissage interne (barre + motif de particules) — INCHANGÉ, indépendant du contour.
+func _draw_fill() -> void:
 	if xp_fill <= 0.0: return
 	if _particles.is_empty():
 		_generate_particles()
@@ -174,6 +184,39 @@ func _draw() -> void:
 			Motif.PAWS:      _draw_paw(Vector2(bx, by), r, alpha)
 			Motif.STARS:     _draw_star(Vector2(bx, by), r, alpha)
 			_:               _draw_bubble(Vector2(bx, by), r, alpha)
+
+# ─── Contour néon (DA cyberpunk, couleur du palier = fill_color) ─────────────
+# Glow diffus + trait net avivé, à coins arrondis, pulsé et grésillant. Ne touche
+# QUE le contour : le remplissage (fond + motif) reste géré par _draw_fill.
+func _draw_neon_contour() -> void:
+	# Pulsation douce SEULEMENT (pas de grésillement : réservé au contour des panels,
+	# sinon trop de bruit visuel quand plusieurs cartes coexistent).
+	var energy := 0.80 + 0.20 * sin(_t * 2.2)
+	# Rentré d'1 px pour que le trait net reste dans la carte.
+	var pts := _rounded_rect(Rect2(Vector2.ONE, size - Vector2(2.0, 2.0)), maxf(corner_rad, 3.0))
+	for g: Array in [[9.0, 0.08], [5.0, 0.14], [2.5, 0.22]]:
+		var gc := fill_color; gc.a = (g[1] as float) * energy
+		draw_polyline(pts, gc, g[0] as float, true)
+	var core := fill_color.lerp(Color.WHITE, 0.55); core.a = 0.95
+	draw_polyline(pts, core, maxf(border_w, 1.5), true)
+
+func _rounded_rect(rect: Rect2, rad: float, seg: int = 5) -> PackedVector2Array:
+	var p := rect.position
+	var s := rect.size
+	rad = minf(rad, minf(s.x, s.y) * 0.5)
+	var pts := PackedVector2Array()
+	_arc(pts, p + Vector2(rad, rad),             rad, PI,       PI * 1.5, seg)
+	_arc(pts, p + Vector2(s.x - rad, rad),       rad, PI * 1.5, TAU,      seg)
+	_arc(pts, p + Vector2(s.x - rad, s.y - rad), rad, 0.0,      PI * 0.5, seg)
+	_arc(pts, p + Vector2(rad, s.y - rad),       rad, PI * 0.5, PI,       seg)
+	pts.append(pts[0])
+	return pts
+
+func _arc(pts: PackedVector2Array, center: Vector2, rad: float,
+		a0: float, a1: float, seg: int) -> void:
+	for i in seg + 1:
+		var a: float = lerpf(a0, a1, float(i) / float(seg))
+		pts.append(center + Vector2(cos(a), sin(a)) * rad)
 
 # Étincelles de fin de remplissage : cœur clair + halo or, fondu sur la vie.
 func _draw_sparks() -> void:
