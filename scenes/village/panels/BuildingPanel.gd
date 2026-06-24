@@ -113,7 +113,8 @@ static func build_route_section(host: Village, quartier: String) -> void:
 	vb.add_child(_action_btn(Translations.T("building.route.btn"), can,
 			func() -> void:
 				if VillageBuildings.rebuild_route(quartier):
-					host.refresh_hub_after_route()))
+					# Anime l'apparition du filament/boule au lieu de tout reconstruire.
+					host.animate_route_creation(quartier)))
 	host.rp_content.add_child(card)
 
 # ═══════════════════════════════════════════════════════════

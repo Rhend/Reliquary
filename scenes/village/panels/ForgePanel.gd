@@ -43,39 +43,70 @@ static func _build_equip_section(host: Village, equip_id: String, icon: String) 
 	var nom    := Translations.entity_name(equip, equip_id)
 	var xp_cur := float(equip.get("xp_maitrise_actuelle", 0.0))
 	var xp_nxt := ForgeSystem.effective_evolve_cost(equip_id)
+	var pts    := ForgeSystem.points(equip_id)
+	var can_evolve := not at_max and ForgeSystem.can_evolve_equipment(equip_id)
+	var frac := 1.0 if at_max else (clampf(xp_cur / xp_nxt, 0.0, 1.0) if xp_nxt > 0.0 else 0.0)
 
-	var sec := UIHelpers.collapsible_section(icon + "  " + nom.to_upper(), ec, true,
-			host.panel_ui_state(), equip_id)
-	host.rp_content.add_child(sec["wrapper"])
-	var body := sec["body"] as VBoxContainer
-	body.add_theme_constant_override("separation", 6)
+	# Carte UNIQUE englobant nom + palier + XP + points de Forge + indication
+	# d'évolution. Cliquable : évolue l'équipement quand il est prêt (le clic
+	# remplace l'ancien bouton ÉVOLUER). Fond rempli par la progression d'XP.
+	var card := UIHelpers.xp_panel(ec, frac, 0.08, 0.60, 1, 6, XPCard.motif_for_type(Enums.EntityType.EQUIPMENT))
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	host.rp_content.add_child(card)
 
-	# Carte XP / palier
-	var built := UIHelpers.entity_xp_card(nom, tier, xp_cur,
-			0.0 if at_max else xp_nxt, icon, Enums.EntityType.EQUIPMENT)
-	(built["card"] as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_child(built["card"])
+	var m := UIHelpers.margin_of(10)
+	card.add_child(m)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE  # le clic passe à la carte
+	m.add_child(vb)
 
-	# Points de Forge
-	var pts := ForgeSystem.points(equip_id)
-	body.add_child(UIHelpers.label(Translations.T("forge.points") % pts, 12, UIColors.FILTER_ON))
+	# Ligne 1 : icône + nom (gauche) · palier (droite).
+	var row1 := HBoxContainer.new()
+	row1.add_theme_constant_override("separation", 8)
+	row1.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(row1)
+	var name_lbl := UIHelpers.label(icon + "  " + nom.to_upper(), 14, ec.lerp(Color.WHITE, 0.25))
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row1.add_child(name_lbl)
+	row1.add_child(UIHelpers.label(GameData.get_tier_name(tier), 11, ec))
 
-	# Bouton d'évolution (rituel) si prêt
-	if not at_max and ForgeSystem.can_evolve_equipment(equip_id):
-		var nc  := UIColors.tier_color(tier + 1)
-		var ebtn := UIHelpers.evolve_button("▲  " + Translations.T("forge.evolve_btn"), nc, 12)
-		ebtn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		ebtn.custom_minimum_size = Vector2(220.0, 28.0)
-		ebtn.pressed.connect(func() -> void:
+	# Ligne 2 (sous le nom) : points de Forge (gauche) · XP / coût ou Rang Max (droite).
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 8)
+	row2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(row2)
+	var pts_lbl := UIHelpers.label(Translations.T("forge.points") % pts, 11, UIColors.FILTER_ON)
+	pts_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pts_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row2.add_child(pts_lbl)
+	if at_max:
+		row2.add_child(UIHelpers.label(Translations.T("forge.equip.max_rank"), 10, UIColors.TIER_LEGENDAIRE))
+	else:
+		row2.add_child(UIHelpers.label("XP  %s / %s" % [UIHelpers.xp_fmt(int(xp_cur)), UIHelpers.xp_fmt(int(xp_nxt))],
+				10, UIColors.TEXT_MUTED))
+
+	# Ligne 3 : indication « cliquer pour évoluer » quand l'équipement est prêt.
+	if can_evolve:
+		var nc := UIColors.tier_color(tier + 1)
+		var hint := UIHelpers.label("▲  " + Translations.T("forge.evolve_btn"), 12, nc.lerp(Color.WHITE, 0.20))
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(hint)
+
+		# Carte cliquable → lance le rituel d'évolution de l'équipement.
+		card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		UIHelpers.add_hover_feedback(card)
+		card.gui_input.connect(func(ev: InputEvent) -> void:
+			if not (ev is InputEventMouseButton \
+					and (ev as InputEventMouseButton).pressed \
+					and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT):
+				return
 			var nt := ForgeSystem.evolve_equipment(equip_id)
 			if nt >= 0:
 				host.launch_evolution_ritual(Enums.EntityType.EQUIPMENT, equip_id, nom, nt - 1, nt)
 		)
-		body.add_child(ebtn)
-	elif at_max:
-		var maxl := UIHelpers.label(Translations.T("forge.equip.max_rank"), 11, UIColors.TIER_LEGENDAIRE)
-		maxl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		body.add_child(maxl)
 
 	# Accès à l'arbre (spatial) — actif dès l'activation de l'arbre (équip. T1).
 	var tree_btn := Button.new()
@@ -88,14 +119,19 @@ static func _build_equip_section(host: Village, equip_id: String, icon: String) 
 	tree_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(ec, 0.20, 0.90, 2, 5))
 	if tier < 1:
 		tree_btn.disabled = true
-		tree_btn.tooltip_text = Translations.T("forge.tree_locked")
+		# Tooltip JRPG du jeu (TooltipOverlay) plutôt que l'infobulle native de Godot,
+		# qui jure avec la DA. mouse_filter STOP : un Button désactivé n'émet plus de
+		# survol, donc le tooltip ne se déclencherait pas sans ça.
+		tree_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		UIHelpers.register_tooltip(tree_btn, Translations.T("forge.open_tree"),
+				Translations.T("forge.tree_locked"), ec)
 	else:
 		tree_btn.pressed.connect(func() -> void:
 			var overlay := ForgeTreeOverlay.new()
 			overlay.equipment_id = equip_id
 			host.add_child(overlay)
 		)
-	body.add_child(tree_btn)
+	host.rp_content.add_child(tree_btn)
 
 # ─── États verrouillés ───────────────────────────────────────
 

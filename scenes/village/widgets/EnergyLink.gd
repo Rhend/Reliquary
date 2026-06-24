@@ -21,9 +21,9 @@ const SEGMENTS := 26
 # Passes du halo diffus : [largeur, alpha de base]. Du plus large/faible
 # (brume) au plus fin/marqué (cœur du filament) — sans jamais être opaque.
 const GLOW_PASSES := [
-	[8.0, 0.045],
-	[4.5, 0.065],
-	[2.0, 0.095],
+	[9.0, 0.085],
+	[5.0, 0.130],
+	[2.5, 0.190],
 ]
 
 var _phase: float = 0.0
@@ -62,7 +62,7 @@ func _draw() -> void:
 
 	# Solide : ondulation calme + alpha renforcé (lien établi, net).
 	var wob_amp := 1.0 if solid else 3.0
-	var alpha_mult := 3.4 if solid else 1.0
+	var alpha_mult := 5.2 if solid else 1.8
 
 	# Trajet : arc léger (s'annule aux extrémités) + ondulation animée subtile.
 	var pts := PackedVector2Array()
@@ -83,10 +83,12 @@ func _draw() -> void:
 			var seg_a: float = pa * lerp(0.30, 1.0, tt)   # plus présent près du point
 			draw_line(pts[i], pts[i + 1], Color(accent.r, accent.g, accent.b, seg_a), w, true)
 
-	# Cœur net du lien quand il est consistant.
-	if solid:
-		for i in pts.size() - 1:
-			draw_line(pts[i], pts[i + 1], Color(accent.r, accent.g, accent.b, 0.55), 1.5, true)
+	# Cœur du lien : trait net en permanence pour que la route se LISE comme un
+	# chemin (et pas une simple brume). Plus large/opaque une fois consistante.
+	var core_a := 0.90 if solid else 0.55
+	var core_w := 2.6 if solid else 1.8
+	for i in pts.size() - 1:
+		draw_line(pts[i], pts[i + 1], Color(accent.r, accent.g, accent.b, core_a), core_w, true)
 
 	# Lueur qui « remonte » doucement le filament vers le point d'énergie.
 	var spark_t := fmod(_phase * 0.30, 1.0)

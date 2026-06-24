@@ -32,10 +32,14 @@ var _drone:          AudioStreamPlayer = null
 var _crystal:        AudioStreamPlayer = null
 
 # ─── État séquence ───────────────────────────────────────────
-var _params:         Dictionary = {}
-var _can_skip:       bool       = false
-var _skip_triggered: bool       = false
-var _returning:      bool       = false
+var _params:      Dictionary = {}
+var _skipped:     bool       = false   # Échap a sauté l'animation vers l'état stable
+var _finished:    bool       = false   # célébration stable atteinte (bouton Retour visible)
+var _returning:   bool       = false   # fondu de sortie déclenché (clic Retour)
+var _tweens:      Array      = []      # tweens de la séquence — tués au skip
+var _bonus_panel: Control    = null    # panneau de stats/bonus (construit une seule fois)
+var _bonus_rows:  Array      = []      # lignes de stats animées du panneau bonus
+var _descent_clone: Control  = null    # clone transitoire du grand texte (phase 4→5)
 
 # ─── Init ─────────────────────────────────────────────────────
 func _ready() -> void:
@@ -282,32 +286,41 @@ func _run_sequence() -> void:
 	# Phase 2 — carte apparaît (0.5 s)
 	_phase2_card_appear()
 	await get_tree().create_timer(0.5).timeout
+	if _skipped: return
 
 	# Phase 3 — montée rituelle (2.0 s)
 	_phase3_ascension_start()
 	await get_tree().create_timer(2.0).timeout
+	if _skipped: return
 
 	# Phase 4 — flash + texte haut (élastique 0.3 s) + pause (0.25 s) + descente (0.4 s)
 	#            → total ~1.0 s avant que la carte soit prête à remonter
 	_phase4_revelation()
 	await get_tree().create_timer(1.0).timeout
-
-	if _skip_triggered: return
+	if _skipped: return
 
 	# Phase 5 — carte remonte (0.4 s) + texte bonus surgit (délai 0.35 s + fade 0.3 s)
-	#            → attendre 0.75 s avant d'activer le skip
 	_phase5_celebration()
 	await get_tree().create_timer(0.75).timeout
+	if _skipped: return
 
-	if _skip_triggered: return
+	# Célébration stable — bouton Retour visible.
+	_finish_celebration()
 
-	# Célébration stable — bouton visible, skip autorisé
-	_can_skip = true
+# Atteint l'état stable : affiche le bouton Retour au village. Idempotent.
+func _finish_celebration() -> void:
+	if _finished:
+		return
+	_finished = true
 	_show_return_button()
+
+func _track(tw: Tween) -> Tween:
+	_tweens.append(tw)
+	return tw
 
 # ─── Phase 2 : fade in + scale in ───────────────────────────
 func _phase2_card_appear() -> void:
-	var tw := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	var tw := _track(create_tween()).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.set_parallel(true)
 	tw.tween_property(_card, "modulate:a", 1.0, 0.5)
 	tw.tween_property(_card, "scale",      Vector2.ONE, 0.5)
@@ -317,15 +330,15 @@ func _phase3_ascension_start() -> void:
 	_particles.emitting = true
 
 	# Les rayons divins s'éveillent pendant la montée rituelle.
-	create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE) \
+	_track(create_tween()).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE) \
 		.tween_property(_rays, "intensity", 0.55, 2.0)
 
 	_drone.play()
-	create_tween().set_ease(Tween.EASE_IN_OUT) \
+	_track(create_tween()).set_ease(Tween.EASE_IN_OUT) \
 		.tween_property(_drone, "pitch_scale", 1.8, 2.0)
 
 	# Pulse fluide × 2 : montée et descente organiques (1.0 s/cycle × 2 = 2 s)
-	var pulse := create_tween()
+	var pulse := _track(create_tween())
 	pulse.set_loops(2)
 	pulse.tween_property(_card, "scale", Vector2(1.20, 1.20), 0.5) \
 		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
@@ -338,7 +351,7 @@ func _phase3_ascension_start() -> void:
 	if _params.get("eclosion", false):
 		from_color = Color(0.15, 0.15, 0.20)  # ténèbres avant la naissance
 		to_color   = ECLOSION_COLOR
-	create_tween().set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE) \
+	_track(create_tween()).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE) \
 		.tween_method(_update_card_color.bind(from_color, to_color), 0.0, 1.0, 2.0)
 
 func _update_card_color(progress: float, from_c: Color, to_c: Color) -> void:
@@ -355,13 +368,13 @@ func _update_card_color(progress: float, from_c: Color, to_c: Color) -> void:
 # ─── Phase 4 : flash + texte descend dans la carte ──────────
 func _phase4_revelation() -> void:
 	_flash.modulate.a = 1.0
-	create_tween().tween_property(_flash, "modulate:a", 0.0, 0.2)
+	_track(create_tween()).tween_property(_flash, "modulate:a", 0.0, 0.2)
 	_crystal.play()
 
 	# Onde de choc + pic d'intensité des rayons, puis ils se posent.
 	_rays.fire_shockwave()
 	_title_fx.fire_burst()
-	var rays_tw := create_tween()
+	var rays_tw := _track(create_tween())
 	rays_tw.tween_property(_rays, "intensity", 1.0, 0.15).set_ease(Tween.EASE_OUT)
 	rays_tw.tween_property(_rays, "intensity", 0.50, 0.80) \
 			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
@@ -369,7 +382,7 @@ func _phase4_revelation() -> void:
 	# Grand texte palier : apparaît en deux temps élastiques, puis descend dans la carte
 	_tier_label.modulate.a = 1.0
 	_tier_label.scale      = Vector2(0.5, 0.5)
-	var appear_tw := create_tween()
+	var appear_tw := _track(create_tween())
 	appear_tw.tween_property(_tier_label, "scale", Vector2(1.2, 1.2), 0.2) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	appear_tw.tween_property(_tier_label, "scale", Vector2.ONE, 0.1) \
@@ -399,6 +412,7 @@ func _start_tier_descent() -> void:
 	clone.pivot_offset  = tier_rect.size * 0.5
 	clone.z_index       = 100
 	add_child(clone)
+	_descent_clone = clone   # réf. pour nettoyage au skip (sinon resterait figé à l'écran)
 
 	# Masquer l'original (le clone s'en charge)
 	_tier_label.modulate.a = 0.0
@@ -408,13 +422,14 @@ func _start_tier_descent() -> void:
 	var from_center  := from_rect.get_center()
 	var target_pos   := from_center - tier_rect.size * 0.5  # pivot_offset = size/2
 
-	var tw := create_tween().set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_CUBIC)
+	var tw := _track(create_tween()).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.set_parallel(true)
 	tw.tween_property(clone, "position", target_pos, 0.4)
 	tw.tween_property(clone, "scale",    Vector2(scale_target, scale_target), 0.4)
 	tw.tween_property(_from_tier_lbl, "modulate:a", 0.0, 0.3)
 	tw.chain().tween_callback(func() -> void:
 		clone.queue_free()
+		_descent_clone = null
 		_finish_tier_replacement()
 	)
 
@@ -424,7 +439,7 @@ func _finish_tier_replacement() -> void:
 	var to_color := UIColors.tier_color(to_tier)
 	_from_tier_lbl.text = GameData.get_tier_name(to_tier).to_upper()
 	_from_tier_lbl.add_theme_color_override("font_color", to_color.lightened(0.20))
-	create_tween().tween_property(_from_tier_lbl, "modulate:a", 1.0, 0.15)
+	_track(create_tween()).tween_property(_from_tier_lbl, "modulate:a", 1.0, 0.15)
 	_reveal_new_name(to_tier, to_color)
 
 # Nom d'affichage de l'entité au palier donné (fallback : nom passé en
@@ -444,7 +459,7 @@ func _reveal_new_name(to_tier: int, to_color: Color) -> void:
 	var new_name := _entity_name_at(to_tier).to_upper()
 	if new_name == _name_lbl.text:
 		return
-	var tw := create_tween()
+	var tw := _track(create_tween())
 	tw.tween_property(_name_lbl, "modulate:a", 0.0, 0.18).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func() -> void:
 		_name_lbl.text = new_name
@@ -465,79 +480,110 @@ func _reveal_new_name(to_tier: int, to_color: Color) -> void:
 func _phase5_celebration() -> void:
 	# Éclosion : le grand mot « ÉCLOSION » disparaît en fondu (pas de morph dans la carte).
 	if _params.get("eclosion", false) and is_instance_valid(_tier_label):
-		create_tween().tween_property(_tier_label, "modulate:a", 0.0, 0.3)
+		_track(create_tween()).tween_property(_tier_label, "modulate:a", 0.0, 0.3)
 
 	# Carte glisse vers le tiers supérieur avec effet élastique d'arrivée ;
 	# le foyer des rayons la suit.
-	var slide := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	var slide := _track(create_tween()).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	slide.set_parallel(true)
 	slide.tween_property(_card, "offset_top",    -235.0, 0.4)
 	slide.tween_property(_card, "offset_bottom",  -45.0, 0.4)
 	slide.tween_property(_rays, "center_offset", Vector2(0.0, -140.0), 0.4)
 	slide.tween_property(_rays, "intensity", 0.35, 0.6)
 
-	# Panneau cadre sous la carte : lignes de stats animées (avant + gain →
-	# après) puis texte des débloquages. Hauteur libre (grandit vers le bas).
+	_spawn_bonus_panel(true)
+
+# Construit le panneau cadre sous la carte (lignes de stats avant→après + texte
+# des débloquages) UNE SEULE FOIS. `animate` : fondu/remontée + déversement des
+# gains ; sinon état final direct (skip). Réf. mémorisées (_bonus_panel/_bonus_rows)
+# pour que le skip puisse forcer l'état final même construit en cours d'animation.
+func _spawn_bonus_panel(animate: bool) -> void:
+	if _bonus_panel != null:
+		return
 	var stat_rows  := _stat_pairs()
 	var bonus_text := _get_evolution_text(not stat_rows.is_empty())
-	if not (stat_rows.is_empty() and bonus_text.is_empty()):
-		var to_color := _accent_color()
+	if stat_rows.is_empty() and bonus_text.is_empty():
+		return
+	var to_color := _accent_color()
 
-		var panel_style := StyleBoxFlat.new()
-		panel_style.bg_color     = Color(UIColors.PANEL_BG_DARK, 0.92)
-		panel_style.border_color = Color(to_color.r, to_color.g, to_color.b, 0.55)
-		panel_style.set_border_width_all(1)
-		panel_style.set_corner_radius_all(10)
-		panel_style.shadow_color = Color(0, 0, 0, 0.45)
-		panel_style.shadow_size  = 14
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color     = Color(UIColors.PANEL_BG_DARK, 0.92)
+	panel_style.border_color = Color(to_color.r, to_color.g, to_color.b, 0.55)
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(10)
+	panel_style.shadow_color = Color(0, 0, 0, 0.45)
+	panel_style.shadow_size  = 14
 
-		var bonus_panel := PanelContainer.new()
-		bonus_panel.add_theme_stylebox_override("panel", panel_style)
-		bonus_panel.anchor_left   = 0.5; bonus_panel.anchor_right  = 0.5
-		bonus_panel.anchor_top    = 0.5; bonus_panel.anchor_bottom = 0.5
-		bonus_panel.offset_left   = -250.0; bonus_panel.offset_right = 250.0
-		bonus_panel.offset_top    =   80.0; bonus_panel.offset_bottom = 80.0  # surgit : 80→70
-		bonus_panel.grow_vertical = Control.GROW_DIRECTION_END  # hauteur = contenu
-		bonus_panel.modulate.a    = 0.0
-		bonus_panel.z_index       = 50
+	var bonus_panel := PanelContainer.new()
+	bonus_panel.add_theme_stylebox_override("panel", panel_style)
+	bonus_panel.anchor_left   = 0.5; bonus_panel.anchor_right  = 0.5
+	bonus_panel.anchor_top    = 0.5; bonus_panel.anchor_bottom = 0.5
+	bonus_panel.offset_left   = -250.0; bonus_panel.offset_right = 250.0
+	bonus_panel.offset_top    =   80.0; bonus_panel.offset_bottom = 80.0  # surgit : 80→70
+	bonus_panel.grow_vertical = Control.GROW_DIRECTION_END  # hauteur = contenu
+	bonus_panel.modulate.a    = 0.0
+	bonus_panel.z_index       = 50
 
-		var inner_margin := UIHelpers.margin_of(14)
-		bonus_panel.add_child(inner_margin)
+	var inner_margin := UIHelpers.margin_of(14)
+	bonus_panel.add_child(inner_margin)
 
-		var content := VBoxContainer.new()
-		content.alignment = BoxContainer.ALIGNMENT_CENTER
-		content.add_theme_constant_override("separation", 6)
-		inner_margin.add_child(content)
+	var content := VBoxContainer.new()
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_theme_constant_override("separation", 6)
+	inner_margin.add_child(content)
 
-		var built_rows: Array = []
-		for data: Dictionary in stat_rows:
-			var r := _build_stat_row(data)
-			content.add_child(r["row"] as Control)
-			built_rows.append(r)
+	var built_rows: Array = []
+	for data: Dictionary in stat_rows:
+		var r := _build_stat_row(data)
+		content.add_child(r["row"] as Control)
+		built_rows.append(r)
 
-		if not bonus_text.is_empty():
-			var bonus := UIHelpers.label(bonus_text, 17, Color.WHITE)
-			bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
-			bonus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			# C4 : le texte s'écoule sur TOUTE la largeur du panneau (500 − 2×14 de
-			# marge), pour qu'autowrap ne coupe pas les phrases sur une largeur réduite.
-			bonus.custom_minimum_size  = Vector2(472.0, 0.0)
-			bonus.add_theme_constant_override("outline_size", 3)
-			bonus.add_theme_constant_override("line_spacing", 6)
-			bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-			content.add_child(bonus)
-		add_child(bonus_panel)
+	if not bonus_text.is_empty():
+		var bonus := UIHelpers.label(bonus_text, 17, Color.WHITE)
+		bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		bonus.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
+		bonus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# C4 : le texte s'écoule sur TOUTE la largeur du panneau (500 − 2×14 de
+		# marge), pour qu'autowrap ne coupe pas les phrases sur une largeur réduite.
+		bonus.custom_minimum_size  = Vector2(472.0, 0.0)
+		bonus.add_theme_constant_override("outline_size", 3)
+		bonus.add_theme_constant_override("line_spacing", 6)
+		bonus.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+		content.add_child(bonus)
+	add_child(bonus_panel)
 
-		# Fade in + légère remontée simultanés, après délai de 0.35 s
-		var bonus_tw := create_tween().set_parallel(true)
-		bonus_tw.tween_property(bonus_panel, "modulate:a", 1.0, 0.3).set_delay(0.35)
-		bonus_tw.tween_property(bonus_panel, "offset_top", 70.0, 0.3) \
-			.set_delay(0.35).set_ease(Tween.EASE_OUT)
+	_bonus_panel = bonus_panel
+	_bonus_rows  = built_rows
 
-		# Puis les gains se déversent dans les valeurs, ligne après ligne.
-		for i in built_rows.size():
-			_animate_stat_row(built_rows[i] as Dictionary, 0.85 + 0.45 * float(i))
+	if not animate:
+		_finalize_bonus_panel()
+		return
+
+	# Fade in + légère remontée simultanés, après délai de 0.35 s
+	var bonus_tw := _track(create_tween().set_parallel(true))
+	bonus_tw.tween_property(bonus_panel, "modulate:a", 1.0, 0.3).set_delay(0.35)
+	bonus_tw.tween_property(bonus_panel, "offset_top", 70.0, 0.3) \
+		.set_delay(0.35).set_ease(Tween.EASE_OUT)
+
+	# Puis les gains se déversent dans les valeurs, ligne après ligne.
+	for i in built_rows.size():
+		_animate_stat_row(built_rows[i] as Dictionary, 0.85 + 0.45 * float(i))
+
+# Force le panneau bonus dans son état final : visible, en place, stats à leur
+# valeur d'arrivée (sans compteur). Appelé par le skip.
+func _finalize_bonus_panel() -> void:
+	if not is_instance_valid(_bonus_panel):
+		return
+	_bonus_panel.modulate.a = 1.0
+	_bonus_panel.offset_top = 70.0
+	for r: Dictionary in _bonus_rows:
+		var value_lbl := r["value"] as Label
+		var bonus_lbl := r["bonus"] as Label
+		if is_instance_valid(value_lbl):
+			value_lbl.text = str(int(r["after"])) + str(r["suffix"])
+			value_lbl.add_theme_color_override("font_color", Color.WHITE)
+		if is_instance_valid(bonus_lbl):
+			bonus_lbl.text = ""
 
 # Retourne le texte explicatif du passage au nouveau palier, selon l'entité
 # et le tier cible. has_stat_rows = des lignes de stats animées sont déjà
@@ -704,7 +750,7 @@ func _animate_stat_row(r: Dictionary, delay: float) -> void:
 	var dur  := clampf(0.12 * float(gain), 0.5, 1.2)
 	var last: Array = [before]   # mutable partagé avec la lambda
 
-	var tw := create_tween()
+	var tw := _track(create_tween())
 	tw.tween_interval(delay)
 	tw.tween_method(func(v: float) -> void:
 		var cur := int(floor(v))
@@ -792,12 +838,73 @@ func _phase6_return() -> void:
 # ═══════════════════════════════════════════════════════════
 
 func _input(event: InputEvent) -> void:
-	if not _can_skip or _returning:
+	if _returning:
 		return
 	if event is InputEventKey \
 			and (event as InputEventKey).pressed \
 			and not (event as InputEventKey).echo:
 		var kc := (event as InputEventKey).keycode
-		if kc == KEY_SPACE or kc == KEY_ESCAPE or kc == KEY_ENTER:
-			_skip_triggered = true
-			_phase6_return()
+		# Avant la fin : Échap/Espace/Entrée TERMINE l'animation (gain de temps) sans
+		# quitter l'écran — le joueur doit cliquer « Retour au village ». Une fois
+		# stable, ces touches n'ont plus d'effet (le bouton est le seul moyen de sortir).
+		if (kc == KEY_SPACE or kc == KEY_ESCAPE or kc == KEY_ENTER) and not _finished:
+			_skip_to_finish()
+			get_viewport().set_input_as_handled()
+
+# Fast-forward vers l'état stable : stoppe l'animation et fige carte, palier/nom,
+# panneau bonus et bouton Retour dans leur état final — SANS changer de scène.
+func _skip_to_finish() -> void:
+	if _finished or _returning:
+		return
+	_skipped = true
+
+	for t in _tweens:
+		if t is Tween and (t as Tween).is_valid():
+			(t as Tween).kill()
+	_tweens.clear()
+
+	# Clone transitoire du grand texte (phase 4→5) éventuellement en vol → nettoyé.
+	if is_instance_valid(_descent_clone):
+		_descent_clone.queue_free()
+		_descent_clone = null
+
+	_particles.emitting = false
+
+	var eclosion := _params.get("eclosion", false) as bool
+	var to_tier  := _params.get("to_tier", 1) as int
+	var to_color := ECLOSION_COLOR if eclosion else UIColors.tier_color(to_tier)
+
+	# Carte : couleur cible, position haute finale, pleine opacité ; foyer des rayons posé.
+	if is_instance_valid(_card):
+		_card.modulate.a    = 1.0
+		_card.scale         = Vector2.ONE
+		_card.offset_top    = -235.0
+		_card.offset_bottom =  -45.0
+	_update_card_color(1.0, to_color, to_color)
+	if is_instance_valid(_rays):
+		_rays.center_offset = Vector2(0.0, -140.0)
+		_rays.intensity     = 0.35
+
+	# Grand texte du haut : disparu (morph/fondu « consommés »).
+	if is_instance_valid(_tier_label):
+		_tier_label.modulate.a = 0.0
+
+	# Morph palier/nom dans la carte (l'éclosion n'est pas une montée de palier).
+	if not eclosion:
+		if is_instance_valid(_from_tier_lbl):
+			_from_tier_lbl.text = GameData.get_tier_name(to_tier).to_upper()
+			_from_tier_lbl.add_theme_color_override("font_color", to_color.lightened(0.20))
+			_from_tier_lbl.modulate.a = 1.0
+		if is_instance_valid(_name_lbl):
+			_name_lbl.text  = _entity_name_at(to_tier).to_upper()
+			_name_lbl.modulate.a = 1.0
+			_name_lbl.scale = Vector2.ONE
+			_name_lbl.add_theme_color_override("font_color", Color.WHITE)
+
+	# Panneau bonus en état final (construit s'il ne l'était pas encore).
+	if _bonus_panel == null:
+		_spawn_bonus_panel(false)
+	else:
+		_finalize_bonus_panel()
+
+	_finish_celebration()

@@ -236,8 +236,11 @@ class _Canvas extends Control:
 
 	func _draw() -> void:
 		var pos: Dictionary = {}
+		var strate: Dictionary = {}
 		for n in tree_nodes:
-			pos[str(n.get("id", ""))] = n.get("pos", Vector2.ZERO)
+			var nid := str(n.get("id", ""))
+			pos[nid]    = n.get("pos", Vector2.ZERO)
+			strate[nid] = int(n.get("strate", 1))
 		var seen: Dictionary = {}
 		for n in tree_nodes:
 			var aid := str(n.get("id", ""))
@@ -248,5 +251,12 @@ class _Canvas extends Control:
 					continue
 				seen[key] = true
 				var both_owned: bool = owned.has(aid) and owned.has(bid)
-				var c := link_color if both_owned else Color(link_color, 0.28)
+				# Lien acquis → couleur du TIER de la strate la plus profonde des deux
+				# nœuds (strate N ⟷ palier N : Peu Commun vert, Rare bleu…), pour un
+				# arc-en-ciel de progression. Sinon : trait diffus neutre.
+				var c: Color
+				if both_owned:
+					c = UIColors.tier_color(maxi(int(strate[aid]), int(strate[bid])))
+				else:
+					c = Color(link_color, 0.28)
 				draw_line(pos[aid], pos[bid], c, 3.0 if both_owned else 2.0, true)

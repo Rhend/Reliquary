@@ -247,12 +247,15 @@ func _build_hub() -> void:
 	_hub_root.add_child(_ring)
 
 	# ── Centre : nom Village + palier + fragments + conditions ──
+	# Centré dans l'anneau, puis LÉGÈREMENT réhaussé (un cran au-dessus du centre
+	# exact, pour un meilleur cadrage sans sortir du rond).
 	var center_box := VBoxContainer.new()
+	var center_lift := -RING_RADIUS * 0.15
 	center_box.add_theme_constant_override("separation", 2)
 	center_box.anchor_left   = 0.5; center_box.anchor_right  = 0.5
 	center_box.anchor_top    = 0.5; center_box.anchor_bottom = 0.5
 	center_box.offset_left   = 0.0; center_box.offset_right  = 0.0
-	center_box.offset_top    = 0.0; center_box.offset_bottom = 0.0
+	center_box.offset_top    = center_lift; center_box.offset_bottom = center_lift
 	center_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	center_box.grow_vertical   = Control.GROW_DIRECTION_BOTH
 	_hub_root.add_child(center_box)
@@ -334,7 +337,8 @@ func _build_district_links(unlocked: Array, n: int, vp: Vector2, tcolor: Color) 
 
 # Tend le lien d'un owner donné, puis rétablit son état (boule cliquable, ou
 # quartier déjà ouvert si on reconstruit le hub).
-func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Color) -> void:
+func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Color,
+		animate: bool = false) -> void:
 	var ang := -PI * 0.5 + idx * TAU / n
 	var outward := Vector2(cos(ang), sin(ang))         # direction radiale de l'owner
 	var owner_center := vp * 0.5 + outward * RING_RADIUS
@@ -346,20 +350,79 @@ func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Co
 	link.accent = tcolor.lerp(UIColors.ENERGY_ACCENT, 0.45)
 	# Départ JUSTE HORS du cercle de l'owner (sinon masqué par l'hexagone) ;
 	# arrivée plus loin sur le même axe radial, dans l'espace.
-	link.start_point = owner_center + outward * DISTRICT_LINK_START
-	link.end_point   = owner_center + outward * DISTRICT_LINK_REACH
+	var start_pt := owner_center + outward * DISTRICT_LINK_START
+	var end_pt   := owner_center + outward * DISTRICT_LINK_REACH
+	link.start_point = start_pt
+	link.end_point   = end_pt
 	_hub_root.add_child(link)
 
 	_links[owner_id]            = link
 	_link_outward[owner_id]     = outward
-	_link_diffuse_end[owner_id] = link.end_point
+	_link_diffuse_end[owner_id] = end_pt
 
 	if _district_open.get(owner_id, false):
 		# Quartier déjà ouvert (reconstruction du hub) : on le rebâtit tel quel,
 		# sans ré-animer ni recentrer la vue (et sans boule, consommée).
 		_reveal_district(owner_id, false)
+	elif animate:
+		# Route fraîchement reconstruite : le filament JAILLIT du cercle vers son
+		# point d'énergie, puis la boule surgit au bout (pas de reconstruction du hub).
+		_grow_link(owner_id, link, start_pt, end_pt)
 	else:
 		_spawn_boule(owner_id)
+
+# Anime l'apparition d'un filament de route : fondu + extension de la pointe
+# (end_point) du cercle de l'owner jusqu'au point d'énergie, puis pop de la boule.
+func _grow_link(owner_id: String, link: EnergyLink, start_pt: Vector2, end_pt: Vector2) -> void:
+	link.modulate.a = 0.0
+	link.end_point  = start_pt
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(link, "modulate:a", 1.0, 0.35).set_ease(Tween.EASE_OUT)
+	tw.tween_property(link, "end_point", end_pt, 0.55) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.chain().tween_callback(func() -> void:
+		if not is_instance_valid(link):
+			return
+		_spawn_boule(owner_id)
+		var boule: Variant = _boules.get(owner_id)
+		if is_instance_valid(boule):
+			(boule as Control).pivot_offset = (boule as Control).size * 0.5
+			(boule as Control).scale = Vector2(0.4, 0.4)
+			boule.create_tween().tween_property(boule, "scale", Vector2.ONE, 0.4) \
+					.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	)
+
+# Reconstruction d'une route depuis un panneau de hub : au lieu de tout
+# reconstruire (_rebuild_hub rechargeait toute la page), on POUSSE le filament du
+# quartier en douceur, puis on rafraîchit le panneau ouvert — sa section « route »
+# disparaît, la route étant désormais faite.
+func animate_route_creation(owner_id: String) -> void:
+	# Pas de hub vivant, ou lien déjà présent → repli/refresh simple.
+	if _hub_root == null or not is_instance_valid(_hub_root):
+		refresh_hub_after_route()
+		return
+	if _links.has(owner_id) and is_instance_valid(_links[owner_id]):
+		_refresh_active_panel()
+		return
+
+	var vp := get_viewport_rect().size
+	var village_maitrise := int(GameData.village.get("maitrise_actuelle", 0))
+	var tcolor := UIColors.tier_color(village_maitrise)
+	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
+		return (d[2] as int) <= village_maitrise)
+	var n := unlocked.size()
+	var idx := -1
+	for i in n:
+		if (unlocked[i] as Array)[4] == owner_id:
+			idx = i
+			break
+	if idx < 0:
+		refresh_hub_after_route()   # owner pas sur l'anneau (cas limite) → repli sûr
+		return
+
+	AudioManager.play_sfx("ui_select", -6.0)
+	_build_one_link(owner_id, idx, n, vp, tcolor, true)
+	_refresh_active_panel()
 
 # (Re)crée la boule d'énergie CLIQUABLE au bout du lien diffus d'un owner.
 # Réutilisé à la construction du hub ET à la fermeture du quartier (le lien
