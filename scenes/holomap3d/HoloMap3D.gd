@@ -29,6 +29,7 @@ signal lieu_selectionne(id: String)
 
 const LINE_SHADER := preload("res://scenes/holomap3d/holo_line.gdshader")
 const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
+const ROUTE_SHADER := preload("res://scenes/holomap3d/holo_route.gdshader")
 
 @export var seed_val := 1337
 
@@ -59,6 +60,14 @@ const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 @export var avenue_largeur := 2         # largeur des grands axes 2×2 voies (cellules)
 @export var avenue_tous_les := 3        # un axe sur N est un grand axe
 @export_range(0.0, 1.0) var densite := 0.85  # remplissage des îlots
+# Routes-néon (seul calque de lignes au sol ; remplace grille + circuits).
+@export var couleur_route := Color(0.95, 0.30, 0.66)  # magenta rosé (distinct du violet Épique)
+@export var route_emission_base := 0.5  # néon de base (discret)
+@export var route_intensite_avenue := 1.0
+@export var route_intensite_rue := 0.6
+@export var flux_intensite := 1.2       # surbrillance du flux qui circule
+@export var flux_vitesse := 0.35        # vitesse du flux (lent)
+@export var flux_frequence := 0.18      # densité de pulses le long de l'axe
 
 # ─── Gabarits de bâtiments (tissu urbain) ─────────────────────
 @export_group("Gabarits")
@@ -67,7 +76,6 @@ const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 # ─── Palette (DA UIColors) ────────────────────────────────────
 @export_group("Palette")
 @export var couleur_decor_bati := Color(0.34, 0.40, 0.52)  # bleu-gris désaturé (remplissage)
-@export var couleur_grille_sol := Color(0.28, 0.34, 0.44)
 @export var couleur_eau := Color(0.16, 0.42, 0.62)
 @export var couleur_parc := Color(0.22, 0.52, 0.30)
 @export var luminosite_decor := 0.5   # émission FAIBLE du décor (sous le seuil de glow)
@@ -95,6 +103,7 @@ var _cam: Camera3D
 var _monde: Node3D
 var _lieux_node: Node3D
 var _mat_decor: ShaderMaterial
+var _mat_routes: ShaderMaterial
 var _post_mat: ShaderMaterial
 
 var _yaw := 0.0
@@ -129,7 +138,7 @@ func _setup_environment() -> void:
 	var we := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.02, 0.03, 0.06)
+	env.background_color = Color(0.010, 0.012, 0.022)  # quasi noir, léger reste de bleu nuit
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.1, 0.12, 0.18)
 	env.glow_enabled = true
@@ -156,6 +165,14 @@ func _setup_materials() -> void:
 	_mat_decor.shader = LINE_SHADER
 	_mat_decor.set_shader_parameter("emission_strength", luminosite_decor)
 	_mat_decor.set_shader_parameter("alpha_mult", 1.0)
+
+	_mat_routes = ShaderMaterial.new()
+	_mat_routes.shader = ROUTE_SHADER
+	_mat_routes.set_shader_parameter("route_color", couleur_route)
+	_mat_routes.set_shader_parameter("emission_base", route_emission_base)
+	_mat_routes.set_shader_parameter("flux_intensite", flux_intensite)
+	_mat_routes.set_shader_parameter("flux_vitesse", flux_vitesse)
+	_mat_routes.set_shader_parameter("flux_frequence", flux_frequence)
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -222,7 +239,7 @@ func _build_all() -> void:
 		_bloque[k] = true
 	_reserver_lieux()       # interdit le remplissage sous les lieux
 
-	_build_grille_sol()
+	_build_routes_neon()
 	if decor_actif:
 		_build_decor()
 	_build_ville()
@@ -248,10 +265,11 @@ func _marquer_routes(dest: Dictionary) -> void:
 	var p := taille_ilot
 	var idx := 0
 	while p < grille:
-		var w := avenue_largeur if (idx % maxi(1, avenue_tous_les) == 0) else rue_secondaire
+		var est_avenue := idx % maxi(1, avenue_tous_les) == 0
+		var w := avenue_largeur if est_avenue else rue_secondaire
 		for k in w:
 			if p + k < grille:
-				dest[p + k] = true
+				dest[p + k] = est_avenue   # valeur = grand axe ? (hiérarchie néon)
 		p += w + taille_ilot
 		idx += 1
 
@@ -312,15 +330,35 @@ func _build_decor() -> void:
 				taille_cellule * 0.22, ht * 0.5, cp)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Decor")
 
-# ─── Grille de sol ────────────────────────────────────────────
-func _build_grille_sol() -> void:
-	var s := HoloMesh3D.st()
-	var col := Color(couleur_grille_sol, 0.22)
+# ─── Routes-néon (seul calque de lignes au sol) ───────────────
+# Trace la voirie (déjà calculée pour les îlots) en néon magenta fin, avec
+# hiérarchie grand axe / rue. Le flux lumineux est animé par le shader.
+func _build_routes_neon() -> void:
+	var s := SurfaceTool.new()
+	s.begin(Mesh.PRIMITIVE_LINES)
 	var n := 0
-	for i in grille:
-		n += HoloMesh3D.line(s, _world(i, 0, 0.0), _world(i, grille - 1, 0.0), col)
-		n += HoloMesh3D.line(s, _world(0, i, 0.0), _world(grille - 1, i, 0.0), col)
-	_ajouter_mesh(HoloMesh3D.commit(s, n), "GrilleSol")
+	var L := float(grille - 1) * taille_cellule
+	var y := 0.015
+	for col in _cols_route:
+		var i_col := route_intensite_avenue if _cols_route[col] else route_intensite_rue
+		n += _route_line(s, _world(col, 0, y), _world(col, grille - 1, y), i_col, L)
+	for row in _rows_route:
+		var i_row := route_intensite_avenue if _rows_route[row] else route_intensite_rue
+		n += _route_line(s, _world(0, row, y), _world(grille - 1, row, y), i_row, L)
+	if n <= 0:
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = "Routes"
+	mi.mesh = s.commit()
+	mi.material_override = _mat_routes
+	_monde.add_child(mi)
+
+# Segment de route : UV.x = distance le long du tracé (pour le flux animé),
+# COLOR.a = intensité (hiérarchie avenue / rue).
+func _route_line(s: SurfaceTool, a: Vector3, b: Vector3, inten: float, L: float) -> int:
+	s.set_color(Color(1, 1, 1, inten)); s.set_uv(Vector2(0, 0)); s.add_vertex(a)
+	s.set_color(Color(1, 1, 1, inten)); s.set_uv(Vector2(L, 0)); s.add_vertex(b)
+	return 1
 
 # ─── Tissu urbain (remplissage par gabarits) ──────────────────
 func _build_ville() -> void:
