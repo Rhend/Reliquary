@@ -64,7 +64,7 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export_range(0.0, 1.0) var densite := 0.85  # remplissage des îlots
 # Routes-néon (seul calque de lignes au sol ; remplace grille + circuits).
 @export var couleur_route := Color(0.95, 0.30, 0.66)  # magenta rosé (distinct du violet Épique)
-@export var route_emission_base := 0.5  # néon de base (discret)
+@export var route_emission_base := 0.7  # néon de base (discret, au-dessus du décor)
 @export var route_intensite_avenue := 1.0
 @export var route_intensite_rue := 0.6
 @export var flux_intensite := 1.2       # surbrillance du flux qui circule
@@ -84,7 +84,15 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export_range(0.0, 1.0) var opacite_faces := 0.5
 @export var couleur_eau := Color(0.16, 0.42, 0.62)
 @export var couleur_parc := Color(0.22, 0.52, 0.30)
-@export var luminosite_decor := 0.5   # émission FAIBLE du décor (sous le seuil de glow)
+# Luminosité des ARÊTES du tissu bâti : remontée pour rester visibles PAR-DESSUS
+# leurs faces sombres (wireframe holo), mais sous le seuil de glow (1.05) → le
+# décor ne bloome pas, il reste en retrait des lieux.
+@export var luminosite_decor := 1.3
+# Luminosité du décor d'AMBIANCE (eau / parc) — distincte, inchangée (la grappe
+# verte du parc reste telle quelle, non affectée par l'éclaircissement du bâti).
+@export var luminosite_ambiance := 0.5
+# Fond : quasi noir teinté, mais décollé du noir TOTAL (ambiance globale d'un cran).
+@export var couleur_fond := Color(0.020, 0.026, 0.044)
 
 # ─── Décor d'ambiance ─────────────────────────────────────────
 @export_group("Décor")
@@ -108,7 +116,8 @@ var _rig: Node3D
 var _cam: Camera3D
 var _monde: Node3D
 var _lieux_node: Node3D
-var _mat_decor: ShaderMaterial
+var _mat_decor: ShaderMaterial       # arêtes du tissu bâti (éclaircies)
+var _mat_ambiance: ShaderMaterial    # eau / parc (inchangé)
 var _mat_routes: ShaderMaterial
 var _mat_faces: ShaderMaterial
 var _post_mat: ShaderMaterial
@@ -145,7 +154,7 @@ func _setup_environment() -> void:
 	var we := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.010, 0.012, 0.022)  # quasi noir, léger reste de bleu nuit
+	env.background_color = couleur_fond   # décollé du noir total (fond reste très sombre)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.1, 0.12, 0.18)
 	env.glow_enabled = true
@@ -172,6 +181,11 @@ func _setup_materials() -> void:
 	_mat_decor.shader = LINE_SHADER
 	_mat_decor.set_shader_parameter("emission_strength", luminosite_decor)
 	_mat_decor.set_shader_parameter("alpha_mult", 1.0)
+
+	_mat_ambiance = ShaderMaterial.new()
+	_mat_ambiance.shader = LINE_SHADER
+	_mat_ambiance.set_shader_parameter("emission_strength", luminosite_ambiance)
+	_mat_ambiance.set_shader_parameter("alpha_mult", 1.0)
 
 	_mat_routes = ShaderMaterial.new()
 	_mat_routes.shader = ROUTE_SHADER
@@ -260,13 +274,13 @@ func _build_all() -> void:
 	_build_ville()
 	_construire_lieux(lieux)
 
-func _ajouter_mesh(mesh: ArrayMesh, nom: String) -> void:
+func _ajouter_mesh(mesh: ArrayMesh, nom: String, mat: Material = null) -> void:
 	if mesh == null:
 		return
 	var mi := MeshInstance3D.new()
 	mi.name = nom
 	mi.mesh = mesh
-	mi.material_override = _mat_decor
+	mi.material_override = mat if mat != null else _mat_decor
 	_monde.add_child(mi)
 
 # ─── Voirie ───────────────────────────────────────────────────
@@ -343,7 +357,7 @@ func _build_decor() -> void:
 		n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), cp)
 		n += HoloMesh3D.diamond(s, c + Vector3(0, ht + ht * 0.4, 0),
 				taille_cellule * 0.22, ht * 0.5, cp)
-	_ajouter_mesh(HoloMesh3D.commit(s, n), "Decor")
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Decor", _mat_ambiance)
 
 # ─── Routes-néon (seul calque de lignes au sol) ───────────────
 # Trace la voirie (déjà calculée pour les îlots) en néon magenta fin, avec
