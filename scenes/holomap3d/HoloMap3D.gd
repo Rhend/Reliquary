@@ -31,6 +31,7 @@ const LINE_SHADER := preload("res://scenes/holomap3d/holo_line.gdshader")
 const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 const ROUTE_SHADER := preload("res://scenes/holomap3d/holo_route.gdshader")
 const FACE_SHADER := preload("res://scenes/holomap3d/holo_face.gdshader")
+const MOTES_SHADER := preload("res://scenes/holomap3d/holo_motes.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
 
 @export var seed_val := 1337
@@ -116,6 +117,14 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export var radar_vitesse := 22.0             # °/s du balayage
 @export var couleur_socle := Color(0.30, 0.85, 1.00)  # cyan holographique (cadre/HUD au sol)
 @export var zoom_amorti := true               # zoom molette lissé
+@export var hud_actif := true                 # habillage HUD 2D (crochets + ligne de scan)
+@export var motes_actif := true               # poussières de données qui montent
+@export var motes_count := 160
+@export var motes_hauteur := 3.5              # hauteur de montée des poussières
+@export var couleur_motes := Color(0.40, 0.85, 1.00)
+# Brume de profondeur : les arêtes lointaines s'estompent (focus centre).
+@export var brume_debut := 16.0
+@export var brume_fin := 30.0
 
 # ─── Lieux ────────────────────────────────────────────────────
 @export_group("Lieux")
@@ -137,6 +146,7 @@ var _debug_label: Label
 var _tooltip: HoloTooltip
 var _hovered: HoloLocation3D
 var _radar: Node3D
+var _mat_motes: ShaderMaterial
 var _distance_cible := 15.0
 var _intro_en_cours := false
 
@@ -158,6 +168,8 @@ func _ready() -> void:
 	if post_process_interne:
 		_setup_post()
 	_setup_debug()
+	if hud_actif:
+		_setup_hud()
 	_setup_tooltip()
 	_build_all()
 
@@ -216,6 +228,19 @@ func _setup_materials() -> void:
 	_mat_faces.set_shader_parameter("opacite", opacite_faces)
 	_mat_faces.render_priority = -1
 
+	# Poussières de données (montée animée).
+	_mat_motes = ShaderMaterial.new()
+	_mat_motes.shader = MOTES_SHADER
+	_mat_motes.set_shader_parameter("mote_color", couleur_motes)
+	_mat_motes.set_shader_parameter("hauteur", motes_hauteur)
+
+	# Brume de profondeur : poussée sur les matériaux de lignes/routes (les faces
+	# ne fadent pas → l'occlusion reste). Les lieux/faisceaux utilisent les
+	# valeurs par défaut du shader (cohérentes avec ces exports).
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes]:
+		m.set_shader_parameter("fog_debut", brume_debut)
+		m.set_shader_parameter("fog_fin", brume_fin)
+
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 1
@@ -244,6 +269,14 @@ func _setup_debug() -> void:
 	lbl.text = "HoloMap3D — glisser pour orbiter · molette = zoom · clic sur un lieu"
 	layer.add_child(lbl)
 	_debug_label = lbl
+
+func _setup_hud() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 2
+	add_child(layer)
+	var hud := HoloHud.new()
+	hud.couleur = couleur_socle
+	layer.add_child(hud)
 
 func _setup_tooltip() -> void:
 	var layer := CanvasLayer.new()
@@ -288,10 +321,35 @@ func _build_all() -> void:
 		_build_decor()
 	_build_ville()
 	_construire_lieux(lieux)
+	if motes_actif:
+		_build_motes()
 	if radar_actif:
 		_build_radar()
 	if intro_actif:
 		_jouer_intro()
+
+# ─── Poussières de données (montée animée par shader) ─────────
+func _build_motes() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x310C0DE
+	var r := (_cgrid() + 1.0) * taille_cellule
+	var seg := 0.12
+	var s := SurfaceTool.new()
+	s.begin(Mesh.PRIMITIVE_LINES)
+	for _i in maxi(0, motes_count):
+		var ang := rng.randf() * TAU
+		var rad := sqrt(rng.randf()) * r        # disque uniforme
+		var x := cos(ang) * rad
+		var z := sin(ang) * rad
+		var ph := rng.randf()                    # phase de montée
+		var a := 0.35 + 0.45 * rng.randf()
+		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(Vector3(x, 0, z))
+		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(Vector3(x, seg, z))
+	var mi := MeshInstance3D.new()
+	mi.name = "Motes"
+	mi.mesh = s.commit()
+	mi.material_override = _mat_motes
+	_monde.add_child(mi)
 
 # ─── Socle « table tactique » (anneau + ticks au sol) ─────────
 func _build_socle() -> void:
