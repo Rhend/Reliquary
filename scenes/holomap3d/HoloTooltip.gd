@@ -61,8 +61,13 @@ func montrer(nom: String, palier_nom: String, tier_color: Color, lore: String, a
 	_lbl_palier.add_theme_color_override("font_color", tier_color)
 	_lbl_lore.text = lore
 	_lbl_lore.visible = lore != ""
-	_frame.add_theme_stylebox_override("panel",
-			UIHelpers.card_style(accent, 0.16, 0.9, 2, 6))
+	# Fond sombre OPAQUE (lisibilité) + bordure accent.
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(UIColors.PANEL_BG_DARK, 0.96)
+	sb.border_color = accent
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(6)
+	_frame.add_theme_stylebox_override("panel", sb)
 	_actif = true   # la visibilité réelle est posée par positionner() (dépend de la caméra)
 
 func cacher() -> void:
