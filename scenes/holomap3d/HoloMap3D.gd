@@ -637,24 +637,23 @@ func _build_decor() -> void:
 	# Parc : petits « arbres » (croix verticale + houppier diamant) un peu épars.
 	# Les arbres SOUS un lieu sans bâtiment passent à la couleur de palier du lieu
 	# et dans un mesh à part (matériau qui glow) : la parcelle EST le lieu, elle
-	# se lit comme tel. Ces arbres-là sont denses (jamais omis) et un peu plus
-	# hauts pour remplir et marquer la zone.
+	# se lit comme tel. Même densité/taille que le parc normal — seule la couleur
+	# (et le glow) change.
 	var sl := HoloMesh3D.st()
 	var nl := 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val ^ 0x515A11
 	for k in _parc:
-		var cell := k as Vector2i
-		var est_lieu: bool = _lieu_sol.has(cell)
-		if not est_lieu and rng.randf() > 0.55:
+		if rng.randf() > 0.55:
 			continue
+		var cell := k as Vector2i
 		var c := _world(cell.x, cell.y, 0.0)
-		var ht := unite_maison * (1.7 if est_lieu else 1.2)
-		if est_lieu:
+		var ht := unite_maison * 1.2
+		if _lieu_sol.has(cell):
 			var lc := Color(_lieu_sol[cell] as Color, 0.9)
 			nl += HoloMesh3D.line(sl, c, c + Vector3(0, ht, 0), lc)
 			nl += HoloMesh3D.diamond(sl, c + Vector3(0, ht + ht * 0.4, 0),
-					taille_cellule * 0.26, ht * 0.5, lc)
+					taille_cellule * 0.22, ht * 0.5, lc)
 		else:
 			n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), cp)
 			n += HoloMesh3D.diamond(s, c + Vector3(0, ht + ht * 0.4, 0),
