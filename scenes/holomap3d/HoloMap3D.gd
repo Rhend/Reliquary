@@ -133,6 +133,20 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export var brume_debut := 16.0
 @export var brume_fin := 30.0
 
+# ─── Urbanisme (Wave 4) ───────────────────────────────────────
+@export_group("Urbanisme")
+@export var skyline_radiale := true           # tours hautes au centre, bas aux bords
+@export var skyline_centre := 1.8             # facteur de hauteur au centre (downtown)
+@export var skyline_bord := 0.45              # facteur de hauteur aux bords
+@export var zonage_actif := true              # quartiers : tours centre / entrepôts périphérie
+@export var toits_detail_actif := true        # antennes / citernes sur les toits
+@export var enseignes_actif := true           # bannières holographiques sur quelques tours
+@export var monument_actif := true            # place + flèche-repère au centre
+@export var noeuds_actif := true              # glow aux intersections de voirie
+@export var autoroute_actif := true           # autoroute surélevée + piliers + trafic
+@export var autoroute_hauteur := 2.6
+@export var couleur_neon := Color(0.30, 0.85, 1.00)  # base émissive des accents néon
+
 # ─── Lieux ────────────────────────────────────────────────────
 @export_group("Lieux")
 @export var lieux: Array[HoloLieuData] = []
@@ -155,6 +169,7 @@ var _hovered: HoloLocation3D
 var _radar: Node3D
 var _mat_motes: ShaderMaterial
 var _mat_trafic: ShaderMaterial
+var _mat_neon: ShaderMaterial          # accents néon (enseignes, nœuds d'intersection)
 var _distance_cible := 15.0
 var _intro_en_cours := false
 var _mats_reveal: Array[ShaderMaterial] = []   # matériaux supportant le reveal d'intro
@@ -250,15 +265,21 @@ func _setup_materials() -> void:
 	_mat_trafic.shader = TRAFFIC_SHADER
 	_mat_trafic.set_shader_parameter("vitesse", vitesse_voitures)
 
+	# Accents néon (enseignes holographiques, nœuds d'intersection) — glow.
+	_mat_neon = ShaderMaterial.new()
+	_mat_neon.shader = LINE_SHADER
+	_mat_neon.set_shader_parameter("emission_strength", 2.0)
+	_mat_neon.set_shader_parameter("alpha_mult", 1.0)
+
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes, _mat_trafic]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes, _mat_trafic, _mat_neon]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_routes, _mat_faces, _mat_trafic]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_routes, _mat_faces, _mat_trafic, _mat_neon]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -332,13 +353,22 @@ func _build_all() -> void:
 	for k in _parc:
 		_bloque[k] = true
 	_reserver_lieux()       # interdit le remplissage sous les lieux
+	if monument_actif:
+		for c in _cellules_monument():
+			_bloque[c] = true   # place centrale (pas de bâtiment de remplissage)
 
 	if socle_actif:
 		_build_socle()
 	_build_routes_neon()
+	if noeuds_actif:
+		_build_noeuds()
 	if decor_actif:
 		_build_decor()
 	_build_ville()
+	if monument_actif:
+		_build_monument()
+	if autoroute_actif:
+		_build_autoroute()
 	_construire_lieux(lieux)
 	if trafic_actif:
 		_build_trafic()
@@ -346,6 +376,8 @@ func _build_all() -> void:
 		_build_motes()
 	if radar_actif:
 		_build_radar()
+	if intro_actif:
+		_jouer_intro()
 
 # ─── Trafic : traînées lumineuses qui circulent sur les routes ─
 func _build_trafic() -> void:
@@ -357,32 +389,38 @@ func _build_trafic() -> void:
 	var lx := Vector3(float(grille - 1) * taille_cellule, 0, 0)   # trajet le long de X
 	var s := SurfaceTool.new()
 	s.begin(Mesh.PRIMITIVE_LINES)
+	# Trafic hiérarchisé : grands axes plus chargés (×2) et plus rapides (×1.4).
 	for col in _cols_route:
-		_semer_voitures(s, _world(col, 0, y), lz, carlen, rng, couleur_voiture_aller)
-		_semer_voitures(s, _world(col, grille - 1, y), -lz, carlen, rng, couleur_voiture_retour)
+		var av: bool = _cols_route[col]
+		var nb := voitures_par_voie * (2 if av else 1)
+		var spd := 1.4 if av else 1.0
+		_semer_voitures(s, _world(col, 0, y), lz, carlen, rng, couleur_voiture_aller, nb, spd)
+		_semer_voitures(s, _world(col, grille - 1, y), -lz, carlen, rng, couleur_voiture_retour, nb, spd)
 	for row in _rows_route:
-		_semer_voitures(s, _world(0, row, y), lx, carlen, rng, couleur_voiture_aller)
-		_semer_voitures(s, _world(grille - 1, row, y), -lx, carlen, rng, couleur_voiture_retour)
+		var av2: bool = _rows_route[row]
+		var nb2 := voitures_par_voie * (2 if av2 else 1)
+		var spd2 := 1.4 if av2 else 1.0
+		_semer_voitures(s, _world(0, row, y), lx, carlen, rng, couleur_voiture_aller, nb2, spd2)
+		_semer_voitures(s, _world(grille - 1, row, y), -lx, carlen, rng, couleur_voiture_retour, nb2, spd2)
 	var mi := MeshInstance3D.new()
 	mi.name = "Trafic"
 	mi.mesh = s.commit()
 	mi.material_override = _mat_trafic
 	_monde.add_child(mi)
 
-# Sème `voitures_par_voie` segments sur une route : base = départ, UV2 = vecteur
-# de trajet complet (le shader translate selon la phase UV.x dans le temps).
+# Sème `nb` segments sur une route : base = départ, UV2 = vecteur de trajet
+# complet, COLOR.a = multiplicateur de vitesse (le shader translate selon UV.x).
 func _semer_voitures(s: SurfaceTool, depart: Vector3, trajet: Vector3, carlen: float,
-		rng: RandomNumberGenerator, couleur: Color) -> void:
+		rng: RandomNumberGenerator, couleur: Color, nb: int, vit_mult: float) -> void:
 	var dirn := trajet.normalized()
 	var uv2 := Vector2(trajet.x, trajet.z)
-	for _c in maxi(0, voitures_par_voie):
+	var c := Color(couleur.r, couleur.g, couleur.b, vit_mult)
+	for _v in maxi(0, nb):
 		var ph := rng.randf()
 		var p0 := depart
 		var p1 := depart + dirn * carlen
-		s.set_color(couleur); s.set_uv(Vector2(ph, 0)); s.set_uv2(uv2); s.add_vertex(p0)
-		s.set_color(couleur); s.set_uv(Vector2(ph, 0)); s.set_uv2(uv2); s.add_vertex(p1)
-	if intro_actif:
-		_jouer_intro()
+		s.set_color(c); s.set_uv(Vector2(ph, 0)); s.set_uv2(uv2); s.add_vertex(p0)
+		s.set_color(c); s.set_uv(Vector2(ph, 0)); s.set_uv2(uv2); s.add_vertex(p1)
 
 # ─── Poussières de données (montée animée par shader) ─────────
 func _build_motes() -> void:
@@ -609,6 +647,8 @@ func _build_ville() -> void:
 	var sf := HoloMesh3D.st_tri()      # faces sombres semi-opaques
 	var n := 0
 	var nf := 0
+	var ss := HoloMesh3D.st()          # enseignes holographiques (néon)
+	var ns := 0
 	var col := Color(couleur_decor_bati, 0.85)
 	for x in grille:
 		for y in grille:
@@ -618,7 +658,7 @@ func _build_ville() -> void:
 			if rng.randf() > densite:
 				occ[cell] = true       # placette / espace laissé vide
 				continue
-			var g := _gabarit_rentre(x, y, occ, rng)
+			var g := _gabarit_rentre(x, y, occ, rng, _zone(x, y))
 			if g == null:
 				occ[cell] = true
 				continue
@@ -628,12 +668,23 @@ func _build_ville() -> void:
 			var sx := float(g.emprise.x) * taille_cellule * 0.86
 			var sz := float(g.emprise.y) * taille_cellule * 0.86
 			var et := g.etages + (0 if g.creux else rng.randi_range(0, 2))
+			var cx := x + (g.emprise.x - 1) * 0.5
+			var cy := y + (g.emprise.y - 1) * 0.5
+			# Skyline radiale : tours hautes au centre, bas aux bords (pas le creux).
+			if skyline_radiale and not g.creux:
+				et = maxi(1, roundi(float(et) * _facteur_hauteur(cx, cy)))
 			var sy := float(et) * unite_maison
 			var centre := _centre_emprise(x, y, g.emprise)
 			# Contour creux UNIQUEMENT (12 arêtes) — aucun quadrillage interne.
 			n += HoloMesh3D.box(s, centre, sx, sy, sz, col)
 			# Faces sombres légèrement insérées (occlusion douce).
 			nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, sy * FACE_INSET, sz * FACE_INSET)
+			# Détails de toit (antennes / citernes).
+			if toits_detail_actif:
+				n += _detail_toit(s, centre, sx, sy, sz, et, col, rng)
+			# Enseignes holographiques (rares, sur les hautes structures).
+			if enseignes_actif and et >= 6 and rng.randf() < 0.18:
+				ns += _enseigne(ss, centre, sx, sy, sz, rng)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Ville")
 	var fmesh := HoloMesh3D.commit(sf, nf)
 	if fmesh != null:
@@ -642,12 +693,24 @@ func _build_ville() -> void:
 		mif.mesh = fmesh
 		mif.material_override = _mat_faces
 		_monde.add_child(mif)
+	if ns > 0:
+		_ajouter_mesh(HoloMesh3D.commit(ss, ns), "Enseignes", _mat_neon)
 
 # Premier gabarit (ordre aléatoire) dont l'emprise tient ici (pas de route /
 # décor / occupé / hors-grille sous l'empreinte).
-func _gabarit_rentre(x: int, y: int, occ: Dictionary, rng: RandomNumberGenerator) -> HoloGabarit:
+func _gabarit_rentre(x: int, y: int, occ: Dictionary, rng: RandomNumberGenerator, zone: int) -> HoloGabarit:
 	var ordre := gabarits.duplicate()
 	ordre.shuffle()
+	# 1re passe : gabarits adaptés à la zone (downtown=tours, périph=entrepôts).
+	if zonage_actif:
+		for g: HoloGabarit in ordre:
+			if _zone_gabarit(g) != zone:
+				continue
+			if rng.randf() > g.poids:
+				continue
+			if _emprise_libre(x, y, g.emprise, occ):
+				return g
+	# 2e passe : n'importe quel gabarit qui rentre.
 	for g: HoloGabarit in ordre:
 		if rng.randf() > g.poids:
 			continue
@@ -658,6 +721,155 @@ func _gabarit_rentre(x: int, y: int, occ: Dictionary, rng: RandomNumberGenerator
 		if g.emprise == Vector2i(1, 1) and _emprise_libre(x, y, g.emprise, occ):
 			return g
 	return null
+
+# Zone d'un gabarit : 0 = downtown (tours), 1 = résidentiel (petit),
+# 2 = industriel/périphérie (large ou creux).
+func _zone_gabarit(g: HoloGabarit) -> int:
+	if g.etages >= 8:
+		return 0
+	if g.creux or g.emprise.x * g.emprise.y >= 12:
+		return 2
+	return 1
+
+# Zone d'une cellule selon la distance au centre (0 centre → 2 périphérie).
+func _zone(cx: int, cy: int) -> int:
+	var d := Vector2(float(cx) - _cgrid(), float(cy) - _cgrid()).length() / maxf(1.0, _cgrid())
+	if d < 0.34:
+		return 0
+	if d < 0.66:
+		return 1
+	return 2
+
+# Facteur de hauteur radial (downtown haut → bords bas).
+func _facteur_hauteur(cx: float, cy: float) -> float:
+	var d := clampf(Vector2(cx - _cgrid(), cy - _cgrid()).length() / maxf(1.0, _cgrid()), 0.0, 1.0)
+	return lerpf(skyline_centre, skyline_bord, d)
+
+# Détail de toit : antenne+balise (tours) ou citerne (autres). Renvoie le nb de segments.
+func _detail_toit(s: SurfaceTool, centre: Vector3, sx: float, sy: float, sz: float,
+		et: int, col: Color, rng: RandomNumberGenerator) -> int:
+	var top := centre + Vector3(0, sy, 0)
+	var n := 0
+	var r := rng.randf()
+	if et >= 6 and r < 0.6:
+		var h := unite_maison * rng.randf_range(1.2, 2.6)
+		var tip := top + Vector3(0, h, 0)
+		n += HoloMesh3D.line(s, top, tip, col)
+		var cw := taille_cellule * 0.12
+		n += HoloMesh3D.line(s, tip + Vector3(-cw, 0, 0), tip + Vector3(cw, 0, 0), col)
+		n += HoloMesh3D.line(s, tip + Vector3(0, 0, -cw), tip + Vector3(0, 0, cw), col)
+	elif r < 0.4:
+		var tw := taille_cellule * 0.22
+		var th := unite_maison * 0.8
+		var off := Vector3((sx * 0.5 - tw * 0.6), sy, (sz * 0.5 - tw * 0.6))
+		n += HoloMesh3D.box(s, centre + off, tw, th, tw, col)
+	return n
+
+# Enseigne holographique : bannière verticale (grille) plaquée sur une façade.
+func _enseigne(ss: SurfaceTool, centre: Vector3, sx: float, sy: float, sz: float,
+		rng: RandomNumberGenerator) -> int:
+	var pal := [Color(0.30, 0.85, 1.00), Color(1.00, 0.30, 0.66), Color(1.00, 0.70, 0.25)]
+	var cc: Color = pal[rng.randi() % pal.size()]
+	var y0 := sy * 0.45
+	var y1 := sy * 0.92
+	var z0 := -sz * 0.18
+	var z1 := sz * 0.18
+	var bx := centre.x + sx * 0.51   # juste devant la face +X
+	var n := 0
+	n += HoloMesh3D.line(ss, Vector3(bx, centre.y + y0, centre.z + z0), Vector3(bx, centre.y + y1, centre.z + z0), cc)
+	n += HoloMesh3D.line(ss, Vector3(bx, centre.y + y0, centre.z + z1), Vector3(bx, centre.y + y1, centre.z + z1), cc)
+	for i in 4:
+		var yy := lerpf(y0, y1, float(i) / 3.0)
+		n += HoloMesh3D.line(ss, Vector3(bx, centre.y + yy, centre.z + z0),
+				Vector3(bx, centre.y + yy, centre.z + z1), Color(cc, 0.55))
+	return n
+
+# ─── Monument central (place + flèche-repère) ─────────────────
+func _cellules_monument() -> Array:
+	var ci := int(floor(_cgrid()))
+	return [Vector2i(ci, ci), Vector2i(ci + 1, ci), Vector2i(ci, ci + 1), Vector2i(ci + 1, ci + 1)]
+
+func _build_monument() -> void:
+	var s := HoloMesh3D.st()
+	var n := 0
+	var c := Color(couleur_socle, 0.9)
+	var base := taille_cellule * 0.9
+	var h := unite_maison * 30.0   # flèche-repère, plus haute que les tours
+	var apex := Vector3(0, h, 0)
+	var corners := [
+		Vector3(base, 0, 0), Vector3(0, 0, base), Vector3(-base, 0, 0), Vector3(0, 0, -base)]
+	for i in 4:
+		n += HoloMesh3D.line(s, corners[i], corners[(i + 1) % 4], c)
+		n += HoloMesh3D.line(s, corners[i], apex, c)
+	for k in 3:
+		var t := float(k + 1) / 4.0
+		n += HoloMesh3D.circle(s, Vector3(0, h * t, 0), base * (1.0 - t), Color(couleur_socle, 0.45), 16)
+	n += HoloMesh3D.diamond(s, apex, base * 0.12, unite_maison * 0.6, c)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Monument")
+
+# ─── Autoroute surélevée (au-dessus d'un grand axe) + trafic ──
+func _avenue_centrale() -> int:
+	var best := -1
+	var bestd := 1.0e9
+	for col in _cols_route:
+		if _cols_route[col]:
+			var d: float = abs(float(col) - _cgrid())
+			if d < bestd:
+				bestd = d
+				best = col
+	return best
+
+func _build_autoroute() -> void:
+	var col := _avenue_centrale()
+	if col < 0:
+		col = int(_cgrid())
+	var xw := _world(col, 0, 0).x
+	var hh := autoroute_hauteur
+	var lane := taille_cellule * 0.45
+	var z0 := _world(col, 0, 0).z
+	var z1 := _world(col, grille - 1, 0).z
+	var s := HoloMesh3D.st()
+	var n := 0
+	var c := Color(couleur_socle, 0.8)
+	var rail := Color(couleur_socle, 0.35)
+	# Deux voies + glissières.
+	n += HoloMesh3D.line(s, Vector3(xw - lane, hh, z0), Vector3(xw - lane, hh, z1), c)
+	n += HoloMesh3D.line(s, Vector3(xw + lane, hh, z0), Vector3(xw + lane, hh, z1), c)
+	n += HoloMesh3D.line(s, Vector3(xw - lane, hh + 0.06, z0), Vector3(xw - lane, hh + 0.06, z1), rail)
+	n += HoloMesh3D.line(s, Vector3(xw + lane, hh + 0.06, z0), Vector3(xw + lane, hh + 0.06, z1), rail)
+	# Traverses + piliers vers le sol (dans le boulevard).
+	var zc := 0
+	while zc < grille:
+		var z := _world(col, zc, 0).z
+		n += HoloMesh3D.line(s, Vector3(xw - lane, hh, z), Vector3(xw + lane, hh, z), c)
+		n += HoloMesh3D.line(s, Vector3(xw, hh, z), Vector3(xw, 0.0, z), Color(couleur_socle, 0.7))
+		zc += maxi(2, taille_ilot)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Autoroute")
+	# Trafic surélevé (réutilise le shader trafic).
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_LINES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0xA07
+	var carlen := taille_cellule * 0.6
+	var trav := Vector3(0, 0, z1 - z0)
+	_semer_voitures(st, Vector3(xw - lane, hh, z0), trav, carlen, rng, couleur_voiture_aller, voitures_par_voie * 2, 1.8)
+	_semer_voitures(st, Vector3(xw + lane, hh, z1), -trav, carlen, rng, couleur_voiture_retour, voitures_par_voie * 2, 1.8)
+	var mi := MeshInstance3D.new()
+	mi.name = "AutorouteTrafic"
+	mi.mesh = st.commit()
+	mi.material_override = _mat_trafic
+	_monde.add_child(mi)
+
+# ─── Nœuds d'intersection (glints néon aux croisements) ───────
+func _build_noeuds() -> void:
+	var s := HoloMesh3D.st()
+	var n := 0
+	var c := Color(couleur_route, 0.9)
+	var rr := taille_cellule * 0.3
+	for col in _cols_route:
+		for row in _rows_route:
+			n += HoloMesh3D.diamond(s, _world(col, row, 0.04), rr, taille_cellule * 0.16, c)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Noeuds", _mat_neon)
 
 func _emprise_libre(x: int, y: int, emp: Vector2i, occ: Dictionary) -> bool:
 	for di in emp.x:

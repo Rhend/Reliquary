@@ -22,7 +22,8 @@ varying vec3 w_pos;
 varying float v_a;
 
 void vertex() {
-	float t = fract(UV.x + TIME * vitesse);
+	// COLOR.a = multiplicateur de vitesse par véhicule (hiérarchie avenue/rue).
+	float t = fract(UV.x + TIME * vitesse * COLOR.a);
 	VERTEX.x += UV2.x * t;
 	VERTEX.z += UV2.y * t;
 	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
