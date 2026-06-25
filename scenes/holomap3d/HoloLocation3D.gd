@@ -84,11 +84,9 @@ func _on_input_event(_cam: Node, ev: InputEvent, _pos: Vector3, _nrm: Vector3, _
 			clique.emit(lieu_id)
 
 func _construire() -> void:
-	# ── Bâtiment-lieu (emprise N×M + étages) ──
+	# ── Bâtiment-lieu : contour creux UNIQUEMENT (12 arêtes, pas de quadrillage) ──
 	var sb := HoloMesh3D.st()
 	var n := HoloMesh3D.box(sb, Vector3.ZERO, taille_x, hauteur, taille_z, col)
-	n += HoloMesh3D.etages(sb, Vector3.ZERO, taille_x, hauteur, taille_z, col,
-			clampi(etages - 1, 0, 6))
 	# Tige toit → pin.
 	n += HoloMesh3D.line(sb, Vector3(0, hauteur, 0), Vector3(0, _pin_y - PIN_H, 0), col)
 	var bat := MeshInstance3D.new()

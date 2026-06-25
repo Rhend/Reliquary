@@ -350,9 +350,8 @@ func _build_ville() -> void:
 			var et := g.etages + (0 if g.creux else rng.randi_range(0, 2))
 			var sy := float(et) * unite_maison
 			var centre := _centre_emprise(x, y, g.emprise)
+			# Contour creux UNIQUEMENT (12 arêtes) — aucun quadrillage interne.
 			n += HoloMesh3D.box(s, centre, sx, sy, sz, col)
-			if not g.creux:
-				n += HoloMesh3D.etages(s, centre, sx, sy, sz, col, clampi(et - 1, 0, 6))
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Ville")
 
 # Premier gabarit (ordre aléatoire) dont l'emprise tient ici (pas de route /
