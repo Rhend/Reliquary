@@ -159,6 +159,8 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export_range(0.0, 1.0) var fenetre_densite := 0.24
 @export var fenetre_emission := 1.9
 @export var couleur_fenetre := Color(0.98, 0.86, 0.58)  # ambre chaud
+# Décor d'un lieu SANS bâtiment (parc-lieu) : émission du décor tier-coloré.
+@export var lieu_decor_emission := 3.4
 
 # ─── Lieux ────────────────────────────────────────────────────
 @export_group("Lieux")
@@ -183,6 +185,7 @@ var _radar: Node3D
 var _mat_motes: ShaderMaterial
 var _mat_trafic: ShaderMaterial
 var _mat_neon: ShaderMaterial          # accents néon (enseignes, nœuds d'intersection)
+var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc tier-coloré)
 var _distance_cible := 15.0
 var _intro_en_cours := false
 var _mats_reveal: Array[ShaderMaterial] = []   # matériaux supportant le reveal d'intro
@@ -194,6 +197,7 @@ var _rows_route := {}
 var _bloque := {}        # Vector2i → true : cellules interdites au remplissage (décor + lieux)
 var _eau := {}
 var _parc := {}
+var _lieu_sol := {}      # Vector2i → Color : cellule de décor portée par un lieu sans bâtiment
 
 func _ready() -> void:
 	get_viewport().physics_object_picking = true
@@ -287,15 +291,22 @@ func _setup_materials() -> void:
 	_mat_neon.set_shader_parameter("emission_strength", 2.0)
 	_mat_neon.set_shader_parameter("alpha_mult", 1.0)
 
+	# Décor d'un lieu SANS bâtiment (parc-lieu) : tier-coloré + glow marqué pour
+	# que la zone ressorte comme un lieu (pas un simple décor vert).
+	_mat_lieu_decor = ShaderMaterial.new()
+	_mat_lieu_decor.shader = LINE_SHADER
+	_mat_lieu_decor.set_shader_parameter("emission_strength", lieu_decor_emission)
+	_mat_lieu_decor.set_shader_parameter("alpha_mult", 1.0)
+
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes, _mat_trafic, _mat_neon]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_routes, _mat_faces, _mat_trafic, _mat_neon]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -363,6 +374,7 @@ func _build_all() -> void:
 
 	_calc_routes()
 	_calc_decor()
+	_calc_lieu_sol()        # cellules de décor portées par un lieu sans bâtiment
 	_bloque.clear()
 	for k in _eau:
 		_bloque[k] = true
@@ -596,6 +608,18 @@ func _calc_decor() -> void:
 			elif x >= px0 and x <= px1 and y >= py0 and y <= py1:
 				_parc[Vector2i(x, y)] = true
 
+# Cellules de décor portées par un lieu SANS bâtiment → couleur de palier du lieu.
+# (Ex. Marécage Putride posé sur le parc : ses arbres prennent sa couleur.)
+func _calc_lieu_sol() -> void:
+	_lieu_sol.clear()
+	for l in lieux:
+		if not l.decouvert or not l.sans_batiment:
+			continue
+		var c := UIColors.tier_color(l.tier)
+		for di in l.emprise.x:
+			for dj in l.emprise.y:
+				_lieu_sol[Vector2i(l.cellule.x + di, l.cellule.y + dj)] = c
+
 func _build_decor() -> void:
 	var s := HoloMesh3D.st()
 	var n := 0
@@ -611,18 +635,32 @@ func _build_decor() -> void:
 		n += HoloMesh3D.line(s, c + Vector3(-hw, 0, 0.18 * taille_cellule),
 				c + Vector3(hw, 0, 0.18 * taille_cellule), ce)
 	# Parc : petits « arbres » (croix verticale + houppier diamant) un peu épars.
+	# Les arbres SOUS un lieu sans bâtiment passent à la couleur de palier du lieu
+	# et dans un mesh à part (matériau qui glow) : la parcelle EST le lieu, elle
+	# se lit comme tel. Ces arbres-là sont denses (jamais omis) et un peu plus
+	# hauts pour remplir et marquer la zone.
+	var sl := HoloMesh3D.st()
+	var nl := 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val ^ 0x515A11
 	for k in _parc:
-		if rng.randf() > 0.55:
-			continue
 		var cell := k as Vector2i
+		var est_lieu: bool = _lieu_sol.has(cell)
+		if not est_lieu and rng.randf() > 0.55:
+			continue
 		var c := _world(cell.x, cell.y, 0.0)
-		var ht := unite_maison * 1.2
-		n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), cp)
-		n += HoloMesh3D.diamond(s, c + Vector3(0, ht + ht * 0.4, 0),
-				taille_cellule * 0.22, ht * 0.5, cp)
+		var ht := unite_maison * (1.7 if est_lieu else 1.2)
+		if est_lieu:
+			var lc := Color(_lieu_sol[cell] as Color, 0.9)
+			nl += HoloMesh3D.line(sl, c, c + Vector3(0, ht, 0), lc)
+			nl += HoloMesh3D.diamond(sl, c + Vector3(0, ht + ht * 0.4, 0),
+					taille_cellule * 0.26, ht * 0.5, lc)
+		else:
+			n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), cp)
+			n += HoloMesh3D.diamond(s, c + Vector3(0, ht + ht * 0.4, 0),
+					taille_cellule * 0.22, ht * 0.5, cp)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Decor", _mat_ambiance)
+	_ajouter_mesh(HoloMesh3D.commit(sl, nl), "DecorLieu", _mat_lieu_decor)
 
 # ─── Routes-néon (seul calque de lignes au sol) ───────────────
 # Trace la voirie (déjà calculée pour les îlots) en néon magenta fin, avec
