@@ -157,6 +157,9 @@ var _mat_motes: ShaderMaterial
 var _mat_trafic: ShaderMaterial
 var _distance_cible := 15.0
 var _intro_en_cours := false
+var _mats_reveal: Array[ShaderMaterial] = []   # matériaux supportant le reveal d'intro
+var _foc := 0.0                                # intensité courante du focus de survol
+var _focus_tw: Tween
 
 var _cols_route := {}
 var _rows_route := {}
@@ -253,6 +256,9 @@ func _setup_materials() -> void:
 	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes, _mat_trafic]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
+
+	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_routes, _mat_faces, _mat_trafic]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -446,28 +452,38 @@ func _build_radar() -> void:
 	_radar.add_child(mi)
 	_monde.add_child(_radar)
 
-# ─── Intro : matérialisation (la ville monte du sol) + caméra ─
+# ─── Intro : MATÉRIALISATION RADIALE (la carte se peint du centre) + caméra ─
+# Un front lumineux s'étend du centre vers les bords ; au-delà du rayon courant,
+# la géométrie est masquée (discard shader) → la ville se dessine. La caméra
+# s'approche de loin en parallèle.
 func _jouer_intro() -> void:
 	_intro_en_cours = true
-	_monde.scale.y = 0.02
-	if is_instance_valid(_lieux_node):
-		_lieux_node.scale.y = 0.02
+	var max_r := _cgrid() * taille_cellule * 1.6 + 2.0
+	_set_reveal(0.0)
 	var d0 := _distance_cible * 1.7
 	distance = d0
 	var tw := create_tween().set_parallel(true)
-	tw.tween_property(_monde, "scale:y", 1.0, 0.85) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	if is_instance_valid(_lieux_node):
-		tw.tween_property(_lieux_node, "scale:y", 1.0, 0.95) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	tw.tween_method(_set_distance, d0, _distance_cible, 1.0) \
+	tw.tween_method(_set_reveal, 0.0, max_r, 1.15) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_method(_set_distance, d0, _distance_cible, 1.1) \
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.finished.connect(func() -> void:
 		_intro_en_cours = false
-		_distance_cible = distance)
+		_distance_cible = distance
+		_set_reveal(100000.0))   # désactive le clip une fois la carte peinte
 
 func _set_distance(v: float) -> void:
 	distance = v
+
+# Pousse le rayon de matérialisation sur tous les matériaux + les lieux.
+func _set_reveal(r: float) -> void:
+	for m in _mats_reveal:
+		if m != null:
+			m.set_shader_parameter("reveal_r", r)
+	if is_instance_valid(_lieux_node):
+		for c in _lieux_node.get_children():
+			if c is HoloLocation3D:
+				(c as HoloLocation3D).set_reveal(r)
 
 func _ajouter_mesh(mesh: ArrayMesh, nom: String, mat: Material = null) -> void:
 	if mesh == null:
@@ -688,6 +704,9 @@ func _construire_lieux(liste: Array) -> void:
 	_hovered = null
 	if is_instance_valid(_tooltip):
 		_tooltip.cacher()
+	if is_instance_valid(_focus_tw):
+		_focus_tw.kill()
+	_set_focus_amount(0.0)
 	if not is_instance_valid(_lieux_node):
 		_lieux_node = Node3D.new()
 		_lieux_node.name = "Lieux"
@@ -725,9 +744,30 @@ func _on_survol(loc: HoloLocation3D, actif: bool) -> void:
 		# Accent du tooltip = couleur de palier du lieu.
 		_tooltip.montrer(loc.lieu_nom, GameData.get_tier_name(loc.tier),
 				UIColors.tier_color(loc.tier), loc.lore, UIColors.tier_color(loc.tier))
+		_focus(loc.global_position, true)
 	elif _hovered == loc:
 		_hovered = null
 		_tooltip.cacher()
+		_focus(Vector3.ZERO, false)
+
+# Focus cinématographique : le quartier autour du lieu survolé s'intensifie
+# (halo dans holo_line) pendant que le trafic ralentit et s'atténue.
+func _focus(pos: Vector3, actif: bool) -> void:
+	if is_instance_valid(_focus_tw):
+		_focus_tw.kill()
+	if actif:
+		_mat_decor.set_shader_parameter("focus_pos", Vector2(pos.x, pos.z))
+	_focus_tw = create_tween()
+	_focus_tw.tween_method(_set_focus_amount, _foc, 1.0 if actif else 0.0, 0.3) \
+			.set_ease(Tween.EASE_OUT)
+
+func _set_focus_amount(v: float) -> void:
+	_foc = v
+	if _mat_decor != null:
+		_mat_decor.set_shader_parameter("focus_force", v)
+	if _mat_trafic != null:
+		_mat_trafic.set_shader_parameter("emission", lerpf(2.2, 0.7, v))
+		_mat_trafic.set_shader_parameter("vitesse", lerpf(vitesse_voitures, 0.03, v))
 
 func _on_lieu_clique(id: String) -> void:
 	lieu_selectionne.emit(id)

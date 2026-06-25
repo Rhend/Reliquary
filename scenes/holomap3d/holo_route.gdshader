@@ -21,6 +21,7 @@ uniform float flux_frequence = 0.18;  // pulses par unite de longueur
 uniform float fog_debut = 16.0;
 uniform float fog_fin = 30.0;
 uniform float fog_min = 0.25;
+uniform float reveal_r = 100000.0;
 
 varying vec3 w_pos;
 
@@ -29,6 +30,9 @@ void vertex() {
 }
 
 void fragment() {
+	if (length(w_pos.xz) > reveal_r) {
+		discard;
+	}
 	float u = UV.x;
 	float phase = fract(u * flux_frequence - TIME * flux_vitesse);
 	float pulse = exp(-pow((phase - 0.5) / 0.07, 2.0));  // pic etroit qui se deplace

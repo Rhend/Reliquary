@@ -16,6 +16,7 @@ uniform float emission = 2.2;     // glint lumineux (glow)
 uniform float fog_debut = 16.0;
 uniform float fog_fin = 30.0;
 uniform float fog_min = 0.25;
+uniform float reveal_r = 100000.0;
 
 varying vec3 w_pos;
 varying float v_a;
@@ -30,6 +31,9 @@ void vertex() {
 }
 
 void fragment() {
+	if (length(w_pos.xz) > reveal_r) {
+		discard;
+	}
 	float d = distance(w_pos, CAMERA_POSITION_WORLD);
 	float fade = mix(1.0, fog_min, smoothstep(fog_debut, fog_fin, d));
 	vec3 c = COLOR.rgb * emission * fade;

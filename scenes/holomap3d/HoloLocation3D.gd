@@ -39,12 +39,14 @@ var _hover := false
 var _pin: MeshInstance3D
 var _ring: MeshInstance3D
 var _beam: MeshInstance3D
+var _halo: MeshInstance3D
 var _pin_y := 0.0
 var _beam_a := 0.0          # opacité courante du faisceau (fondu au survol)
 var _mat_bat: ShaderMaterial
 var _mat_pin: ShaderMaterial
 var _mat_ring: ShaderMaterial
 var _mat_beam: ShaderMaterial
+var _mat_halo: ShaderMaterial
 
 const PIN_R := 0.26
 const PIN_H := 0.34
@@ -55,6 +57,7 @@ func _ready() -> void:
 	_mat_pin  = _mk_mat()
 	_mat_ring = _mk_mat()
 	_mat_beam = _mk_mat()
+	_mat_halo = _mk_mat()
 	_pin_y = hauteur + pin_float
 	_construire()
 
@@ -78,6 +81,12 @@ func _ready() -> void:
 
 func ancre_globale() -> Vector3:
 	return to_global(Vector3(0, _pin_y + PIN_H, 0))
+
+# Reveal d'intro : rayon de matérialisation poussé sur tous les matériaux.
+func set_reveal(r: float) -> void:
+	for m in [_mat_bat, _mat_pin, _mat_ring, _mat_beam, _mat_halo]:
+		if m != null:
+			m.set_shader_parameter("reveal_r", r)
 
 func _mk_mat() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
@@ -114,6 +123,23 @@ func _construire() -> void:
 		bat.mesh = HoloMesh3D.commit(sb, n)
 		bat.material_override = _mat_bat
 		add_child(bat)
+
+	# ── Halo au sol (disque dégradé tier-coloré, ancre le lieu) ──
+	var shd := SurfaceTool.new()
+	shd.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hrad := ring_radius * 1.5
+	var hseg := 28
+	for i in hseg:
+		var a0 := TAU * float(i) / float(hseg)
+		var a1 := TAU * float(i + 1) / float(hseg)
+		shd.set_color(Color(col, 0.40)); shd.add_vertex(Vector3.ZERO)
+		shd.set_color(Color(col, 0.0)); shd.add_vertex(Vector3(cos(a0) * hrad, 0, sin(a0) * hrad))
+		shd.set_color(Color(col, 0.0)); shd.add_vertex(Vector3(cos(a1) * hrad, 0, sin(a1) * hrad))
+	_halo = MeshInstance3D.new()
+	_halo.mesh = shd.commit()
+	_halo.material_override = _mat_halo
+	_halo.position = Vector3(0, 0.012, 0)
+	add_child(_halo)
 
 	# ── Anneau pulsant au sol ──
 	var sr := HoloMesh3D.st()
@@ -167,6 +193,11 @@ func _process(dt: float) -> void:
 		_mat_ring.set_shader_parameter("alpha_mult",
 				(1.0 - phase) * (1.5 if _hover else 1.0))
 		_mat_ring.set_shader_parameter("emission_strength", 3.4 if _hover else 2.4)
+
+	# Halo au sol : respiration douce, plus intense au survol.
+	if is_instance_valid(_halo):
+		_mat_halo.set_shader_parameter("alpha_mult", (0.55 + 0.3 * pulse) * (1.6 if _hover else 1.0))
+		_mat_halo.set_shader_parameter("emission_strength", 1.9 if _hover else 1.2)
 
 	# Faisceau : fondu d'apparition au survol (disparaît hors survol).
 	if is_instance_valid(_beam):
