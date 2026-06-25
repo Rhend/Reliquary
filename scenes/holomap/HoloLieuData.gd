@@ -18,5 +18,7 @@ extends Resource
 @export var nom_affichage_fr: String = ""      # libellé affiché (jamais un champ `name`)
 @export var tier: int = 0                      # palier (0=Commun … 5=Unique) → couleur + nom de palier
 @export var lore_fr: String = ""               # texte d'ambiance (tooltip)
-@export var cellule: Vector2i = Vector2i.ZERO  # cellule de grille du lieu
+@export var cellule: Vector2i = Vector2i.ZERO  # cellule d'origine (coin) du bâtiment-lieu
+@export var emprise: Vector2i = Vector2i(2, 2) # emprise au sol N×M (cellules)
+@export var etages: int = 5                    # hauteur en unités-maison
 @export var decouvert: bool = true             # false → totalement absent de la carte

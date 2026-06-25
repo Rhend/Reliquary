@@ -1021,12 +1021,21 @@ func _discovered_biomes_as_lieux(grille: int) -> Array[HoloLieuData]:
 	for i in ids.size():
 		var eid: String = ids[i]
 		var e := GameData.entities[eid] as Dictionary
+		var tier := int(e.get("maitrise_actuelle", 0))
+		# Emprise et hauteur croissent avec la rareté (les lieux rares ressortent).
+		var cote := clampi(2 + tier, 2, 4)
+		var emp := Vector2i(cote, cote)
+		var cell: Vector2i = cells[i]
+		cell.x = clampi(cell.x, 0, maxi(0, grille - emp.x))
+		cell.y = clampi(cell.y, 0, maxi(0, grille - emp.y))
 		var l := HoloLieuData.new()
 		l.id              = eid
 		l.nom_affichage_fr = Translations.entity_name(e, eid)
-		l.tier            = int(e.get("maitrise_actuelle", 0))
+		l.tier            = tier
 		l.lore_fr         = Translations.entity_lore(e)
-		l.cellule         = cells[i]
+		l.cellule         = cell
+		l.emprise         = emp
+		l.etages          = 4 + tier * 3
 		l.decouvert       = true
 		out.append(l)
 	return out

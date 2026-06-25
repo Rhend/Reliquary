@@ -24,11 +24,10 @@ var lieux: Array[HoloLieuData] = []
 var titre := ""
 var sous_titre := ""
 var fermable := true
-var grille := 16   # taille de grille de la carte (pour placer les lieux côté appelant) — doit refléter HoloMap3D.grille
+var grille := 28   # taille de grille de la carte (pour placer les lieux côté appelant) — doit refléter HoloMap3D.grille
 
-# Palette / accents repris pour le chrome.
-var couleur_cyan := Color(0.30, 0.85, 1.00)
-var couleur_magenta := Color(1.00, 0.25, 0.78)
+# Couleurs du chrome (DA neutre, hors palette de rareté).
+const CHROME_TITRE := Color(0.82, 0.88, 0.98)
 
 var _map: HoloMap3D
 var _vp: SubViewport
@@ -78,13 +77,13 @@ func _construire_chrome() -> void:
 		head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(head)
 		if titre != "":
-			var t := UIHelpers.label(titre, 22, couleur_cyan.lightened(0.35))
+			var t := UIHelpers.label(titre, 22, CHROME_TITRE)
 			t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			t.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
 			t.add_theme_constant_override("shadow_offset_y", 2)
 			head.add_child(t)
 		if sous_titre != "":
-			var s := UIHelpers.label(sous_titre, 12, Color(couleur_magenta.lightened(0.2), 0.85))
+			var s := UIHelpers.label(sous_titre, 12, UIColors.TEXT_MUTED)
 			s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			head.add_child(s)
 
@@ -92,7 +91,7 @@ func _construire_chrome() -> void:
 		var close := Button.new()
 		close.text = "✕"
 		close.add_theme_font_size_override("font_size", 20)
-		close.add_theme_color_override("font_color", couleur_cyan.lightened(0.3))
+		close.add_theme_color_override("font_color", CHROME_TITRE)
 		close.add_theme_color_override("font_hover_color", Color.WHITE)
 		close.flat = true
 		close.set_anchors_preset(Control.PRESET_TOP_RIGHT)
