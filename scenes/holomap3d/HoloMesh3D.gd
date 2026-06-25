@@ -13,6 +13,42 @@ static func st() -> SurfaceTool:
 	s.begin(Mesh.PRIMITIVE_LINES)
 	return s
 
+# SurfaceTool en triangles (faces pleines des bâtiments).
+static func st_tri() -> SurfaceTool:
+	var s := SurfaceTool.new()
+	s.begin(Mesh.PRIMITIVE_TRIANGLES)
+	return s
+
+static func _tri(s: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> int:
+	s.add_vertex(a); s.add_vertex(b); s.add_vertex(c)
+	return 3
+
+static func _quad(s: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> int:
+	return _tri(s, a, b, c) + _tri(s, a, c, d)
+
+# Faces pleines d'une boîte (toit + 4 côtés ; sol omis, jamais visible).
+# Base centrée en `c` au sol, hauteur `sy` sur +Y.
+static func box_faces(s: SurfaceTool, c: Vector3, sx: float, sy: float, sz: float) -> int:
+	var hx := sx * 0.5
+	var hz := sz * 0.5
+	var y0 := c.y
+	var y1 := c.y + sy
+	var b0 := Vector3(c.x - hx, y0, c.z - hz)
+	var b1 := Vector3(c.x + hx, y0, c.z - hz)
+	var b2 := Vector3(c.x + hx, y0, c.z + hz)
+	var b3 := Vector3(c.x - hx, y0, c.z + hz)
+	var t0 := Vector3(c.x - hx, y1, c.z - hz)
+	var t1 := Vector3(c.x + hx, y1, c.z - hz)
+	var t2 := Vector3(c.x + hx, y1, c.z + hz)
+	var t3 := Vector3(c.x - hx, y1, c.z + hz)
+	var n := 0
+	n += _quad(s, t0, t1, t2, t3)   # toit
+	n += _quad(s, b0, b1, t1, t0)
+	n += _quad(s, b1, b2, t2, t1)
+	n += _quad(s, b2, b3, t3, t2)
+	n += _quad(s, b3, b0, t0, t3)
+	return n
+
 # Finalise (null si aucune ligne — évite un mesh vide invalide).
 static func commit(s: SurfaceTool, compte: int) -> ArrayMesh:
 	if compte <= 0:

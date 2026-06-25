@@ -30,6 +30,8 @@ signal lieu_selectionne(id: String)
 const LINE_SHADER := preload("res://scenes/holomap3d/holo_line.gdshader")
 const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 const ROUTE_SHADER := preload("res://scenes/holomap3d/holo_route.gdshader")
+const FACE_SHADER := preload("res://scenes/holomap3d/holo_face.gdshader")
+const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
 
 @export var seed_val := 1337
 
@@ -76,6 +78,10 @@ const ROUTE_SHADER := preload("res://scenes/holomap3d/holo_route.gdshader")
 # ─── Palette (DA UIColors) ────────────────────────────────────
 @export_group("Palette")
 @export var couleur_decor_bati := Color(0.34, 0.40, 0.52)  # bleu-gris désaturé (remplissage)
+# Faces sombres semi-transparentes (occlusion douce). Opacité réglable :
+# 0 = quasi transparent (très holo) → 1 = bien masquant.
+@export var couleur_faces := Color(0.02, 0.03, 0.06)
+@export_range(0.0, 1.0) var opacite_faces := 0.5
 @export var couleur_eau := Color(0.16, 0.42, 0.62)
 @export var couleur_parc := Color(0.22, 0.52, 0.30)
 @export var luminosite_decor := 0.5   # émission FAIBLE du décor (sous le seuil de glow)
@@ -104,6 +110,7 @@ var _monde: Node3D
 var _lieux_node: Node3D
 var _mat_decor: ShaderMaterial
 var _mat_routes: ShaderMaterial
+var _mat_faces: ShaderMaterial
 var _post_mat: ShaderMaterial
 
 var _yaw := 0.0
@@ -173,6 +180,14 @@ func _setup_materials() -> void:
 	_mat_routes.set_shader_parameter("flux_intensite", flux_intensite)
 	_mat_routes.set_shader_parameter("flux_vitesse", flux_vitesse)
 	_mat_routes.set_shader_parameter("flux_frequence", flux_frequence)
+
+	# Faces sombres : dessinées AVANT les arêtes (render_priority plus bas) et
+	# écrivant la profondeur → occlusion des lignes derrière.
+	_mat_faces = ShaderMaterial.new()
+	_mat_faces.shader = FACE_SHADER
+	_mat_faces.set_shader_parameter("face_color", couleur_faces)
+	_mat_faces.set_shader_parameter("opacite", opacite_faces)
+	_mat_faces.render_priority = -1
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -365,8 +380,10 @@ func _build_ville() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val
 	var occ := {}
-	var s := HoloMesh3D.st()
+	var s := HoloMesh3D.st()           # arêtes lumineuses
+	var sf := HoloMesh3D.st_tri()      # faces sombres semi-opaques
 	var n := 0
+	var nf := 0
 	var col := Color(couleur_decor_bati, 0.85)
 	for x in grille:
 		for y in grille:
@@ -390,7 +407,16 @@ func _build_ville() -> void:
 			var centre := _centre_emprise(x, y, g.emprise)
 			# Contour creux UNIQUEMENT (12 arêtes) — aucun quadrillage interne.
 			n += HoloMesh3D.box(s, centre, sx, sy, sz, col)
+			# Faces sombres légèrement insérées (occlusion douce).
+			nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, sy * FACE_INSET, sz * FACE_INSET)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Ville")
+	var fmesh := HoloMesh3D.commit(sf, nf)
+	if fmesh != null:
+		var mif := MeshInstance3D.new()
+		mif.name = "VilleFaces"
+		mif.mesh = fmesh
+		mif.material_override = _mat_faces
+		_monde.add_child(mif)
 
 # Premier gabarit (ordre aléatoire) dont l'emprise tient ici (pas de route /
 # décor / occupé / hors-grille sous l'empreinte).
@@ -476,6 +502,8 @@ func _construire_lieux(liste: Array) -> void:
 		loc.etages       = l.etages
 		loc.ring_radius  = maxf(l.emprise.x, l.emprise.y) * taille_cellule * 0.7
 		loc.line_shader  = LINE_SHADER
+		loc.face_material = _mat_faces
+		loc.face_inset   = FACE_INSET
 		loc.position     = _centre_emprise(l.cellule.x, l.cellule.y, l.emprise)
 		loc.clique.connect(_on_lieu_clique)
 		loc.survol_change.connect(_on_survol)

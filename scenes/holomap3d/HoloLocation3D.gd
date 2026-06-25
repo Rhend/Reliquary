@@ -30,6 +30,8 @@ var etages: int = 4                      # subdivision (lignes d'étages)
 var pin_float: float = 0.6               # distance du pin au-dessus du toit
 var ring_radius: float = 0.8
 var line_shader: Shader
+var face_material: Material               # faces sombres semi-opaques (occlusion)
+var face_inset: float = 0.96
 
 var _t := 0.0
 var _hover := false
@@ -84,6 +86,18 @@ func _on_input_event(_cam: Node, ev: InputEvent, _pos: Vector3, _nrm: Vector3, _
 			clique.emit(lieu_id)
 
 func _construire() -> void:
+	# ── Faces sombres semi-opaques (occlusion douce), légèrement insérées ──
+	if face_material != null:
+		var sf := HoloMesh3D.st_tri()
+		var nf := HoloMesh3D.box_faces(sf, Vector3.ZERO,
+				taille_x * face_inset, hauteur * face_inset, taille_z * face_inset)
+		var fmesh := HoloMesh3D.commit(sf, nf)
+		if fmesh != null:
+			var mif := MeshInstance3D.new()
+			mif.mesh = fmesh
+			mif.material_override = face_material
+			add_child(mif)
+
 	# ── Bâtiment-lieu : contour creux UNIQUEMENT (12 arêtes, pas de quadrillage) ──
 	var sb := HoloMesh3D.st()
 	var n := HoloMesh3D.box(sb, Vector3.ZERO, taille_x, hauteur, taille_z, col)
