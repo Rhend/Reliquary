@@ -38,7 +38,7 @@ func _ready() -> void:
 	# Fond sombre (sous le viewport).
 	var bg := ColorRect.new()
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.010, 0.012, 0.022)  # quasi noir (cohérent avec le fond 3D)
+	bg.color = Color(0.0, 0.0, 0.0)  # noir (cohérent avec le fond 3D)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 

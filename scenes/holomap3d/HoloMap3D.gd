@@ -91,8 +91,8 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 # Luminosité du décor d'AMBIANCE (eau / parc) — distincte, inchangée (la grappe
 # verte du parc reste telle quelle, non affectée par l'éclaircissement du bâti).
 @export var luminosite_ambiance := 0.5
-# Fond : quasi noir teinté, mais décollé du noir TOTAL (ambiance globale d'un cran).
-@export var couleur_fond := Color(0.020, 0.026, 0.044)
+# Fond : noir.
+@export var couleur_fond := Color(0.0, 0.0, 0.0)
 
 # ─── Décor d'ambiance ─────────────────────────────────────────
 @export_group("Décor")
