@@ -515,6 +515,7 @@ func _construire_lieux(liste: Array) -> void:
 		loc.hauteur      = float(l.etages) * unite_maison
 		loc.etages       = l.etages
 		loc.ring_radius  = maxf(l.emprise.x, l.emprise.y) * taille_cellule * 0.7
+		loc.sans_batiment = l.sans_batiment
 		loc.line_shader  = LINE_SHADER
 		loc.face_material = _mat_faces
 		loc.face_inset   = FACE_INSET

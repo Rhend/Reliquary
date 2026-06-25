@@ -29,6 +29,7 @@ var hauteur: float = 1.0                 # hauteur monde du bâtiment
 var etages: int = 4                      # subdivision (lignes d'étages)
 var pin_float: float = 0.6               # distance du pin au-dessus du toit
 var ring_radius: float = 0.8
+var sans_batiment: bool = false          # true → pas de boîte/faces/tige (le décor EST le corps)
 var line_shader: Shader
 var face_material: Material               # faces sombres semi-opaques (occlusion)
 var face_inset: float = 0.96
@@ -86,27 +87,29 @@ func _on_input_event(_cam: Node, ev: InputEvent, _pos: Vector3, _nrm: Vector3, _
 			clique.emit(lieu_id)
 
 func _construire() -> void:
-	# ── Faces sombres semi-opaques (occlusion douce), légèrement insérées ──
-	if face_material != null:
-		var sf := HoloMesh3D.st_tri()
-		var nf := HoloMesh3D.box_faces(sf, Vector3.ZERO,
-				taille_x * face_inset, hauteur * face_inset, taille_z * face_inset)
-		var fmesh := HoloMesh3D.commit(sf, nf)
-		if fmesh != null:
-			var mif := MeshInstance3D.new()
-			mif.mesh = fmesh
-			mif.material_override = face_material
-			add_child(mif)
+	# Lieu SANS bâtiment : on saute faces + boîte + tige ; le décor sous l'emprise
+	# (ex. parc) tient lieu de corps. Seuls anneau + pin + collision subsistent.
+	if not sans_batiment:
+		# ── Faces sombres semi-opaques (occlusion douce), légèrement insérées ──
+		if face_material != null:
+			var sf := HoloMesh3D.st_tri()
+			var nf := HoloMesh3D.box_faces(sf, Vector3.ZERO,
+					taille_x * face_inset, hauteur * face_inset, taille_z * face_inset)
+			var fmesh := HoloMesh3D.commit(sf, nf)
+			if fmesh != null:
+				var mif := MeshInstance3D.new()
+				mif.mesh = fmesh
+				mif.material_override = face_material
+				add_child(mif)
 
-	# ── Bâtiment-lieu : contour creux UNIQUEMENT (12 arêtes, pas de quadrillage) ──
-	var sb := HoloMesh3D.st()
-	var n := HoloMesh3D.box(sb, Vector3.ZERO, taille_x, hauteur, taille_z, col)
-	# Tige toit → pin.
-	n += HoloMesh3D.line(sb, Vector3(0, hauteur, 0), Vector3(0, _pin_y - PIN_H, 0), col)
-	var bat := MeshInstance3D.new()
-	bat.mesh = HoloMesh3D.commit(sb, n)
-	bat.material_override = _mat_bat
-	add_child(bat)
+		# ── Bâtiment-lieu : contour creux UNIQUEMENT (12 arêtes) ──
+		var sb := HoloMesh3D.st()
+		var n := HoloMesh3D.box(sb, Vector3.ZERO, taille_x, hauteur, taille_z, col)
+		n += HoloMesh3D.line(sb, Vector3(0, hauteur, 0), Vector3(0, _pin_y - PIN_H, 0), col)  # tige
+		var bat := MeshInstance3D.new()
+		bat.mesh = HoloMesh3D.commit(sb, n)
+		bat.material_override = _mat_bat
+		add_child(bat)
 
 	# ── Anneau pulsant au sol ──
 	var sr := HoloMesh3D.st()

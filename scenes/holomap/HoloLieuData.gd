@@ -21,4 +21,7 @@ extends Resource
 @export var cellule: Vector2i = Vector2i.ZERO  # cellule d'origine (coin) du bâtiment-lieu
 @export var emprise: Vector2i = Vector2i(2, 2) # emprise au sol N×M (cellules)
 @export var etages: int = 5                    # hauteur en unités-maison
+# true → lieu SANS bâtiment : pas de boîte (ni faces), juste pin + anneau +
+# zone cliquable. Le décor sous l'emprise (ex. parc) EST le corps du lieu.
+@export var sans_batiment: bool = false
 @export var decouvert: bool = true             # false → totalement absent de la carte

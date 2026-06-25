@@ -1026,10 +1026,16 @@ func _discovered_biomes_as_lieux(grille: int) -> Array[HoloLieuData]:
 		var cote := clampi(2 + tier, 2, 4)
 		var emp := Vector2i(cote, cote)
 		var cell: Vector2i = cells[i]
-		# TEST VISUEL : on pose le Marécage Putride sur le parc (zone décor) pour
-		# voir le rendu lieu-sur-parc. Le parc occupe ~x[2..8] y[17..23] (grille 28).
+		var etages_l := 4 + tier * 3
+		var sans_bati := false
+		# Le Marécage Putride EST le parc : lieu SANS bâtiment, emprise calée sur
+		# la zone du parc (x[2..8] y[17..23], grille 28) → pin + zone cliquable
+		# par-dessus le décor vert, aucun bâtiment.
 		if eid == "biome_marecage":
-			cell = Vector2i(4, 18)
+			emp = Vector2i(7, 7)
+			cell = Vector2i(2, 17)
+			etages_l = 2
+			sans_bati = true
 		cell.x = clampi(cell.x, 0, maxi(0, grille - emp.x))
 		cell.y = clampi(cell.y, 0, maxi(0, grille - emp.y))
 		var l := HoloLieuData.new()
@@ -1039,7 +1045,8 @@ func _discovered_biomes_as_lieux(grille: int) -> Array[HoloLieuData]:
 		l.lore_fr         = Translations.entity_lore(e)
 		l.cellule         = cell
 		l.emprise         = emp
-		l.etages          = 4 + tier * 3
+		l.etages          = etages_l
+		l.sans_batiment   = sans_bati
 		l.decouvert       = true
 		out.append(l)
 	return out
