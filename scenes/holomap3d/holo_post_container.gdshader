@@ -11,10 +11,10 @@
 // ============================================================
 shader_type canvas_item;
 
-uniform float scanline_intensity = 0.28;
+uniform float scanline_intensity = 0.0;   // 0 = pas de scanlines (effet vieille tele)
 uniform float scanline_count     = 240.0;
 uniform float scanline_speed     = 0.6;
-uniform float flicker_amplitude  = 0.04;
+uniform float flicker_amplitude  = 0.0;    // 0 = pas de scintillement
 uniform float distortion_amplitude = 0.0;   // 0 = pas d'ondulation
 
 float flicker(float t) {

@@ -11,10 +11,10 @@
 shader_type canvas_item;
 
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
-uniform float scanline_intensity = 0.30;
+uniform float scanline_intensity = 0.0;   // 0 = pas de scanlines (effet vieille tele)
 uniform float scanline_count     = 240.0;
 uniform float scanline_speed     = 0.6;
-uniform float flicker_amplitude  = 0.05;
+uniform float flicker_amplitude  = 0.0;    // 0 = pas de scintillement
 uniform float distortion_amplitude = 0.0;   // 0 = pas d'ondulation
 
 float flicker(float t) {

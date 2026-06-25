@@ -80,10 +80,10 @@ const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 # ─── Hologramme (glow + post-process) ─────────────────────────
 @export_group("Hologramme")
 @export var glow_intensity := 1.0
-@export_range(0.0, 1.0) var scanline_intensity := 0.28
+@export_range(0.0, 1.0) var scanline_intensity := 0.0   # 0 = pas de scanlines (effet vieille télé)
 @export var scanline_count := 240.0
 @export var scanline_speed := 0.6
-@export_range(0.0, 0.5) var flicker_amplitude := 0.04
+@export_range(0.0, 0.5) var flicker_amplitude := 0.0    # 0 = pas de scintillement
 @export_range(0.0, 0.02) var distortion_amplitude := 0.0   # 0 = pas d'ondulation
 # Post-process interne (scanlines/flicker/distorsion sur un CanvasLayer). À
 # DÉSACTIVER quand la scène est embarquée dans un SubViewport : le post est
