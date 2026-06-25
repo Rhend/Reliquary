@@ -4,9 +4,11 @@
 # Area3D placée à la position monde du lieu. Dessine, en COULEUR DE PALIER
 # (UIColors.tier_color, trait plein + glow marqué → ressort du tissu urbain) :
 #   • le bâtiment-lieu (boîte d'emprise N×M, étages, subdivision légère) ;
-#   • un PIN diamant flottant relié par une tige ;
-#   • un ANNEAU pulsant (ping radar) projeté au sol.
-# Pin + anneau pulsent en continu ; le survol intensifie tout.
+#   • un PIN diamant flottant relié par une tige (repère permanent) ;
+#   • un ANNEAU « ping radar » + un HALO au sol, ÉMIS AU SURVOL SEULEMENT
+#     (fondu doux) — hors survol le lieu n'émet plus rien en continu.
+# Seuls le pin et la boîte restent visibles en permanence ; le survol fait
+# apparaître halo + ping + faisceau et intensifie le tout.
 #
 # Picking 3D via le viewport (Area3D + CollisionShape3D + input_ray_pickable) →
 # survol/clic suivent la caméra. Clic gauche → émet `clique(id)`.
@@ -42,6 +44,7 @@ var _beam: MeshInstance3D
 var _halo: MeshInstance3D
 var _pin_y := 0.0
 var _beam_a := 0.0          # opacité courante du faisceau (fondu au survol)
+var _emit_a := 0.0          # opacité des halos émis (ping anneau + halo sol) — survol seul
 var _mat_bat: ShaderMaterial
 var _mat_pin: ShaderMaterial
 var _mat_ring: ShaderMaterial
@@ -139,6 +142,7 @@ func _construire() -> void:
 	_halo.mesh = shd.commit()
 	_halo.material_override = _mat_halo
 	_halo.position = Vector3(0, 0.012, 0)
+	_halo.visible = false   # halos émis au survol seulement
 	add_child(_halo)
 
 	# ── Anneau pulsant au sol ──
@@ -148,6 +152,7 @@ func _construire() -> void:
 	_ring.mesh = HoloMesh3D.commit(sr, nr)
 	_ring.material_override = _mat_ring
 	_ring.position = Vector3(0, 0.03, 0)
+	_ring.visible = false   # ping radar au survol seulement
 	add_child(_ring)
 
 	# ── Pin diamant flottant ──
@@ -186,18 +191,27 @@ func _process(dt: float) -> void:
 		_mat_pin.set_shader_parameter("emission_strength",
 				(4.2 + 0.6 * pulse) if _hover else (2.8 + 0.5 * pulse))
 
-	if is_instance_valid(_ring):
-		var phase := fposmod(_t * 0.6, 1.0)
-		var s := 0.5 + 0.9 * phase
-		_ring.scale = Vector3(s, 1.0, s)
-		_mat_ring.set_shader_parameter("alpha_mult",
-				(1.0 - phase) * (1.5 if _hover else 1.0))
-		_mat_ring.set_shader_parameter("emission_strength", 3.4 if _hover else 2.4)
+	# Halos émis (ping radar + halo au sol) : fondu d'apparition au survol seul ;
+	# hors survol ils disparaissent (le lieu n'émet plus rien en continu, le pin
+	# flottant suffisant comme repère permanent).
+	_emit_a = lerpf(_emit_a, 1.0 if _hover else 0.0, 1.0 - exp(-10.0 * dt))
+	var emet := _emit_a >= 0.01
 
-	# Halo au sol : respiration douce, plus intense au survol.
+	if is_instance_valid(_ring):
+		_ring.visible = emet
+		if emet:
+			var phase := fposmod(_t * 0.6, 1.0)
+			var s := 0.5 + 0.9 * phase
+			_ring.scale = Vector3(s, 1.0, s)
+			_mat_ring.set_shader_parameter("alpha_mult", (1.0 - phase) * 1.5 * _emit_a)
+			_mat_ring.set_shader_parameter("emission_strength", 3.4)
+
+	# Halo au sol : respiration douce, au survol seulement.
 	if is_instance_valid(_halo):
-		_mat_halo.set_shader_parameter("alpha_mult", (0.55 + 0.3 * pulse) * (1.6 if _hover else 1.0))
-		_mat_halo.set_shader_parameter("emission_strength", 1.9 if _hover else 1.2)
+		_halo.visible = emet
+		if emet:
+			_mat_halo.set_shader_parameter("alpha_mult", (0.55 + 0.3 * pulse) * 1.6 * _emit_a)
+			_mat_halo.set_shader_parameter("emission_strength", 1.9)
 
 	# Faisceau : fondu d'apparition au survol (disparaît hors survol).
 	if is_instance_valid(_beam):
