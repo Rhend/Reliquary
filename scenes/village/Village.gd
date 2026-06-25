@@ -983,6 +983,67 @@ func start_selected_expedition() -> void:
 	AdventureSystem.start_adventure(adv_selected_biome_id)
 	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
 
+# ─── Carte holographique 3D des expéditions (overlay) ─────────
+# API publique appelée par le bouton « Carte » de l'AdventurePanel.
+# Ouvre la carte holo 3D (orbitable) peuplée des biomes DÉCOUVERTS ; un clic sur
+# un pin sélectionne le biome puis ferme la carte (le bouton « PARTIR » prend le
+# relais). Embarque HoloMap3D dans un SubViewport via HoloMap3DOverlay.
+func open_expedition_map() -> void:
+	var holo := HoloMap3DOverlay.new()
+	holo.titre      = Translations.T("adv.map_title")
+	holo.sous_titre = Translations.T("adv.map_hint")
+	holo.lieux      = _discovered_biomes_as_lieux(holo.grille)
+	holo.z_index    = 400
+	holo.lieu_selectionne.connect(func(biome_id: String) -> void:
+		adv_selected_biome_id = biome_id
+		if is_instance_valid(holo):
+			holo.queue_free()
+		_refresh_active_panel()
+	)
+	add_child(holo)
+
+# Construit la liste de lieux de la carte à partir des biomes découverts.
+# Chaque biome occupe une cellule distincte (placement déterministe pour que
+# la carte soit stable d'une ouverture à l'autre).
+func _discovered_biomes_as_lieux(grille: int) -> Array[HoloLieuData]:
+	var ids: Array = []
+	for eid: String in GameData.entities:
+		var e := GameData.entities[eid] as Dictionary
+		if e.get("entity_type", "") != Enums.EntityType.BIOME:
+			continue
+		if not e.get("est_decouvert", false):
+			continue
+		ids.append(eid)
+	ids.sort()  # ordre déterministe
+
+	var cells := _holo_spread_cells(ids.size(), grille)
+	var out: Array[HoloLieuData] = []
+	for i in ids.size():
+		var eid: String = ids[i]
+		var e := GameData.entities[eid] as Dictionary
+		var l := HoloLieuData.new()
+		l.id        = eid
+		l.nom       = Translations.entity_name(e, eid)
+		l.cellule   = cells[i]
+		l.decouvert = true
+		out.append(l)
+	return out
+
+# n cellules distinctes réparties sur la grille, mélange déterministe.
+func _holo_spread_cells(n: int, grille: int) -> Array:
+	var all: Array = []
+	for i in grille:
+		for j in grille:
+			all.append(Vector2i(i, j))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260625
+	for k in range(all.size() - 1, 0, -1):
+		var r := rng.randi_range(0, k)
+		var tmp: Variant = all[k]
+		all[k] = all[r]
+		all[r] = tmp
+	return all.slice(0, mini(n, all.size()))
+
 # Panneau générique "Bientôt disponible" pour les fonctionnalités non implémentées.
 func _panel_soon(label: String) -> void:
 	var lbl := UIHelpers.label(Translations.T("village.soon") % label, 13, UIColors.TEXT_MUTED)

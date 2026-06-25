@@ -96,6 +96,24 @@ static func build(host: Village) -> void:
 			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 	host.rp_content.add_child(btn)
 
+	# ── Bouton Carte : ouvre la carte holographique des expéditions ──
+	# Sélecteur de biome alternatif, plus immersif que l'accordéon. Toujours
+	# disponible (même biome non sélectionné) ; masqué pendant une expédition.
+	var map_btn := Button.new()
+	map_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_btn.custom_minimum_size   = Vector2(0, 40)
+	map_btn.visible = not AdventureSystem.is_running
+	map_btn.text = Translations.T("adv.map_btn")
+	map_btn.add_theme_font_size_override("font_size", 15)
+	map_btn.add_theme_color_override("font_color", tcolor.lightened(0.25))
+	map_btn.add_theme_color_override("font_hover_color", Color.WHITE)
+	map_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.08, 0.45, 1, 6))
+	map_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.20, 0.90, 2, 6))
+	map_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	map_btn.pressed.connect(host.open_expedition_map)
+	UIHelpers.add_hover_feedback(map_btn)
+	host.rp_content.add_child(map_btn)
+
 	# ── Séparateur ────────────────────────────────────────────
 	host.rp_content.add_child(HSeparator.new())
 
