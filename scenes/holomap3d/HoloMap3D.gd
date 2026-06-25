@@ -161,6 +161,8 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export var couleur_fenetre := Color(0.98, 0.86, 0.58)  # ambre chaud
 # Décor d'un lieu SANS bâtiment (parc-lieu) : émission du décor tier-coloré.
 @export var lieu_decor_emission := 3.4
+# Nb MAX d'arbres colorés posés sur un parc-lieu (les arbres glow, peu suffisent).
+@export var lieu_arbres_max := 6
 
 # ─── Lieux ────────────────────────────────────────────────────
 @export_group("Lieux")
@@ -198,6 +200,7 @@ var _bloque := {}        # Vector2i → true : cellules interdites au remplissag
 var _eau := {}
 var _parc := {}
 var _lieu_sol := {}      # Vector2i → Color : cellule de décor portée par un lieu sans bâtiment
+var _lieu_arbres := {}   # Vector2i → Color : cellules CHOISIES pour un arbre coloré (plafonné)
 
 func _ready() -> void:
 	get_viewport().physics_object_picking = true
@@ -609,16 +612,32 @@ func _calc_decor() -> void:
 				_parc[Vector2i(x, y)] = true
 
 # Cellules de décor portées par un lieu SANS bâtiment → couleur de palier du lieu.
-# (Ex. Marécage Putride posé sur le parc : ses arbres prennent sa couleur.)
+# (Ex. Marécage Putride posé sur le parc : quelques arbres prennent sa couleur.)
+# `_lieu_sol` = toute l'emprise (sol du lieu, laissé vide d'arbres) ; `_lieu_arbres`
+# = un petit nombre de cellules CHOISIES (plafond `lieu_arbres_max`) qui porteront
+# un arbre coloré — les arbres glow, 5-6 suffisent à marquer la parcelle.
 func _calc_lieu_sol() -> void:
 	_lieu_sol.clear()
+	_lieu_arbres.clear()
 	for l in lieux:
 		if not l.decouvert or not l.sans_batiment:
 			continue
 		var c := UIColors.tier_color(l.tier)
+		var libres: Array = []
 		for di in l.emprise.x:
 			for dj in l.emprise.y:
-				_lieu_sol[Vector2i(l.cellule.x + di, l.cellule.y + dj)] = c
+				var cell := Vector2i(l.cellule.x + di, l.cellule.y + dj)
+				_lieu_sol[cell] = c
+				if _parc.has(cell):
+					libres.append(cell)
+		# Tirage déterministe (graine = id du lieu) de quelques cellules à arbre.
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(l.id)
+		for k in range(libres.size() - 1, 0, -1):
+			var r := rng.randi_range(0, k)
+			var tmp: Variant = libres[k]; libres[k] = libres[r]; libres[r] = tmp
+		for i in mini(lieu_arbres_max, libres.size()):
+			_lieu_arbres[libres[i]] = c
 
 func _build_decor() -> void:
 	var s := HoloMesh3D.st()
@@ -644,17 +663,19 @@ func _build_decor() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val ^ 0x515A11
 	for k in _parc:
-		if rng.randf() > 0.55:
-			continue
 		var cell := k as Vector2i
 		var c := _world(cell.x, cell.y, 0.0)
 		var ht := unite_maison * 1.2
-		if _lieu_sol.has(cell):
-			var lc := Color(_lieu_sol[cell] as Color, 0.9)
+		if _lieu_arbres.has(cell):
+			# Cellule choisie d'un parc-lieu : arbre coloré (glow).
+			var lc := Color(_lieu_arbres[cell] as Color, 0.9)
 			nl += HoloMesh3D.line(sl, c, c + Vector3(0, ht, 0), lc)
 			nl += HoloMesh3D.diamond(sl, c + Vector3(0, ht + ht * 0.4, 0),
 					taille_cellule * 0.22, ht * 0.5, lc)
-		else:
+		elif _lieu_sol.has(cell):
+			continue   # reste du sol du lieu : laissé vide (peu d'arbres voulus)
+		elif rng.randf() <= 0.55:
+			# Parc ordinaire : arbres verts épars.
 			n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), cp)
 			n += HoloMesh3D.diamond(s, c + Vector3(0, ht + ht * 0.4, 0),
 					taille_cellule * 0.22, ht * 0.5, cp)
