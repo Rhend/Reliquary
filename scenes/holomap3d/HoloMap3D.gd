@@ -108,6 +108,15 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export_range(0.0, 0.02) var distortion_amplitude := 0.0
 @export var post_process_interne := true
 
+# ─── Effets / Juice ───────────────────────────────────────────
+@export_group("Effets")
+@export var intro_actif := true               # matérialisation : la ville monte du sol à l'ouverture
+@export var socle_actif := true               # anneau-socle « table tactique »
+@export var radar_actif := true               # balayage radar lent au sol
+@export var radar_vitesse := 22.0             # °/s du balayage
+@export var couleur_socle := Color(0.30, 0.85, 1.00)  # cyan holographique (cadre/HUD au sol)
+@export var zoom_amorti := true               # zoom molette lissé
+
 # ─── Lieux ────────────────────────────────────────────────────
 @export_group("Lieux")
 @export var lieux: Array[HoloLieuData] = []
@@ -127,6 +136,9 @@ var _dragging := false
 var _debug_label: Label
 var _tooltip: HoloTooltip
 var _hovered: HoloLocation3D
+var _radar: Node3D
+var _distance_cible := 15.0
+var _intro_en_cours := false
 
 var _cols_route := {}
 var _rows_route := {}
@@ -174,6 +186,7 @@ func _setup_camera() -> void:
 	_cam.near = 0.1
 	_cam.far = 300.0
 	_rig.add_child(_cam)
+	_distance_cible = distance
 	_appliquer_camera()
 
 func _setup_materials() -> void:
@@ -268,11 +281,85 @@ func _build_all() -> void:
 		_bloque[k] = true
 	_reserver_lieux()       # interdit le remplissage sous les lieux
 
+	if socle_actif:
+		_build_socle()
 	_build_routes_neon()
 	if decor_actif:
 		_build_decor()
 	_build_ville()
 	_construire_lieux(lieux)
+	if radar_actif:
+		_build_radar()
+	if intro_actif:
+		_jouer_intro()
+
+# ─── Socle « table tactique » (anneau + ticks au sol) ─────────
+func _build_socle() -> void:
+	var s := HoloMesh3D.st()
+	var n := 0
+	var r := (_cgrid() + 1.0) * taille_cellule * 1.10
+	n += HoloMesh3D.circle(s, Vector3.ZERO, r, Color(couleur_socle, 0.55), 96)
+	n += HoloMesh3D.circle(s, Vector3.ZERO, r * 0.965, Color(couleur_socle, 0.22), 96)
+	# Ticks radiaux (graduations) — plus longs tous les 1/8 de tour.
+	var ticks := 48
+	for i in ticks:
+		var a := TAU * float(i) / float(ticks)
+		var dir := Vector3(cos(a), 0.0, sin(a))
+		var long := i % 6 == 0
+		var ext := taille_cellule * (0.65 if long else 0.3)
+		n += HoloMesh3D.line(s, dir * r, dir * (r + ext),
+				Color(couleur_socle, 0.5 if long else 0.28))
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Socle")   # _mat_decor → léger glow cyan
+
+# ─── Balayage radar (sweep en éventail, tourne lentement) ─────
+func _build_radar() -> void:
+	var r := (_cgrid() + 1.0) * taille_cellule * 1.06
+	var seg := 12
+	var span := deg_to_rad(28.0)
+	var s := SurfaceTool.new()
+	s.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var y := 0.02
+	for i in seg:
+		var a0 := -span * 0.5 + span * float(i) / float(seg)
+		var a1 := -span * 0.5 + span * float(i + 1) / float(seg)
+		# Alpha croît vers le bord d'attaque (a = +span/2) : effet comète.
+		var al0 := 0.32 * (a0 + span * 0.5) / span
+		var al1 := 0.32 * (a1 + span * 0.5) / span
+		var p0 := Vector3(cos(a0), 0, sin(a0)) * r + Vector3(0, y, 0)
+		var p1 := Vector3(cos(a1), 0, sin(a1)) * r + Vector3(0, y, 0)
+		s.set_color(Color(couleur_socle, 0.10)); s.add_vertex(Vector3(0, y, 0))
+		s.set_color(Color(couleur_socle, al0)); s.add_vertex(p0)
+		s.set_color(Color(couleur_socle, al1)); s.add_vertex(p1)
+	_radar = Node3D.new()
+	_radar.name = "Radar"
+	var mi := MeshInstance3D.new()
+	mi.mesh = s.commit()
+	mi.material_override = _mat_ambiance   # additif, émission faible → discret
+	_radar.add_child(mi)
+	_monde.add_child(_radar)
+
+# ─── Intro : matérialisation (la ville monte du sol) + caméra ─
+func _jouer_intro() -> void:
+	_intro_en_cours = true
+	_monde.scale.y = 0.02
+	if is_instance_valid(_lieux_node):
+		_lieux_node.scale.y = 0.02
+	var d0 := _distance_cible * 1.7
+	distance = d0
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(_monde, "scale:y", 1.0, 0.85) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	if is_instance_valid(_lieux_node):
+		tw.tween_property(_lieux_node, "scale:y", 1.0, 0.95) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_method(_set_distance, d0, _distance_cible, 1.0) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.finished.connect(func() -> void:
+		_intro_en_cours = false
+		_distance_cible = distance)
+
+func _set_distance(v: float) -> void:
+	distance = v
 
 func _ajouter_mesh(mesh: ArrayMesh, nom: String, mat: Material = null) -> void:
 	if mesh == null:
@@ -558,7 +645,12 @@ func _appliquer_camera() -> void:
 func _process(dt: float) -> void:
 	if auto_rotation:
 		_yaw += deg_to_rad(vitesse_rotation) * dt
-		_appliquer_camera()
+	# Zoom amorti (hors intro) : la distance glisse vers sa cible.
+	if zoom_amorti and not _intro_en_cours:
+		distance = lerpf(distance, _distance_cible, 1.0 - exp(-12.0 * dt))
+	_appliquer_camera()
+	if is_instance_valid(_radar):
+		_radar.rotation.y += deg_to_rad(radar_vitesse) * dt
 	_maj_tooltip()
 
 func _maj_tooltip() -> void:
@@ -573,11 +665,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			distance -= 1.2
-			_appliquer_camera()
+			_distance_cible = clampf(_distance_cible - 1.2, distance_min, distance_max)
+			if not zoom_amorti:
+				distance = _distance_cible
+				_appliquer_camera()
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			distance += 1.2
-			_appliquer_camera()
+			_distance_cible = clampf(_distance_cible + 1.2, distance_min, distance_max)
+			if not zoom_amorti:
+				distance = _distance_cible
+				_appliquer_camera()
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			_dragging = mb.pressed and mode_rotation == 0
 	elif event is InputEventMouseMotion and _dragging:

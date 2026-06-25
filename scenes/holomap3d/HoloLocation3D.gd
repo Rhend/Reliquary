@@ -38,10 +38,13 @@ var _t := 0.0
 var _hover := false
 var _pin: MeshInstance3D
 var _ring: MeshInstance3D
+var _beam: MeshInstance3D
 var _pin_y := 0.0
+var _beam_a := 0.0          # opacité courante du faisceau (fondu au survol)
 var _mat_bat: ShaderMaterial
 var _mat_pin: ShaderMaterial
 var _mat_ring: ShaderMaterial
+var _mat_beam: ShaderMaterial
 
 const PIN_R := 0.26
 const PIN_H := 0.34
@@ -51,6 +54,7 @@ func _ready() -> void:
 	_mat_bat  = _mk_mat()
 	_mat_pin  = _mk_mat()
 	_mat_ring = _mk_mat()
+	_mat_beam = _mk_mat()
 	_pin_y = hauteur + pin_float
 	_construire()
 
@@ -129,6 +133,20 @@ func _construire() -> void:
 	_pin.position = Vector3(0, _pin_y, 0)
 	add_child(_pin)
 
+	# ── Faisceau vertical (visible au survol) : colonne de lumière vers le ciel ──
+	var bh := maxf(hauteur * 2.4, 2.2)
+	var rb := maxf(PIN_R * 0.6, taille_x * 0.12)
+	var sm := HoloMesh3D.st()
+	var nb := HoloMesh3D.line(sm, Vector3.ZERO, Vector3(0, bh, 0), col)
+	for corner in [Vector2(rb, rb), Vector2(-rb, rb), Vector2(rb, -rb), Vector2(-rb, -rb)]:
+		nb += HoloMesh3D.line(sm, Vector3(corner.x, 0, corner.y), Vector3(corner.x, bh, corner.y), col)
+	nb += HoloMesh3D.circle(sm, Vector3(0, bh, 0), rb * 1.5, col, 16)
+	_beam = MeshInstance3D.new()
+	_beam.mesh = HoloMesh3D.commit(sm, nb)
+	_beam.material_override = _mat_beam
+	_beam.visible = false
+	add_child(_beam)
+
 func _process(dt: float) -> void:
 	_t += dt
 	var pulse := 0.5 + 0.5 * sin(_t * 4.0)
@@ -149,3 +167,13 @@ func _process(dt: float) -> void:
 		_mat_ring.set_shader_parameter("alpha_mult",
 				(1.0 - phase) * (1.5 if _hover else 1.0))
 		_mat_ring.set_shader_parameter("emission_strength", 3.4 if _hover else 2.4)
+
+	# Faisceau : fondu d'apparition au survol (disparaît hors survol).
+	if is_instance_valid(_beam):
+		_beam_a = lerpf(_beam_a, 1.0 if _hover else 0.0, 1.0 - exp(-10.0 * dt))
+		if _beam_a < 0.01:
+			_beam.visible = false
+		else:
+			_beam.visible = true
+			_mat_beam.set_shader_parameter("alpha_mult", _beam_a * (0.45 + 0.35 * pulse))
+			_mat_beam.set_shader_parameter("emission_strength", 3.2)
