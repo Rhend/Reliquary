@@ -32,6 +32,7 @@ const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 const ROUTE_SHADER := preload("res://scenes/holomap3d/holo_route.gdshader")
 const FACE_SHADER := preload("res://scenes/holomap3d/holo_face.gdshader")
 const MOTES_SHADER := preload("res://scenes/holomap3d/holo_motes.gdshader")
+const TRAFFIC_SHADER := preload("res://scenes/holomap3d/holo_traffic.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
 
 @export var seed_val := 1337
@@ -119,9 +120,15 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export var zoom_amorti := true               # zoom molette lissé
 @export var hud_actif := true                 # habillage HUD 2D (crochets + ligne de scan)
 @export var motes_actif := true               # poussières de données qui montent
-@export var motes_count := 160
+@export var motes_count := 80
 @export var motes_hauteur := 3.5              # hauteur de montée des poussières
 @export var couleur_motes := Color(0.40, 0.85, 1.00)
+# Trafic : traînées lumineuses qui circulent sur les routes.
+@export var trafic_actif := true
+@export var voitures_par_voie := 2            # nb de véhicules par sens et par route
+@export var vitesse_voitures := 0.08          # tours/seconde
+@export var couleur_voiture_aller := Color(0.55, 0.90, 1.00)   # cyan (phares)
+@export var couleur_voiture_retour := Color(1.00, 0.55, 0.25)  # ambre (feux arrière)
 # Brume de profondeur : les arêtes lointaines s'estompent (focus centre).
 @export var brume_debut := 16.0
 @export var brume_fin := 30.0
@@ -147,6 +154,7 @@ var _tooltip: HoloTooltip
 var _hovered: HoloLocation3D
 var _radar: Node3D
 var _mat_motes: ShaderMaterial
+var _mat_trafic: ShaderMaterial
 var _distance_cible := 15.0
 var _intro_en_cours := false
 
@@ -234,10 +242,15 @@ func _setup_materials() -> void:
 	_mat_motes.set_shader_parameter("mote_color", couleur_motes)
 	_mat_motes.set_shader_parameter("hauteur", motes_hauteur)
 
-	# Brume de profondeur : poussée sur les matériaux de lignes/routes (les faces
-	# ne fadent pas → l'occlusion reste). Les lieux/faisceaux utilisent les
-	# valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes]:
+	# Trafic (traînées le long des routes).
+	_mat_trafic = ShaderMaterial.new()
+	_mat_trafic.shader = TRAFFIC_SHADER
+	_mat_trafic.set_shader_parameter("vitesse", vitesse_voitures)
+
+	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
+	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
+	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes, _mat_trafic]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
@@ -321,10 +334,47 @@ func _build_all() -> void:
 		_build_decor()
 	_build_ville()
 	_construire_lieux(lieux)
+	if trafic_actif:
+		_build_trafic()
 	if motes_actif:
 		_build_motes()
 	if radar_actif:
 		_build_radar()
+
+# ─── Trafic : traînées lumineuses qui circulent sur les routes ─
+func _build_trafic() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0xCA4F1C
+	var y := 0.03
+	var carlen := taille_cellule * 0.55
+	var lz := Vector3(0, 0, float(grille - 1) * taille_cellule)   # trajet le long de Z
+	var lx := Vector3(float(grille - 1) * taille_cellule, 0, 0)   # trajet le long de X
+	var s := SurfaceTool.new()
+	s.begin(Mesh.PRIMITIVE_LINES)
+	for col in _cols_route:
+		_semer_voitures(s, _world(col, 0, y), lz, carlen, rng, couleur_voiture_aller)
+		_semer_voitures(s, _world(col, grille - 1, y), -lz, carlen, rng, couleur_voiture_retour)
+	for row in _rows_route:
+		_semer_voitures(s, _world(0, row, y), lx, carlen, rng, couleur_voiture_aller)
+		_semer_voitures(s, _world(grille - 1, row, y), -lx, carlen, rng, couleur_voiture_retour)
+	var mi := MeshInstance3D.new()
+	mi.name = "Trafic"
+	mi.mesh = s.commit()
+	mi.material_override = _mat_trafic
+	_monde.add_child(mi)
+
+# Sème `voitures_par_voie` segments sur une route : base = départ, UV2 = vecteur
+# de trajet complet (le shader translate selon la phase UV.x dans le temps).
+func _semer_voitures(s: SurfaceTool, depart: Vector3, trajet: Vector3, carlen: float,
+		rng: RandomNumberGenerator, couleur: Color) -> void:
+	var dirn := trajet.normalized()
+	var uv2 := Vector2(trajet.x, trajet.z)
+	for _c in maxi(0, voitures_par_voie):
+		var ph := rng.randf()
+		var p0 := depart
+		var p1 := depart + dirn * carlen
+		s.set_color(couleur); s.set_uv(Vector2(ph, 0)); s.set_uv2(uv2); s.add_vertex(p0)
+		s.set_color(couleur); s.set_uv(Vector2(ph, 0)); s.set_uv2(uv2); s.add_vertex(p1)
 	if intro_actif:
 		_jouer_intro()
 

@@ -1,6 +1,12 @@
-[gd_scene load_steps=2 format=3 uid="uid://b3holomap3dcyber"]
+[gd_scene format=3 uid="uid://bw5dwb6niy5rd"]
 
-[ext_resource type="Script" path="res://scenes/holomap3d/HoloMap3D.gd" id="1_holo3d"]
+[ext_resource type="Script" uid="uid://bqblcnjgaqdjj" path="res://scenes/holomap3d/HoloMap3D.gd" id="1_holo3d"]
 
-[node name="HoloMap3D" type="Node3D"]
+[node name="HoloMap3D" type="Node3D" unique_id=505832886]
 script = ExtResource("1_holo3d")
+rue_secondaire = 3
+avenue_largeur = 3
+avenue_tous_les = 4
+opacite_faces = 0.4
+luminosite_decor = 1.5
+luminosite_ambiance = 0.65
