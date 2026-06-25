@@ -3,12 +3,15 @@
 #
 # Control 2D (sur un CanvasLayer au-dessus du rendu 3D). HoloMap3D le pilote :
 # à chaque frame il projette la position monde du pin survolé vers l'écran
-# (Camera3D.unproject_position) et appelle `set_ancre()` ; la ligne de rappel
+# (Camera3D.unproject_position) et appelle `positionner()` ; la ligne de rappel
 # (segment horizontal « ----- » qui casse « \ » vers le cadre) et le cadre
 # suivent donc le pin pendant la rotation.
 #
-# Contenu : nom (bleu muted, registre « nom » du journal), palier (couleur du
-# tier, NOM seul jamais de numéro), lore. Couleurs via UIColors — rien en dur.
+# DA : reprend le langage visuel du tooltip global du jeu (TooltipOverlay) —
+# fond BG_DARK opaque, liseré d'accent (plus épais en haut), coins arrondis,
+# ombre portée, losange ◆ + titre, séparateur en dégradé. Contenu : nom (bleu
+# muted = registre « nom » du journal), palier (couleur du tier, NOM seul jamais
+# de numéro), lore. Couleurs via UIColors — rien en dur.
 # ============================================================
 class_name HoloTooltip
 extends Control
@@ -16,18 +19,22 @@ extends Control
 const MARGE_ECRAN := 12.0
 const JAMBE := 46.0          # longueur du segment horizontal qui part du pin
 const ECART_CADRE := 12.0    # gap entre le coude et le cadre
+const MAX_WIDTH := 300.0
 
 var _ancre := Vector2.ZERO   # point écran du pin (départ de la ligne)
 var _coude := Vector2.ZERO
 var _bord_cadre := Vector2.ZERO
 var _accent := Color(1.0, 0.25, 0.78)
-var _actif := false       # contenu défini (entre montrer/cacher)
-var _a_lecran := false    # pin visible (devant la caméra) cette frame
+var _actif := false          # contenu défini (entre montrer/cacher)
+var _a_lecran := false       # pin visible (devant la caméra) cette frame
 
 var _frame: PanelContainer
+var _diamond: Label
 var _lbl_nom: Label
 var _lbl_palier: Label
 var _lbl_lore: Label
+var _sep: TextureRect
+var _sep_grad: Gradient
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -38,37 +45,91 @@ func _ready() -> void:
 	_frame.visible = false
 	add_child(_frame)
 
-	var m := UIHelpers.margin_of(8)
-	_frame.add_child(m)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 3)
-	m.add_child(vb)
+	var mg := MarginContainer.new()
+	for s in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		mg.add_theme_constant_override(s, 12)
+	_frame.add_child(mg)
 
-	_lbl_nom = UIHelpers.label("", 15, UIColors.LOG_IGNORED)     # registre « nom » = bleu muted
-	vb.add_child(_lbl_nom)
-	_lbl_palier = UIHelpers.label("", 12, UIColors.TEXT_MUTED)   # couleur posée au survol (tier)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 7)
+	mg.add_child(vb)
+
+	# ── Titre : losange d'accent + nom (registre « nom » = bleu muted) ──
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 7)
+	vb.add_child(title_row)
+
+	_diamond = Label.new()
+	_diamond.text = "◆"
+	_diamond.add_theme_font_size_override("font_size", 10)
+	_diamond.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title_row.add_child(_diamond)
+
+	_lbl_nom = Label.new()
+	_lbl_nom.add_theme_font_size_override("font_size", 15)
+	_lbl_nom.add_theme_color_override("font_color", UIColors.LOG_IGNORED)
+	_lbl_nom.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lbl_nom.custom_minimum_size = Vector2(MAX_WIDTH - 24.0, 0)
+	title_row.add_child(_lbl_nom)
+
+	# ── Palier (nom seul, couleur du tier) ──
+	_lbl_palier = Label.new()
+	_lbl_palier.add_theme_font_size_override("font_size", 12)
 	vb.add_child(_lbl_palier)
-	_lbl_lore = UIHelpers.label("", 11, UIColors.TEXT_MUTED)
+
+	# ── Séparateur en dégradé (transparent → accent → transparent) ──
+	_sep_grad = Gradient.new()
+	_sep_grad.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	_sep_grad.colors  = PackedColorArray([
+		Color.TRANSPARENT, Color(1, 1, 1, 0.5), Color.TRANSPARENT])
+	var sep_tex := GradientTexture1D.new()
+	sep_tex.gradient = _sep_grad
+	sep_tex.width = 128
+	_sep = TextureRect.new()
+	_sep.texture = sep_tex
+	_sep.expand_mode  = TextureRect.EXPAND_IGNORE_SIZE
+	_sep.stretch_mode = TextureRect.STRETCH_SCALE
+	_sep.custom_minimum_size = Vector2(0, 2)
+	_sep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(_sep)
+
+	# ── Lore (corps clair, lisible sur fond sombre) ──
+	_lbl_lore = Label.new()
+	_lbl_lore.add_theme_font_size_override("font_size", 12)
+	_lbl_lore.add_theme_color_override("font_color", UIColors.TOOLTIP_BODY)
+	_lbl_lore.add_theme_constant_override("line_spacing", 3)
 	_lbl_lore.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_lbl_lore.custom_minimum_size = Vector2(230, 0)
+	_lbl_lore.custom_minimum_size = Vector2(MAX_WIDTH - 24.0, 0)
 	vb.add_child(_lbl_lore)
 
-# Affiche le tooltip avec son contenu. `palier_nom` = NOM du palier (pas de numéro).
+# Affiche le tooltip. `palier_nom` = NOM du palier (jamais de numéro).
 func montrer(nom: String, palier_nom: String, tier_color: Color, lore: String, accent: Color) -> void:
 	_accent = accent
+	_diamond.add_theme_color_override("font_color", accent)
 	_lbl_nom.text = nom
 	_lbl_palier.text = palier_nom
 	_lbl_palier.add_theme_color_override("font_color", tier_color)
 	_lbl_lore.text = lore
 	_lbl_lore.visible = lore != ""
-	# Fond sombre OPAQUE (lisibilité) + bordure accent.
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(UIColors.PANEL_BG_DARK, 0.96)
-	sb.border_color = accent
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(6)
-	_frame.add_theme_stylebox_override("panel", sb)
+	_sep.visible = lore != ""
+	var sep_c := accent.lerp(Color.WHITE, 0.20)
+	_sep_grad.colors = PackedColorArray([
+		Color.TRANSPARENT, Color(sep_c.r, sep_c.g, sep_c.b, 0.90), Color.TRANSPARENT])
+	_appliquer_style()
 	_actif = true   # la visibilité réelle est posée par positionner() (dépend de la caméra)
+
+# Stylebox calqué sur TooltipOverlay._apply_style (DA tooltip du jeu).
+func _appliquer_style() -> void:
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(UIColors.BG_DARK.r, UIColors.BG_DARK.g, UIColors.BG_DARK.b, 0.97)
+	s.border_color = Color(_accent.r, _accent.g, _accent.b, 0.85)
+	s.set_border_width_all(1)
+	s.set_border_width(SIDE_TOP, 2)   # liseré d'accent plus marqué en haut
+	s.set_corner_radius_all(5)
+	s.shadow_color  = Color(0, 0, 0, 0.55)
+	s.shadow_size   = 10
+	s.shadow_offset = Vector2(0, 4)
+	_frame.add_theme_stylebox_override("panel", s)
 
 func cacher() -> void:
 	_actif = false
