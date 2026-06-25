@@ -1022,10 +1022,12 @@ func _discovered_biomes_as_lieux(grille: int) -> Array[HoloLieuData]:
 		var eid: String = ids[i]
 		var e := GameData.entities[eid] as Dictionary
 		var l := HoloLieuData.new()
-		l.id        = eid
-		l.nom       = Translations.entity_name(e, eid)
-		l.cellule   = cells[i]
-		l.decouvert = true
+		l.id              = eid
+		l.nom_affichage_fr = Translations.entity_name(e, eid)
+		l.tier            = int(e.get("maitrise_actuelle", 0))
+		l.lore_fr         = Translations.entity_lore(e)
+		l.cellule         = cells[i]
+		l.decouvert       = true
 		out.append(l)
 	return out
 

@@ -15,10 +15,14 @@ class_name HoloLocation3D
 extends Area3D
 
 signal clique(id: String)
+# Survol entrée/sortie (raycast caméra) — HoloMap3D s'y abonne pour le tooltip.
+signal survol_change(loc: HoloLocation3D, actif: bool)
 
 # ─── Données (définies AVANT add_child) ───────────────────────
 var lieu_id: String = ""
 var lieu_nom: String = ""
+var tier: int = 0                  # palier du lieu (couleur + nom de palier au tooltip)
+var lore: String = ""              # texte d'ambiance (tooltip)
 var accent_color: Color = Color(1.00, 0.25, 0.78)  # magenta (marqueur)
 var base_color: Color = Color(0.30, 0.85, 1.00)    # cyan (touche)
 var footprint: float = 0.8        # côté de la base (unités monde)
@@ -59,10 +63,18 @@ func _ready() -> void:
 	col.position = Vector3(0, base_y + total_h * 0.5, 0)
 	add_child(col)
 
-	mouse_entered.connect(func() -> void: _hover = true)
-	mouse_exited.connect(func() -> void: _hover = false)
+	mouse_entered.connect(func() -> void:
+		_hover = true
+		survol_change.emit(self, true))
+	mouse_exited.connect(func() -> void:
+		_hover = false
+		survol_change.emit(self, false))
 	input_event.connect(_on_input_event)
 	set_process(true)
+
+# Position monde du pin (sommet du diamant) — ancre 3D du tooltip.
+func ancre_globale() -> Vector3:
+	return to_global(Vector3(0, _pin_y + PIN_H, 0))
 
 func _mk_mat() -> ShaderMaterial:
 	var m := ShaderMaterial.new()

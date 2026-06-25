@@ -24,7 +24,7 @@ var lieux: Array[HoloLieuData] = []
 var titre := ""
 var sous_titre := ""
 var fermable := true
-var grille := 7   # taille de grille de la carte (pour placer les lieux côté appelant)
+var grille := 16   # taille de grille de la carte (pour placer les lieux côté appelant) — doit refléter HoloMap3D.grille
 
 # Palette / accents repris pour le chrome.
 var couleur_cyan := Color(0.30, 0.85, 1.00)

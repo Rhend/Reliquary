@@ -36,30 +36,33 @@ const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 @export_range(15.0, 85.0) var plongee_deg := 55.0     # angle aérien
 @export var plongee_min := 25.0
 @export var plongee_max := 80.0
-@export var distance := 17.0                          # distance caméra→centre
-@export var distance_min := 9.0
-@export var distance_max := 32.0
+@export var distance := 14.0                          # distance caméra→centre
+@export var distance_min := 7.0
+@export var distance_max := 26.0
 @export var fov := 50.0
 @export_enum("Libre", "Paliers") var mode_rotation := 0
 @export var palier_deg := 45.0                        # pas en mode Paliers
 @export var vitesse_rotation := 18.0                  # °/s (auto-rotation)
 @export var auto_rotation := false
 
-# ─── Cœur urbain ──────────────────────────────────────────────
-@export_group("Ville")
-@export var grille := 7
-@export_range(0.0, 1.0) var densite := 0.55
-@export var hauteur_min := 0.6
-@export var hauteur_max := 2.8
-@export var rayon_urbain := 3.4          # rayon du cœur plat (unités-cellule)
+# ─── Maillage / Cœur urbain ───────────────────────────────────
+@export_group("Maillage / Ville")
+@export var grille := 16                        # nb de cellules par côté (fin = net)
+@export var taille_cellule := 0.45              # taille monde d'une cellule (petit = fin)
+@export var bloc_cellules := 2                  # côté d'un bâtiment, en cellules
+@export var rue_cellules := 1                   # largeur de rue entre blocs (cellules)
+@export_range(0.0, 1.0) var densite := 0.62     # proportion de blocs bâtis (espacement prime)
+@export var hauteur_min := 0.5
+@export var hauteur_max := 2.6
+@export var rayon_urbain := 7.0                 # rayon du cœur plat (cellules)
 
 # ─── Reliefs périphériques ────────────────────────────────────
 @export_group("Reliefs")
-@export var relief_marge := 6
+@export var relief_marge := 8
 @export_range(1, 3) var relief_subdiv := 1
 @export var relief_hauteur := 2.2
-@export var relief_echelle := 0.20
-@export var relief_transition := 2.0
+@export var relief_echelle := 0.12
+@export var relief_transition := 3.0
 
 # ─── Circuits néon ────────────────────────────────────────────
 @export_group("Circuits")
@@ -69,11 +72,14 @@ const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 @export_group("Palette")
 @export var couleur_cyan := Color(0.30, 0.85, 1.00)
 @export var couleur_magenta := Color(1.00, 0.25, 0.78)
-@export var luminosite_lignes := 2.0
+# Finesse du trait : émission HDR des lignes. En GL Compatibility le cœur de
+# ligne fait 1 px ; l'épaisseur PERÇUE vient du glow → baisser pour un trait
+# plus fin/net, monter pour des lignes plus grasses.
+@export var luminosite_lignes := 1.5
 
 # ─── Hologramme (glow + post-process) ─────────────────────────
 @export_group("Hologramme")
-@export var glow_intensity := 1.3
+@export var glow_intensity := 1.0
 @export_range(0.0, 1.0) var scanline_intensity := 0.28
 @export var scanline_count := 240.0
 @export var scanline_speed := 0.6
@@ -98,8 +104,9 @@ var _noise: FastNoiseLite
 
 var _yaw := 0.0
 var _dragging := false
-var _cell := 1.0
 var _debug_label: Label
+var _tooltip: HoloTooltip
+var _hovered: HoloLocation3D
 
 func _ready() -> void:
 	get_viewport().physics_object_picking = true   # picking 3D (Area3D)
@@ -111,6 +118,7 @@ func _ready() -> void:
 	if post_process_interne:
 		_setup_post()
 	_setup_debug()
+	_setup_tooltip()
 	_build_all()
 
 # ─── Setup ────────────────────────────────────────────────────
@@ -123,8 +131,8 @@ func _setup_environment() -> void:
 	env.ambient_light_color = Color(0.1, 0.12, 0.18)
 	env.glow_enabled = true
 	env.glow_intensity = glow_intensity
-	env.glow_bloom = 0.25
-	env.glow_hdr_threshold = 0.9
+	env.glow_bloom = 0.12          # halo plus serré → trait plus net
+	env.glow_hdr_threshold = 1.05  # seuil relevé → moins de bouillie lumineuse
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	we.environment = env
 	add_child(we)
@@ -171,6 +179,14 @@ func _setup_debug() -> void:
 	layer.add_child(lbl)
 	_debug_label = lbl
 
+# Tooltip de lieu (au-dessus du post-process interne : layer 3 > layer 1).
+func _setup_tooltip() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 3
+	add_child(layer)
+	_tooltip = HoloTooltip.new()
+	layer.add_child(_tooltip)
+
 func _appliquer_post_uniforms() -> void:
 	_post_mat.set_shader_parameter("scanline_intensity", scanline_intensity)
 	_post_mat.set_shader_parameter("scanline_count", scanline_count)
@@ -183,7 +199,7 @@ func _cgrid() -> float:
 	return float(grille - 1) * 0.5
 
 func _world(gx: float, gy: float, y: float) -> Vector3:
-	return Vector3((gx - _cgrid()) * _cell, y, (gy - _cgrid()) * _cell)
+	return Vector3((gx - _cgrid()) * taille_cellule, y, (gy - _cgrid()) * taille_cellule)
 
 func _relief_weight(gx: float, gy: float) -> float:
 	var d := Vector2(gx - _cgrid(), gy - _cgrid()).length()
@@ -275,6 +291,9 @@ func _arete(s: SurfaceTool, p1: Vector3, p2: Vector3, w1: float, w2: float) -> i
 	HoloMesh3D.line(s, p1, p2, Color(col, 0.30 + 0.5 * w))
 	return 1
 
+# Ville par BLOCS : un bâtiment occupe `bloc_cellules`² cellules, séparé du
+# voisin par `rue_cellules` cellules de rue (espacement → arêtes non partagées,
+# lecture « circuit imprimé »). Densité = proportion de blocs bâtis.
 func _build_ville() -> void:
 	var reserved := {}
 	for l in lieux:
@@ -285,18 +304,31 @@ func _build_ville() -> void:
 	var s := HoloMesh3D.st()
 	var n := 0
 	var col := Color(couleur_cyan, 0.9)
-	for i in grille:
-		for j in grille:
-			if reserved.has(Vector2i(i, j)):
-				continue
-			if Vector2(i - _cgrid(), j - _cgrid()).length() > rayon_urbain:
-				continue
-			if rng.randf() > densite:
-				continue
-			var h := rng.randf_range(hauteur_min, hauteur_max)
-			HoloMesh3D.box(s, _world(i, j, 0.0), _cell * 0.8, h, _cell * 0.8, col)
-			n += 12
+	var pitch := bloc_cellules + rue_cellules
+	var fp := float(bloc_cellules) * taille_cellule * 0.82  # inset → rues visibles
+	var bi := 0
+	while bi < grille:
+		var bj := 0
+		while bj < grille:
+			var cx := bi + (bloc_cellules - 1) * 0.5
+			var cy := bj + (bloc_cellules - 1) * 0.5
+			if Vector2(cx - _cgrid(), cy - _cgrid()).length() <= rayon_urbain \
+					and not _bloc_reserve(reserved, bi, bj) \
+					and rng.randf() <= densite:
+				var h := rng.randf_range(hauteur_min, hauteur_max)
+				HoloMesh3D.box(s, _world(cx, cy, 0.0), fp, h, fp, col)
+				n += 12
+			bj += pitch
+		bi += pitch
 	_ajouter_mesh(_monde, HoloMesh3D.commit(s, n), "Ville")
+
+# Vrai si une cellule réservée à un lieu tombe dans l'empreinte du bloc.
+func _bloc_reserve(reserved: Dictionary, bi: int, bj: int) -> bool:
+	for di in bloc_cellules:
+		for dj in bloc_cellules:
+			if reserved.has(Vector2i(bi + di, bj + dj)):
+				return true
+	return false
 
 func _build_circuits() -> void:
 	var rng := RandomNumberGenerator.new()
@@ -318,6 +350,9 @@ func _build_circuits() -> void:
 
 # ─── Lieux (pins + anneaux + collisions, découverts only) ─────
 func _construire_lieux(liste: Array) -> void:
+	_hovered = null
+	if is_instance_valid(_tooltip):
+		_tooltip.cacher()
 	if not is_instance_valid(_lieux_node):
 		_lieux_node = Node3D.new()
 		_lieux_node.name = "Lieux"
@@ -326,28 +361,41 @@ func _construire_lieux(liste: Array) -> void:
 		_lieux_node.remove_child(c)
 		c.queue_free()
 
+	var fp := float(bloc_cellules) * taille_cellule
 	for l in liste:
 		if not l.decouvert:
 			continue  # règle stricte : absent (pin + anneau + collision)
 		var loc := HoloLocation3D.new()
 		loc.lieu_id      = l.id
-		loc.lieu_nom     = l.nom
+		loc.lieu_nom     = l.nom_affichage_fr
+		loc.tier         = l.tier
+		loc.lore         = l.lore_fr
 		loc.accent_color = couleur_magenta
 		loc.base_color   = couleur_cyan
-		loc.footprint    = _cell * 0.8
+		loc.footprint    = fp * 0.7
 		loc.base_y       = _relief_h(l.cellule.x, l.cellule.y)
-		loc.ring_radius  = _cell * 0.85
+		loc.ring_radius  = fp * 0.95
 		loc.line_shader  = LINE_SHADER
 		loc.position     = _world(l.cellule.x, l.cellule.y, 0.0)
 		loc.clique.connect(_on_lieu_clique)
+		loc.survol_change.connect(_on_survol)
 		_lieux_node.add_child(loc)
+
+func _on_survol(loc: HoloLocation3D, actif: bool) -> void:
+	if actif:
+		_hovered = loc
+		_tooltip.montrer(loc.lieu_nom, GameData.get_tier_name(loc.tier),
+				UIColors.tier_color(loc.tier), loc.lore, couleur_magenta)
+	elif _hovered == loc:
+		_hovered = null
+		_tooltip.cacher()
 
 func _on_lieu_clique(id: String) -> void:
 	lieu_selectionne.emit(id)
 	var nom := id
 	for l in lieux:
 		if l.id == id:
-			nom = l.nom
+			nom = l.nom_affichage_fr
 			break
 	print("[HoloMap3D] lieu sélectionné : %s (%s)" % [id, nom])
 	if is_instance_valid(_debug_label):
@@ -367,6 +415,18 @@ func _process(dt: float) -> void:
 	if auto_rotation:
 		_yaw += deg_to_rad(vitesse_rotation) * dt
 		_appliquer_camera()
+	_maj_tooltip()
+
+# Reprojette l'ancre 3D du pin survolé vers l'écran chaque frame → la ligne de
+# rappel et le cadre suivent le pin pendant/aprés la rotation.
+func _maj_tooltip() -> void:
+	if not is_instance_valid(_tooltip):
+		return
+	if _hovered == null or not is_instance_valid(_hovered):
+		return
+	var wp := _hovered.ancre_globale()
+	var a_lecran := not _cam.is_position_behind(wp)
+	_tooltip.positionner(_cam.unproject_position(wp), a_lecran)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -407,19 +467,32 @@ func peupler_lieux(nouvelle_liste: Array[HoloLieuData]) -> void:
 	_build_all()
 
 func _lieux_placeholder() -> Array[HoloLieuData]:
+	# [id, nom_affichage_fr, tier, lore_fr, cellule, decouvert]
 	var defs := [
-		["q_nexus",    "Nexus Central",       Vector2i(3, 3), true],
-		["q_fonderie", "Fonderie Néon",       Vector2i(1, 4), true],
-		["q_archives", "Archives Spectrales",  Vector2i(5, 2), true],
-		["q_dock",     "Docks Orbitaux",      Vector2i(4, 5), true],
-		["q_secret",   "Secteur Verrouillé",   Vector2i(2, 1), false], # non découvert : absent
+		["q_nexus", "Nexus Central", 4,
+			"Cœur de données de la mégapole, scellé depuis le Grand Crash.",
+			Vector2i(8, 8), true],
+		["q_fonderie", "Fonderie Néon", 2,
+			"Les forges automatisées tournent encore, sans personne aux commandes.",
+			Vector2i(3, 11), true],
+		["q_archives", "Archives Spectrales", 3,
+			"Des téraoctets de souvenirs volés y dérivent comme des fantômes.",
+			Vector2i(12, 4), true],
+		["q_dock", "Docks Orbitaux", 1,
+			"Rampes de lancement rouillées pointant vers un ciel mort.",
+			Vector2i(11, 12), true],
+		["q_secret", "Secteur Verrouillé", 5,
+			"Inaccessible. Aucune trace dans les registres.",
+			Vector2i(4, 3), false], # non découvert : absent
 	]
 	var out: Array[HoloLieuData] = []
 	for d in defs:
 		var l := HoloLieuData.new()
 		l.id = d[0]
-		l.nom = d[1]
-		l.cellule = d[2]
-		l.decouvert = d[3]
+		l.nom_affichage_fr = d[1]
+		l.tier = d[2]
+		l.lore_fr = d[3]
+		l.cellule = d[4]
+		l.decouvert = d[5]
 		out.append(l)
 	return out
