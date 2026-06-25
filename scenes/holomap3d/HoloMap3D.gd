@@ -84,7 +84,7 @@ const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 @export var scanline_count := 240.0
 @export var scanline_speed := 0.6
 @export_range(0.0, 0.5) var flicker_amplitude := 0.04
-@export_range(0.0, 0.02) var distortion_amplitude := 0.0035
+@export_range(0.0, 0.02) var distortion_amplitude := 0.0   # 0 = pas d'ondulation
 # Post-process interne (scanlines/flicker/distorsion sur un CanvasLayer). À
 # DÉSACTIVER quand la scène est embarquée dans un SubViewport : le post est
 # alors porté par le SubViewportContainer (cf. HoloMap3DOverlay).
