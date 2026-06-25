@@ -17,6 +17,7 @@ uniform float reveal_r = 100000.0;   // rayon de materialisation (intro)
 uniform vec4  fenetre_color : source_color = vec4(0.95, 0.85, 0.55, 1.0); // ambre chaud
 uniform float fenetre_densite = 0.16; // proportion de fenetres allumees
 uniform float fenetre_taille = 0.16;  // taille d'une fenetre (unites monde)
+uniform float fenetre_emission = 1.4; // gain d'emission des fenetres
 
 varying vec3 w_pos;
 varying vec3 w_nrm;
@@ -53,6 +54,6 @@ void fragment() {
 	float w = lit * win * tw;
 
 	ALBEDO = face_color.rgb;
-	EMISSION = fenetre_color.rgb * w * 1.4;
+	EMISSION = fenetre_color.rgb * w * fenetre_emission;
 	ALPHA = clamp(opacite + w * 0.5, 0.0, 1.0);  // fenetres allumees plus opaques
 }

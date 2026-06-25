@@ -136,16 +136,29 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 # ─── Urbanisme (Wave 4) ───────────────────────────────────────
 @export_group("Urbanisme")
 @export var skyline_radiale := true           # tours hautes au centre, bas aux bords
-@export var skyline_centre := 1.8             # facteur de hauteur au centre (downtown)
-@export var skyline_bord := 0.45              # facteur de hauteur aux bords
+@export var skyline_centre := 2.2             # facteur de hauteur au centre (downtown)
+@export var skyline_bord := 0.40              # facteur de hauteur aux bords
 @export var zonage_actif := true              # quartiers : tours centre / entrepôts périphérie
+# Îlots à fronts de rue : les cellules en bordure de rue se bâtissent presque
+# toujours (front continu), le cœur d'îlot reste creux (courettes) → la ville se
+# lit en blocs et non en bâtiments éparpillés.
+@export var ilots_fronts := true
+@export_range(0.0, 1.0) var coeur_ilot_densite := 0.30  # densité au cœur d'un îlot
+# Teinte des arêtes par quartier (downtown cyan, périphérie ambre) → quartiers lisibles.
+@export var teinte_quartiers := true
+@export var teinte_downtown := Color(0.40, 0.78, 1.00)   # accent froid du centre
+@export var teinte_peripherie := Color(1.00, 0.62, 0.34) # accent chaud des faubourgs
 @export var toits_detail_actif := true        # antennes / citernes sur les toits
 @export var enseignes_actif := true           # bannières holographiques sur quelques tours
 @export var monument_actif := true            # place + flèche-repère au centre
-@export var noeuds_actif := true              # glow aux intersections de voirie
+@export var noeuds_actif := true              # glow aux GRANDS croisements (avenue × avenue)
 @export var autoroute_actif := true           # autoroute surélevée + piliers + trafic
 @export var autoroute_hauteur := 2.6
 @export var couleur_neon := Color(0.30, 0.85, 1.00)  # base émissive des accents néon
+# Fenêtres allumées (shader de faces) : densité + gain d'émission → ville habitée.
+@export_range(0.0, 1.0) var fenetre_densite := 0.24
+@export var fenetre_emission := 1.9
+@export var couleur_fenetre := Color(0.98, 0.86, 0.58)  # ambre chaud
 
 # ─── Lieux ────────────────────────────────────────────────────
 @export_group("Lieux")
@@ -252,6 +265,9 @@ func _setup_materials() -> void:
 	_mat_faces.shader = FACE_SHADER
 	_mat_faces.set_shader_parameter("face_color", couleur_faces)
 	_mat_faces.set_shader_parameter("opacite", opacite_faces)
+	_mat_faces.set_shader_parameter("fenetre_densite", fenetre_densite)
+	_mat_faces.set_shader_parameter("fenetre_emission", fenetre_emission)
+	_mat_faces.set_shader_parameter("fenetre_color", couleur_fenetre)
 	_mat_faces.render_priority = -1
 
 	# Poussières de données (montée animée).
@@ -649,16 +665,21 @@ func _build_ville() -> void:
 	var nf := 0
 	var ss := HoloMesh3D.st()          # enseignes holographiques (néon)
 	var ns := 0
-	var col := Color(couleur_decor_bati, 0.85)
 	for x in grille:
 		for y in grille:
 			var cell := Vector2i(x, y)
 			if occ.has(cell) or _bloque.has(cell) or _est_route(x, y):
 				continue
-			if rng.randf() > densite:
+			# Front de rue dense, cœur d'îlot creux (courettes).
+			var seuil := densite
+			if ilots_fronts and not _front_de_rue(x, y):
+				seuil = densite * coeur_ilot_densite
+			if rng.randf() > seuil:
 				occ[cell] = true       # placette / espace laissé vide
 				continue
-			var g := _gabarit_rentre(x, y, occ, rng, _zone(x, y))
+			var zone := _zone(x, y)
+			var col := Color(_teinte_quartier(zone, couleur_decor_bati), 0.85)
+			var g := _gabarit_rentre(x, y, occ, rng, zone)
 			if g == null:
 				occ[cell] = true
 				continue
@@ -744,6 +765,24 @@ func _zone(cx: int, cy: int) -> int:
 func _facteur_hauteur(cx: float, cy: float) -> float:
 	var d := clampf(Vector2(cx - _cgrid(), cy - _cgrid()).length() / maxf(1.0, _cgrid()), 0.0, 1.0)
 	return lerpf(skyline_centre, skyline_bord, d)
+
+# Cellule en bordure de rue (front de bloc) : un 4-voisin est une route, OU c'est
+# le pourtour de la grille (façade donnant sur le vide).
+func _front_de_rue(x: int, y: int) -> bool:
+	if x == 0 or y == 0 or x == grille - 1 or y == grille - 1:
+		return true
+	return _est_route(x - 1, y) or _est_route(x + 1, y) \
+			or _est_route(x, y - 1) or _est_route(x, y + 1)
+
+# Teinte d'arête selon le quartier : centre froid (cyan), faubourgs chauds (ambre),
+# zone médiane inchangée. Mélange léger → reste cohérent avec la DA bleu-gris.
+func _teinte_quartier(zone: int, base: Color) -> Color:
+	if not teinte_quartiers:
+		return base
+	match zone:
+		0: return base.lerp(teinte_downtown, 0.45)
+		2: return base.lerp(teinte_peripherie, 0.32)
+		_: return base
 
 # Détail de toit : antenne+balise (tours) ou citerne (autres). Renvoie le nb de segments.
 func _detail_toit(s: SurfaceTool, centre: Vector3, sx: float, sy: float, sz: float,
@@ -860,15 +899,22 @@ func _build_autoroute() -> void:
 	mi.material_override = _mat_trafic
 	_monde.add_child(mi)
 
-# ─── Nœuds d'intersection (glints néon aux croisements) ───────
+# ─── Nœuds d'intersection (glints néon aux GRANDS croisements) ─
+# Seules les intersections avenue × avenue portent un glint (les croisements de
+# rues secondaires restaient un damier de losanges qui noyait la ville). Plus
+# petits et plus discrets.
 func _build_noeuds() -> void:
 	var s := HoloMesh3D.st()
 	var n := 0
-	var c := Color(couleur_route, 0.9)
-	var rr := taille_cellule * 0.3
+	var c := Color(couleur_route, 0.7)
+	var rr := taille_cellule * 0.2
 	for col in _cols_route:
+		if not _cols_route[col]:
+			continue
 		for row in _rows_route:
-			n += HoloMesh3D.diamond(s, _world(col, row, 0.04), rr, taille_cellule * 0.16, c)
+			if not _rows_route[row]:
+				continue
+			n += HoloMesh3D.diamond(s, _world(col, row, 0.04), rr, taille_cellule * 0.10, c)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Noeuds", _mat_neon)
 
 func _emprise_libre(x: int, y: int, emp: Vector2i, occ: Dictionary) -> bool:
