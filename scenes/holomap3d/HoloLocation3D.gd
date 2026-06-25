@@ -182,14 +182,15 @@ func _process(dt: float) -> void:
 	_t += dt
 	var pulse := 0.5 + 0.5 * sin(_t * 4.0)
 
-	# Bâtiment-lieu : trait plein lumineux (glow marqué), boosté au survol.
+	# Bâtiment-lieu : trait plein très lumineux (glow marqué) pour RESSORTIR du
+	# tissu urbain teinté par quartier ; encore boosté au survol.
 	_mat_bat.set_shader_parameter("emission_strength",
-			(3.6 + 0.5 * pulse) if _hover else 2.4)
+			(5.0 + 0.6 * pulse) if _hover else 3.6)
 
 	if is_instance_valid(_pin):
 		_pin.position.y = _pin_y + sin(_t * 2.0) * 0.06
 		_mat_pin.set_shader_parameter("emission_strength",
-				(4.2 + 0.6 * pulse) if _hover else (2.8 + 0.5 * pulse))
+				(5.8 + 0.7 * pulse) if _hover else (4.2 + 0.5 * pulse))
 
 	# Halos émis (ping radar + halo au sol) : fondu d'apparition au survol seul ;
 	# hors survol ils disparaissent (le lieu n'émet plus rien en continu, le pin
