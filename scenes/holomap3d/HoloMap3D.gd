@@ -99,6 +99,9 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 # ─── Décor d'ambiance ─────────────────────────────────────────
 @export_group("Décor")
 @export var decor_actif := true
+# Faubourgs/routes/lac GREFFÉS autour du carré (asymétriques, hors grille) :
+# cassent la symétrie du carré sans rien chevaucher du tissu existant.
+@export var exterieur_actif := true
 
 # ─── Hologramme (glow + post-process) ─────────────────────────
 @export_group("Hologramme")
@@ -188,6 +191,7 @@ var _mat_motes: ShaderMaterial
 var _mat_trafic: ShaderMaterial
 var _mat_neon: ShaderMaterial          # accents néon (enseignes, nœuds d'intersection)
 var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc tier-coloré)
+var _mat_lac: ShaderMaterial           # nappe d'eau pleine (lac satellite, hors carré)
 var _distance_cible := 15.0
 var _intro_en_cours := false
 var _mats_reveal: Array[ShaderMaterial] = []   # matériaux supportant le reveal d'intro
@@ -301,15 +305,21 @@ func _setup_materials() -> void:
 	_mat_lieu_decor.set_shader_parameter("emission_strength", lieu_decor_emission)
 	_mat_lieu_decor.set_shader_parameter("alpha_mult", 1.0)
 
+	# Lac satellite (hors carré) : nappe pleine, bleu franc et lisible.
+	_mat_lac = ShaderMaterial.new()
+	_mat_lac.shader = LINE_SHADER
+	_mat_lac.set_shader_parameter("emission_strength", 1.3)
+	_mat_lac.set_shader_parameter("alpha_mult", 1.0)
+
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -396,6 +406,8 @@ func _build_all() -> void:
 	if decor_actif:
 		_build_decor()
 	_build_ville()
+	if exterieur_actif:
+		_build_exterieur()   # faubourgs / routes / lac GREFFÉS autour du carré
 	if monument_actif:
 		_build_monument()
 	if autoroute_actif:
@@ -774,6 +786,132 @@ func _build_ville() -> void:
 		_monde.add_child(mif)
 	if ns > 0:
 		_ajouter_mesh(HoloMesh3D.commit(ss, ns), "Enseignes", _mat_neon)
+
+# ─── Extérieur : faubourgs / routes / lac greffés AUTOUR du carré ──
+# Tout est posé HORS de la grille [0,grille)² (aucun chevauchement avec le tissu
+# existant) et réparti de façon volontairement asymétrique : faubourg dense à
+# l'est, quartier-satellite détaché au nord-est, hameau au bout d'une route au
+# nord, lac au coin sud-ouest — le côté ouest reste nu. Casse la symétrie du carré.
+func _build_exterieur() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x0FA0B0
+	var s := HoloMesh3D.st()        # arêtes des faubourgs
+	var sf := HoloMesh3D.st_tri()   # faces sombres (occlusion)
+	var na := 0
+	var nf := 0
+	# Faubourgs : rect en cellules HORS grille (x ≥ grille, ou y < 0).
+	# [rect, densité, étages max] — tailles/positions inégales → asymétrie.
+	var quartiers := [
+		[Rect2(grille + 1, 6, 7, 15), 0.62, 4],   # est : faubourg dense, décalé sud
+		[Rect2(grille + 3, -9, 6, 6), 0.55, 3],   # nord-est : satellite détaché
+		[Rect2(7, -12, 8, 4), 0.50, 2],           # nord : hameau au bout de la route
+	]
+	for q in quartiers:
+		var r := _poser_quartier(s, sf, q[0], q[1], q[2], rng)
+		na += r[0]
+		nf += r[1]
+	_ajouter_mesh(HoloMesh3D.commit(s, na), "Faubourgs")
+	var fmesh := HoloMesh3D.commit(sf, nf)
+	if fmesh != null:
+		var mif := MeshInstance3D.new()
+		mif.name = "FaubourgsFaces"
+		mif.mesh = fmesh
+		mif.material_override = _mat_faces
+		_monde.add_child(mif)
+	# Routes de liaison : polylignes coudées partant du bord du carré vers les
+	# faubourgs (coudes = symétrie cassée). UV = flux animé du shader de route.
+	var sr := SurfaceTool.new()
+	sr.begin(Mesh.PRIMITIVE_LINES)
+	var nr := 0
+	var ed := float(grille - 1)   # ligne de bord du carré (point d'accroche)
+	nr += _route_ext(sr, [Vector2(ed, 9), Vector2(grille + 2, 9), Vector2(grille + 6, 10)], route_intensite_avenue)
+	nr += _route_ext(sr, [Vector2(ed, 17), Vector2(grille + 3, 18), Vector2(grille + 7, 18)], route_intensite_rue)
+	nr += _route_ext(sr, [Vector2(ed, 5), Vector2(grille + 2, 0), Vector2(grille + 5, -5)], route_intensite_rue)
+	nr += _route_ext(sr, [Vector2(10, 0), Vector2(10.5, -5), Vector2(11, -11)], route_intensite_rue)
+	if nr > 0:
+		var mir := MeshInstance3D.new()
+		mir.name = "RoutesExt"
+		mir.mesh = sr.commit()
+		mir.material_override = _mat_routes
+		_monde.add_child(mir)
+	# Lac au coin sud-ouest (nappe pleine bleue, calée contre le coin mais
+	# entièrement hors du carré → la ville borde l'eau sans la chevaucher).
+	_build_lac_ext(Vector2(-5.0, grille + 4.5), 6.0, 5.0)
+
+# Remplit un rect (cellules) de petits bâtiments épars (faubourg). Renvoie
+# [nb arêtes, nb faces] pour que l'appelant sache si les meshes sont non vides.
+func _poser_quartier(s: SurfaceTool, sf: SurfaceTool, rect: Rect2, dens: float,
+		et_max: int, rng: RandomNumberGenerator) -> Array:
+	var na := 0
+	var nf := 0
+	var occ := {}
+	var x0 := int(rect.position.x)
+	var y0 := int(rect.position.y)
+	var w := int(rect.size.x)
+	var h := int(rect.size.y)
+	var col := Color(couleur_decor_bati, 0.85)
+	for ix in w:
+		for iy in h:
+			var gx := x0 + ix
+			var gy := y0 + iy
+			var cell := Vector2i(gx, gy)
+			if occ.has(cell):
+				continue
+			if rng.randf() > dens:
+				continue
+			# Emprise 1×1, 2×1 ou 1×2 (reste dans le rect).
+			var ex := 1
+			var ey := 1
+			var roll := rng.randf()
+			if roll < 0.28 and ix + 1 < w:
+				ex = 2
+			elif roll < 0.5 and iy + 1 < h:
+				ey = 2
+			for dx in ex:
+				for dy in ey:
+					occ[Vector2i(gx + dx, gy + dy)] = true
+			var et := rng.randi_range(1, maxi(1, et_max))
+			var sx := float(ex) * taille_cellule * 0.82
+			var sz := float(ey) * taille_cellule * 0.82
+			var sy := float(et) * unite_maison
+			var centre := _world(gx + (ex - 1) * 0.5, gy + (ey - 1) * 0.5, 0.0)
+			na += HoloMesh3D.box(s, centre, sx, sy, sz, col)
+			nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, sy * FACE_INSET, sz * FACE_INSET)
+	return [na, nf]
+
+# Polyligne de route extérieure (UV.x = distance cumulée → flux animé du shader).
+func _route_ext(sr: SurfaceTool, pts_cellules: Array, inten: float) -> int:
+	var n := 0
+	var acc := 0.0
+	var y := 0.02
+	for i in range(pts_cellules.size() - 1):
+		var a := _world(pts_cellules[i].x, pts_cellules[i].y, y)
+		var b := _world(pts_cellules[i + 1].x, pts_cellules[i + 1].y, y)
+		var L := a.distance_to(b)
+		sr.set_color(Color(1, 1, 1, inten)); sr.set_uv(Vector2(acc, 0)); sr.add_vertex(a)
+		sr.set_color(Color(1, 1, 1, inten)); sr.set_uv(Vector2(acc + L, 0)); sr.add_vertex(b)
+		acc += L
+		n += 1
+	return n
+
+# Lac satellite : nappe d'eau PLEINE (éventail d'ellipse au sol), tout en bleu.
+func _build_lac_ext(centre_cell: Vector2, rx: float, ry: float) -> void:
+	var se := HoloMesh3D.st_tri()
+	var ne := 0
+	var ce := Color(couleur_eau, 0.92)
+	var y := 0.012
+	var c := _world(centre_cell.x, centre_cell.y, y)
+	var seg := 64
+	var prev := _world(centre_cell.x + rx, centre_cell.y, y)
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := _world(centre_cell.x + cos(a) * rx, centre_cell.y + sin(a) * ry, y)
+		se.set_color(ce); se.add_vertex(c)
+		se.set_color(ce); se.add_vertex(prev)
+		se.set_color(ce); se.add_vertex(cur)
+		ne += 1
+		prev = cur
+	_ajouter_mesh(HoloMesh3D.commit(se, ne), "LacExt", _mat_lac)
 
 # Premier gabarit (ordre aléatoire) dont l'emprise tient ici (pas de route /
 # décor / occupé / hors-grille sous l'empreinte).
