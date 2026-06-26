@@ -102,6 +102,8 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 # Faubourgs/routes/lac GREFFÉS autour du carré (asymétriques, hors grille) :
 # cassent la symétrie du carré sans rien chevaucher du tissu existant.
 @export var exterieur_actif := true
+# Sol : nappe de terre + maillage fin (petits carrés) qui lie tout l'ensemble.
+@export var sol_actif := true
 
 # ─── Hologramme (glow + post-process) ─────────────────────────
 @export_group("Hologramme")
@@ -192,6 +194,7 @@ var _mat_trafic: ShaderMaterial
 var _mat_neon: ShaderMaterial          # accents néon (enseignes, nœuds d'intersection)
 var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc tier-coloré)
 var _mat_lac: ShaderMaterial           # nappe d'eau pleine (lac satellite, hors carré)
+var _mat_sol: ShaderMaterial           # sol : nappe de terre + maillage fin (liant)
 var _distance_cible := 15.0
 var _intro_en_cours := false
 var _mats_reveal: Array[ShaderMaterial] = []   # matériaux supportant le reveal d'intro
@@ -217,7 +220,6 @@ func _ready() -> void:
 	_setup_materials()
 	if post_process_interne:
 		_setup_post()
-	_setup_debug()
 	if hud_actif:
 		_setup_hud()
 	_setup_tooltip()
@@ -311,15 +313,22 @@ func _setup_materials() -> void:
 	_mat_lac.set_shader_parameter("emission_strength", 1.3)
 	_mat_lac.set_shader_parameter("alpha_mult", 1.0)
 
+	# Sol : émission faible (la luminosité réelle vient des vertex colors — nappe
+	# très sombre + maillage discret) → matérialise le terrain sans écraser la ville.
+	_mat_sol = ShaderMaterial.new()
+	_mat_sol.shader = LINE_SHADER
+	_mat_sol.set_shader_parameter("emission_strength", 0.7)
+	_mat_sol.set_shader_parameter("alpha_mult", 1.0)
+
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_sol, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -400,6 +409,8 @@ func _build_all() -> void:
 
 	if socle_actif:
 		_build_socle()
+	if sol_actif:
+		_build_sol()        # nappe de terre + maillage fin : liant visuel sous tout
 	_build_routes_neon()
 	if noeuds_actif:
 		_build_noeuds()
@@ -505,6 +516,45 @@ func _build_socle() -> void:
 		n += HoloMesh3D.line(s, dir * r, dir * (r + ext),
 				Color(couleur_socle, 0.5 if long else 0.28))
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Socle")   # _mat_decor → léger glow cyan
+
+# ─── Sol : nappe de terre + maillage fin (liant visuel sous tout) ──
+# Un grand disque sombre (la « matière » du terrain) + un quadrillage fin de
+# tout petits carrés posés dessus, le tout clippé au disque (pas de bord carré).
+# Couvre la ville, le lac, les collines et les faubourgs proches → tout est
+# rattaché à un même sol. Centre décalé vers le lac pour englober l'ensemble.
+func _build_sol() -> void:
+	var sc := Vector2(6.0, 22.0)    # centre du disque-terrain (entre ville et lac)
+	var R := 34.0                   # rayon (cellules)
+	# 1) Nappe de terre pleine (disque sombre) — additif → léger relief de fond.
+	var sp := HoloMesh3D.st_tri()
+	var npq := 0
+	var c_terre := Color(0.05, 0.07, 0.10, 1.0)
+	var cw := _world(sc.x, sc.y, -0.004)
+	var seg := 96
+	var prev := _world(sc.x + R, sc.y, -0.004)
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := _world(sc.x + cos(a) * R, sc.y + sin(a) * R, -0.004)
+		sp.set_color(c_terre); sp.add_vertex(cw)
+		sp.set_color(c_terre); sp.add_vertex(prev)
+		sp.set_color(c_terre); sp.add_vertex(cur)
+		npq += 1
+		prev = cur
+	_ajouter_mesh(HoloMesh3D.commit(sp, npq), "SolTerre", _mat_sol)
+	# 2) Maillage fin (petits carrés) clippé au disque (chordes dans le cercle).
+	var sg := HoloMesh3D.st()
+	var ng := 0
+	var c_grille := Color(0.16, 0.22, 0.30, 0.42)
+	var pas := 0.5                  # demi-cellule → tout petits carrés
+	var yg := -0.003
+	var k := -R
+	while k <= R + 0.001:
+		var half := sqrt(maxf(0.0, R * R - k * k))
+		if half > 0.05:
+			ng += HoloMesh3D.line(sg, _world(sc.x + k, sc.y - half, yg), _world(sc.x + k, sc.y + half, yg), c_grille)
+			ng += HoloMesh3D.line(sg, _world(sc.x - half, sc.y + k, yg), _world(sc.x + half, sc.y + k, yg), c_grille)
+		k += pas
+	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "SolGrille", _mat_sol)
 
 # ─── Balayage radar (sweep en éventail, tourne lentement) ─────
 func _build_radar() -> void:
@@ -828,6 +878,8 @@ func _build_exterieur() -> void:
 	nr += _route_ext(sr, [Vector2(ed, 17), Vector2(grille + 3, 18), Vector2(grille + 7, 18)], route_intensite_rue)
 	nr += _route_ext(sr, [Vector2(ed, 5), Vector2(grille + 2, 0), Vector2(grille + 5, -5)], route_intensite_rue)
 	nr += _route_ext(sr, [Vector2(10, 0), Vector2(10.5, -5), Vector2(11, -11)], route_intensite_rue)
+	# Route jusqu'au lac : sort du coin sud-ouest de la ville et rejoint la rive.
+	nr += _route_ext(sr, [Vector2(2, ed), Vector2(-0.5, ed + 1.0), Vector2(-1.7, 28.6)], route_intensite_avenue)
 	if nr > 0:
 		var mir := MeshInstance3D.new()
 		mir.name = "RoutesExt"
