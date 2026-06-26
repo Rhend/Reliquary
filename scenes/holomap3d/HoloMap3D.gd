@@ -173,8 +173,7 @@ var _cam: Camera3D
 var _monde: Node3D
 var _lieux_node: Node3D
 var _mat_decor: ShaderMaterial       # arêtes du tissu bâti (éclaircies)
-var _mat_ambiance: ShaderMaterial    # parc (arbres-lignes, inchangé)
-var _mat_lac: ShaderMaterial         # nappe d'eau pleine (lac en bord de ville)
+var _mat_ambiance: ShaderMaterial    # eau / parc (inchangé)
 var _mat_routes: ShaderMaterial
 var _mat_faces: ShaderMaterial
 var _post_mat: ShaderMaterial
@@ -259,13 +258,6 @@ func _setup_materials() -> void:
 	_mat_ambiance.set_shader_parameter("emission_strength", luminosite_ambiance)
 	_mat_ambiance.set_shader_parameter("alpha_mult", 1.0)
 
-	# Lac : nappe pleine, bleu franc et lisible (émission marquée mais sous le
-	# seuil de glow) → l'eau se lit comme une masse, pas comme des traits.
-	_mat_lac = ShaderMaterial.new()
-	_mat_lac.shader = LINE_SHADER
-	_mat_lac.set_shader_parameter("emission_strength", 1.3)
-	_mat_lac.set_shader_parameter("alpha_mult", 1.0)
-
 	_mat_routes = ShaderMaterial.new()
 	_mat_routes.shader = ROUTE_SHADER
 	_mat_routes.set_shader_parameter("route_color", couleur_route)
@@ -312,12 +304,12 @@ func _setup_materials() -> void:
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -374,45 +366,6 @@ func _world(gx: float, gy: float, y: float) -> Vector3:
 func _centre_emprise(i: int, j: int, emp: Vector2i) -> Vector3:
 	return _world(i + (emp.x - 1) * 0.5, j + (emp.y - 1) * 0.5, 0.0)
 
-# ─── Silhouette urbaine (contour irrégulier — casse la forme carrée) ──
-# Rayon NORMALISÉ du contour de ville selon l'angle (1.0 ≈ milieu de bord de
-# grille). Somme d'harmoniques → péninsules et golfes : la ville n'est plus un
-# pâté carré, elle a une côte organique (et les coins du carré sont rognés).
-func _rayon_ville(ang: float) -> float:
-	return 0.88 + 0.12 * sin(ang * 3.0 + 0.6) \
-			+ 0.07 * sin(ang * 5.0 - 1.7) \
-			+ 0.05 * sin(ang * 2.0 + 2.3)
-
-# Une cellule (indices grille) tombe-t-elle dans la silhouette de la ville ?
-func _dans_ville(gx: float, gy: float) -> bool:
-	var dx := gx - _cgrid()
-	var dy := gy - _cgrid()
-	var d := sqrt(dx * dx + dy * dy) / maxf(1.0, _cgrid())
-	return d <= _rayon_ville(atan2(dy, dx))
-
-# Étendue [i0,i1] des cellules d'une COLONNE (x=col) tombant dans la ville
-# (i0 = -1 si la colonne est entièrement hors silhouette). Sert à rogner les
-# routes / trafic / autoroute sur le contour organique.
-func _etendue_colonne(col: int) -> Vector2i:
-	var i0 := -1
-	var i1 := -1
-	for y in grille:
-		if _dans_ville(col, y):
-			if i0 < 0:
-				i0 = y
-			i1 = y
-	return Vector2i(i0, i1)
-
-func _etendue_ligne(row: int) -> Vector2i:
-	var i0 := -1
-	var i1 := -1
-	for x in grille:
-		if _dans_ville(x, row):
-			if i0 < 0:
-				i0 = x
-			i1 = x
-	return Vector2i(i0, i1)
-
 # ─── Construction ─────────────────────────────────────────────
 func _build_all() -> void:
 	if not is_instance_valid(_monde):
@@ -463,30 +416,23 @@ func _build_trafic() -> void:
 	rng.seed = seed_val ^ 0xCA4F1C
 	var y := 0.03
 	var carlen := taille_cellule * 0.55
+	var lz := Vector3(0, 0, float(grille - 1) * taille_cellule)   # trajet le long de Z
+	var lx := Vector3(float(grille - 1) * taille_cellule, 0, 0)   # trajet le long de X
 	var s := SurfaceTool.new()
 	s.begin(Mesh.PRIMITIVE_LINES)
 	# Trafic hiérarchisé : grands axes plus chargés (×2) et plus rapides (×1.4).
-	# Le trajet est rogné sur la silhouette (même étendue que les routes).
 	for col in _cols_route:
-		var ec := _etendue_colonne(col)
-		if ec.x < 0:
-			continue
 		var av: bool = _cols_route[col]
 		var nb := voitures_par_voie * (2 if av else 1)
 		var spd := 1.4 if av else 1.0
-		var lz := Vector3(0, 0, float(ec.y - ec.x) * taille_cellule)
-		_semer_voitures(s, _world(col, ec.x, y), lz, carlen, rng, couleur_voiture_aller, nb, spd)
-		_semer_voitures(s, _world(col, ec.y, y), -lz, carlen, rng, couleur_voiture_retour, nb, spd)
+		_semer_voitures(s, _world(col, 0, y), lz, carlen, rng, couleur_voiture_aller, nb, spd)
+		_semer_voitures(s, _world(col, grille - 1, y), -lz, carlen, rng, couleur_voiture_retour, nb, spd)
 	for row in _rows_route:
-		var er := _etendue_ligne(row)
-		if er.x < 0:
-			continue
 		var av2: bool = _rows_route[row]
 		var nb2 := voitures_par_voie * (2 if av2 else 1)
 		var spd2 := 1.4 if av2 else 1.0
-		var lx := Vector3(float(er.y - er.x) * taille_cellule, 0, 0)
-		_semer_voitures(s, _world(er.x, row, y), lx, carlen, rng, couleur_voiture_aller, nb2, spd2)
-		_semer_voitures(s, _world(er.y, row, y), -lx, carlen, rng, couleur_voiture_retour, nb2, spd2)
+		_semer_voitures(s, _world(0, row, y), lx, carlen, rng, couleur_voiture_aller, nb2, spd2)
+		_semer_voitures(s, _world(grille - 1, row, y), -lx, carlen, rng, couleur_voiture_retour, nb2, spd2)
 	var mi := MeshInstance3D.new()
 	mi.name = "Trafic"
 	mi.mesh = s.commit()
@@ -639,27 +585,28 @@ func _marquer_routes(dest: Dictionary) -> void:
 func _est_route(x: int, y: int) -> bool:
 	return _cols_route.has(x) or _rows_route.has(y)
 
-# ─── Décor d'ambiance (lac en bord de ville + parc) ───────────
-# PLUS de fleuve diagonal (ses vaguelettes-lignes lisaient mal). Une seule masse
-# d'eau : un grand lac posé sur un coin, là où la silhouette rogne la ville → la
-# cité borde le lac. Rendu plein (cf. `_build_decor`), pas en traits.
+# ─── Décor d'ambiance (placeholder : lac + fleuve + parc) ─────
 func _calc_decor() -> void:
 	_eau.clear()
 	_parc.clear()
 	if not decor_actif:
 		return
 	var g := float(grille)
-	# Lac : grande ellipse débordant sur un coin (bord de ville).
-	var lc := Vector2(g * 0.84, g * 0.18)
-	var lrx := g * 0.30
-	var lry := g * 0.24
-	# Parc (rectangle) côté opposé.
+	# Lac (ellipse).
+	var lc := Vector2(g * 0.74, g * 0.24)
+	var lrx := g * 0.14
+	var lry := g * 0.10
+	# Parc (rectangle).
 	var px0 := int(g * 0.08); var px1 := int(g * 0.30)
 	var py0 := int(g * 0.62); var py1 := int(g * 0.84)
 	for x in grille:
 		for y in grille:
 			var fx := float(x); var fy := float(y)
-			if pow((fx - lc.x) / lrx, 2.0) + pow((fy - lc.y) / lry, 2.0) <= 1.0:
+			# Fleuve : bande diagonale traversante.
+			var d_fleuve: float = abs(fy - (0.50 * g + 0.16 * fx))
+			if d_fleuve < 1.3:
+				_eau[Vector2i(x, y)] = true
+			elif pow((fx - lc.x) / lrx, 2.0) + pow((fy - lc.y) / lry, 2.0) <= 1.0:
 				_eau[Vector2i(x, y)] = true
 			elif x >= px0 and x <= px1 and y >= py0 and y <= py1:
 				_parc[Vector2i(x, y)] = true
@@ -695,20 +642,17 @@ func _calc_lieu_sol() -> void:
 func _build_decor() -> void:
 	var s := HoloMesh3D.st()
 	var n := 0
+	var ce := Color(couleur_eau, 0.7)
 	var cp := Color(couleur_parc, 0.7)
-	# Lac : nappe PLEINE (un quad bleu par cellule d'eau, jointifs) → masse d'eau
-	# intégralement bleue, plus aucune vaguelette-trait. Mesh + matériau dédiés.
-	var se := HoloMesh3D.st_tri()
-	var ne := 0
-	var ce := Color(couleur_eau, 0.92)
-	var hw := taille_cellule * 0.5
+	# Eau : courtes vaguelettes horizontales.
 	for k in _eau:
 		var cell := k as Vector2i
 		var c := _world(cell.x, cell.y, 0.012)
-		ne += HoloMesh3D.quad_color(se,
-				c + Vector3(-hw, 0, -hw), c + Vector3(hw, 0, -hw),
-				c + Vector3(hw, 0, hw), c + Vector3(-hw, 0, hw), ce)
-	_ajouter_mesh(HoloMesh3D.commit(se, ne), "Lac", _mat_lac)
+		var hw := taille_cellule * 0.4
+		n += HoloMesh3D.line(s, c + Vector3(-hw, 0, -0.05 * taille_cellule),
+				c + Vector3(hw, 0, -0.05 * taille_cellule), ce)
+		n += HoloMesh3D.line(s, c + Vector3(-hw, 0, 0.18 * taille_cellule),
+				c + Vector3(hw, 0, 0.18 * taille_cellule), ce)
 	# Parc : petits « arbres » (croix verticale + houppier diamant) un peu épars.
 	# Les arbres SOUS un lieu sans bâtiment passent à la couleur de palier du lieu
 	# et dans un mesh à part (matériau qui glow) : la parcelle EST le lieu, elle
@@ -745,22 +689,14 @@ func _build_routes_neon() -> void:
 	var s := SurfaceTool.new()
 	s.begin(Mesh.PRIMITIVE_LINES)
 	var n := 0
+	var L := float(grille - 1) * taille_cellule
 	var y := 0.015
-	# Routes rognées sur la silhouette : chaque axe ne court que dans la ville.
 	for col in _cols_route:
-		var ec := _etendue_colonne(col)
-		if ec.x < 0:
-			continue
 		var i_col := route_intensite_avenue if _cols_route[col] else route_intensite_rue
-		var lc := float(ec.y - ec.x) * taille_cellule
-		n += _route_line(s, _world(col, ec.x, y), _world(col, ec.y, y), i_col, lc)
+		n += _route_line(s, _world(col, 0, y), _world(col, grille - 1, y), i_col, L)
 	for row in _rows_route:
-		var er := _etendue_ligne(row)
-		if er.x < 0:
-			continue
 		var i_row := route_intensite_avenue if _rows_route[row] else route_intensite_rue
-		var lr := float(er.y - er.x) * taille_cellule
-		n += _route_line(s, _world(er.x, row, y), _world(er.y, row, y), i_row, lr)
+		n += _route_line(s, _world(0, row, y), _world(grille - 1, row, y), i_row, L)
 	if n <= 0:
 		return
 	var mi := MeshInstance3D.new()
@@ -790,7 +726,7 @@ func _build_ville() -> void:
 	for x in grille:
 		for y in grille:
 			var cell := Vector2i(x, y)
-			if occ.has(cell) or _bloque.has(cell) or _est_route(x, y) or not _dans_ville(x, y):
+			if occ.has(cell) or _bloque.has(cell) or _est_route(x, y):
 				continue
 			# Front de rue dense, cœur d'îlot creux (courettes).
 			var seuil := densite
@@ -987,12 +923,8 @@ func _build_autoroute() -> void:
 	var xw := _world(col, 0, 0).x
 	var hh := autoroute_hauteur
 	var lane := taille_cellule * 0.45
-	# Rognée sur la silhouette : l'autoroute ne dépasse pas la côte de la ville.
-	var ec := _etendue_colonne(col)
-	var ai := maxi(0, ec.x)
-	var bi := ec.y if ec.y >= 0 else grille - 1
-	var z0 := _world(col, ai, 0).z
-	var z1 := _world(col, bi, 0).z
+	var z0 := _world(col, 0, 0).z
+	var z1 := _world(col, grille - 1, 0).z
 	var s := HoloMesh3D.st()
 	var n := 0
 	var c := Color(couleur_socle, 0.8)
@@ -1002,9 +934,9 @@ func _build_autoroute() -> void:
 	n += HoloMesh3D.line(s, Vector3(xw + lane, hh, z0), Vector3(xw + lane, hh, z1), c)
 	n += HoloMesh3D.line(s, Vector3(xw - lane, hh + 0.06, z0), Vector3(xw - lane, hh + 0.06, z1), rail)
 	n += HoloMesh3D.line(s, Vector3(xw + lane, hh + 0.06, z0), Vector3(xw + lane, hh + 0.06, z1), rail)
-	# Traverses + piliers vers le sol (dans le boulevard, sur l'étendue rognée).
-	var zc := ai
-	while zc <= bi:
+	# Traverses + piliers vers le sol (dans le boulevard).
+	var zc := 0
+	while zc < grille:
 		var z := _world(col, zc, 0).z
 		n += HoloMesh3D.line(s, Vector3(xw - lane, hh, z), Vector3(xw + lane, hh, z), c)
 		n += HoloMesh3D.line(s, Vector3(xw, hh, z), Vector3(xw, 0.0, z), Color(couleur_socle, 0.7))
@@ -1051,7 +983,7 @@ func _emprise_libre(x: int, y: int, emp: Vector2i, occ: Dictionary) -> bool:
 			if cx >= grille or cy >= grille:
 				return false
 			var c := Vector2i(cx, cy)
-			if occ.has(c) or _bloque.has(c) or _est_route(cx, cy) or not _dans_ville(cx, cy):
+			if occ.has(c) or _bloque.has(c) or _est_route(cx, cy):
 				return false
 	return true
 

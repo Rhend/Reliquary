@@ -63,18 +63,6 @@ static func line(s: SurfaceTool, a: Vector3, b: Vector3, col: Color) -> int:
 	s.set_color(col); s.add_vertex(b)
 	return 1
 
-# Quad PLEIN coloré (deux triangles) — vertex color lue par holo_line (additif).
-# Sert aux nappes pleines (lac) là où les arêtes-lignes ne conviennent pas.
-# /!\ SurfaceTool en PRIMITIVE_TRIANGLES (st_tri).
-static func quad_color(s: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color) -> int:
-	s.set_color(col); s.add_vertex(a)
-	s.set_color(col); s.add_vertex(b)
-	s.set_color(col); s.add_vertex(c)
-	s.set_color(col); s.add_vertex(a)
-	s.set_color(col); s.add_vertex(c)
-	s.set_color(col); s.add_vertex(d)
-	return 2
-
 # Boîte wireframe (12 arêtes) : base centrée en `c` (au sol), hauteur `sy` sur +Y.
 static func box(s: SurfaceTool, c: Vector3, sx: float, sy: float, sz: float, col: Color) -> int:
 	var hx := sx * 0.5
