@@ -836,7 +836,13 @@ func _build_exterieur() -> void:
 		_monde.add_child(mir)
 	# Lac au coin sud-ouest (nappe pleine bleue, calée contre le coin mais
 	# entièrement hors du carré → la ville borde l'eau sans la chevaucher).
-	_build_lac_ext(Vector2(-5.0, grille + 4.5), 6.0, 5.0)
+	var lac_centre := Vector2(-5.0, grille + 4.5)
+	var lac_rx := 6.0
+	var lac_ry := 5.0
+	_build_lac_ext(lac_centre, lac_rx, lac_ry)
+	# Collines tout autour du lac (dômes wireframe), sauf là où elles mordraient
+	# la ville (côté ville culé).
+	_build_collines(lac_centre, lac_rx, lac_ry, rng)
 
 # Remplit un rect (cellules) de petits bâtiments épars (faubourg). Renvoie
 # [nb arêtes, nb faces] pour que l'appelant sache si les meshes sont non vides.
@@ -912,6 +918,54 @@ func _build_lac_ext(centre_cell: Vector2, rx: float, ry: float) -> void:
 		ne += 1
 		prev = cur
 	_ajouter_mesh(HoloMesh3D.commit(se, ne), "LacExt", _mat_lac)
+
+# Collines : dômes wireframe disposés en couronne AUTOUR du lac (sur la rive),
+# avec culling de tout dôme qui mordrait la ville carrée → reliefs uniquement
+# sur les rives extérieures du lac (le côté ville reste sans collines).
+func _build_collines(lac_centre: Vector2, lac_rx: float, lac_ry: float, rng: RandomNumberGenerator) -> void:
+	var s := HoloMesh3D.st()
+	var n := 0
+	var col := Color(0.30, 0.52, 0.40)   # teinte terrain (vert sourd, distinct du bâti)
+	var nb := 16
+	for i in nb:
+		var a := TAU * float(i) / float(nb) + rng.randf_range(-0.14, 0.14)
+		var rh := rng.randf_range(1.4, 2.9)             # rayon de colline (cellules)
+		# Anneau elliptique calé sur la rive (juste au-delà du bord du lac).
+		var hx := lac_centre.x + cos(a) * (lac_rx + rh * 0.8)
+		var hy := lac_centre.y + sin(a) * (lac_ry + rh * 0.8)
+		if _chevauche_ville(hx, hy, rh + 0.6):
+			continue   # collerait à la ville → on saute (côté ville sans relief)
+		var centre := _world(hx, hy, 0.0)
+		var ht := unite_maison * rng.randf_range(2.0, 4.5)
+		n += _dome(s, centre, rh * taille_cellule, ht, col, 2, 6)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Collines", _mat_ambiance)
+
+# Dôme wireframe (colline) : `anneaux` cercles de latitude (profil hémisphérique)
+# + cercle de base + `meridiens` arcs verticaux jusqu'au sommet. Renvoie le nb d'arêtes.
+func _dome(s: SurfaceTool, c: Vector3, r: float, h: float, col: Color, anneaux: int, meridiens: int) -> int:
+	var n := 0
+	n += HoloMesh3D.circle(s, c, r, col, 24)
+	for k in range(1, anneaux + 1):
+		var t := float(k) / float(anneaux + 1)
+		n += HoloMesh3D.circle(s, c + Vector3(0, h * t, 0), r * sqrt(maxf(0.0, 1.0 - t * t)), col, 20)
+	for m in meridiens:
+		var ang := TAU * float(m) / float(meridiens)
+		var dir := Vector3(cos(ang), 0, sin(ang))
+		var prev := c + dir * r
+		var pas := 6
+		for i in range(1, pas + 1):
+			var t := float(i) / float(pas)
+			var cur := c + dir * (r * sqrt(maxf(0.0, 1.0 - t * t))) + Vector3(0, h * t, 0)
+			n += HoloMesh3D.line(s, prev, cur, col)
+			prev = cur
+	return n
+
+# Un disque (centre cellule cx,cy ; rayon r en cellules) mord-il la ville carrée
+# [−0.5, grille−0.5]² (emprise des bâtiments) ?
+func _chevauche_ville(cx: float, cy: float, r: float) -> bool:
+	var nx := clampf(cx, -0.5, float(grille) - 0.5)
+	var ny := clampf(cy, -0.5, float(grille) - 0.5)
+	return Vector2(cx - nx, cy - ny).length() < r
 
 # Premier gabarit (ordre aléatoire) dont l'emprise tient ici (pas de route /
 # décor / occupé / hors-grille sous l'empreinte).
