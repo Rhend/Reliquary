@@ -134,12 +134,12 @@ func _shoot_holo() -> void:
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_pont_profil.png")
 	print("Screenshot -> res://tests/_shot_holo_pont_profil.png")
-	# Vue rapprochée quasi top-down d'un carrefour (voies + médiane + sens + FEUX).
+	# Vue rapprochée quasi top-down du carrefour signalé (gx28-29 / gy24-25).
 	holo.distance_min = 1.0
-	holo._rig.position = Vector3(-0.4, 0.1, 0.7)
-	holo._set_yaw(deg_to_rad(8.0))
-	holo.plongee_deg = 72.0
-	holo._distance_cible = 2.0
+	holo._rig.position = Vector3(-0.22, 0.1, -1.0)
+	holo._set_yaw(deg_to_rad(2.0))
+	holo.plongee_deg = 78.0
+	holo._distance_cible = 2.6
 	await get_tree().create_timer(1.0).timeout
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_voies.png")
