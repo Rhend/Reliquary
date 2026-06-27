@@ -43,8 +43,12 @@ func _ready() -> void:
 	_ok("routes peintes", m.routes.size() > 0)
 	_ok("eau peinte", m.eaux.size() > 0)
 	_ok("parcs peints", m.parcs.size() > 0)
-	# Feuille Surélevé vide → aucun ouvrage produit.
-	_ok("surélevé vide", m.sureleve.is_empty())
+	# Calque Surélevé : 3 ponts (gris acier), altitude 2 m, sans piliers (Ouvrages
+	# = exemples génériques O01/O02 → ignorés). Pas de route surélevée.
+	_eq("nb ponts", m.ponts.size(), 3)
+	_ok("ponts à 2 m d'altitude", _ponts_altitude(m, 2.0))
+	_ok("ponts sans piliers (Ouvrages ignoré)", _aucun_pilier(m))
+	_eq("routes surélevées", m.routes_elevees.size(), 0)
 
 	print("\n════════════════════════════════")
 	print("RÉSULTAT : %d échec(s)" % _fail.size())
@@ -66,6 +70,18 @@ func _a_tour(m: HoloXlsxMap, forme: int, hauteur: float) -> bool:
 		if int(t["forme"]) == forme and is_equal_approx(t["hauteur_m"], hauteur):
 			return true
 	return false
+
+func _ponts_altitude(m: HoloXlsxMap, alt: float) -> bool:
+	for p in m.ponts:
+		if not is_equal_approx(p["altitude_m"], alt):
+			return false
+	return not m.ponts.is_empty()
+
+func _aucun_pilier(m: HoloXlsxMap) -> bool:
+	for p in m.ponts:
+		if p["piliers"]:
+			return false
+	return true
 
 func _ok(nom: String, cond: bool) -> void:
 	print(("  ✓ " if cond else "  ✗ ") + nom)

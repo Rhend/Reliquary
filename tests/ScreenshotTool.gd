@@ -114,6 +114,17 @@ func _shoot_holo() -> void:
 	crop2.resize(1050, 800, Image.INTERPOLATE_NEAREST)
 	crop2.save_png("res://tests/_shot_holo_cyl.png")
 	print("Screenshot -> res://tests/_shot_holo_cyl.png")
+	# Vue rapprochée des ponts : on recentre l'orbite sur la zone des ponts (le rig
+	# regarde ce point au lieu du centre monde) et on s'approche fortement.
+	holo.distance_min = 1.0
+	holo._rig.position = Vector3(-1.8, 0.2, 1.6)
+	holo._set_yaw(deg_to_rad(22.0))
+	holo.plongee_deg = 27.0
+	holo._distance_cible = 2.8
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_pont.png")
+	print("Screenshot -> res://tests/_shot_holo_pont.png")
 
 # ── Capture du chemin RÉEL en jeu : overlay « Carte » (gabarit Excel) ──
 func _shoot_holo_overlay() -> void:

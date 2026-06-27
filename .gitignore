@@ -15,6 +15,10 @@ tools/_icon_preview.png
 # Claude Code — local machine settings
 .claude/settings.local.json
 
+# Fichiers temporaires / sauvegardes Excel du gabarit de carte
+Carte Holo/~$*.xlsx
+Carte Holo/*_old.xlsx
+
 # OS
 .DS_Store
 Thumbs.db

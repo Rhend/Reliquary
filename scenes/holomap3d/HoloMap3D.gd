@@ -511,6 +511,8 @@ func _build_all_excel() -> void:
 	if decor_actif:
 		_build_decor()          # parcs (arbres) — _eau vide → pas de vaguelettes
 	_build_batiments_excel()
+	_build_ponts_excel()          # ouvrages du calque Surélevé (au-dessus de l'eau/route)
+	_build_routes_elevees_excel() # autoroutes surélevées (magenta) — vide pour l'instant
 	if motes_actif:
 		_build_motes()
 	if radar_actif:
@@ -803,6 +805,109 @@ func _build_batiments_excel() -> void:
 		mif.mesh = fmesh
 		mif.material_override = _mat_faces
 		_monde.add_child(mif)
+
+# ─── Ponts (calque Surélevé) : tablier + structure + garde-corps ──
+# Posés à leur altitude AU-DESSUS du sol → l'eau/route restent visibles dessous.
+# Apparence d'OUVRAGE acier (treillis + rambardes), distincte d'une route surélevée.
+func _build_ponts_excel() -> void:
+	if _excel.ponts.is_empty():
+		return
+	var s := HoloMesh3D.st()
+	var sf := HoloMesh3D.st_tri()
+	var n := 0
+	var nf := 0
+	var col := Color(0.64, 0.74, 0.86)   # acier clair (glow via _mat_decor)
+	for p in _excel.ponts:
+		var r := _bati_pont(p, col, s, sf)
+		n += r[0]; nf += r[1]
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "PontsExcel")
+	var fmesh := HoloMesh3D.commit(sf, nf)
+	if fmesh != null:
+		var mif := MeshInstance3D.new()
+		mif.name = "PontsExcelFaces"
+		mif.mesh = fmesh
+		mif.material_override = _mat_faces
+		_monde.add_child(mif)
+
+# Un pont : tablier (dalle fine) + garde-corps (main courante + montants) au-dessus,
+# treillis (corde basse + montants + diagonales) en dessous, le long des deux grands
+# côtés ; piliers optionnels (Ouvrages d'art). Renvoie [nb arêtes, nb faces].
+func _bati_pont(pont: Dictionary, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
+	var bbox: Rect2i = pont["bbox"]
+	var y := _hauteur_monde(pont["altitude_m"])
+	var ep := taille_cellule * 0.16          # épaisseur du tablier
+	var rail_h := taille_cellule * 0.42       # hauteur du garde-corps
+	var centre := _world(bbox.position.x + (bbox.size.x - 1) * 0.5,
+			bbox.position.y + (bbox.size.y - 1) * 0.5, y)
+	var sx := float(bbox.size.x) * taille_cellule * 0.98
+	var sz := float(bbox.size.y) * taille_cellule * 0.98
+	var n := 0
+	var nf := 0
+	# Tablier : dalle fine (arêtes acier + faces sombres pour l'occlusion).
+	n += HoloMesh3D.box(s, centre, sx, ep, sz, col)
+	nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, ep, sz * FACE_INSET)
+	# Travée = plus grande dimension ; garde-corps/treillis le long de cet axe.
+	var span_x := sx >= sz
+	var along := Vector3(1, 0, 0) if span_x else Vector3(0, 0, 1)
+	var side := Vector3(0, 0, 1) if span_x else Vector3(1, 0, 0)
+	var demi_long := (sx if span_x else sz) * 0.5
+	var demi_large := (sz if span_x else sx) * 0.5
+	var y0 := centre.y                        # dessous du tablier
+	var y1 := centre.y + ep                   # dessus du tablier
+	var yr := y1 + rail_h                      # main courante
+	var yb := maxf(0.02, centre.y - taille_cellule * 0.5)   # corde basse du treillis
+	var pas := maxi(2, roundi((2.0 * demi_long) / taille_cellule))
+	for cote: float in [-1.0, 1.0]:
+		var off := side * (demi_large * cote)
+		var a := centre + off - along * demi_long
+		var b := centre + off + along * demi_long
+		n += HoloMesh3D.line(s, Vector3(a.x, yr, a.z), Vector3(b.x, yr, b.z), col)   # main courante
+		n += HoloMesh3D.line(s, Vector3(a.x, yb, a.z), Vector3(b.x, yb, b.z), col)   # corde basse
+		for i in pas + 1:
+			var t := float(i) / float(pas)
+			var px := lerpf(a.x, b.x, t)
+			var pz := lerpf(a.z, b.z, t)
+			n += HoloMesh3D.line(s, Vector3(px, y1, pz), Vector3(px, yr, pz), col)   # montant garde-corps
+			n += HoloMesh3D.line(s, Vector3(px, y0, pz), Vector3(px, yb, pz), col)   # montant treillis
+			if i < pas:
+				var t2 := float(i + 1) / float(pas)
+				n += HoloMesh3D.line(s, Vector3(px, y0, pz),
+						Vector3(lerpf(a.x, b.x, t2), yb, lerpf(a.z, b.z, t2)), col)   # diagonale
+	# Piliers (si « Ouvrages d'art » le précise) : colonnes vers le sol/l'eau.
+	if pont["piliers"]:
+		for i in range(1, pas, 2):
+			var t := float(i) / float(pas)
+			var c0 := centre + along * (-demi_long + 2.0 * demi_long * t)
+			n += HoloMesh3D.line(s, Vector3(c0.x, yb, c0.z), Vector3(c0.x, 0.0, c0.z), col)
+	return [n, nf]
+
+# Routes magenta surélevées (autoroutes) : tuiles néon à leur altitude. Vide pour
+# l'instant (le calque ne porte que des ponts) ; code prêt si l'auteur en peint.
+func _build_routes_elevees_excel() -> void:
+	if _excel.routes_elevees.is_empty():
+		return
+	var s := HoloMesh3D.st_tri()
+	var n := 0
+	var y := _hauteur_monde(8.0)   # altitude par défaut d'une autoroute surélevée
+	var hw := taille_cellule * 0.5
+	for cell: Vector2i in _excel.routes_elevees:
+		var c := _world(cell.x, cell.y, y)
+		var u := float(cell.x + cell.y) * taille_cellule
+		var p0 := c + Vector3(-hw, 0, -hw)
+		var p1 := c + Vector3(hw, 0, -hw)
+		var p2 := c + Vector3(hw, 0, hw)
+		var p3 := c + Vector3(-hw, 0, hw)
+		for v in [p0, p1, p2, p0, p2, p3]:
+			s.set_color(Color(1, 1, 1, 0.85)); s.set_uv(Vector2(u, 0)); s.add_vertex(v)
+		n += 2
+	var mesh := HoloMesh3D.commit(s, n)
+	if mesh == null:
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = "RoutesEleveesExcel"
+	mi.mesh = mesh
+	mi.material_override = _mat_routes
+	_monde.add_child(mi)
 
 # Hauteur en mètres → hauteur monde (1 hauteur-défaut = 1 unité-maison × exagération).
 func _hauteur_monde(h_m: float) -> float:

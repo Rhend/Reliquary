@@ -23,15 +23,19 @@
 class_name HoloXlsxMap
 extends RefCounted
 
-enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC }
+enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC, PONT }
 enum Forme { BOITE, PYRAMIDE, CYLINDRE, DOME, GRADINS }
 
-# Centroïdes de famille (repères d'auteur ; on classe au plus proche).
+const ALTITUDE_PONT_DEFAUT := 3.0   # m, si aucune altitude tapée (faible : décolle le tablier)
+
+# Centroïdes de famille (repères d'auteur ; on classe au plus proche). Le gris
+# acier (PONT) n'apparaît que sur le calque Surélevé (jamais sur la Carte).
 const _FAMILLES := {
 	Cell.BATIMENT: Color8(0x3A, 0x42, 0x53),
 	Cell.ROUTE:    Color8(0xD6, 0x24, 0x8F),
 	Cell.EAU:      Color8(0x17, 0xC3, 0xC3),
 	Cell.PARC:     Color8(0x5E, 0x73, 0x49),
+	Cell.PONT:     Color8(0x9F, 0xB2, 0xC4),
 }
 # Familles « non-carte » → VIDE (fonds neutres du gabarit).
 const _NEUTRES := [
@@ -55,7 +59,8 @@ var routes: Array = []      # Array[Vector2i]
 var eaux: Array = []        # Array[Vector2i]
 var parcs: Array = []       # Array[Vector2i]
 var tours_orphelines: Array = []   # codes forme/hauteur posés sur une case NON-bâtiment (cf. 9c sur l'eau)
-var sureleve: Array = []    # ouvrages du calque « Surélevé » (VIDE pour l'instant)
+var ponts: Array = []       # calque « Surélevé » : {cells, bbox, altitude_m, piliers}
+var routes_elevees: Array = []   # calque « Surélevé » : cases ROUTE magenta (autoroutes surélevées)
 
 # Tables internes du classeur.
 var _fills: Array = []       # fillId → Color (ou null)
@@ -258,27 +263,95 @@ func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_te
 		elif t == XMLParser.NODE_ELEMENT_END and p.get_node_name() == "v":
 			lire_v = false
 
-# ─── Surélevé : prêt mais ne produit rien tant que c'est vide ─
+# ─── Surélevé : ponts (gris acier) + routes surélevées (magenta) ──
+# Même grille que « Carte ». On superpose au sol (l'eau/route reste visible
+# dessous, l'ouvrage est généré par-dessus à son altitude).
 func _lire_sureleve(zip: ZIPReader) -> void:
-	sureleve.clear()
+	ponts.clear()
+	routes_elevees.clear()
 	var chemin := _chemin_feuille("Surélevé")
 	if chemin == "":
 		return
 	var dico_type := {}
 	var dico_texte := {}
 	_lire_grille(zip, chemin, dico_type, dico_texte)
-	# Cases peintes (non vides) → ouvrages surélevés, altitude = chiffre de la case.
+	# Routes magenta surélevées (autoroutes) — distinctes des ponts.
 	for cell: Vector2i in dico_type:
-		if dico_type[cell] == Cell.VIDE:
+		if dico_type[cell] == Cell.ROUTE:
+			routes_elevees.append(cell)
+	# Ponts (gris acier) regroupés par adjacence 4-connexe.
+	var vus := {}
+	for cell: Vector2i in dico_type:
+		if dico_type[cell] != Cell.PONT or vus.has(cell):
 			continue
-		var h := hauteur_defaut_m
-		var f := Forme.BOITE
-		if dico_texte.has(cell):
-			var hf := _parse_hauteur_forme(dico_texte[cell])
-			if hf.x > 0.0:
-				h = hf.x
-			f = int(hf.y)
-		sureleve.append({"cell": cell, "type": dico_type[cell], "altitude_m": h, "forme": f})
+		var bloc := _flood_type(cell, dico_type, Cell.PONT, vus)
+		ponts.append(_finaliser_pont(bloc, dico_texte))
+	# Piliers : affinés depuis « Ouvrages d'art » (optionnel ; sinon sans piliers).
+	_appliquer_ouvrages(zip)
+
+# Flood-fill 4-connexe d'un bloc de type `t` dans `dico` ; marque dans `vus`.
+func _flood_type(depart: Vector2i, dico: Dictionary, t: int, vus: Dictionary) -> Array:
+	var bloc: Array = []
+	var pile: Array = [depart]
+	while not pile.is_empty():
+		var c: Vector2i = pile.pop_back()
+		if vus.has(c) or dico.get(c, Cell.VIDE) != t:
+			continue
+		vus[c] = true
+		bloc.append(c)
+		pile.append(c + Vector2i(1, 0)); pile.append(c + Vector2i(-1, 0))
+		pile.append(c + Vector2i(0, 1)); pile.append(c + Vector2i(0, -1))
+	return bloc
+
+# Bloc-pont : bbox + altitude (max des textes du bloc, défaut faible).
+func _finaliser_pont(cells: Array, dico_texte: Dictionary) -> Dictionary:
+	var minx := 1 << 30; var miny := 1 << 30; var maxx := -(1 << 30); var maxy := -(1 << 30)
+	var alt := 0.0
+	for c: Vector2i in cells:
+		minx = mini(minx, c.x); miny = mini(miny, c.y)
+		maxx = maxi(maxx, c.x); maxy = maxi(maxy, c.y)
+		if dico_texte.has(c):
+			var hf := _parse_hauteur_forme(dico_texte[c])
+			if hf.x > alt:
+				alt = hf.x
+	if alt <= 0.0:
+		alt = ALTITUDE_PONT_DEFAUT
+	return {
+		"cells": cells,
+		"bbox": Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1),
+		"altitude_m": alt,
+		"piliers": false,
+	}
+
+# « Ouvrages d'art » (optionnel) : une ligne « Pont… » avec Piliers=Oui active les
+# piliers du pont dont la bbox contient le début du tracé. Les exemples par défaut
+# (Autoroute/Passerelle) ne contiennent pas « pont » → ignorés.
+func _appliquer_ouvrages(zip: ZIPReader) -> void:
+	if ponts.is_empty():
+		return
+	var chemin := _chemin_feuille("Ouvrages d'art")
+	if chemin == "":
+		return
+	var vals := _valeurs_cellules(zip, chemin)   # B=Type, C=Tracé, F=Piliers
+	for ligne in range(2, 60):
+		var typ := str(vals.get("B%d" % ligne, "")).to_lower()
+		if not typ.contains("pont"):
+			continue
+		var piliers := str(vals.get("F%d" % ligne, "")).strip_edges().to_lower() == "oui"
+		var debut := _parse_trace_debut(str(vals.get("C%d" % ligne, "")))
+		for p in ponts:
+			if (p["bbox"] as Rect2i).has_point(debut):
+				p["piliers"] = piliers
+
+# Début d'un tracé « 12x05 → 12x55 » → Vector2i(gx, gy) (0-based, L=ligne/C=colonne).
+func _parse_trace_debut(trace: String) -> Vector2i:
+	for tok in trace.split(" "):
+		var t := tok.strip_edges().to_lower()
+		if t.contains("x"):
+			var p := t.split("x")
+			if p.size() >= 2 and p[0].is_valid_int() and p[1].is_valid_int():
+				return Vector2i(int(p[1]) - 1, int(p[0]) - 1)
+	return Vector2i(-999, -999)
 
 # ─── Regroupement des cases en éléments ───────────────────────
 func _regrouper_batiments() -> void:
@@ -467,7 +540,7 @@ func _parser(zip: ZIPReader, chemin: String) -> XMLParser:
 
 # Résumé texte (debug / test headless).
 func resume() -> String:
-	return "grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d tours=%d surélevé=%d" % [
+	return "grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d tours=%d ponts=%d routes_élevées=%d" % [
 		grille, taille_case_m, hauteur_defaut_m,
 		batiments.size(), routes.size(), eaux.size(), parcs.size(),
-		tours_orphelines.size(), sureleve.size()]
+		tours_orphelines.size(), ponts.size(), routes_elevees.size()]
