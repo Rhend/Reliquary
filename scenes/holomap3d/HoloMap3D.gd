@@ -1126,75 +1126,137 @@ func _build_routes_elevees_excel() -> void:
 func _build_terrains_excel() -> void:
 	if _excel.terrains.is_empty():
 		return
-	var sg := HoloMesh3D.st_tri()
+	var sg := HoloMesh3D.st_tri()   # gazon
 	var ng := 0
-	var s := HoloMesh3D.st()
+	var s := HoloMesh3D.st()        # structure (terre / lignes / gradins)
 	var n := 0
+	var sn := HoloMesh3D.st()       # éléments lumineux (projecteurs, écran)
+	var nn := 0
 	for t in _excel.terrains:
-		var r := _terrain_baseball(t["bbox"], sg, s)
-		ng += r[0]; n += r[1]
-	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "TerrainGazon", _mat_ambiance)
-	_ajouter_mesh(HoloMesh3D.commit(s, n), "TerrainBaseball", _mat_decor)
+		var r := _stade_baseball(t["bbox"], sg, s, sn)
+		ng += r[0]; n += r[1]; nn += r[2]
+	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "StadeGazon", _mat_ambiance)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "StadeStructure", _mat_decor)
+	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "StadeLumieres", _mat_neon)
 
-func _terrain_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool) -> Array:
-	var w := bbox.size.x
-	var h := bbox.size.y
-	var R := maxf(taille_cellule, float(mini(w, h) - 1) * taille_cellule * 0.94)
-	var B := R * 0.34
-	var home := _world(bbox.position.x, bbox.position.y + h - 1, 0.02)
-	var u := Vector3(1, 0, 0)     # ligne de 1re base (+X)
-	var v := Vector3(0, 0, -1)    # ligne de 3e base (−Z)
+# Point sur une ellipse ajustée à la bbox (k = fraction du demi-axe), à hauteur y.
+func _pt_ell(c: Vector3, ax: float, az: float, k: float, a: float, y: float) -> Vector3:
+	return c + Vector3(cos(a) * ax * k, y, sin(a) * az * k)
+
+# Anneau elliptique (échelle k, hauteur y). Renvoie le nb d'arêtes.
+func _anneau_ell(s: SurfaceTool, c: Vector3, ax: float, az: float, k: float, y: float, col: Color, seg: int) -> int:
+	var prev := _pt_ell(c, ax, az, k, 0.0, y)
+	var n := 0
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := _pt_ell(c, ax, az, k, a, y)
+		n += HoloMesh3D.line(s, prev, cur, col)
+		prev = cur
+	return n
+
+# Stade de baseball complet, ajusté à la bbox (ellipses → tout ratio remplit) :
+# terrain (gazon + losange + clôture) + GRADINS en bol + PROJECTEURS + TABLEAU.
+func _stade_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool, sn: SurfaceTool) -> Array:
+	var cx := bbox.position.x + (bbox.size.x - 1) * 0.5
+	var cy := bbox.position.y + (bbox.size.y - 1) * 0.5
+	var ax := float(bbox.size.x) * taille_cellule * 0.5
+	var az := float(bbox.size.y) * taille_cellule * 0.5
+	var c := _world(cx, cy, 0.0)
+	var kf := 0.56     # bord du terrain (clôture) en fraction du demi-axe
 	var vert := Color(0.32, 0.70, 0.36)
-	var vert_a := Color(0.16, 0.40, 0.20, 0.5)
+	var vert_a := Color(0.15, 0.38, 0.19, 0.5)
 	var terre := Color(0.80, 0.58, 0.35)
 	var blanc := Color(0.92, 0.96, 1.0)
+	var acier := Color(0.42, 0.48, 0.58)
 	var n := 0
 	var ng := 0
-	var seg := 26
-	# Gazon : éventail (quart de disque) du marbre vers l'arc.
-	var prevg := home + u * R
+	var nn := 0
+	# Marbre côté +Z ; le champ s'ouvre vers −Z (poteaux de faute à ±45° du centre).
+	var home := c + Vector3(0, 0, az * 0.40) + Vector3(0, 0.02, 0)
+	var a_rf := -PI * 0.25
+	var a_lf := -PI * 0.75
+	var rfp := _pt_ell(c, ax, az, kf, a_rf, 0.02)
+	var lfp := _pt_ell(c, ax, az, kf, a_lf, 0.02)
+	var seg := 30
+	# Gazon (territoire bon) : éventail du marbre vers l'arc de clôture.
+	var prevg := rfp
 	for i in range(1, seg + 1):
-		var a := (PI * 0.5) * float(i) / float(seg)
-		var cur := home + (u * cos(a) + v * sin(a)) * R
+		var a := lerpf(a_rf, a_lf, float(i) / float(seg))
+		var cur := _pt_ell(c, ax, az, kf, a, 0.02)
 		sg.set_color(vert_a); sg.add_vertex(home)
 		sg.set_color(vert_a); sg.add_vertex(prevg)
 		sg.set_color(vert_a); sg.add_vertex(cur)
 		ng += 1
 		prevg = cur
-	# Arc du champ extérieur (clôture) + piste d'avertissement.
-	var prev := home + u * R
-	var prev2 := home + u * (R * 0.92)
+	# Clôture + warning track.
+	var prev := rfp
+	var prev2 := _pt_ell(c, ax, az, kf * 0.93, a_rf, 0.02)
 	for i in range(1, seg + 1):
-		var a := (PI * 0.5) * float(i) / float(seg)
-		var dir := u * cos(a) + v * sin(a)
-		var cur := home + dir * R
-		var cur2 := home + dir * (R * 0.92)
+		var a := lerpf(a_rf, a_lf, float(i) / float(seg))
+		var cur := _pt_ell(c, ax, az, kf, a, 0.02)
+		var cur2 := _pt_ell(c, ax, az, kf * 0.93, a, 0.02)
 		n += HoloMesh3D.line(s, prev, cur, vert)
 		n += HoloMesh3D.line(s, prev2, cur2, Color(vert, 0.6))
 		prev = cur; prev2 = cur2
-	# Lignes de faute.
-	n += HoloMesh3D.line(s, home, home + u * R, blanc)
-	n += HoloMesh3D.line(s, home, home + v * R, blanc)
-	# Losange intérieur (base paths) + bases.
-	var first := home + u * B
-	var second := home + (u + v) * B
-	var third := home + v * B
+	# Lignes de faute + losange + bases + monticule.
+	n += HoloMesh3D.line(s, home, rfp, blanc)
+	n += HoloMesh3D.line(s, home, lfp, blanc)
+	var d1 := (rfp - home).normalized()
+	var d3 := (lfp - home).normalized()
+	var b := minf(ax, az) * kf * 0.42
+	var first := home + d1 * b
+	var third := home + d3 * b
+	var second := home + (d1 + d3) * b
 	n += HoloMesh3D.line(s, home, first, terre)
 	n += HoloMesh3D.line(s, first, second, terre)
 	n += HoloMesh3D.line(s, second, third, terre)
 	n += HoloMesh3D.line(s, third, home, terre)
 	for base: Vector3 in [first, second, third, home]:
 		n += _carre_plat(s, base, taille_cellule * 0.06, blanc)
-	# Arc de terre intérieure (limite de l'infield) + monticule du lanceur.
-	var rr := B * 1.35
-	var pv := home + u * rr
-	for i in range(1, 13):
-		var a := (PI * 0.5) * float(i) / 12.0
-		var cur := home + (u * cos(a) + v * sin(a)) * rr
-		n += HoloMesh3D.line(s, pv, cur, terre)
-		pv = cur
-	n += HoloMesh3D.circle(s, home + (u + v) * (B * 0.5), B * 0.13, terre, 12)
-	return [ng, n]
+	n += HoloMesh3D.circle(s, home + (d1 + d3) * (b * 0.5), b * 0.13, terre, 12)
+	# ── Gradins en BOL : anneaux montants de la clôture (kf) au bord (1.0) ──
+	var nb_t := 4
+	var hb := minf(ax, az) * 0.55
+	for t in nb_t:
+		var k := lerpf(kf * 1.04, 1.0, float(t) / float(nb_t - 1))
+		var yy := lerpf(0.02, hb, float(t) / float(nb_t - 1))
+		n += _anneau_ell(s, c, ax, az, k, yy, acier, 56)
+	var nb_m := 28
+	for m in nb_m:
+		var a := TAU * float(m) / float(nb_m)
+		var pv := _pt_ell(c, ax, az, kf * 1.04, a, 0.02)
+		for t in range(1, nb_t):
+			var k := lerpf(kf * 1.04, 1.0, float(t) / float(nb_t - 1))
+			var yy := lerpf(0.02, hb, float(t) / float(nb_t - 1))
+			var cur := _pt_ell(c, ax, az, k, a, yy)
+			n += HoloMesh3D.line(s, pv, cur, Color(acier, 0.55))
+			pv = cur
+	# ── Projecteurs : mâts au sommet du bol + banc lumineux (glow) ──
+	for la: float in [-0.5, -1.05, -1.6, -2.1, -2.65, 0.05]:
+		var basep := _pt_ell(c, ax, az, 1.0, la, hb)
+		var topp := basep + Vector3(0, hb * 0.55, 0)
+		n += HoloMesh3D.line(s, basep, topp, acier)
+		var bw := minf(ax, az) * 0.06
+		nn += _carre_plat(sn, topp + Vector3(0, bw, 0), bw, Color(1.0, 0.98, 0.85))
+	# ── Tableau d'affichage au centre du champ (au-delà de la clôture, −Z) ──
+	var sb := _pt_ell(c, ax, az, kf * 1.12, -PI * 0.5, hb * 0.45)
+	var sw := ax * 0.28
+	var sh := hb * 0.30
+	var p0 := sb + Vector3(-sw, sh, 0)
+	var p1 := sb + Vector3(sw, sh, 0)
+	var p2 := sb + Vector3(sw, -sh, 0)
+	var p3 := sb + Vector3(-sw, -sh, 0)
+	nn += HoloMesh3D.line(sn, p0, p1, Color(0.40, 0.90, 1.0))
+	nn += HoloMesh3D.line(sn, p1, p2, Color(0.40, 0.90, 1.0))
+	nn += HoloMesh3D.line(sn, p2, p3, Color(0.40, 0.90, 1.0))
+	nn += HoloMesh3D.line(sn, p3, p0, Color(0.40, 0.90, 1.0))
+	for i in 3:
+		var yy := lerpf(-sh, sh, float(i + 1) / 4.0)
+		nn += HoloMesh3D.line(sn, sb + Vector3(-sw, yy, 0), sb + Vector3(sw, yy, 0), Color(0.40, 0.90, 1.0, 0.5))
+	# Mâts du tableau jusqu'au sol.
+	n += HoloMesh3D.line(s, sb + Vector3(-sw * 0.7, -sh, 0), sb + Vector3(-sw * 0.7, -hb * 0.45, 0), acier)
+	n += HoloMesh3D.line(s, sb + Vector3(sw * 0.7, -sh, 0), sb + Vector3(sw * 0.7, -hb * 0.45, 0), acier)
+	return [ng, n, nn]
 
 # ─── Halo d'horizon + brume au sol (#6) ───────────────────────
 # Une « jupe » cylindrique à dégradé vertical autour de la ville (bleu-cyan en bas,
