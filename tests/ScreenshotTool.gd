@@ -134,12 +134,13 @@ func _shoot_holo() -> void:
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_pont_profil.png")
 	print("Screenshot -> res://tests/_shot_holo_pont_profil.png")
-	# Top-down sur le tour du stade (contour + médiane épurés).
+	# Vue oblique des ponts qui franchissent les ruisseaux → médiane continue sur le
+	# tablier (la route ne « se divise » plus au franchissement de l'eau).
 	holo.distance_min = 0.6
-	holo._rig.position = Vector3(3.9, 0.1, 1.73)
-	holo._set_yaw(deg_to_rad(0.0))
-	holo.plongee_deg = 87.0
-	holo._distance_cible = 3.2
+	holo._rig.position = Vector3(0.11, 0.12, 3.26)
+	holo._set_yaw(deg_to_rad(28.0))
+	holo.plongee_deg = 34.0
+	holo._distance_cible = 1.9
 	await get_tree().create_timer(1.0).timeout
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_voies.png")

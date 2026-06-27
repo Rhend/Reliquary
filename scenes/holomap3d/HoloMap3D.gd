@@ -678,22 +678,75 @@ func _run_len(R: Dictionary, c: Vector2i, dir: Vector2i) -> int:
 		n += 1; p -= dir
 	return n
 
+# FRANCHISSEMENTS : cases d'EAU qui coupent une route (route de part et d'autre, H
+# ou V) ET recouvertes par un PONT (calque Surélevé). La route les franchit → on les
+# traite comme route pour la continuité du corridor, et le tablier porte la médiane.
+func _franchissements() -> Dictionary:
+	var pont_cells := {}
+	for p in _excel.ponts:
+		for pc: Vector2i in p["cells"]:
+			pont_cells[pc] = true
+	var cut := {}
+	var T: Dictionary = _excel.type_case
+	for c: Vector2i in _excel.eaux:
+		if not pont_cells.has(c):
+			continue
+		var lr: bool = int(T.get(c + Vector2i(-1, 0), 0)) == HoloXlsxMap.Cell.ROUTE \
+			and int(T.get(c + Vector2i(1, 0), 0)) == HoloXlsxMap.Cell.ROUTE
+		var ud: bool = int(T.get(c + Vector2i(0, -1), 0)) == HoloXlsxMap.Cell.ROUTE \
+			and int(T.get(c + Vector2i(0, 1), 0)) == HoloXlsxMap.Cell.ROUTE
+		if lr or ud:
+			cut[c] = true
+	return cut
+
+# Ligne pointillée le long d'une POLYLIGNE 3D (suit un profil, ex. rampe de pont).
+func _dashes_poly(s: SurfaceTool, pts: Array, col: Color, dash: float, gap: float) -> int:
+	var n := 0
+	var on := true
+	var rem := dash
+	for i in range(pts.size() - 1):
+		var a: Vector3 = pts[i]
+		var b: Vector3 = pts[i + 1]
+		var seg := a.distance_to(b)
+		if seg < 1e-5:
+			continue
+		var dir := (b - a) / seg
+		var d := 0.0
+		while d < seg - 1e-6:
+			var step := minf(rem, seg - d)
+			if on:
+				n += HoloMesh3D.line(s, a + dir * d, a + dir * (d + step), col)
+			d += step
+			rem -= step
+			if rem <= 1e-5:
+				on = not on
+				rem = dash if on else gap
+	return n
+
 # Marquage de voirie par GRAPHE de centerline. Pour chaque case on déduit son AXE
 # dominant (corridor H ou V) → la médiane/les voies suivent le corridor, tournent
 # aux ANGLES, et s'OUVRENT aux cases « carrefour » (≥ 3 bras de corridor = T ou
 # croisement). Robuste aux largeurs : une voie 2-large reste un seul corridor.
 func _build_marquage_voirie(s: SurfaceTool) -> int:
+	# Franchissements (eau qui coupe une route MAIS couverte par un pont) → comptés
+	# comme route pour la CONTINUITÉ du corridor : le marquage traverse au lieu de
+	# « diviser » la route. La médiane VISIBLE au franchissement est portée par le
+	# tablier (cf. _bati_pont) ; ici on les ajoute juste au graphe, sans tracé plat.
+	var pont_cut := _franchissements()
 	var R := {}
 	for c: Vector2i in _excel.routes:
 		R[c] = true
+	for c: Vector2i in pont_cut:
+		R[c] = true
+	var cells: Array = R.keys()
 	var axis := {}
-	for c: Vector2i in _excel.routes:
+	for c: Vector2i in cells:
 		axis[c] = 0 if _run_len(R, c, Vector2i(1, 0)) >= _run_len(R, c, Vector2i(0, 1)) else 1
 	# Cases ouvertes (vrai T / croisement) : ≥ 3 bras SUBSTANTIELS (qui s'étendent
 	# sur ≥ 2 cases). Exclut les moignons de coin ET la voie adjacente d'une route
 	# large (qui ne s'étend que d'1 case en perpendiculaire) → les COINS tournent.
 	var ouvert := {}
-	for c: Vector2i in _excel.routes:
+	for c: Vector2i in cells:
 		var deg := 0
 		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			if R.has(c + d) and R.has(c + d + d):
@@ -703,7 +756,7 @@ func _build_marquage_voirie(s: SurfaceTool) -> int:
 	# Nœud médian (centre de la coupe transversale du corridor) + largeur.
 	var node := {}
 	var larg := {}
-	for c: Vector2i in _excel.routes:
+	for c: Vector2i in cells:
 		var ax: int = axis[c]
 		if ax == 0:
 			var lo := c.y; var hi := c.y
@@ -726,7 +779,7 @@ func _build_marquage_voirie(s: SurfaceTool) -> int:
 			continue
 		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var nc := c + d
-			if not R.has(nc) or ouvert.has(nc):
+			if not R.has(nc) or ouvert.has(nc) or pont_cut.has(nc):
 				continue
 			var na: Vector2 = node[c]
 			var nb: Vector2 = node[nc]
@@ -1002,18 +1055,28 @@ func _build_ponts_excel() -> void:
 		return
 	var s := HoloMesh3D.st()
 	var sf := HoloMesh3D.st_tri()
+	var smed := HoloMesh3D.st()        # médiane portée par le tablier (continuité route)
 	var st := SurfaceTool.new()       # trafic des ponts (réutilise holo_traffic)
 	st.begin(Mesh.PRIMITIVE_LINES)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val ^ 0x9011D5
+	var pont_cut := _franchissements()
 	var n := 0
 	var nf := 0
+	var nmed := 0
 	var ncar := 0
 	var col := Color(0.64, 0.74, 0.86)   # acier clair (glow via _mat_decor)
 	for p in _excel.ponts:
-		var r := _bati_pont(p, col, s, sf, st, rng)
-		n += r[0]; nf += r[1]; ncar += r[2]
+		# Pont « routier » (franchit une coupure route/eau) → porte la médiane.
+		var porte_route := false
+		for pc: Vector2i in p["cells"]:
+			if pont_cut.has(pc):
+				porte_route = true
+				break
+		var r := _bati_pont(p, col, s, sf, smed, st, rng, porte_route)
+		n += r[0]; nf += r[1]; ncar += r[2]; nmed += r[3]
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "PontsExcel")
+	_ajouter_mesh(HoloMesh3D.commit(smed, nmed), "PontsMarquage", _mat_neon)
 	var fmesh := HoloMesh3D.commit(sf, nf)
 	if fmesh != null:
 		var mif := MeshInstance3D.new()
@@ -1042,7 +1105,8 @@ func _profil_pont(t: float, alt: float, rf: float) -> float:
 # montants + diagonales) sous la partie élevée, piliers optionnels, et trafic.
 # Renvoie [nb arêtes, nb faces, nb voitures].
 func _bati_pont(pont: Dictionary, col: Color, s: SurfaceTool, sf: SurfaceTool,
-		st: SurfaceTool, rng: RandomNumberGenerator) -> Array:
+		smed: SurfaceTool, st: SurfaceTool, rng: RandomNumberGenerator,
+		porte_route: bool) -> Array:
 	var bbox: Rect2i = pont["bbox"]
 	var alt := _hauteur_monde(pont["altitude_m"])   # hauteur du plateau
 	var ep := taille_cellule * 0.14
@@ -1103,11 +1167,20 @@ func _bati_pont(pont: Dictionary, col: Color, s: SurfaceTool, sf: SurfaceTool,
 			if c.y > alt * 0.6:
 				n += HoloMesh3D.line(s, Vector3(c.x, maxf(0.02, c.y - taille_cellule * 0.5), c.z),
 						Vector3(c.x, 0.0, c.z), col)
+	# Médiane pointillée PORTÉE PAR LE TABLIER (suit la rampe) → continuité avec le
+	# marquage au sol de part et d'autre : la route ne « se divise » plus au pont.
+	var nmed := 0
+	if porte_route:
+		var deck: Array[Vector3] = []
+		for c2: Vector3 in centers:
+			deck.append(c2 + Vector3(0, ep + 0.02, 0))
+		nmed = _dashes_poly(smed, deck, Color(0.95, 0.55, 0.82),
+				taille_cellule * 0.5, taille_cellule * 0.35)
 	# Trafic : voitures qui montent la rampe, traversent, redescendent.
 	var ncar := 0
 	if trafic_actif:
 		ncar = _semer_pont_trafic(st, centers, ep, rng)
-	return [n, nf, ncar]
+	return [n, nf, ncar, nmed]
 
 # Sème des voitures sur le pont, sur 3 tronçons (montée / plateau / descente) dans
 # les deux sens → la circulation suit la rampe. Renvoie le nb de voitures.
