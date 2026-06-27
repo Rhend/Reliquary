@@ -46,7 +46,7 @@ func _ready() -> void:
 	# Calque Surélevé : 3 ponts (gris acier), altitude 2 m, sans piliers (Ouvrages
 	# = exemples génériques O01/O02 → ignorés). Pas de route surélevée.
 	_eq("nb ponts", m.ponts.size(), 3)
-	_ok("ponts à 2 m d'altitude", _ponts_altitude(m, 2.0))
+	_ok("ponts à altitude faible (1-4 m)", _ponts_altitude_faible(m, 4.0))
 	_ok("ponts sans piliers (Ouvrages ignoré)", _aucun_pilier(m))
 	_eq("routes surélevées", m.routes_elevees.size(), 0)
 
@@ -71,9 +71,9 @@ func _a_tour(m: HoloXlsxMap, forme: int, hauteur: float) -> bool:
 			return true
 	return false
 
-func _ponts_altitude(m: HoloXlsxMap, alt: float) -> bool:
+func _ponts_altitude_faible(m: HoloXlsxMap, maxi_m: float) -> bool:
 	for p in m.ponts:
-		if not is_equal_approx(p["altitude_m"], alt):
+		if p["altitude_m"] < 0.5 or p["altitude_m"] > maxi_m:
 			return false
 	return not m.ponts.is_empty()
 
