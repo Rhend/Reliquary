@@ -33,6 +33,7 @@ const ROUTE_SHADER := preload("res://scenes/holomap3d/holo_route.gdshader")
 const FACE_SHADER := preload("res://scenes/holomap3d/holo_face.gdshader")
 const MOTES_SHADER := preload("res://scenes/holomap3d/holo_motes.gdshader")
 const TRAFFIC_SHADER := preload("res://scenes/holomap3d/holo_traffic.gdshader")
+const WATER_SHADER := preload("res://scenes/holomap3d/holo_water.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
 const TAILLE_MONDE_CIBLE := 13.0   # largeur monde visée pour la grille Excel (cadrage caméra)
 const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit de carte par défaut
@@ -207,7 +208,9 @@ var _mat_trafic: ShaderMaterial
 var _mat_neon: ShaderMaterial          # accents néon (enseignes, nœuds d'intersection)
 var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc tier-coloré)
 var _mat_lac: ShaderMaterial           # nappe d'eau pleine (lac satellite, hors carré)
+var _mat_eau: ShaderMaterial           # eau qui s'écoule (carte Excel, shader animé)
 var _mat_sol: ShaderMaterial           # sol : nappe de terre + maillage fin (liant)
+var _discos: Array[Node3D] = []        # boules à facettes (sommets de pyramides) — tournent
 var _distance_cible := 15.0
 var _intro_en_cours := false
 var _mats_reveal: Array[ShaderMaterial] = []   # matériaux supportant le reveal d'intro
@@ -328,6 +331,11 @@ func _setup_materials() -> void:
 	_mat_lac.set_shader_parameter("emission_strength", 1.3)
 	_mat_lac.set_shader_parameter("alpha_mult", 1.0)
 
+	# Eau qui s'écoule (carte Excel) : bandes de courant animées par le shader.
+	_mat_eau = ShaderMaterial.new()
+	_mat_eau.shader = WATER_SHADER
+	_mat_eau.set_shader_parameter("eau_color", couleur_eau)
+
 	# Sol : émission faible (la luminosité réelle vient des vertex colors — nappe
 	# très sombre + maillage discret) → matérialise le terrain sans écraser la ville.
 	_mat_sol = ShaderMaterial.new()
@@ -338,12 +346,12 @@ func _setup_materials() -> void:
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_sol, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -486,8 +494,9 @@ func _build_all_excel() -> void:
 	_bloque.clear()
 	_lieu_sol.clear()
 	_lieu_arbres.clear()
-	for c: Vector2i in _excel.eaux:
-		_eau[c] = true
+	_discos.clear()
+	# L'eau est gérée par le shader animé (_build_eau_excel). On NE peuple PAS _eau
+	# → _build_decor n'ajoute pas de vaguelettes statiques par-dessus le courant.
 	for c: Vector2i in _excel.parcs:
 		_parc[c] = true
 	if socle_actif:
@@ -495,9 +504,11 @@ func _build_all_excel() -> void:
 	if sol_actif:
 		_build_sol_disc(Vector2(_cgrid(), _cgrid()), _cgrid() * 1.28 + 2.0)
 	_build_routes_excel()
-	_build_eau_excel()          # nappe d'eau pleine (lisibilité du fleuve/lac)
+	_build_trottoirs_excel()    # bordures de voirie (trottoirs)
+	_build_eclairage_excel()    # lampadaires (points lumineux chauds)
+	_build_eau_excel()          # eau qui s'écoule (shader animé)
 	if decor_actif:
-		_build_decor()          # shimmer (vaguelettes) + parcs (arbres) — réutilise _eau/_parc
+		_build_decor()          # parcs (arbres) — _eau vide → pas de vaguelettes
 	_build_batiments_excel()
 	if motes_actif:
 		_build_motes()
@@ -618,14 +629,108 @@ func _build_trafic_excel() -> void:
 	mi.material_override = _mat_trafic
 	_monde.add_child(mi)
 
-# Eau peinte → nappe pleine cyan (faible alpha) : rend le fleuve/lac lisible sous
-# les vaguelettes de _build_decor. Additif discret (sous le seuil de glow).
+# Trottoirs : trait clair (béton) le long de CHAQUE bord de voirie (côté d'une case
+# route dont le voisin n'est pas une route) → bordure de chaussée continue.
+func _build_trottoirs_excel() -> void:
+	var routes := {}
+	for c: Vector2i in _excel.routes:
+		routes[c] = true
+	var s := HoloMesh3D.st()
+	var n := 0
+	var col := Color(0.55, 0.60, 0.66)   # béton clair, discret
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for cell: Vector2i in _excel.routes:
+		for d: Vector2i in dirs:
+			if routes.has(cell + d):
+				continue
+			var seg := _cote_cellule(cell, d)
+			n += HoloMesh3D.line(s, _world(seg[0].x, seg[0].y, 0.025),
+					_world(seg[1].x, seg[1].y, 0.025), col)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "TrottoirsExcel", _mat_ambiance)
+
+# Éclairage public : petits lampadaires (mât sombre + tête chaude qui glow) posés
+# le long des axes de voirie, à intervalle régulier, décalés sur le trottoir.
+func _build_eclairage_excel() -> void:
+	var mats := HoloMesh3D.st()       # mâts (sombres)
+	var nm := 0
+	var tetes := HoloMesh3D.st()      # têtes lumineuses (glow chaud)
+	var nt := 0
+	var col_mat := Color(0.35, 0.38, 0.42)
+	var col_tete := Color(1.0, 0.82, 0.50)
+	var ht := unite_maison * 1.4      # hauteur du mât
+	var off := taille_cellule * 0.5   # décalage vers le trottoir
+	var pas := 4                       # un lampadaire toutes les 4 cases
+	for horizontal in [true, false]:
+		for run in _routes_runs(horizontal):
+			if int(run[2]) - int(run[1]) < 2:
+				continue
+			var k: int = int(run[1]) + 1
+			while k < int(run[2]):
+				var base: Vector3
+				if horizontal:
+					base = _world(k, run[0], 0.0) + Vector3(0, 0, off)
+				else:
+					base = _world(run[0], k, 0.0) + Vector3(off, 0, 0)
+				var tete := base + Vector3(0, ht, 0)
+				nm += HoloMesh3D.line(mats, base, tete, col_mat)
+				nt += HoloMesh3D.diamond(tetes, tete, taille_cellule * 0.08, unite_maison * 0.18, col_tete)
+				k += pas
+	_ajouter_mesh(HoloMesh3D.commit(mats, nm), "LampadairesMats", _mat_ambiance)
+	_ajouter_mesh(HoloMesh3D.commit(tetes, nt), "LampadairesTetes", _mat_neon)
+
+# Boule à facettes (sommet de pyramide) : 3 grands cercles orthogonaux + rayons
+# lumineux distribués sur 360° (sphère de Fibonacci). Tourne (cf. _process).
+func _build_disco(apex: Vector3, rayon_boule: float, longueur_rayons: float) -> void:
+	var node := Node3D.new()
+	node.name = "DiscoPyramide"
+	node.position = apex
+	var s := HoloMesh3D.st()
+	var n := 0
+	var blanc := Color(0.90, 0.96, 1.0)
+	n += HoloMesh3D.circle(s, Vector3.ZERO, rayon_boule, blanc, 18)   # plan XZ
+	n += _cercle_plan(s, rayon_boule, blanc, 18, true)               # plan XY
+	n += _cercle_plan(s, rayon_boule, blanc, 18, false)              # plan YZ
+	var pal := [Color(0.40, 0.90, 1.0), Color(1.0, 0.40, 0.80),
+			Color(1.0, 0.85, 0.50), Color(0.70, 1.0, 0.75)]
+	var nb := 44
+	for i in nb:
+		var dir := _point_sphere(i, nb)
+		var c: Color = pal[i % pal.size()]
+		n += HoloMesh3D.line(s, dir * rayon_boule, dir * longueur_rayons, c)
+	var mi := MeshInstance3D.new()
+	mi.name = "DiscoMesh"
+	mi.mesh = HoloMesh3D.commit(s, n)
+	mi.material_override = _mat_neon
+	node.add_child(mi)
+	_monde.add_child(node)
+	_discos.append(node)
+
+# Cercle vertical (plan XY si `xy`, sinon YZ), centré à l'origine.
+func _cercle_plan(s: SurfaceTool, r: float, col: Color, seg: int, xy: bool) -> int:
+	var prev := Vector3(r, 0, 0) if xy else Vector3(0, r, 0)
+	var n := 0
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := Vector3(cos(a) * r, sin(a) * r, 0) if xy else Vector3(0, cos(a) * r, sin(a) * r)
+		n += HoloMesh3D.line(s, prev, cur, col)
+		prev = cur
+	return n
+
+# i-ème direction d'une distribution sphérique régulière (spirale de Fibonacci).
+func _point_sphere(i: int, n: int) -> Vector3:
+	var phi := PI * (3.0 - sqrt(5.0))
+	var y := 1.0 - (float(i) / float(maxi(1, n - 1))) * 2.0
+	var rad := sqrt(maxf(0.0, 1.0 - y * y))
+	var th := phi * float(i)
+	return Vector3(cos(th) * rad, y, sin(th) * rad)
+
+# Eau peinte → nappe pleine qui S'ÉCOULE (shader holo_water, motif animé en
+# coordonnées monde → courant continu d'une case à l'autre).
 func _build_eau_excel() -> void:
 	var s := HoloMesh3D.st_tri()
 	var n := 0
 	var y := 0.008
 	var hw := taille_cellule * 0.5
-	var col := Color(couleur_eau, 0.5)
 	for cell: Vector2i in _excel.eaux:
 		var c := _world(cell.x, cell.y, y)
 		var p0 := c + Vector3(-hw, 0, -hw)
@@ -633,9 +738,9 @@ func _build_eau_excel() -> void:
 		var p2 := c + Vector3(hw, 0, hw)
 		var p3 := c + Vector3(-hw, 0, hw)
 		for v in [p0, p1, p2, p0, p2, p3]:
-			s.set_color(col); s.add_vertex(v)
+			s.set_color(Color.WHITE); s.add_vertex(v)
 		n += 2
-	_ajouter_mesh(HoloMesh3D.commit(s, n), "EauExcel", _mat_ambiance)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "EauExcel", _mat_eau)
 
 # Bâtiments lus : volumes creux (arêtes _mat_decor + faces sombres _mat_faces).
 # Boîte = silhouette extrudée de l'emprise exacte ; autres formes = paramétriques
@@ -657,8 +762,12 @@ func _build_batiments_excel() -> void:
 			var bb: Rect2i = b["bbox"]
 			var sx := float(bb.size.x) * taille_cellule * FACE_INSET
 			var sz := float(bb.size.y) * taille_cellule * FACE_INSET
-			var r := _bati_forme(_centre_bbox(bb), sx, sz, h, forme, col, s, sf)
+			var centre := _centre_bbox(bb)
+			var r := _bati_forme(centre, sx, sz, h, forme, col, s, sf)
 			n += r[0]; nf += r[1]
+			# Boule à facettes au sommet de la pyramide (rayons lumineux 360°).
+			if forme == HoloXlsxMap.Forme.PYRAMIDE:
+				_build_disco(centre + Vector3(0, h, 0), taille_cellule * 0.85, taille_cellule * 3.2)
 	for t in _excel.tours_orphelines:
 		var h := _hauteur_monde(t["hauteur_m"])
 		var rect: Rect2i = t["rect"]
@@ -1712,6 +1821,10 @@ func _process(dt: float) -> void:
 	_appliquer_camera()
 	if is_instance_valid(_radar):
 		_radar.rotation.y += deg_to_rad(radar_vitesse) * dt
+	# Boules à facettes : rotation lente → balayage des rayons lumineux.
+	for d in _discos:
+		if is_instance_valid(d):
+			d.rotation.y += dt * 0.9
 	_maj_tooltip()
 
 func _maj_tooltip() -> void:
