@@ -122,3 +122,97 @@ static func diamond(s: SurfaceTool, c: Vector3, r: float, h: float, col: Color) 
 		n += line(s, bot, mids[i], col)
 		n += line(s, mids[i], mids[(i + 1) % 4], col)
 	return n
+
+# ─── Formes paramétriques (gabarit Excel : C/P/D + Boîte/Gradins) ──
+# Anneau elliptique (plan XZ) centré en `c`, demi-axes rx (X) et rz (Z).
+static func ellipse(s: SurfaceTool, c: Vector3, rx: float, rz: float, col: Color, seg: int = 28) -> int:
+	var prev := c + Vector3(rx, 0, 0)
+	var n := 0
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := c + Vector3(cos(a) * rx, 0, sin(a) * rz)
+		n += line(s, prev, cur, col)
+		prev = cur
+	return n
+
+# Cylindre wireframe : base au sol centrée `c`, demi-emprise rx/rz, hauteur `h`.
+# `meridiens` arêtes verticales reliant les deux ellipses.
+static func cylinder(s: SurfaceTool, c: Vector3, rx: float, rz: float, h: float, col: Color, seg: int = 28, meridiens: int = 10) -> int:
+	var n := 0
+	n += ellipse(s, c, rx, rz, col, seg)
+	n += ellipse(s, c + Vector3(0, h, 0), rx, rz, col, seg)
+	for m in maxi(0, meridiens):
+		var a := TAU * float(m) / float(meridiens)
+		var p := Vector3(cos(a) * rx, 0, sin(a) * rz)
+		n += line(s, c + p, c + p + Vector3(0, h, 0), col)
+	return n
+
+# Faces pleines d'un cylindre (paroi + toit) pour l'occlusion holo.
+static func cylinder_faces(s: SurfaceTool, c: Vector3, rx: float, rz: float, h: float, seg: int = 28) -> int:
+	var n := 0
+	var top := c + Vector3(0, h, 0)
+	var prev := Vector2(rx, 0.0)
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := Vector2(cos(a) * rx, sin(a) * rz)
+		var b0 := c + Vector3(prev.x, 0, prev.y)
+		var b1 := c + Vector3(cur.x, 0, cur.y)
+		var t0 := top + Vector3(prev.x, 0, prev.y)
+		var t1 := top + Vector3(cur.x, 0, cur.y)
+		var nrm := Vector3(cos(a), 0, sin(a))
+		n += _quad(s, b0, b1, t1, t0, nrm)        # paroi
+		n += _tri(s, top, t1, t0, Vector3(0, 1, 0))  # toit (éventail)
+		prev = cur
+	return n
+
+# Pyramide wireframe : base rect sx×sz centrée `c` au sol, apex à hauteur `h`.
+static func pyramid(s: SurfaceTool, c: Vector3, sx: float, sz: float, h: float, col: Color) -> int:
+	var hx := sx * 0.5
+	var hz := sz * 0.5
+	var b := [
+		c + Vector3(-hx, 0, -hz), c + Vector3(hx, 0, -hz),
+		c + Vector3(hx, 0, hz), c + Vector3(-hx, 0, hz)]
+	var apex := c + Vector3(0, h, 0)
+	var n := 0
+	for i in 4:
+		n += line(s, b[i], b[(i + 1) % 4], col)   # base
+		n += line(s, b[i], apex, col)              # arête montante
+	return n
+
+# Faces pleines d'une pyramide (4 triangles latéraux ; base omise).
+static func pyramid_faces(s: SurfaceTool, c: Vector3, sx: float, sz: float, h: float) -> int:
+	var hx := sx * 0.5
+	var hz := sz * 0.5
+	var b := [
+		c + Vector3(-hx, 0, -hz), c + Vector3(hx, 0, -hz),
+		c + Vector3(hx, 0, hz), c + Vector3(-hx, 0, hz)]
+	var apex := c + Vector3(0, h, 0)
+	var n := 0
+	for i in 4:
+		var p0: Vector3 = b[i]
+		var p1: Vector3 = b[(i + 1) % 4]
+		var nrm := (p1 - p0).cross(apex - p0).normalized()
+		n += _tri(s, p0, p1, apex, nrm)
+	return n
+
+# Dôme wireframe (demi-ellipsoïde) : `anneaux` cercles de latitude + `meridiens`
+# arcs verticaux + cercle de base. Base au sol centrée `c`, demi-axes rx/rz, hauteur h.
+static func dome(s: SurfaceTool, c: Vector3, rx: float, rz: float, h: float, col: Color, anneaux: int = 3, meridiens: int = 10) -> int:
+	var n := 0
+	n += ellipse(s, c, rx, rz, col, 28)
+	for k in range(1, anneaux + 1):
+		var t := float(k) / float(anneaux + 1)
+		var f := sqrt(maxf(0.0, 1.0 - t * t))
+		n += ellipse(s, c + Vector3(0, h * t, 0), rx * f, rz * f, col, 24)
+	for m in maxi(0, meridiens):
+		var ang := TAU * float(m) / float(meridiens)
+		var dir := Vector3(cos(ang) * rx, 0, sin(ang) * rz)
+		var prev := c + dir
+		var pas := 6
+		for i in range(1, pas + 1):
+			var t := float(i) / float(pas)
+			var f := sqrt(maxf(0.0, 1.0 - t * t))
+			var cur := c + dir * f + Vector3(0, h * t, 0)
+			n += line(s, prev, cur, col)
+			prev = cur
+	return n

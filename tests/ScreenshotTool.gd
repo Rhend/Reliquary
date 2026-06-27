@@ -30,6 +30,7 @@ func _ready() -> void:
 		mode = "summary"
 	match mode:
 		"welcome":   await _shoot_welcome()
+		"holo":      await _shoot_holo()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -72,6 +73,46 @@ func _shoot_welcome() -> void:
 	_vp.add_child(village)
 	await get_tree().create_timer(0.8).timeout
 	_capture("res://tests/_shot_welcome.png")
+
+# ── Capture de la HoloMap 3D (carte lue depuis le gabarit Excel) ──
+# Scène 3D autonome dans un SubViewport à monde propre ; on laisse l'intro de
+# matérialisation se jouer, puis on capture sous deux angles (yaw 0 et tourné).
+func _shoot_holo() -> void:
+	var vp3d := SubViewport.new()
+	vp3d.size = Vector2i(1280, 720)
+	vp3d.own_world_3d = true
+	vp3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp3d)
+	var holo: HoloMap3D = (load("res://scenes/holomap3d/holo_map_3d.tscn") as PackedScene).instantiate()
+	vp3d.add_child(holo)
+	await get_tree().create_timer(2.2).timeout   # intro (matérialisation) terminée
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_top.png")
+	print("Screenshot -> res://tests/_shot_holo_top.png")
+	# Vue tournée (orbite) pour juger le volume des bâtiments.
+	holo.tourner(deg_to_rad(35.0))
+	holo.plongee_deg = 42.0
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	var orbit := vp3d.get_texture().get_image()
+	orbit.save_png("res://tests/_shot_holo_orbit.png")
+	print("Screenshot -> res://tests/_shot_holo_orbit.png")
+	# Zoom ×2.5 sur le cœur de la carte (pyramide / gradins / cylindre).
+	var crop := orbit.get_region(Rect2i(440, 150, 420, 320))
+	crop.resize(1050, 800, Image.INTERPOLATE_NEAREST)
+	crop.save_png("res://tests/_shot_holo_zoom.png")
+	print("Screenshot -> res://tests/_shot_holo_zoom.png")
+	# Vue de dessus rapprochée du coin nord-est (cylindre « 9c » sur le lac).
+	holo._set_yaw(0.0)
+	holo.plongee_deg = 60.0
+	holo._distance_cible = 9.0
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	var img2 := vp3d.get_texture().get_image()
+	var crop2 := img2.get_region(Rect2i(720, 40, 420, 320))
+	crop2.resize(1050, 800, Image.INTERPOLATE_NEAREST)
+	crop2.save_png("res://tests/_shot_holo_cyl.png")
+	print("Screenshot -> res://tests/_shot_holo_cyl.png")
 
 # ── Capture du village avec pastilles de notification ───────
 func _shoot_village() -> void:

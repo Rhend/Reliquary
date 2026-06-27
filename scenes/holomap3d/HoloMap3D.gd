@@ -34,6 +34,7 @@ const FACE_SHADER := preload("res://scenes/holomap3d/holo_face.gdshader")
 const MOTES_SHADER := preload("res://scenes/holomap3d/holo_motes.gdshader")
 const TRAFFIC_SHADER := preload("res://scenes/holomap3d/holo_traffic.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
+const TAILLE_MONDE_CIBLE := 13.0   # largeur monde visée pour la grille Excel (cadrage caméra)
 
 @export var seed_val := 1337
 
@@ -56,6 +57,16 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export var unite_maison := 0.14    # hauteur d'un étage / maison ≈ 3 m (unité de référence)
 @export var taille_cellule := 0.34  # côté d'une cellule au sol ≈ emprise d'une maison
 @export var grille := 28            # nb de cellules par côté
+
+# ─── Source : gabarit Excel (sinon ville procédurale) ─────────
+@export_group("Carte Excel")
+# Chemin d'un classeur .xlsx (feuilles Carte / Surélevé / Paramètres). Vide → ville
+# PROCÉDURALE (comportement historique, conservé). Renseigné → la carte est LUE au
+# runtime (ZIPReader + XMLParser) et reproduite (décor seul, aucun lieu cliquable).
+@export var chemin_xlsx := ""
+# Gain vertical appliqué aux hauteurs lues (en mètres) : 1 = échelle réelle (ville
+# plate), >1 = relief plus lisible en holo. N'affecte PAS l'emprise au sol.
+@export var exageration_hauteur := 2.5
 
 # ─── Voirie / densité ─────────────────────────────────────────
 @export_group("Voirie")
@@ -173,6 +184,7 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 @export_group("Lieux")
 @export var lieux: Array[HoloLieuData] = []
 
+var _excel: HoloXlsxMap   # modèle lu depuis le gabarit Excel (null = ville procédurale)
 var _rig: Node3D
 var _cam: Camera3D
 var _monde: Node3D
@@ -211,7 +223,9 @@ var _lieu_arbres := {}   # Vector2i → Color : cellules CHOISIES pour un arbre 
 
 func _ready() -> void:
 	get_viewport().physics_object_picking = true
-	if lieux.is_empty():
+	_charger_excel()
+	# Mode Excel = décor seul : aucun lieu placeholder (les lieux sont hors périmètre).
+	if _excel == null and lieux.is_empty():
 		lieux = _lieux_placeholder()
 	if gabarits.is_empty():
 		gabarits = _gabarits_defaut()
@@ -394,6 +408,11 @@ func _build_all() -> void:
 	for c in _monde.get_children():
 		c.queue_free()
 
+	# Carte lue depuis le gabarit Excel → rendu data-driven (décor seul).
+	if _excel != null:
+		_build_all_excel()
+		return
+
 	_calc_routes()
 	_calc_decor()
 	_calc_lieu_sol()        # cellules de décor portées par un lieu sans bâtiment
@@ -432,6 +451,252 @@ func _build_all() -> void:
 		_build_radar()
 	if intro_actif:
 		_jouer_intro()
+
+# ─── Carte Excel : lecture + rendu data-driven ────────────────
+# Charge le gabarit ; en cas de succès, cale la grille et l'échelle sur le fichier.
+func _charger_excel() -> void:
+	if chemin_xlsx.strip_edges() == "":
+		return
+	var m := HoloXlsxMap.new()
+	if not m.charger(chemin_xlsx):
+		push_warning("[HoloMap3D] gabarit illisible (%s) → ville procédurale" % chemin_xlsx)
+		return
+	_excel = m
+	grille = m.grille
+	taille_cellule = TAILLE_MONDE_CIBLE / float(maxi(1, grille))
+	# Réglages spécifiques carte Excel (décor dense au sol, pas de gratte-ciels) :
+	# cadrage plus serré, bâti plus clair/lisible, routes moins envahissantes,
+	# brume repoussée (la carte tient dans le champ proche).
+	distance = TAILLE_MONDE_CIBLE * 0.98
+	plongee_deg = 50.0
+	couleur_decor_bati = Color(0.46, 0.56, 0.74)
+	luminosite_decor = 2.2
+	route_emission_base = 0.45
+	brume_debut = 22.0
+	brume_fin = 46.0
+	print("[HoloMap3D] ", m.resume())
+
+# Rendu de la carte Excel : décor d'apparence (eau/parc/route) + bâtiments lus,
+# le tout dans la DA holo existante (socle, sol, motes, radar, intro, post-process).
+# AUCUN lieu cliquable (chantier : décor seul).
+func _build_all_excel() -> void:
+	_eau.clear()
+	_parc.clear()
+	_bloque.clear()
+	_lieu_sol.clear()
+	_lieu_arbres.clear()
+	for c: Vector2i in _excel.eaux:
+		_eau[c] = true
+	for c: Vector2i in _excel.parcs:
+		_parc[c] = true
+	if socle_actif:
+		_build_socle()
+	if sol_actif:
+		_build_sol_disc(Vector2(_cgrid(), _cgrid()), _cgrid() * 1.28 + 2.0)
+	_build_routes_excel()
+	_build_eau_excel()          # nappe d'eau pleine (lisibilité du fleuve/lac)
+	if decor_actif:
+		_build_decor()          # shimmer (vaguelettes) + parcs (arbres) — réutilise _eau/_parc
+	_build_batiments_excel()
+	if motes_actif:
+		_build_motes()
+	if radar_actif:
+		_build_radar()
+	_construire_lieux([])       # aucun lieu : décor seul
+	if intro_actif:
+		_jouer_intro()
+
+# Routes peintes (cellules magenta) → tuiles néon pleines, flux animé (holo_route).
+# UV.x = distance diagonale → le flux balaie le réseau de façon cohérente.
+func _build_routes_excel() -> void:
+	var s := HoloMesh3D.st_tri()
+	var n := 0
+	var y := 0.02
+	var hw := taille_cellule * 0.5
+	for cell: Vector2i in _excel.routes:
+		var c := _world(cell.x, cell.y, y)
+		var u := float(cell.x + cell.y) * taille_cellule
+		var col := Color(1, 1, 1, 0.7)
+		var p0 := c + Vector3(-hw, 0, -hw)
+		var p1 := c + Vector3(hw, 0, -hw)
+		var p2 := c + Vector3(hw, 0, hw)
+		var p3 := c + Vector3(-hw, 0, hw)
+		for v in [p0, p1, p2, p0, p2, p3]:
+			s.set_color(col); s.set_uv(Vector2(u, 0)); s.add_vertex(v)
+		n += 2
+	var mesh := HoloMesh3D.commit(s, n)
+	if mesh == null:
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = "RoutesExcel"
+	mi.mesh = mesh
+	mi.material_override = _mat_routes
+	_monde.add_child(mi)
+
+# Eau peinte → nappe pleine cyan (faible alpha) : rend le fleuve/lac lisible sous
+# les vaguelettes de _build_decor. Additif discret (sous le seuil de glow).
+func _build_eau_excel() -> void:
+	var s := HoloMesh3D.st_tri()
+	var n := 0
+	var y := 0.008
+	var hw := taille_cellule * 0.5
+	var col := Color(couleur_eau, 0.5)
+	for cell: Vector2i in _excel.eaux:
+		var c := _world(cell.x, cell.y, y)
+		var p0 := c + Vector3(-hw, 0, -hw)
+		var p1 := c + Vector3(hw, 0, -hw)
+		var p2 := c + Vector3(hw, 0, hw)
+		var p3 := c + Vector3(-hw, 0, hw)
+		for v in [p0, p1, p2, p0, p2, p3]:
+			s.set_color(col); s.add_vertex(v)
+		n += 2
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "EauExcel", _mat_ambiance)
+
+# Bâtiments lus : volumes creux (arêtes _mat_decor + faces sombres _mat_faces).
+# Boîte = silhouette extrudée de l'emprise exacte ; autres formes = paramétriques
+# sur la bbox du bloc. Les tours orphelines (code posé sur l'eau, ex. « 9c ») sont
+# rendues comme volume compact à leur case.
+func _build_batiments_excel() -> void:
+	var s := HoloMesh3D.st()
+	var sf := HoloMesh3D.st_tri()
+	var n := 0
+	var nf := 0
+	var col := Color(couleur_decor_bati, 0.85)
+	for b in _excel.batiments:
+		var h := _hauteur_monde(b["hauteur_m"])
+		var forme: int = b["forme"]
+		if forme == HoloXlsxMap.Forme.BOITE:
+			var r := _bati_boite(b["cells"], h, col, s, sf)
+			n += r[0]; nf += r[1]
+		else:
+			var bb: Rect2i = b["bbox"]
+			var sx := float(bb.size.x) * taille_cellule * FACE_INSET
+			var sz := float(bb.size.y) * taille_cellule * FACE_INSET
+			var r := _bati_forme(_centre_bbox(bb), sx, sz, h, forme, col, s, sf)
+			n += r[0]; nf += r[1]
+	for t in _excel.tours_orphelines:
+		var h := _hauteur_monde(t["hauteur_m"])
+		var cell: Vector2i = t["cell"]
+		var taille := taille_cellule * 1.6
+		var r := _bati_forme(_world(cell.x, cell.y, 0.0), taille, taille, h, t["forme"], col, s, sf)
+		n += r[0]; nf += r[1]
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "BatimentsExcel")
+	var fmesh := HoloMesh3D.commit(sf, nf)
+	if fmesh != null:
+		var mif := MeshInstance3D.new()
+		mif.name = "BatimentsExcelFaces"
+		mif.mesh = fmesh
+		mif.material_override = _mat_faces
+		_monde.add_child(mif)
+
+# Hauteur en mètres → hauteur monde (1 hauteur-défaut = 1 unité-maison × exagération).
+func _hauteur_monde(h_m: float) -> float:
+	var par_metre := unite_maison / maxf(0.5, _excel.hauteur_defaut_m)
+	return h_m * par_metre * exageration_hauteur
+
+func _centre_bbox(bb: Rect2i) -> Vector3:
+	return _world(bb.position.x + (bb.size.x - 1) * 0.5, bb.position.y + (bb.size.y - 1) * 0.5, 0.0)
+
+# Bloc-bâtiment BOÎTE : silhouette extrudée de l'emprise exacte (arbitraire).
+# Arêtes = contour bas + contour haut (côtés frontière) + verticales aux SEULS coins
+# de silhouette. Faces = parois (poussées vers l'intérieur) + toit par case (sous le
+# niveau des arêtes) → occlusion sans avaler les arêtes. Renvoie [nb arêtes, nb faces].
+func _bati_boite(cells: Array, h: float, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var n := 0
+	var nf := 0
+	var eps := taille_cellule * 0.06
+	var hwf := taille_cellule * 0.5
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	var minx := 1 << 30; var miny := 1 << 30; var maxx := -(1 << 30); var maxy := -(1 << 30)
+	for c: Vector2i in cells:
+		minx = mini(minx, c.x); miny = mini(miny, c.y)
+		maxx = maxi(maxx, c.x); maxy = maxi(maxy, c.y)
+		# Frontières : côtés dont le voisin n'est pas dans le bloc.
+		for d: Vector2i in dirs:
+			if setd.has(c + d):
+				continue
+			var seg := _cote_cellule(c, d)
+			var a0 := _world(seg[0].x, seg[0].y, 0.0)
+			var b0 := _world(seg[1].x, seg[1].y, 0.0)
+			var a1 := a0 + Vector3(0, h, 0)
+			var b1 := b0 + Vector3(0, h, 0)
+			n += HoloMesh3D.line(s, a0, b0, col)   # bas
+			n += HoloMesh3D.line(s, a1, b1, col)   # haut
+			var inward := Vector3(-float(d.x), 0, -float(d.y)) * eps
+			nf += HoloMesh3D._quad(sf, a0 + inward, b0 + inward, b1 + inward, a1 + inward,
+					Vector3(float(d.x), 0, float(d.y)))
+		# Toit de la case (légèrement sous le sommet → les arêtes hautes ressortent).
+		var rc := _world(c.x, c.y, h - eps)
+		var r0 := rc + Vector3(-hwf, 0, -hwf)
+		var r1 := rc + Vector3(hwf, 0, -hwf)
+		var r2 := rc + Vector3(hwf, 0, hwf)
+		var r3 := rc + Vector3(-hwf, 0, hwf)
+		nf += HoloMesh3D._quad(sf, r0, r1, r2, r3, Vector3(0, 1, 0))
+	# Verticales aux coins de silhouette uniquement (boîte = 4 coins, L = 6, etc.).
+	for vi in range(minx, maxx + 2):
+		for vj in range(miny, maxy + 2):
+			if _est_coin(setd, vi, vj):
+				var pv := _world(float(vi) - 0.5, float(vj) - 0.5, 0.0)
+				n += HoloMesh3D.line(s, pv, pv + Vector3(0, h, 0), col)
+	return [n, nf]
+
+# Côté `d` de la case `c` → [coin a, coin b] en coordonnées de grille (demi-entiers).
+func _cote_cellule(c: Vector2i, d: Vector2i) -> Array:
+	var x := float(c.x)
+	var y := float(c.y)
+	match d:
+		Vector2i(1, 0):  return [Vector2(x + 0.5, y - 0.5), Vector2(x + 0.5, y + 0.5)]
+		Vector2i(-1, 0): return [Vector2(x - 0.5, y + 0.5), Vector2(x - 0.5, y - 0.5)]
+		Vector2i(0, 1):  return [Vector2(x + 0.5, y + 0.5), Vector2(x - 0.5, y + 0.5)]
+		_:               return [Vector2(x - 0.5, y - 0.5), Vector2(x + 0.5, y - 0.5)]
+
+# Le sommet de grille (vi,vj) est-il un coin de silhouette du bloc ? (cases autour :
+# 1 ou 3 dans le bloc = coin franc ; 2 en diagonale = coin de pincement.)
+func _est_coin(setd: Dictionary, vi: int, vj: int) -> bool:
+	var a := setd.has(Vector2i(vi - 1, vj - 1))
+	var b := setd.has(Vector2i(vi, vj - 1))
+	var c := setd.has(Vector2i(vi - 1, vj))
+	var d := setd.has(Vector2i(vi, vj))
+	var k := int(a) + int(b) + int(c) + int(d)
+	if k == 1 or k == 3:
+		return true
+	if k == 2:
+		return (a and d) or (b and c)
+	return false
+
+# Volume paramétrique (Pyramide / Cylindre / Dôme / Gradins) centré sur `centre`,
+# emprise sx×sz, hauteur h. Renvoie [nb arêtes, nb faces].
+func _bati_forme(centre: Vector3, sx: float, sz: float, h: float, forme: int, col: Color,
+		s: SurfaceTool, sf: SurfaceTool) -> Array:
+	var n := 0
+	var nf := 0
+	match forme:
+		HoloXlsxMap.Forme.PYRAMIDE:
+			n += HoloMesh3D.pyramid(s, centre, sx, sz, h, col)
+			nf += HoloMesh3D.pyramid_faces(sf, centre, sx * FACE_INSET, sz * FACE_INSET, h * FACE_INSET)
+		HoloXlsxMap.Forme.CYLINDRE:
+			n += HoloMesh3D.cylinder(s, centre, sx * 0.5, sz * 0.5, h, col)
+			nf += HoloMesh3D.cylinder_faces(sf, centre, sx * 0.5 * FACE_INSET, sz * 0.5 * FACE_INSET, h * FACE_INSET)
+		HoloXlsxMap.Forme.DOME:
+			n += HoloMesh3D.dome(s, centre, sx * 0.5, sz * 0.5, h, col)
+		HoloXlsxMap.Forme.GRADINS:
+			var paliers := clampi(roundi(h / maxf(0.05, unite_maison * 0.8)), 2, 5)
+			for k in paliers:
+				var t0 := h * float(k) / float(paliers)
+				var t1 := h * float(k + 1) / float(paliers)
+				var shrink := lerpf(1.0, 0.34, float(k) / float(paliers))
+				var bx := sx * shrink
+				var bz := sz * shrink
+				var base := Vector3(centre.x, centre.y + t0, centre.z)
+				n += HoloMesh3D.box(s, base, bx, t1 - t0, bz, col)
+				nf += HoloMesh3D.box_faces(sf, base, bx * FACE_INSET, (t1 - t0), bz * FACE_INSET)
+		_:
+			n += HoloMesh3D.box(s, centre, sx, h, sz, col)
+			nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, h * FACE_INSET, sz * FACE_INSET)
+	return [n, nf]
 
 # ─── Trafic : traînées lumineuses qui circulent sur les routes ─
 func _build_trafic() -> void:
@@ -523,8 +788,10 @@ func _build_socle() -> void:
 # Couvre la ville, le lac, les collines et les faubourgs proches → tout est
 # rattaché à un même sol. Centre décalé vers le lac pour englober l'ensemble.
 func _build_sol() -> void:
-	var sc := Vector2(6.0, 22.0)    # centre du disque-terrain (entre ville et lac)
-	var R := 34.0                   # rayon (cellules)
+	_build_sol_disc(Vector2(6.0, 22.0), 34.0)   # centre entre ville et lac (procédural)
+
+# Disque-terrain + maillage fin, centré sur `sc` (cellules), rayon `R` (cellules).
+func _build_sol_disc(sc: Vector2, R: float) -> void:
 	# 1) Nappe de terre pleine (disque sombre) — additif → léger relief de fond.
 	var sp := HoloMesh3D.st_tri()
 	var npq := 0

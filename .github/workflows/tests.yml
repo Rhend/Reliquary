@@ -6,6 +6,7 @@
 #   • TestExpeditionFlow  — boucle d'expédition : stats de cycle + résumé
 #   • TestTierCap         — garde-fou plafond dur global (T2) : XP / évolution / Hall / Village
 #   • TestDropSystem      — drops de biome : taux/quantité fréquent + rare, gating Forge
+#   • TestHoloXlsx        — lecteur runtime du gabarit Excel (HoloMap) : params, formes, feuilles vides
 # Chaque scène de test quitte avec un code ≠ 0 en cas d'échec.
 
 name: tests
@@ -47,3 +48,6 @@ jobs:
 
       - name: TestDropSystem (drops de biome)
         run: $GODOT --headless --path . res://tests/TestDropSystem.tscn
+
+      - name: TestHoloXlsx (lecteur gabarit Excel HoloMap)
+        run: $GODOT --headless --path . res://tests/TestHoloXlsx.tscn
