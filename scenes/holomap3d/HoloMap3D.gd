@@ -578,13 +578,14 @@ func _build_routes_excel() -> void:
 		mi.mesh = surf
 		mi.material_override = _mat_routes
 		_monde.add_child(mi)
-	var inter := _routes_intersections()
-	# 2) Marquage au sol : médiane + lignes de voie, INTERROMPUS aux carrefours
-	#    (comme une vraie voirie) → plus de marquages qui se chevauchent.
+	var inter := _routes_intersections()             # trafic (verrou plein, sécurité)
+	var inter_marq := _routes_intersections(true)    # marquage (vrais croisements seulement)
+	# 2) Marquage au sol : médiane + lignes de voie, INTERROMPUS aux VRAIS carrefours
+	#    seulement → plus de marquages qui se chevauchent, ni de portions effacées.
 	var sm := HoloMesh3D.st()
 	var nm := 0
 	for b in _routes_bandes():
-		nm += _bande_marquage(b, sm, inter)
+		nm += _bande_marquage(b, sm, inter_marq)
 	_ajouter_mesh(HoloMesh3D.commit(sm, nm), "RoutesMarquage", _mat_neon)
 	# 3) Trafic SIMULÉ (HoloTraffic) : les voitures suivent les voies, tournent au
 	#    bon sens aux intersections et NE SE CROISENT PAS (réservation de cases).
@@ -712,14 +713,20 @@ func _bande_marquage(b: Dictionary, s: SurfaceTool, inter: Dictionary) -> int:
 		a = bend + 1
 	return n
 
-# Cases d'INTERSECTION = couvertes par une bande horizontale ET une bande verticale
-# (deux routes se croisent / un virage). Servent de « verrou plein » au trafic
-# simulé : une seule voiture à la fois → pas de croisement.
-func _routes_intersections() -> Dictionary:
+# Cases d'INTERSECTION = couvertes par une bande horizontale ET une bande verticale.
+# Pour le TRAFIC (verrou plein, sécurité) : toutes les bandes. Pour le MARQUAGE
+# (`directionnel`) : seulement le croisement de deux bandes DIRECTIONNELLES (longueur
+# > largeur) → les bandes « carrées » (routes 2-voies à largeur variable) ne sont
+# plus prises pour des carrefours, donc les marquages ne disparaissent plus.
+func _routes_intersections(directionnel := false) -> Dictionary:
 	var in_h := {}
 	var in_v := {}
 	for b in _routes_bandes():
 		var horiz: bool = b["axe"] == "H"
+		var lon: int = (int(b["x1"]) - int(b["x0"]) + 1) if horiz else (int(b["y1"]) - int(b["y0"]) + 1)
+		var lar: int = (int(b["y1"]) - int(b["y0"]) + 1) if horiz else (int(b["x1"]) - int(b["x0"]) + 1)
+		if directionnel and lon <= lar:
+			continue
 		for gx in range(int(b["x0"]), int(b["x1"]) + 1):
 			for gy in range(int(b["y0"]), int(b["y1"]) + 1):
 				if horiz:
