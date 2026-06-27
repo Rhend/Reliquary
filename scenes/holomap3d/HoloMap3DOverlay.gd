@@ -25,6 +25,9 @@ var titre := ""
 var sous_titre := ""
 var fermable := true
 var grille := 28   # taille de grille de la carte (pour placer les lieux côté appelant) — doit refléter HoloMap3D.grille
+# Gabarit Excel à reproduire (vide → ville procédurale). Renseigné → décor lu
+# depuis le fichier (la grille réelle vient alors du gabarit, pas de `grille`).
+var chemin_xlsx := ""
 
 # Couleurs du chrome (DA neutre, hors palette de rareté).
 const CHROME_TITRE := Color(0.82, 0.88, 0.98)
@@ -61,6 +64,7 @@ func _ready() -> void:
 	_map = HoloMap3D.new()
 	_map.post_process_interne = false   # le post est sur le conteneur
 	_map.grille = grille
+	_map.chemin_xlsx = chemin_xlsx      # non vide → carte lue depuis le gabarit Excel
 	if not lieux.is_empty():
 		_map.lieux = lieux
 	_map.lieu_selectionne.connect(func(id: String) -> void: lieu_selectionne.emit(id))

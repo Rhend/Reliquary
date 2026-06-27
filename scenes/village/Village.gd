@@ -985,14 +985,15 @@ func start_selected_expedition() -> void:
 
 # ─── Carte holographique 3D des expéditions (overlay) ─────────
 # API publique appelée par le bouton « Carte » de l'AdventurePanel.
-# Ouvre la carte holo 3D (orbitable) peuplée des biomes DÉCOUVERTS ; un clic sur
-# un pin sélectionne le biome puis ferme la carte (le bouton « PARTIR » prend le
-# relais). Embarque HoloMap3D dans un SubViewport via HoloMap3DOverlay.
+# Ouvre la carte holo 3D (orbitable) reproduisant le gabarit Excel (décor seul à
+# ce stade — les LIEUX/pins cliquables sont reportés à un chantier ultérieur ; la
+# sélection de biome passe par l'accordéon du panneau). Embarque HoloMap3D dans un
+# SubViewport via HoloMap3DOverlay.
 func open_expedition_map() -> void:
 	var holo := HoloMap3DOverlay.new()
 	holo.titre      = Translations.T("adv.map_title")
 	holo.sous_titre = Translations.T("adv.map_hint")
-	holo.lieux      = _discovered_biomes_as_lieux(holo.grille)
+	holo.chemin_xlsx = HoloMap3D.CHEMIN_GABARIT_DEFAUT   # carte lue depuis le gabarit
 	holo.z_index    = 400
 	holo.lieu_selectionne.connect(func(biome_id: String) -> void:
 		adv_selected_biome_id = biome_id
@@ -1002,9 +1003,9 @@ func open_expedition_map() -> void:
 	)
 	add_child(holo)
 
-# Construit la liste de lieux de la carte à partir des biomes découverts.
-# Chaque biome occupe une cellule distincte (placement déterministe pour que
-# la carte soit stable d'une ouverture à l'autre).
+# DORMANT (réutilisé quand les pins de lieux reviendront — chantier ultérieur) :
+# construit la liste de lieux de la carte à partir des biomes découverts. Chaque
+# biome occupe une cellule distincte (placement déterministe → carte stable).
 func _discovered_biomes_as_lieux(grille: int) -> Array[HoloLieuData]:
 	var ids: Array = []
 	for eid: String in GameData.entities:

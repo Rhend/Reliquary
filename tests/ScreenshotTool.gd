@@ -31,6 +31,7 @@ func _ready() -> void:
 	match mode:
 		"welcome":   await _shoot_welcome()
 		"holo":      await _shoot_holo()
+		"holo_overlay": await _shoot_holo_overlay()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -113,6 +114,19 @@ func _shoot_holo() -> void:
 	crop2.resize(1050, 800, Image.INTERPOLATE_NEAREST)
 	crop2.save_png("res://tests/_shot_holo_cyl.png")
 	print("Screenshot -> res://tests/_shot_holo_cyl.png")
+
+# ── Capture du chemin RÉEL en jeu : overlay « Carte » (gabarit Excel) ──
+func _shoot_holo_overlay() -> void:
+	var overlay := HoloMap3DOverlay.new()
+	overlay.titre = "Carte des expéditions"
+	overlay.sous_titre = "gabarit Excel"
+	overlay.chemin_xlsx = HoloMap3D.CHEMIN_GABARIT_DEFAUT
+	overlay.fermable = false
+	_vp.add_child(overlay)
+	await get_tree().create_timer(2.6).timeout
+	await RenderingServer.frame_post_draw
+	_vp.get_texture().get_image().save_png("res://tests/_shot_holo_overlay.png")
+	print("Screenshot -> res://tests/_shot_holo_overlay.png")
 
 # ── Capture du village avec pastilles de notification ───────
 func _shoot_village() -> void:
