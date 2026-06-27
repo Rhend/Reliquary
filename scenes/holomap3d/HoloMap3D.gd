@@ -507,6 +507,7 @@ func _build_all_excel() -> void:
 	_build_trottoirs_excel()    # bordures de voirie (trottoirs)
 	_build_eclairage_excel()    # lampadaires (points lumineux chauds)
 	_build_eau_excel()          # eau qui s'écoule (shader animé)
+	_build_bordure_eau_excel()  # liseré cyan vif → l'eau se détache de la carte
 	if decor_actif:
 		_build_decor()          # parcs (arbres) — _eau vide → pas de vaguelettes
 	_build_batiments_excel()
@@ -741,6 +742,25 @@ func _build_eau_excel() -> void:
 			s.set_color(Color.WHITE); s.add_vertex(v)
 		n += 2
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "EauExcel", _mat_eau)
+
+# Bordure d'eau : fin liseré cyan vif (glow) le long de chaque bord de plan d'eau
+# (côté d'une case eau dont le voisin n'est pas de l'eau) → la nappe se détache.
+func _build_bordure_eau_excel() -> void:
+	var eaux := {}
+	for c: Vector2i in _excel.eaux:
+		eaux[c] = true
+	var s := HoloMesh3D.st()
+	var n := 0
+	var col := Color(0.45, 0.95, 1.0)   # cyan vif (au-dessus du seuil de glow)
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for cell: Vector2i in _excel.eaux:
+		for d: Vector2i in dirs:
+			if eaux.has(cell + d):
+				continue
+			var seg := _cote_cellule(cell, d)
+			n += HoloMesh3D.line(s, _world(seg[0].x, seg[0].y, 0.014),
+					_world(seg[1].x, seg[1].y, 0.014), col)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "BordureEauExcel", _mat_neon)
 
 # Bâtiments lus : volumes creux (arêtes _mat_decor + faces sombres _mat_faces).
 # Boîte = silhouette extrudée de l'emprise exacte ; autres formes = paramétriques
