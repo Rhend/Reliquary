@@ -53,6 +53,9 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 @export var palier_deg := 45.0
 @export var vitesse_rotation := 18.0
 @export var auto_rotation := false
+# Déplacement libre ZQSD (se balader) : on translate le centre d'orbite.
+# Z/S = avant/arrière, Q/D = gauche/droite, E/A = monter/descendre. Vitesse ∝ zoom.
+@export var vitesse_balade := 0.55
 
 # ─── Échelle (référencée maison) ──────────────────────────────
 @export_group("Échelle")
@@ -918,42 +921,23 @@ func _toit_details_excel(bbox: Rect2i, h: float, col: Color, s: SurfaceTool,
 	var sz := float(bbox.size.y) * taille_cellule * 0.86
 	var toit := _centre_bbox(bbox) + Vector3(0, h, 0)
 	var n := 0
-	var nb := 0
-	var nban := 0
 	var grand := bbox.size.x * bbox.size.y >= 9
 	var haut := h >= _hauteur_monde(7.0)
 	var roll := rng.randf()
-	# Antenne (tours hautes/grandes) ou citerne (autres) — la plupart en ont une.
-	if haut or grand or roll < 0.55:
+	# Détail STRUCTUREL discret (antenne ou citerne) — PAS de signal lumineux
+	# (balises / enseignes retirées à la demande de l'auteur).
+	if haut or grand or roll < 0.5:
 		if haut or roll < 0.3:
-			var tip := toit + Vector3(0, maxf(unite_maison * 1.4, h * 0.4), 0)
+			var tip := toit + Vector3(0, maxf(unite_maison * 1.2, h * 0.35), 0)
 			n += HoloMesh3D.line(s, toit, tip, col)
 			var cw := taille_cellule * 0.1
 			n += HoloMesh3D.line(s, tip + Vector3(-cw, 0, 0), tip + Vector3(cw, 0, 0), col)
 			n += HoloMesh3D.line(s, tip + Vector3(0, 0, -cw), tip + Vector3(0, 0, cw), col)
-			# Balise rouge clignotante à la pointe (tours hautes / grandes).
-			if haut or grand:
-				nb += HoloMesh3D.diamond(sb, tip + Vector3(0, taille_cellule * 0.06, 0),
-						taille_cellule * 0.05, taille_cellule * 0.08, Color(1.0, 0.15, 0.12))
 		else:
 			var tw := taille_cellule * 0.2
 			var off := Vector3(sx * 0.5 - tw * 0.6, 0, sz * 0.5 - tw * 0.6)
 			n += HoloMesh3D.box(s, toit + off, tw, unite_maison * 0.7, tw, col)
-	# Enseigne holographique : bannière verticale sur une façade (grandes tours).
-	if (haut or grand) and rng.randf() < 0.5:
-		var pal := [Color(0.30, 0.85, 1.0), Color(1.0, 0.30, 0.66), Color(1.0, 0.70, 0.25)]
-		var cc: Color = pal[rng.randi() % pal.size()]
-		var bx := toit.x + sx * 0.5
-		var y0 := toit.y - h * 0.5
-		var y1 := toit.y - h * 0.08
-		var z0 := toit.z - sz * 0.22
-		var z1 := toit.z + sz * 0.22
-		nban += HoloMesh3D.line(sban, Vector3(bx, y0, z0), Vector3(bx, y1, z0), cc)
-		nban += HoloMesh3D.line(sban, Vector3(bx, y0, z1), Vector3(bx, y1, z1), cc)
-		for i in 4:
-			var yy := lerpf(y0, y1, float(i) / 3.0)
-			nban += HoloMesh3D.line(sban, Vector3(bx, yy, z0), Vector3(bx, yy, z1), Color(cc, 0.55))
-	return [n, nb, nban]
+	return [n, 0, 0]
 
 # ─── Ponts (calque Surélevé) : tablier en RAMPE + structure + garde-corps + trafic ──
 # Le tablier part du sol à un bout, monte (/), traverse en hauteur, redescend (\)
@@ -2342,6 +2326,30 @@ func _appliquer_camera() -> void:
 	_cam.position = Vector3(0, 0, distance)
 	_cam.fov = fov
 
+# Déplacement libre ZQSD : translate le centre d'orbite dans le plan horizontal de
+# la caméra (E/A pour l'altitude). Vitesse proportionnelle au zoom (distance).
+func _deplacement_zqsd(dt: float) -> void:
+	if not is_instance_valid(_cam) or not is_instance_valid(_rig):
+		return
+	var fwd := -_cam.global_transform.basis.z
+	fwd.y = 0.0
+	var right := _cam.global_transform.basis.x
+	right.y = 0.0
+	if fwd.length() > 0.001:
+		fwd = fwd.normalized()
+	if right.length() > 0.001:
+		right = right.normalized()
+	var mv := Vector3.ZERO
+	if Input.is_key_pressed(KEY_Z): mv += fwd
+	if Input.is_key_pressed(KEY_S): mv -= fwd
+	if Input.is_key_pressed(KEY_D): mv += right
+	if Input.is_key_pressed(KEY_Q): mv -= right
+	if Input.is_key_pressed(KEY_E): mv += Vector3.UP
+	if Input.is_key_pressed(KEY_A): mv -= Vector3.UP
+	if mv.length_squared() < 0.0001:
+		return
+	_rig.position += mv.normalized() * (maxf(2.0, distance) * vitesse_balade * dt)
+
 func _process(dt: float) -> void:
 	if auto_rotation:
 		_yaw += deg_to_rad(vitesse_rotation) * dt
@@ -2349,6 +2357,7 @@ func _process(dt: float) -> void:
 	if zoom_amorti and not _intro_en_cours:
 		distance = lerpf(distance, _distance_cible, 1.0 - exp(-12.0 * dt))
 	_appliquer_camera()
+	_deplacement_zqsd(dt)
 	if is_instance_valid(_radar):
 		_radar.rotation.y += deg_to_rad(radar_vitesse) * dt
 	# Boules à facettes : rotation lente → balayage des rayons lumineux.
