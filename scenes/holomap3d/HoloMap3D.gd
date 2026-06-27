@@ -507,31 +507,115 @@ func _build_all_excel() -> void:
 	if intro_actif:
 		_jouer_intro()
 
-# Routes peintes (cellules magenta) → tuiles néon pleines, flux animé (holo_route).
-# UV.x = distance diagonale → le flux balaie le réseau de façon cohérente.
+# Routes peintes (cellules magenta) → voirie « comme la map procédurale » :
+#   1) surface = tuiles magenta DISCRÈTES (corps de la chaussée peinte),
+#   2) axes néon = lignes le long des RUNS contigus (flux lumineux animé),
+#   3) trafic = traînées de phares qui circulent → vie urbaine.
 func _build_routes_excel() -> void:
-	var s := HoloMesh3D.st_tri()
-	var n := 0
-	var y := 0.02
+	# 1) Surface (tuiles atténuées).
+	var st := HoloMesh3D.st_tri()
+	var nt := 0
 	var hw := taille_cellule * 0.5
 	for cell: Vector2i in _excel.routes:
-		var c := _world(cell.x, cell.y, y)
+		var c := _world(cell.x, cell.y, 0.02)
 		var u := float(cell.x + cell.y) * taille_cellule
-		var col := Color(1, 1, 1, 0.7)
+		var col := Color(1, 1, 1, 0.3)
 		var p0 := c + Vector3(-hw, 0, -hw)
 		var p1 := c + Vector3(hw, 0, -hw)
 		var p2 := c + Vector3(hw, 0, hw)
 		var p3 := c + Vector3(-hw, 0, hw)
 		for v in [p0, p1, p2, p0, p2, p3]:
-			s.set_color(col); s.set_uv(Vector2(u, 0)); s.add_vertex(v)
-		n += 2
-	var mesh := HoloMesh3D.commit(s, n)
-	if mesh == null:
+			st.set_color(col); st.set_uv(Vector2(u, 0)); st.add_vertex(v)
+		nt += 2
+	var surf := HoloMesh3D.commit(st, nt)
+	if surf != null:
+		var mi := MeshInstance3D.new()
+		mi.name = "RoutesSurfaceExcel"
+		mi.mesh = surf
+		mi.material_override = _mat_routes
+		_monde.add_child(mi)
+	# 2) Axes néon le long des runs (flux animé via holo_route).
+	var sl := SurfaceTool.new()
+	sl.begin(Mesh.PRIMITIVE_LINES)
+	var nl := 0
+	for run in _routes_runs(true):
+		if run[2] - run[1] < 2:
+			continue
+		var a := _world(run[1], run[0], 0.04)
+		var b := _world(run[2], run[0], 0.04)
+		nl += _route_line(sl, a, b, route_intensite_avenue, a.distance_to(b))
+	for run in _routes_runs(false):
+		if run[2] - run[1] < 2:
+			continue
+		var a := _world(run[0], run[1], 0.04)
+		var b := _world(run[0], run[2], 0.04)
+		nl += _route_line(sl, a, b, route_intensite_avenue, a.distance_to(b))
+	if nl > 0:
+		var mil := MeshInstance3D.new()
+		mil.name = "RoutesAxesExcel"
+		mil.mesh = sl.commit()
+		mil.material_override = _mat_routes
+		_monde.add_child(mil)
+	# 3) Trafic.
+	if trafic_actif:
+		_build_trafic_excel()
+
+# Décompose les cases-route en RUNS contigus (par ligne si horizontal, sinon par
+# colonne). Renvoie un Array de [ligne, début, fin] (coordonnées de grille).
+func _routes_runs(horizontal: bool) -> Array:
+	var par_ligne := {}
+	for c: Vector2i in _excel.routes:
+		var ligne: int = c.y if horizontal else c.x
+		var perp: int = c.x if horizontal else c.y
+		if not par_ligne.has(ligne):
+			par_ligne[ligne] = []
+		(par_ligne[ligne] as Array).append(perp)
+	var runs: Array = []
+	for ligne in par_ligne:
+		var arr: Array = par_ligne[ligne]
+		arr.sort()
+		var debut: int = arr[0]
+		var prev: int = arr[0]
+		for i in range(1, arr.size()):
+			if arr[i] == prev + 1:
+				prev = arr[i]
+			else:
+				runs.append([ligne, debut, prev])
+				debut = arr[i]
+				prev = arr[i]
+		runs.append([ligne, debut, prev])
+	return runs
+
+# Trafic : voitures (traînées) semées sur chaque run de voirie (≥ 3 cases) dans les
+# deux sens, plus chargé sur les longs axes. Réutilise le shader holo_traffic.
+func _build_trafic_excel() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0xE7CA1
+	var s := SurfaceTool.new()
+	s.begin(Mesh.PRIMITIVE_LINES)
+	var carlen := taille_cellule * 0.55
+	var semees := false
+	for horizontal in [true, false]:
+		for run in _routes_runs(horizontal):
+			var L: int = run[2] - run[1]
+			if L < 2:
+				continue
+			var a: Vector3
+			var b: Vector3
+			if horizontal:
+				a = _world(run[1], run[0], 0.06); b = _world(run[2], run[0], 0.06)
+			else:
+				a = _world(run[0], run[1], 0.06); b = _world(run[0], run[2], 0.06)
+			var nb := clampi((L + 1) / 3, 1, 3)
+			_semer_voitures(s, a, b - a, carlen, rng, couleur_voiture_aller, nb, 1.0)
+			_semer_voitures(s, b, a - b, carlen, rng, couleur_voiture_retour, nb, 1.0)
+			semees = true
+	if not semees:
 		return
 	var mi := MeshInstance3D.new()
-	mi.name = "RoutesExcel"
-	mi.mesh = mesh
-	mi.material_override = _mat_routes
+	mi.name = "TraficExcel"
+	mi.mesh = s.commit()
+	mi.material_override = _mat_trafic
 	_monde.add_child(mi)
 
 # Eau peinte → nappe pleine cyan (faible alpha) : rend le fleuve/lac lisible sous
@@ -577,9 +661,10 @@ func _build_batiments_excel() -> void:
 			n += r[0]; nf += r[1]
 	for t in _excel.tours_orphelines:
 		var h := _hauteur_monde(t["hauteur_m"])
-		var cell: Vector2i = t["cell"]
-		var taille := taille_cellule * 1.6
-		var r := _bati_forme(_world(cell.x, cell.y, 0.0), taille, taille, h, t["forme"], col, s, sf)
+		var rect: Rect2i = t["rect"]
+		# Centrée et dimensionnée sur le plan d'eau (≈ 70 % de sa plus petite dimension).
+		var taille := float(mini(rect.size.x, rect.size.y)) * taille_cellule * 0.7
+		var r := _bati_forme(_centre_bbox(rect), taille, taille, h, t["forme"], col, s, sf)
 		n += r[0]; nf += r[1]
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "BatimentsExcel")
 	var fmesh := HoloMesh3D.commit(sf, nf)

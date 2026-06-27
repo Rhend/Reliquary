@@ -32,6 +32,13 @@ func _ready() -> void:
 	# « 9c » est posé sur l'eau → tour orpheline cylindre 9 m (cf. chantier).
 	_eq("nb tours orphelines", m.tours_orphelines.size(), 1)
 	_ok("cylindre 9 m (tour)", _a_tour(m, HoloXlsxMap.Forme.CYLINDRE, 9.0))
+	# La tour se centre sur le plan d'eau : son rectangle (bassin du lac) contient la
+	# case « 9c » et fait au moins 3x3 (≠ la seule case du texte).
+	var tour: Dictionary = m.tours_orphelines[0] if not m.tours_orphelines.is_empty() else {}
+	var rect: Rect2i = tour.get("rect", Rect2i())
+	print("    (rect tour = %s)" % str(rect))
+	_ok("tour centrée sur le bassin (rect contient 9c, >= 3x3)",
+			rect.has_point(Vector2i(44, 6)) and rect.size.x >= 3 and rect.size.y >= 3)
 	# Décor au sol présent.
 	_ok("routes peintes", m.routes.size() > 0)
 	_ok("eau peinte", m.eaux.size() > 0)

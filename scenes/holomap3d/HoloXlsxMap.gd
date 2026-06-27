@@ -310,6 +310,9 @@ func _regrouper_batiments() -> void:
 		if hf.z > 0.5:   # un code reconnu (hauteur et/ou lettre de forme)
 			tours_orphelines.append({
 				"cell": cell,
+				# Plus grand rectangle de MÊME apparence contenant la case (= le plan
+				# d'eau / le bassin) → la tour se centre et se dimensionne dessus.
+				"rect": _rect_local(cell, type_case.get(cell, Cell.VIDE)),
 				"hauteur_m": (hf.x if hf.x > 0.0 else hauteur_defaut_m),
 				"forme": int(hf.y),
 			})
@@ -378,6 +381,39 @@ func _parse_hauteur_forme(txt: String) -> Vector3:
 	var h := float(num) if num != "" else 0.0
 	var reconnu := 1.0 if (num != "" or lettre_ok) else 0.0
 	return Vector3(h, forme, reconnu)
+
+# Plus grand rectangle de cases de type `t` contenant `seed` (essaie horizontal-
+# d'abord et vertical-d'abord, garde la plus grande aire). Sert à centrer une tour
+# orpheline sur son plan d'eau (le code « 9c » est posé sur le bassin du lac).
+func _rect_local(seed: Vector2i, t: int) -> Rect2i:
+	var r1 := _rect_dir(seed, t, true)
+	var r2 := _rect_dir(seed, t, false)
+	return r1 if r1.get_area() >= r2.get_area() else r2
+
+func _rect_dir(seed: Vector2i, t: int, horiz_dabord: bool) -> Rect2i:
+	var x0 := seed.x; var x1 := seed.x; var y0 := seed.y; var y1 := seed.y
+	if horiz_dabord:
+		while _est_type(x0 - 1, y0, t): x0 -= 1
+		while _est_type(x1 + 1, y0, t): x1 += 1
+		while _bande_pleine(x0, x1, y0 - 1, t, true): y0 -= 1
+		while _bande_pleine(x0, x1, y1 + 1, t, true): y1 += 1
+	else:
+		while _est_type(x0, y0 - 1, t): y0 -= 1
+		while _est_type(x0, y1 + 1, t): y1 += 1
+		while _bande_pleine(y0, y1, x0 - 1, t, false): x0 -= 1
+		while _bande_pleine(y0, y1, x1 + 1, t, false): x1 += 1
+	return Rect2i(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+
+func _est_type(x: int, y: int, t: int) -> bool:
+	return type_case.get(Vector2i(x, y), Cell.VIDE) == t
+
+# Toutes les cases de [a..b] sur la ligne/colonne `fixe` sont-elles de type `t` ?
+func _bande_pleine(a: int, b: int, fixe: int, t: int, horizontale: bool) -> bool:
+	for k in range(a, b + 1):
+		var c := Vector2i(k, fixe) if horizontale else Vector2i(fixe, k)
+		if type_case.get(c, Cell.VIDE) != t:
+			return false
+	return true
 
 # Réf cellule « AT8 » → Vector2i(colonne 1-based, ligne 1-based).
 func _ref_vers_rc(ref: String) -> Vector2i:
