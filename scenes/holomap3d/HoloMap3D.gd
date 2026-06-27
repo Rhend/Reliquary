@@ -521,19 +521,20 @@ func _build_all_excel() -> void:
 	if intro_actif:
 		_jouer_intro()
 
-# Routes peintes (cellules magenta) → voirie « comme la map procédurale » :
-#   1) surface = tuiles magenta DISCRÈTES (corps de la chaussée peinte),
-#   2) axes néon = lignes le long des RUNS contigus (flux lumineux animé),
-#   3) trafic = traînées de phares qui circulent → vie urbaine.
+# Routes peintes → voirie TYPÉE par largeur (départementale 1 / nationale 2 /
+# autoroute 4 cases) :
+#   1) surface = tuiles magenta discrètes (corps de la chaussée),
+#   2) marquage = médiane (sépare les 2 sens) + lignes de voie pointillées,
+#   3) trafic DIRECTIONNEL par voie (aller cyan / retour ambre) → sens lisible.
 func _build_routes_excel() -> void:
-	# 1) Surface (tuiles atténuées).
+	# 1) Surface.
 	var st := HoloMesh3D.st_tri()
 	var nt := 0
 	var hw := taille_cellule * 0.5
 	for cell: Vector2i in _excel.routes:
 		var c := _world(cell.x, cell.y, 0.02)
 		var u := float(cell.x + cell.y) * taille_cellule
-		var col := Color(1, 1, 1, 0.3)
+		var col := Color(1, 1, 1, 0.28)
 		var p0 := c + Vector3(-hw, 0, -hw)
 		var p1 := c + Vector3(hw, 0, -hw)
 		var p2 := c + Vector3(hw, 0, hw)
@@ -548,31 +549,26 @@ func _build_routes_excel() -> void:
 		mi.mesh = surf
 		mi.material_override = _mat_routes
 		_monde.add_child(mi)
-	# 2) Axes néon le long des runs (flux animé via holo_route).
-	var sl := SurfaceTool.new()
-	sl.begin(Mesh.PRIMITIVE_LINES)
-	var nl := 0
-	for run in _routes_runs(true):
-		if run[2] - run[1] < 2:
-			continue
-		var a := _world(run[1], run[0], 0.04)
-		var b := _world(run[2], run[0], 0.04)
-		nl += _route_line(sl, a, b, route_intensite_avenue, a.distance_to(b))
-	for run in _routes_runs(false):
-		if run[2] - run[1] < 2:
-			continue
-		var a := _world(run[0], run[1], 0.04)
-		var b := _world(run[0], run[2], 0.04)
-		nl += _route_line(sl, a, b, route_intensite_avenue, a.distance_to(b))
-	if nl > 0:
-		var mil := MeshInstance3D.new()
-		mil.name = "RoutesAxesExcel"
-		mil.mesh = sl.commit()
-		mil.material_override = _mat_routes
-		_monde.add_child(mil)
-	# 3) Trafic.
-	if trafic_actif:
-		_build_trafic_excel()
+	# 2) + 3) Bandes typées : marquage au sol + trafic directionnel par voie.
+	var bandes := _routes_bandes()
+	var sm := HoloMesh3D.st()
+	var nm := 0
+	var stf := SurfaceTool.new()
+	stf.begin(Mesh.PRIMITIVE_LINES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x40A05
+	var ncar := 0
+	for b in bandes:
+		nm += _bande_marquage(b, sm)
+		if trafic_actif:
+			ncar += _bande_trafic(b, stf, rng)
+	_ajouter_mesh(HoloMesh3D.commit(sm, nm), "RoutesMarquage", _mat_neon)
+	if ncar > 0:
+		var mit := MeshInstance3D.new()
+		mit.name = "RoutesTrafic"
+		mit.mesh = stf.commit()
+		mit.material_override = _mat_trafic
+		_monde.add_child(mit)
 
 # Décompose les cases-route en RUNS contigus (par ligne si horizontal, sinon par
 # colonne). Renvoie un Array de [ligne, début, fin] (coordonnées de grille).
@@ -600,37 +596,118 @@ func _routes_runs(horizontal: bool) -> Array:
 		runs.append([ligne, debut, prev])
 	return runs
 
-# Trafic : voitures (traînées) semées sur chaque run de voirie (≥ 3 cases) dans les
-# deux sens, plus chargé sur les longs axes. Réutilise le shader holo_traffic.
-func _build_trafic_excel() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_val ^ 0xE7CA1
-	var s := SurfaceTool.new()
-	s.begin(Mesh.PRIMITIVE_LINES)
-	var carlen := taille_cellule * 0.55
-	var semees := false
-	for horizontal in [true, false]:
-		for run in _routes_runs(horizontal):
-			var L: int = run[2] - run[1]
-			if L < 2:
-				continue
-			var a: Vector3
-			var b: Vector3
-			if horizontal:
-				a = _world(run[1], run[0], 0.06); b = _world(run[2], run[0], 0.06)
-			else:
-				a = _world(run[0], run[1], 0.06); b = _world(run[0], run[2], 0.06)
-			var nb := clampi((L + 1) / 3, 1, 3)
-			_semer_voitures(s, a, b - a, carlen, rng, couleur_voiture_aller, nb, 1.0)
-			_semer_voitures(s, b, a - b, carlen, rng, couleur_voiture_retour, nb, 1.0)
-			semees = true
-	if not semees:
-		return
-	var mi := MeshInstance3D.new()
-	mi.name = "TraficExcel"
-	mi.mesh = s.commit()
-	mi.material_override = _mat_trafic
-	_monde.add_child(mi)
+# Nb de voies PAR SENS selon la largeur (cases) : départementale 1×1 (1 voie),
+# nationale 2×2 (2 voies), autoroute 3×3 (3 voies) — cf. demande auteur.
+func _n_voies(largeur: int) -> int:
+	if largeur <= 1:
+		return 1
+	if largeur <= 3:
+		return 2
+	return 3
+
+# Décompose la voirie en BANDES rectangulaires (rangées/colonnes contiguës de même
+# emprise) → chaque bande connaît son axe (H/V) et sa largeur. On ne garde une bande
+# que si sa longueur ≥ sa largeur (sinon c'est l'autre orientation qui la décrit).
+func _routes_bandes() -> Array:
+	var bandes: Array = []
+	for horiz in [true, false]:
+		var par_emprise := {}
+		for r in _routes_runs(horiz):
+			var key := "%d,%d" % [r[1], r[2]]
+			if not par_emprise.has(key):
+				par_emprise[key] = []
+			(par_emprise[key] as Array).append(int(r[0]))
+		for key in par_emprise:
+			var lignes: Array = par_emprise[key]
+			lignes.sort()
+			var bornes := (key as String).split(",")
+			var e0 := int(bornes[0])
+			var e1 := int(bornes[1])
+			var i := 0
+			while i < lignes.size():
+				var j := i
+				while j + 1 < lignes.size() and int(lignes[j + 1]) == int(lignes[j]) + 1:
+					j += 1
+				var largeur: int = int(lignes[j]) - int(lignes[i]) + 1
+				if (e1 - e0 + 1) >= largeur:
+					if horiz:
+						bandes.append({"axe": "H", "x0": e0, "x1": e1, "y0": int(lignes[i]), "y1": int(lignes[j])})
+					else:
+						bandes.append({"axe": "V", "x0": int(lignes[i]), "x1": int(lignes[j]), "y0": e0, "y1": e1})
+				i = j + 1
+	return bandes
+
+# Point monde d'une bande à (along, across) en coords de grille (selon l'axe).
+func _pt_bande(horiz: bool, av: float, wv: float, y: float) -> Vector3:
+	return _world(av, wv, y) if horiz else _world(wv, av, y)
+
+# Marquage au sol d'une bande : médiane vive (double trait) séparant les deux sens
+# + lignes de voie pointillées (nb selon le type). Renvoie le nb d'arêtes.
+func _bande_marquage(b: Dictionary, s: SurfaceTool) -> int:
+	var horiz: bool = b["axe"] == "H"
+	var a0: int = b["x0"] if horiz else b["y0"]
+	var a1: int = b["x1"] if horiz else b["y1"]
+	var w0: int = b["y0"] if horiz else b["x0"]
+	var w1: int = b["y1"] if horiz else b["x1"]
+	var as0 := float(a0) - 0.5
+	var as1 := float(a1) + 0.5
+	var wa := float(w0) - 0.5
+	var wb := float(w1) + 0.5
+	var wmid := (float(w0) + float(w1)) * 0.5
+	var nl := _n_voies(w1 - w0 + 1)
+	var y := 0.045
+	var n := 0
+	var col_med := Color(1.0, 0.45, 0.78)    # médiane vive
+	var col_voie := Color(0.85, 0.28, 0.58)  # lignes de voie (plus discrètes)
+	n += HoloMesh3D.line(s, _pt_bande(horiz, as0, wmid - 0.05, y), _pt_bande(horiz, as1, wmid - 0.05, y), col_med)
+	n += HoloMesh3D.line(s, _pt_bande(horiz, as0, wmid + 0.05, y), _pt_bande(horiz, as1, wmid + 0.05, y), col_med)
+	for ch: Array in [[wa, wmid], [wmid, wb]]:
+		for k in range(1, nl):
+			var wv := lerpf(ch[0], ch[1], float(k) / float(nl))
+			n += _dashes(s, _pt_bande(horiz, as0, wv, y), _pt_bande(horiz, as1, wv, y), col_voie,
+					taille_cellule * 0.4, taille_cellule * 0.3)
+	return n
+
+# Trafic directionnel d'une bande : une chaussée par sens, `nl` voies chacune,
+# voitures aller (cyan) d'un côté, retour (ambre) de l'autre. Renvoie le nb posé.
+func _bande_trafic(b: Dictionary, st: SurfaceTool, rng: RandomNumberGenerator) -> int:
+	var horiz: bool = b["axe"] == "H"
+	var a0: int = b["x0"] if horiz else b["y0"]
+	var a1: int = b["x1"] if horiz else b["y1"]
+	var w0: int = b["y0"] if horiz else b["x0"]
+	var w1: int = b["y1"] if horiz else b["x1"]
+	var as0 := float(a0) - 0.5
+	var as1 := float(a1) + 0.5
+	var wa := float(w0) - 0.5
+	var wb := float(w1) + 0.5
+	var wmid := (float(w0) + float(w1)) * 0.5
+	var nl := _n_voies(w1 - w0 + 1)
+	var y := 0.065
+	var carlen := taille_cellule * 0.5
+	var nbcars := clampi((a1 - a0 + 1) / 5, 1, 3)
+	var ncar := 0
+	for k in nl:
+		var wva := lerpf(wa, wmid, (float(k) + 0.5) / float(nl))   # chaussée A → sens −along
+		_semer_voitures(st, _pt_bande(horiz, as1, wva, y), _pt_bande(horiz, as0, wva, y) - _pt_bande(horiz, as1, wva, y),
+				carlen, rng, couleur_voiture_retour, nbcars, 1.0)
+		var wvb := lerpf(wmid, wb, (float(k) + 0.5) / float(nl))   # chaussée B → sens +along
+		_semer_voitures(st, _pt_bande(horiz, as0, wvb, y), _pt_bande(horiz, as1, wvb, y) - _pt_bande(horiz, as0, wvb, y),
+				carlen, rng, couleur_voiture_aller, nbcars, 1.0)
+		ncar += nbcars * 2
+	return ncar
+
+# Ligne pointillée a→b (segments `dash`, trous `gap`). Renvoie le nb de segments.
+func _dashes(s: SurfaceTool, a: Vector3, b: Vector3, col: Color, dash: float, gap: float) -> int:
+	var L := a.distance_to(b)
+	if L < 0.001:
+		return 0
+	var dir := (b - a) / L
+	var n := 0
+	var d := 0.0
+	while d < L:
+		n += HoloMesh3D.line(s, a + dir * d, a + dir * minf(d + dash, L), col)
+		d += dash + gap
+	return n
 
 # Trottoirs : trait clair (béton) le long de CHAQUE bord de voirie (côté d'une case
 # route dont le voisin n'est pas une route) → bordure de chaussée continue.
@@ -661,23 +738,25 @@ func _build_eclairage_excel() -> void:
 	var col_mat := Color(0.35, 0.38, 0.42)
 	var col_tete := Color(1.0, 0.82, 0.50)
 	var ht := unite_maison * 1.4      # hauteur du mât
-	var off := taille_cellule * 0.5   # décalage vers le trottoir
 	var pas := 4                       # un lampadaire toutes les 4 cases
-	for horizontal in [true, false]:
-		for run in _routes_runs(horizontal):
-			if int(run[2]) - int(run[1]) < 2:
-				continue
-			var k: int = int(run[1]) + 1
-			while k < int(run[2]):
-				var base: Vector3
-				if horizontal:
-					base = _world(k, run[0], 0.0) + Vector3(0, 0, off)
-				else:
-					base = _world(run[0], k, 0.0) + Vector3(off, 0, 0)
+	# Sur les DEUX bords extérieurs de chaque bande (quelle que soit la largeur).
+	for b in _routes_bandes():
+		var horiz: bool = b["axe"] == "H"
+		var a0: int = b["x0"] if horiz else b["y0"]
+		var a1: int = b["x1"] if horiz else b["y1"]
+		var w0: int = b["y0"] if horiz else b["x0"]
+		var w1: int = b["y1"] if horiz else b["x1"]
+		if a1 - a0 < 2:
+			continue
+		var bords := [float(w0) - 0.65, float(w1) + 0.65]
+		var k := a0 + 1
+		while k < a1:
+			for wv: float in bords:
+				var base := _pt_bande(horiz, float(k), wv, 0.0)
 				var tete := base + Vector3(0, ht, 0)
 				nm += HoloMesh3D.line(mats, base, tete, col_mat)
 				nt += HoloMesh3D.diamond(tetes, tete, taille_cellule * 0.08, unite_maison * 0.18, col_tete)
-				k += pas
+			k += pas
 	_ajouter_mesh(HoloMesh3D.commit(mats, nm), "LampadairesMats", _mat_ambiance)
 	_ajouter_mesh(HoloMesh3D.commit(tetes, nt), "LampadairesTetes", _mat_neon)
 
