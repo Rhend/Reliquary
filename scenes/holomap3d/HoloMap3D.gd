@@ -549,26 +549,21 @@ func _build_routes_excel() -> void:
 		mi.mesh = surf
 		mi.material_override = _mat_routes
 		_monde.add_child(mi)
-	# 2) + 3) Bandes typées : marquage au sol + trafic directionnel par voie.
-	var bandes := _routes_bandes()
+	# 2) Marquage au sol : médiane (sépare les sens) + lignes de voie pointillées.
 	var sm := HoloMesh3D.st()
 	var nm := 0
-	var stf := SurfaceTool.new()
-	stf.begin(Mesh.PRIMITIVE_LINES)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_val ^ 0x40A05
-	var ncar := 0
-	for b in bandes:
+	for b in _routes_bandes():
 		nm += _bande_marquage(b, sm)
-		if trafic_actif:
-			ncar += _bande_trafic(b, stf, rng)
 	_ajouter_mesh(HoloMesh3D.commit(sm, nm), "RoutesMarquage", _mat_neon)
-	if ncar > 0:
-		var mit := MeshInstance3D.new()
-		mit.name = "RoutesTrafic"
-		mit.mesh = stf.commit()
-		mit.material_override = _mat_trafic
-		_monde.add_child(mit)
+	# 3) Trafic SIMULÉ (HoloTraffic) : les voitures suivent les voies, tournent au
+	#    bon sens aux intersections et NE SE CROISENT PAS (réservation de cases).
+	if trafic_actif:
+		var n_cars := clampi(_excel.routes.size() / 7, 6, 90)
+		var trafic := HoloTraffic.new()
+		trafic.name = "TraficSim"
+		_monde.add_child(trafic)
+		trafic.configurer(_excel.routes, _routes_intersections(), _cgrid(), taille_cellule,
+				0.06, _mat_neon, n_cars, seed_val ^ 0x40A05)
 
 # Décompose les cases-route en RUNS contigus (par ligne si horizontal, sinon par
 # colonne). Renvoie un Array de [ligne, début, fin] (coordonnées de grille).
@@ -668,33 +663,25 @@ func _bande_marquage(b: Dictionary, s: SurfaceTool) -> int:
 					taille_cellule * 0.4, taille_cellule * 0.3)
 	return n
 
-# Trafic directionnel d'une bande : une chaussée par sens, `nl` voies chacune,
-# voitures aller (cyan) d'un côté, retour (ambre) de l'autre. Renvoie le nb posé.
-func _bande_trafic(b: Dictionary, st: SurfaceTool, rng: RandomNumberGenerator) -> int:
-	var horiz: bool = b["axe"] == "H"
-	var a0: int = b["x0"] if horiz else b["y0"]
-	var a1: int = b["x1"] if horiz else b["y1"]
-	var w0: int = b["y0"] if horiz else b["x0"]
-	var w1: int = b["y1"] if horiz else b["x1"]
-	var as0 := float(a0) - 0.5
-	var as1 := float(a1) + 0.5
-	var wa := float(w0) - 0.5
-	var wb := float(w1) + 0.5
-	var wmid := (float(w0) + float(w1)) * 0.5
-	var nl := _n_voies(w1 - w0 + 1)
-	var y := 0.065
-	var carlen := taille_cellule * 0.5
-	var nbcars := clampi((a1 - a0 + 1) / 5, 1, 3)
-	var ncar := 0
-	for k in nl:
-		var wva := lerpf(wa, wmid, (float(k) + 0.5) / float(nl))   # chaussée A → sens −along
-		_semer_voitures(st, _pt_bande(horiz, as1, wva, y), _pt_bande(horiz, as0, wva, y) - _pt_bande(horiz, as1, wva, y),
-				carlen, rng, couleur_voiture_retour, nbcars, 1.0)
-		var wvb := lerpf(wmid, wb, (float(k) + 0.5) / float(nl))   # chaussée B → sens +along
-		_semer_voitures(st, _pt_bande(horiz, as0, wvb, y), _pt_bande(horiz, as1, wvb, y) - _pt_bande(horiz, as0, wvb, y),
-				carlen, rng, couleur_voiture_aller, nbcars, 1.0)
-		ncar += nbcars * 2
-	return ncar
+# Cases d'INTERSECTION = couvertes par une bande horizontale ET une bande verticale
+# (deux routes se croisent / un virage). Servent de « verrou plein » au trafic
+# simulé : une seule voiture à la fois → pas de croisement.
+func _routes_intersections() -> Dictionary:
+	var in_h := {}
+	var in_v := {}
+	for b in _routes_bandes():
+		var horiz: bool = b["axe"] == "H"
+		for gx in range(int(b["x0"]), int(b["x1"]) + 1):
+			for gy in range(int(b["y0"]), int(b["y1"]) + 1):
+				if horiz:
+					in_h[Vector2i(gx, gy)] = true
+				else:
+					in_v[Vector2i(gx, gy)] = true
+	var inter := {}
+	for c: Vector2i in in_h:
+		if in_v.has(c):
+			inter[c] = true
+	return inter
 
 # Ligne pointillée a→b (segments `dash`, trous `gap`). Renvoie le nb de segments.
 func _dashes(s: SurfaceTool, a: Vector3, b: Vector3, col: Color, dash: float, gap: float) -> int:

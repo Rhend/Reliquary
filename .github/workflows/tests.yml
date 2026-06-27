@@ -51,3 +51,6 @@ jobs:
 
       - name: TestHoloXlsx (lecteur gabarit Excel HoloMap)
         run: $GODOT --headless --path . res://tests/TestHoloXlsx.tscn
+
+      - name: TestHoloTraffic (simulation de trafic — pas de croisement)
+        run: $GODOT --headless --path . res://tests/TestHoloTraffic.tscn
