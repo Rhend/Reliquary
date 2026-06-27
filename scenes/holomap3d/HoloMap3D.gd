@@ -689,18 +689,14 @@ func _build_marquage_voirie(s: SurfaceTool) -> int:
 	var axis := {}
 	for c: Vector2i in _excel.routes:
 		axis[c] = 0 if _run_len(R, c, Vector2i(1, 0)) >= _run_len(R, c, Vector2i(0, 1)) else 1
-	# Cases ouvertes (T / croisement) : ≥ 3 bras (le long + branche perpendiculaire).
+	# Cases ouvertes (vrai T / croisement) : ≥ 3 bras SUBSTANTIELS (qui s'étendent
+	# sur ≥ 2 cases). Exclut les moignons de coin ET la voie adjacente d'une route
+	# large (qui ne s'étend que d'1 case en perpendiculaire) → les COINS tournent.
 	var ouvert := {}
 	for c: Vector2i in _excel.routes:
-		var ax: int = axis[c]
-		var ad := [Vector2i(1, 0), Vector2i(-1, 0)] if ax == 0 else [Vector2i(0, 1), Vector2i(0, -1)]
-		var pd := [Vector2i(0, 1), Vector2i(0, -1)] if ax == 0 else [Vector2i(1, 0), Vector2i(-1, 0)]
 		var deg := 0
-		for d: Vector2i in ad:
-			if R.has(c + d):
-				deg += 1
-		for d: Vector2i in pd:
-			if R.has(c + d) and int(axis.get(c + d, -1)) == 1 - ax:
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if R.has(c + d) and R.has(c + d + d):
 				deg += 1
 		if deg >= 3:
 			ouvert[c] = true
