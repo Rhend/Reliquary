@@ -213,7 +213,10 @@ var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc t
 var _mat_lac: ShaderMaterial           # nappe d'eau pleine (lac satellite, hors carré)
 var _mat_eau: ShaderMaterial           # eau qui s'écoule (carte Excel, shader animé)
 var _mat_sol: ShaderMaterial           # sol : nappe de terre + maillage fin (liant)
+var _mat_horizon: ShaderMaterial       # halo d'horizon / brume (sans atténuation de brume)
+var _mat_balise: ShaderMaterial        # balises rouges clignotantes (sommets de tours)
 var _discos: Array[Node3D] = []        # boules à facettes (sommets de pyramides) — tournent
+var _balise_t := 0.0                   # phase de clignotement des balises
 var _distance_cible := 15.0
 var _intro_en_cours := false
 var _mats_reveal: Array[ShaderMaterial] = []   # matériaux supportant le reveal d'intro
@@ -338,6 +341,21 @@ func _setup_materials() -> void:
 	_mat_eau = ShaderMaterial.new()
 	_mat_eau.shader = WATER_SHADER
 	_mat_eau.set_shader_parameter("eau_color", couleur_eau)
+
+	# Halo d'horizon / brume d'ambiance : émission douce, brume repoussée très loin
+	# (l'horizon est volontairement distant et doit rester visible).
+	_mat_horizon = ShaderMaterial.new()
+	_mat_horizon.shader = LINE_SHADER
+	_mat_horizon.set_shader_parameter("emission_strength", 1.0)
+	_mat_horizon.set_shader_parameter("alpha_mult", 1.0)
+	_mat_horizon.set_shader_parameter("fog_debut", 1.0e6)
+	_mat_horizon.set_shader_parameter("fog_fin", 1.0e6)
+
+	# Balises rouges (sommets de tours) : clignotement via alpha_mult (cf. _process).
+	_mat_balise = ShaderMaterial.new()
+	_mat_balise.shader = LINE_SHADER
+	_mat_balise.set_shader_parameter("emission_strength", 3.2)
+	_mat_balise.set_shader_parameter("alpha_mult", 1.0)
 
 	# Sol : émission faible (la luminosité réelle vient des vertex colors — nappe
 	# très sombre + maillage discret) → matérialise le terrain sans écraser la ville.
@@ -488,6 +506,7 @@ func _charger_excel() -> void:
 	route_emission_base = 0.45
 	brume_debut = 22.0
 	brume_fin = 46.0
+	couleur_fond = Color(0.012, 0.022, 0.045)   # bleu nuit très sombre (≠ noir total) → atmosphère
 	print("[HoloMap3D] ", _excel.resume())
 
 # Rendu de la carte Excel : décor d'apparence (eau/parc/route) + bâtiments lus,
@@ -504,6 +523,7 @@ func _build_all_excel() -> void:
 	# → _build_decor n'ajoute pas de vaguelettes statiques par-dessus le courant.
 	for c: Vector2i in _excel.parcs:
 		_parc[c] = true
+	_build_horizon_excel()      # halo d'horizon + brume au sol (atmosphère)
 	if socle_actif:
 		_build_socle()
 	if sol_actif:
@@ -843,15 +863,24 @@ func _build_bordure_eau_excel() -> void:
 func _build_batiments_excel() -> void:
 	var s := HoloMesh3D.st()
 	var sf := HoloMesh3D.st_tri()
+	var sb := HoloMesh3D.st()    # balises rouges (clignotantes)
+	var sban := HoloMesh3D.st()  # enseignes holographiques
 	var n := 0
 	var nf := 0
+	var nb := 0
+	var nban := 0
 	var col := Color(couleur_decor_bati, 0.85)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x70175
 	for b in _excel.batiments:
 		var h := _hauteur_monde(b["hauteur_m"])
 		var forme: int = b["forme"]
 		if forme == HoloXlsxMap.Forme.BOITE:
 			var r := _bati_boite(b["cells"], h, col, s, sf)
 			n += r[0]; nf += r[1]
+			# Détails de toit (#3) : antenne/citerne + balise + enseigne.
+			var rd := _toit_details_excel(b["bbox"], h, col, s, sb, sban, rng)
+			n += rd[0]; nb += rd[1]; nban += rd[2]
 		else:
 			var bb: Rect2i = b["bbox"]
 			var sx := float(bb.size.x) * taille_cellule * FACE_INSET
@@ -870,6 +899,8 @@ func _build_batiments_excel() -> void:
 		var r := _bati_forme(_centre_bbox(rect), taille, taille, h, t["forme"], col, s, sf)
 		n += r[0]; nf += r[1]
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "BatimentsExcel")
+	_ajouter_mesh(HoloMesh3D.commit(sb, nb), "Balises", _mat_balise)
+	_ajouter_mesh(HoloMesh3D.commit(sban, nban), "Enseignes", _mat_neon)
 	var fmesh := HoloMesh3D.commit(sf, nf)
 	if fmesh != null:
 		var mif := MeshInstance3D.new()
@@ -877,6 +908,52 @@ func _build_batiments_excel() -> void:
 		mif.mesh = fmesh
 		mif.material_override = _mat_faces
 		_monde.add_child(mif)
+
+# Détails de toit (#3) sur un bâtiment BOÎTE : antenne ou citerne (la plupart),
+# balise rouge clignotante au sommet des HAUTES tours, et enseigne holographique
+# sur quelques façades. Renvoie [nb arêtes, nb balises, nb enseignes].
+func _toit_details_excel(bbox: Rect2i, h: float, col: Color, s: SurfaceTool,
+		sb: SurfaceTool, sban: SurfaceTool, rng: RandomNumberGenerator) -> Array:
+	var sx := float(bbox.size.x) * taille_cellule * 0.86
+	var sz := float(bbox.size.y) * taille_cellule * 0.86
+	var toit := _centre_bbox(bbox) + Vector3(0, h, 0)
+	var n := 0
+	var nb := 0
+	var nban := 0
+	var grand := bbox.size.x * bbox.size.y >= 9
+	var haut := h >= _hauteur_monde(7.0)
+	var roll := rng.randf()
+	# Antenne (tours hautes/grandes) ou citerne (autres) — la plupart en ont une.
+	if haut or grand or roll < 0.55:
+		if haut or roll < 0.3:
+			var tip := toit + Vector3(0, maxf(unite_maison * 1.4, h * 0.4), 0)
+			n += HoloMesh3D.line(s, toit, tip, col)
+			var cw := taille_cellule * 0.1
+			n += HoloMesh3D.line(s, tip + Vector3(-cw, 0, 0), tip + Vector3(cw, 0, 0), col)
+			n += HoloMesh3D.line(s, tip + Vector3(0, 0, -cw), tip + Vector3(0, 0, cw), col)
+			# Balise rouge clignotante à la pointe (tours hautes / grandes).
+			if haut or grand:
+				nb += HoloMesh3D.diamond(sb, tip + Vector3(0, taille_cellule * 0.06, 0),
+						taille_cellule * 0.05, taille_cellule * 0.08, Color(1.0, 0.15, 0.12))
+		else:
+			var tw := taille_cellule * 0.2
+			var off := Vector3(sx * 0.5 - tw * 0.6, 0, sz * 0.5 - tw * 0.6)
+			n += HoloMesh3D.box(s, toit + off, tw, unite_maison * 0.7, tw, col)
+	# Enseigne holographique : bannière verticale sur une façade (grandes tours).
+	if (haut or grand) and rng.randf() < 0.5:
+		var pal := [Color(0.30, 0.85, 1.0), Color(1.0, 0.30, 0.66), Color(1.0, 0.70, 0.25)]
+		var cc: Color = pal[rng.randi() % pal.size()]
+		var bx := toit.x + sx * 0.5
+		var y0 := toit.y - h * 0.5
+		var y1 := toit.y - h * 0.08
+		var z0 := toit.z - sz * 0.22
+		var z1 := toit.z + sz * 0.22
+		nban += HoloMesh3D.line(sban, Vector3(bx, y0, z0), Vector3(bx, y1, z0), cc)
+		nban += HoloMesh3D.line(sban, Vector3(bx, y0, z1), Vector3(bx, y1, z1), cc)
+		for i in 4:
+			var yy := lerpf(y0, y1, float(i) / 3.0)
+			nban += HoloMesh3D.line(sban, Vector3(bx, yy, z0), Vector3(bx, yy, z1), Color(cc, 0.55))
+	return [n, nb, nban]
 
 # ─── Ponts (calque Surélevé) : tablier en RAMPE + structure + garde-corps + trafic ──
 # Le tablier part du sol à un bout, monte (/), traverse en hauteur, redescend (\)
@@ -1118,6 +1195,53 @@ func _terrain_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool) -> Array:
 		pv = cur
 	n += HoloMesh3D.circle(s, home + (u + v) * (B * 0.5), B * 0.13, terre, 12)
 	return [ng, n]
+
+# ─── Halo d'horizon + brume au sol (#6) ───────────────────────
+# Une « jupe » cylindrique à dégradé vertical autour de la ville (bleu-cyan en bas,
+# transparent en haut) + une nappe de brume au sol qui s'éclaire vers l'horizon →
+# la ville se décolle du noir et gagne en profondeur.
+func _build_horizon_excel() -> void:
+	var rv := (_cgrid() + 1.0) * taille_cellule
+	var rh := rv * 1.7
+	var hh := rv * 0.6
+	var seg := 72
+	var c_bas := Color(0.10, 0.28, 0.48, 0.42)
+	var c_haut := Color(0.10, 0.28, 0.48, 0.0)
+	var sc := HoloMesh3D.st_tri()
+	var nc := 0
+	var prev := Vector2(rh, 0.0)
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := Vector2(cos(a) * rh, sin(a) * rh)
+		var b0 := Vector3(prev.x, 0.0, prev.y)
+		var b1 := Vector3(cur.x, 0.0, cur.y)
+		var t0 := Vector3(prev.x, hh, prev.y)
+		var t1 := Vector3(cur.x, hh, cur.y)
+		sc.set_color(c_bas); sc.add_vertex(b0)
+		sc.set_color(c_bas); sc.add_vertex(b1)
+		sc.set_color(c_haut); sc.add_vertex(t1)
+		sc.set_color(c_bas); sc.add_vertex(b0)
+		sc.set_color(c_haut); sc.add_vertex(t1)
+		sc.set_color(c_haut); sc.add_vertex(t0)
+		nc += 2
+		prev = cur
+	_ajouter_mesh(HoloMesh3D.commit(sc, nc), "Horizon", _mat_horizon)
+	# Brume au sol : éventail centre (transparent) → bord (faible lueur).
+	var sd := HoloMesh3D.st_tri()
+	var nd := 0
+	var c_centre := Color(0.06, 0.16, 0.30, 0.0)
+	var c_bord := Color(0.10, 0.26, 0.44, 0.28)
+	var y := -0.006
+	var prevp := Vector3(rh, y, 0.0)
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := Vector3(cos(a) * rh, y, sin(a) * rh)
+		sd.set_color(c_centre); sd.add_vertex(Vector3(0, y, 0))
+		sd.set_color(c_bord); sd.add_vertex(prevp)
+		sd.set_color(c_bord); sd.add_vertex(cur)
+		nd += 1
+		prevp = cur
+	_ajouter_mesh(HoloMesh3D.commit(sd, nd), "BrumeSol", _mat_horizon)
 
 # Petit carré plat (plan XZ) centré en `c`, demi-côté `r`.
 func _carre_plat(s: SurfaceTool, c: Vector3, r: float, col: Color) -> int:
@@ -2169,6 +2293,10 @@ func _process(dt: float) -> void:
 	for d in _discos:
 		if is_instance_valid(d):
 			d.rotation.y += dt * 0.9
+	# Balises rouges de sommet : clignotement (allumées ~40 % du temps).
+	if _mat_balise != null:
+		_balise_t += dt
+		_mat_balise.set_shader_parameter("alpha_mult", 1.0 if fposmod(_balise_t, 1.6) < 0.6 else 0.06)
 	_maj_tooltip()
 
 func _maj_tooltip() -> void:

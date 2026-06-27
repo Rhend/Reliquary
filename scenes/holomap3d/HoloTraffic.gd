@@ -25,6 +25,12 @@ var _road_list: Array = []
 var _inter := {}         # Vector2i → true (vraie intersection : verrou plein)
 var _occ := {}           # clé de créneau → id voiture
 var _cars: Array = []
+# Feux tricolores (#1) : carrefours (cases d'intersection connexes) → phase H/V.
+var _jid := {}                 # case d'intersection → id de carrefour
+var _junction_ctrl: Array = [] # carrefour contrôlé par des feux ?
+var _junction_off: Array = []  # déphasage (variété)
+var _lights: Array = []        # feux à dessiner : {a, b, jid, axe}
+var _t_global := 0.0
 var _cgrid := 0.0
 var _cell := 0.34
 var _y := 0.06
@@ -45,6 +51,7 @@ func configurer(routes: Array, inter: Dictionary, cgrid: float, cell: float,
 	for c: Vector2i in routes:
 		_road[c] = true
 		_road_list.append(c)
+	_calc_feux()
 	_im = ImmediateMesh.new()
 	var mi := MeshInstance3D.new()
 	mi.name = "VoituresMesh"
@@ -53,6 +60,75 @@ func configurer(routes: Array, inter: Dictionary, cgrid: float, cell: float,
 	add_child(mi)
 	_spawn(nb_voitures)
 	set_process(not _cars.is_empty())
+
+# Carrefours = composantes connexes de cases d'intersection. Un carrefour est
+# « contrôlé » (feux) s'il a des approches sur les DEUX axes et ≥ 3 côtés (vrai
+# croisement / T) — pas un simple virage. Pose un feu par approche.
+func _axe(dir: Vector2i) -> int:
+	return 0 if dir.x != 0 else 1   # 0 = horizontal, 1 = vertical
+
+func _calc_feux() -> void:
+	var seen := {}
+	for c0: Vector2i in _inter:
+		if seen.has(c0):
+			continue
+		var jid := _junction_ctrl.size()
+		var blob: Array = []
+		var stack: Array = [c0]
+		while not stack.is_empty():
+			var x: Vector2i = stack.pop_back()
+			if seen.has(x) or not _inter.has(x):
+				continue
+			seen[x] = true
+			blob.append(x)
+			_jid[x] = jid
+			for d: Vector2i in DIRS:
+				if _inter.has(x + d):
+					stack.append(x + d)
+		var ad := {}
+		for x: Vector2i in blob:
+			for d: Vector2i in DIRS:
+				if _road.has(x + d) and not _inter.has(x + d):
+					ad[d] = true
+		var has_h: bool = ad.has(Vector2i(1, 0)) or ad.has(Vector2i(-1, 0))
+		var has_v: bool = ad.has(Vector2i(0, 1)) or ad.has(Vector2i(0, -1))
+		var ctrl: bool = has_h and has_v and ad.size() >= 3
+		_junction_ctrl.append(ctrl)
+		_junction_off.append(_rng.randf() * 9.0)
+		if ctrl:
+			for x: Vector2i in blob:
+				for d: Vector2i in DIRS:
+					if _road.has(x + d) and not _inter.has(x + d):
+						var centre := (_world(x.x, x.y) + _world(x.x + d.x, x.y + d.y)) * 0.5
+						var across := Vector3(float(d.y), 0.0, -float(d.x)) * (_cell * 0.34)
+						var up := Vector3(0, _cell * 0.12, 0)
+						_lights.append({"a": centre + across + up, "b": centre - across + up,
+								"jid": jid, "axe": _axe(d)})
+
+# Phase d'un carrefour : 0 = axe H au vert, 1 = axe V au vert, -1 = tout rouge (jaune).
+func _phase(jid: int) -> int:
+	var periode := 9.0
+	var jaune := 1.2
+	var local := fmod(_t_global + _junction_off[jid], periode)
+	if local < periode * 0.5 - jaune:
+		return 0
+	if local < periode * 0.5:
+		return -1
+	if local < periode - jaune:
+		return 1
+	return -1
+
+# Le feu interdit-il d'entrer dans le carrefour `ncell` en venant de `arrived` ?
+func _feu_rouge(arrived: Vector2i, ncell: Vector2i, ndir: Vector2i) -> bool:
+	if _inter.get(arrived, false):
+		return false   # déjà engagé dans le carrefour → on dégage
+	if not _inter.get(ncell, false):
+		return false
+	var jid: int = _jid.get(ncell, -1)
+	if jid < 0 or not _junction_ctrl[jid]:
+		return false
+	var ph := _phase(jid)
+	return ph != _axe(ndir)   # rouge si pas le bon axe (ou tout-rouge ph=-1)
 
 # ─── Géométrie ────────────────────────────────────────────────
 func _world(gx: float, gy: float) -> Vector3:
@@ -128,6 +204,7 @@ func _choisir(cell: Vector2i, dir: Vector2i, id: int) -> Vector2i:
 
 # ─── Boucle ───────────────────────────────────────────────────
 func _process(dt: float) -> void:
+	_t_global += dt
 	for id in _cars.size():
 		_avancer(id, dt)
 	_dessiner()
@@ -150,6 +227,8 @@ func _avancer(id: int, dt: float) -> void:
 	if ndir == Vector2i.ZERO:
 		return   # attend (ne tient plus que sa case courante)
 	var ncell: Vector2i = arrived + ndir
+	if _feu_rouge(arrived, ncell, ndir):
+		return   # feu rouge → attend à la ligne d'arrêt
 	if not _libre(ncell, ndir, id):
 		return   # case suivante occupée → attend (file / cède le passage)
 	# Engage le mouvement : réserve la suivante en GARDANT la courante.
@@ -180,14 +259,23 @@ func positions() -> Array:
 
 # Avance la simulation d'un pas SANS rendu (test headless).
 func pas_sim(dt: float) -> void:
+	_t_global += dt
 	for id in _cars.size():
 		_avancer(id, dt)
 
 func _dessiner() -> void:
 	_im.clear_surfaces()
-	if _cars.is_empty():
+	if _cars.is_empty() and _lights.is_empty():
 		return
 	_im.surface_begin(Mesh.PRIMITIVE_LINES)
+	# Feux tricolores : barre verte (passant) / rouge (arrêt) / ambre (transition).
+	for lt: Dictionary in _lights:
+		var ph := _phase(lt["jid"])
+		var col := Color(1.0, 0.70, 0.15)
+		if ph >= 0:
+			col = Color(0.30, 1.0, 0.40) if ph == int(lt["axe"]) else Color(1.0, 0.20, 0.18)
+		_im.surface_set_color(col); _im.surface_add_vertex(lt["a"])
+		_im.surface_set_color(col); _im.surface_add_vertex(lt["b"])
 	var hl := _cell * 0.18
 	for car: Dictionary in _cars:
 		var t: float = car["t"]
