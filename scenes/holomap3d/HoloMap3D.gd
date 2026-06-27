@@ -46,7 +46,7 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 @export var plongee_min := 25.0
 @export var plongee_max := 80.0
 @export var distance := 15.0
-@export var distance_min := 8.0
+@export var distance_min := 5.6   # 2 crans de molette plus près qu'avant (8.0)
 @export var distance_max := 32.0
 @export var fov := 50.0
 @export_enum("Libre", "Paliers") var mode_rotation := 0
@@ -69,6 +69,9 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # Gain vertical appliqué aux hauteurs lues (en mètres) : 1 = échelle réelle (ville
 # plate), >1 = relief plus lisible en holo. N'affecte PAS l'emprise au sol.
 @export var exageration_hauteur := 2.5
+# Densité du trafic simulé (voitures par case de route). Plus haut = plus dense
+# (au-delà de ~0.45 le réseau peut s'embouteiller aux carrefours).
+@export var densite_trafic := 0.30
 
 # ─── Voirie / densité ─────────────────────────────────────────
 @export_group("Voirie")
@@ -558,7 +561,7 @@ func _build_routes_excel() -> void:
 	# 3) Trafic SIMULÉ (HoloTraffic) : les voitures suivent les voies, tournent au
 	#    bon sens aux intersections et NE SE CROISENT PAS (réservation de cases).
 	if trafic_actif:
-		var n_cars := clampi(_excel.routes.size() / 7, 6, 90)
+		var n_cars := clampi(int(_excel.routes.size() * densite_trafic), 8, 220)
 		var trafic := HoloTraffic.new()
 		trafic.name = "TraficSim"
 		_monde.add_child(trafic)

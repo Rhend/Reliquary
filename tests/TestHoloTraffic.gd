@@ -35,7 +35,7 @@ func _ready() -> void:
 
 	var cell := 0.34
 	var trafic := HoloTraffic.new()
-	trafic.configurer(routes, inter, 14.5, cell, 0.06, ShaderMaterial.new(), 40, 9876)
+	trafic.configurer(routes, inter, 14.5, cell, 0.06, ShaderMaterial.new(), 55, 9876)
 	trafic.set_process(false)   # on cadence nous-mêmes
 
 	var dmin := 1.0e9
@@ -58,7 +58,8 @@ func _ready() -> void:
 	# 0.136 m) mais très au-dessus de 0 → un vrai croisement le ferait chuter.
 	var seuil := 0.08
 	_ok("aucun croisement sur 600 pas (dmin=%.3f m > %.3f m)" % [dmin, seuil], dmin > seuil)
-	_ok("les voitures roulent (déplacement cumulé=%.1f m)" % deplacement, deplacement > 10.0)
+	# Seuil haut → détecte aussi un éventuel BLOCAGE GÉNÉRAL (gridlock) à densité élevée.
+	_ok("trafic fluide, pas de gridlock (déplacement cumulé=%.0f m)" % deplacement, deplacement > 150.0)
 
 	print("\n════════════════════════════════")
 	print("RÉSULTAT : %d échec(s)" % _fail.size())
