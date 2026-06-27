@@ -467,14 +467,16 @@ func _build_all() -> void:
 # ─── Carte Excel : lecture + rendu data-driven ────────────────
 # Charge le gabarit ; en cas de succès, cale la grille et l'échelle sur le fichier.
 func _charger_excel() -> void:
-	if chemin_xlsx.strip_edges() == "":
-		return
-	var m := HoloXlsxMap.new()
-	if not m.charger(chemin_xlsx):
-		push_warning("[HoloMap3D] gabarit illisible (%s) → ville procédurale" % chemin_xlsx)
-		return
-	_excel = m
-	grille = m.grille
+	# `_excel` peut être pré-injecté (preview/test) → on ne recharge pas le fichier.
+	if _excel == null:
+		if chemin_xlsx.strip_edges() == "":
+			return
+		var m := HoloXlsxMap.new()
+		if not m.charger(chemin_xlsx):
+			push_warning("[HoloMap3D] gabarit illisible (%s) → ville procédurale" % chemin_xlsx)
+			return
+		_excel = m
+	grille = _excel.grille
 	taille_cellule = TAILLE_MONDE_CIBLE / float(maxi(1, grille))
 	# Réglages spécifiques carte Excel (décor dense au sol, pas de gratte-ciels) :
 	# cadrage plus serré, bâti plus clair/lisible, routes moins envahissantes,
@@ -486,7 +488,7 @@ func _charger_excel() -> void:
 	route_emission_base = 0.45
 	brume_debut = 22.0
 	brume_fin = 46.0
-	print("[HoloMap3D] ", m.resume())
+	print("[HoloMap3D] ", _excel.resume())
 
 # Rendu de la carte Excel : décor d'apparence (eau/parc/route) + bâtiments lus,
 # le tout dans la DA holo existante (socle, sol, motes, radar, intro, post-process).
@@ -513,6 +515,7 @@ func _build_all_excel() -> void:
 	_build_bordure_eau_excel()  # liseré cyan vif → l'eau se détache de la carte
 	if decor_actif:
 		_build_decor()          # parcs (arbres) — _eau vide → pas de vaguelettes
+	_build_terrains_excel()     # terrains de sport (baseball)
 	_build_batiments_excel()
 	_build_ponts_excel()          # ouvrages du calque Surélevé (au-dessus de l'eau/route)
 	_build_routes_elevees_excel() # autoroutes surélevées (magenta) — vide pour l'instant
@@ -1038,6 +1041,92 @@ func _build_routes_elevees_excel() -> void:
 	mi.mesh = mesh
 	mi.material_override = _mat_routes
 	_monde.add_child(mi)
+
+# ─── Terrain de baseball (apparence sable/tan) ────────────────
+# Vu de dessus, DA holo : gazon (éventail) + arc du champ extérieur + lignes de
+# faute + losange intérieur (bases) + monticule. Le marbre est posé à un coin du
+# bloc, le champ s'ouvre vers l'opposé.
+func _build_terrains_excel() -> void:
+	if _excel.terrains.is_empty():
+		return
+	var sg := HoloMesh3D.st_tri()
+	var ng := 0
+	var s := HoloMesh3D.st()
+	var n := 0
+	for t in _excel.terrains:
+		var r := _terrain_baseball(t["bbox"], sg, s)
+		ng += r[0]; n += r[1]
+	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "TerrainGazon", _mat_ambiance)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "TerrainBaseball", _mat_decor)
+
+func _terrain_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool) -> Array:
+	var w := bbox.size.x
+	var h := bbox.size.y
+	var R := maxf(taille_cellule, float(mini(w, h) - 1) * taille_cellule * 0.94)
+	var B := R * 0.34
+	var home := _world(bbox.position.x, bbox.position.y + h - 1, 0.02)
+	var u := Vector3(1, 0, 0)     # ligne de 1re base (+X)
+	var v := Vector3(0, 0, -1)    # ligne de 3e base (−Z)
+	var vert := Color(0.32, 0.70, 0.36)
+	var vert_a := Color(0.16, 0.40, 0.20, 0.5)
+	var terre := Color(0.80, 0.58, 0.35)
+	var blanc := Color(0.92, 0.96, 1.0)
+	var n := 0
+	var ng := 0
+	var seg := 26
+	# Gazon : éventail (quart de disque) du marbre vers l'arc.
+	var prevg := home + u * R
+	for i in range(1, seg + 1):
+		var a := (PI * 0.5) * float(i) / float(seg)
+		var cur := home + (u * cos(a) + v * sin(a)) * R
+		sg.set_color(vert_a); sg.add_vertex(home)
+		sg.set_color(vert_a); sg.add_vertex(prevg)
+		sg.set_color(vert_a); sg.add_vertex(cur)
+		ng += 1
+		prevg = cur
+	# Arc du champ extérieur (clôture) + piste d'avertissement.
+	var prev := home + u * R
+	var prev2 := home + u * (R * 0.92)
+	for i in range(1, seg + 1):
+		var a := (PI * 0.5) * float(i) / float(seg)
+		var dir := u * cos(a) + v * sin(a)
+		var cur := home + dir * R
+		var cur2 := home + dir * (R * 0.92)
+		n += HoloMesh3D.line(s, prev, cur, vert)
+		n += HoloMesh3D.line(s, prev2, cur2, Color(vert, 0.6))
+		prev = cur; prev2 = cur2
+	# Lignes de faute.
+	n += HoloMesh3D.line(s, home, home + u * R, blanc)
+	n += HoloMesh3D.line(s, home, home + v * R, blanc)
+	# Losange intérieur (base paths) + bases.
+	var first := home + u * B
+	var second := home + (u + v) * B
+	var third := home + v * B
+	n += HoloMesh3D.line(s, home, first, terre)
+	n += HoloMesh3D.line(s, first, second, terre)
+	n += HoloMesh3D.line(s, second, third, terre)
+	n += HoloMesh3D.line(s, third, home, terre)
+	for base: Vector3 in [first, second, third, home]:
+		n += _carre_plat(s, base, taille_cellule * 0.06, blanc)
+	# Arc de terre intérieure (limite de l'infield) + monticule du lanceur.
+	var rr := B * 1.35
+	var pv := home + u * rr
+	for i in range(1, 13):
+		var a := (PI * 0.5) * float(i) / 12.0
+		var cur := home + (u * cos(a) + v * sin(a)) * rr
+		n += HoloMesh3D.line(s, pv, cur, terre)
+		pv = cur
+	n += HoloMesh3D.circle(s, home + (u + v) * (B * 0.5), B * 0.13, terre, 12)
+	return [ng, n]
+
+# Petit carré plat (plan XZ) centré en `c`, demi-côté `r`.
+func _carre_plat(s: SurfaceTool, c: Vector3, r: float, col: Color) -> int:
+	var a := c + Vector3(-r, 0, -r)
+	var b := c + Vector3(r, 0, -r)
+	var d := c + Vector3(r, 0, r)
+	var e := c + Vector3(-r, 0, r)
+	return HoloMesh3D.line(s, a, b, col) + HoloMesh3D.line(s, b, d, col) \
+			+ HoloMesh3D.line(s, d, e, col) + HoloMesh3D.line(s, e, a, col)
 
 # Hauteur en mètres → hauteur monde (1 hauteur-défaut = 1 unité-maison × exagération).
 func _hauteur_monde(h_m: float) -> float:

@@ -32,6 +32,7 @@ func _ready() -> void:
 		"welcome":   await _shoot_welcome()
 		"holo":      await _shoot_holo()
 		"holo_overlay": await _shoot_holo_overlay()
+		"holo_baseball": await _shoot_holo_baseball()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -142,6 +143,40 @@ func _shoot_holo() -> void:
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_voies.png")
 	print("Screenshot -> res://tests/_shot_holo_voies.png")
+
+# ── Preview d'un terrain de baseball (modèle synthétique injecté) ──
+func _shoot_holo_baseball() -> void:
+	var vp3d := SubViewport.new()
+	vp3d.size = Vector2i(1280, 720)
+	vp3d.own_world_3d = true
+	vp3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp3d)
+	var m := HoloXlsxMap.new()
+	m.ok = true
+	m.grille = 24
+	m.taille_case_m = 10.0
+	m.hauteur_defaut_m = 3.0
+	m.terrains = [{"cells": [], "bbox": Rect2i(5, 5, 14, 14)}]
+	var holo: HoloMap3D = HoloMap3D.new()
+	holo._excel = m            # modèle pré-injecté (pas de lecture fichier)
+	holo.distance_min = 1.0
+	vp3d.add_child(holo)
+	await get_tree().create_timer(2.2).timeout
+	# Vue quasi top-down (lecture du plan) + vue 3/4.
+	holo._set_yaw(deg_to_rad(-45.0))
+	holo.plongee_deg = 78.0
+	holo._distance_cible = 7.2
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_baseball.png")
+	print("Screenshot -> res://tests/_shot_holo_baseball.png")
+	holo._set_yaw(deg_to_rad(-30.0))
+	holo.plongee_deg = 50.0
+	holo._distance_cible = 6.5
+	await get_tree().create_timer(1.0).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_baseball2.png")
+	print("Screenshot -> res://tests/_shot_holo_baseball2.png")
 
 # ── Capture du chemin RÉEL en jeu : overlay « Carte » (gabarit Excel) ──
 func _shoot_holo_overlay() -> void:

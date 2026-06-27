@@ -23,7 +23,7 @@
 class_name HoloXlsxMap
 extends RefCounted
 
-enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC, PONT }
+enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC, PONT, SPORT }
 enum Forme { BOITE, PYRAMIDE, CYLINDRE, DOME, GRADINS }
 
 const ALTITUDE_PONT_DEFAUT := 3.0   # m, si aucune altitude tapée (faible : décolle le tablier)
@@ -36,6 +36,7 @@ const _FAMILLES := {
 	Cell.EAU:      Color8(0x17, 0xC3, 0xC3),
 	Cell.PARC:     Color8(0x5E, 0x73, 0x49),
 	Cell.PONT:     Color8(0x9F, 0xB2, 0xC4),
+	Cell.SPORT:    Color8(0xD2, 0xB4, 0x8C),   # sable/tan → terrain de sport (baseball)
 }
 # Familles « non-carte » → VIDE (fonds neutres du gabarit).
 const _NEUTRES := [
@@ -58,6 +59,7 @@ var batiments: Array = []   # [{cells:Array[Vector2i], bbox:Rect2i, hauteur_m:fl
 var routes: Array = []      # Array[Vector2i]
 var eaux: Array = []        # Array[Vector2i]
 var parcs: Array = []       # Array[Vector2i]
+var terrains: Array = []    # terrains de sport (baseball) : [{cells, bbox}]
 var tours_orphelines: Array = []   # codes forme/hauteur posés sur une case NON-bâtiment (cf. 9c sur l'eau)
 var ponts: Array = []       # calque « Surélevé » : {cells, bbox, altitude_m, piliers}
 var routes_elevees: Array = []   # calque « Surélevé » : cases ROUTE magenta (autoroutes surélevées)
@@ -359,6 +361,7 @@ func _regrouper_batiments() -> void:
 	routes.clear()
 	eaux.clear()
 	parcs.clear()
+	terrains.clear()
 	tours_orphelines.clear()
 	for cell: Vector2i in type_case:
 		match type_case[cell]:
@@ -372,6 +375,17 @@ func _regrouper_batiments() -> void:
 			continue
 		var bloc := _flood(cell, vus)
 		batiments.append(_finaliser_bloc(bloc))
+	# Terrains de sport (sable/tan) : flood-fill 4-connexe → un terrain par bloc.
+	var vus_sp := {}
+	for cell: Vector2i in type_case:
+		if type_case[cell] != Cell.SPORT or vus_sp.has(cell):
+			continue
+		var bloc := _flood_type(cell, type_case, Cell.SPORT, vus_sp)
+		var minx := 1 << 30; var miny := 1 << 30; var maxx := -(1 << 30); var maxy := -(1 << 30)
+		for c: Vector2i in bloc:
+			minx = mini(minx, c.x); miny = mini(miny, c.y)
+			maxx = maxi(maxx, c.x); maxy = maxi(maxy, c.y)
+		terrains.append({"cells": bloc, "bbox": Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1)})
 	# Codes posés sur une case NON-bâtiment (ex. « 9c » sur l'eau) : tour isolée.
 	# Le canal apparence reste celui du fond (l'eau garde son shimmer) ; le code
 	# ajoute un volume paramétrique compact à cette case (cf. chantier : le
@@ -540,7 +554,7 @@ func _parser(zip: ZIPReader, chemin: String) -> XMLParser:
 
 # Résumé texte (debug / test headless).
 func resume() -> String:
-	return "grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d tours=%d ponts=%d routes_élevées=%d" % [
+	return "grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d sport=%d tours=%d ponts=%d routes_élevées=%d" % [
 		grille, taille_case_m, hauteur_defaut_m,
-		batiments.size(), routes.size(), eaux.size(), parcs.size(),
+		batiments.size(), routes.size(), eaux.size(), parcs.size(), terrains.size(),
 		tours_orphelines.size(), ponts.size(), routes_elevees.size()]
