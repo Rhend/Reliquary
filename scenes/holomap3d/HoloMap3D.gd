@@ -806,20 +806,26 @@ func _build_batiments_excel() -> void:
 		mif.material_override = _mat_faces
 		_monde.add_child(mif)
 
-# ─── Ponts (calque Surélevé) : tablier + structure + garde-corps ──
-# Posés à leur altitude AU-DESSUS du sol → l'eau/route restent visibles dessous.
-# Apparence d'OUVRAGE acier (treillis + rambardes), distincte d'une route surélevée.
+# ─── Ponts (calque Surélevé) : tablier en RAMPE + structure + garde-corps + trafic ──
+# Le tablier part du sol à un bout, monte (/), traverse en hauteur, redescend (\)
+# au sol à l'autre bout → il « colle à la route ». Des voitures circulent dessus
+# (montée, traversée, descente). L'eau/route restent visibles dessous.
 func _build_ponts_excel() -> void:
 	if _excel.ponts.is_empty():
 		return
 	var s := HoloMesh3D.st()
 	var sf := HoloMesh3D.st_tri()
+	var st := SurfaceTool.new()       # trafic des ponts (réutilise holo_traffic)
+	st.begin(Mesh.PRIMITIVE_LINES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x9011D5
 	var n := 0
 	var nf := 0
+	var ncar := 0
 	var col := Color(0.64, 0.74, 0.86)   # acier clair (glow via _mat_decor)
 	for p in _excel.ponts:
-		var r := _bati_pont(p, col, s, sf)
-		n += r[0]; nf += r[1]
+		var r := _bati_pont(p, col, s, sf, st, rng)
+		n += r[0]; nf += r[1]; ncar += r[2]
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "PontsExcel")
 	var fmesh := HoloMesh3D.commit(sf, nf)
 	if fmesh != null:
@@ -828,58 +834,113 @@ func _build_ponts_excel() -> void:
 		mif.mesh = fmesh
 		mif.material_override = _mat_faces
 		_monde.add_child(mif)
+	if ncar > 0:
+		var mit := MeshInstance3D.new()
+		mit.name = "PontsTrafic"
+		mit.mesh = st.commit()
+		mit.material_override = _mat_trafic
+		_monde.add_child(mit)
 
-# Un pont : tablier (dalle fine) + garde-corps (main courante + montants) au-dessus,
-# treillis (corde basse + montants + diagonales) en dessous, le long des deux grands
-# côtés ; piliers optionnels (Ouvrages d'art). Renvoie [nb arêtes, nb faces].
-func _bati_pont(pont: Dictionary, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
+# Profil du tablier le long de la travée (t∈[0,1]) : rampe / sur les `rf` premiers,
+# plateau au milieu, rampe \ sur les `rf` derniers. `alt` = hauteur du plateau.
+func _profil_pont(t: float, alt: float, rf: float) -> float:
+	if t < rf:
+		return alt * (t / rf)
+	if t > 1.0 - rf:
+		return alt * ((1.0 - t) / rf)
+	return alt
+
+# Un pont en rampe : tablier (surface + bords + traverses) suivant le profil,
+# garde-corps (main courante + montants) au-dessus, treillis (corde basse +
+# montants + diagonales) sous la partie élevée, piliers optionnels, et trafic.
+# Renvoie [nb arêtes, nb faces, nb voitures].
+func _bati_pont(pont: Dictionary, col: Color, s: SurfaceTool, sf: SurfaceTool,
+		st: SurfaceTool, rng: RandomNumberGenerator) -> Array:
 	var bbox: Rect2i = pont["bbox"]
-	var y := _hauteur_monde(pont["altitude_m"])
-	var ep := taille_cellule * 0.16          # épaisseur du tablier
-	var rail_h := taille_cellule * 0.42       # hauteur du garde-corps
-	var centre := _world(bbox.position.x + (bbox.size.x - 1) * 0.5,
-			bbox.position.y + (bbox.size.y - 1) * 0.5, y)
-	var sx := float(bbox.size.x) * taille_cellule * 0.98
-	var sz := float(bbox.size.y) * taille_cellule * 0.98
-	var n := 0
-	var nf := 0
-	# Tablier : dalle fine (arêtes acier + faces sombres pour l'occlusion).
-	n += HoloMesh3D.box(s, centre, sx, ep, sz, col)
-	nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, ep, sz * FACE_INSET)
-	# Travée = plus grande dimension ; garde-corps/treillis le long de cet axe.
-	var span_x := sx >= sz
+	var alt := _hauteur_monde(pont["altitude_m"])   # hauteur du plateau
+	var ep := taille_cellule * 0.14
+	var rail_h := taille_cellule * 0.40
+	var rf := 0.40
+	var span_x := bbox.size.x >= bbox.size.y
+	var long_cells: int = bbox.size.x if span_x else bbox.size.y
+	var larg_cells: int = bbox.size.y if span_x else bbox.size.x
 	var along := Vector3(1, 0, 0) if span_x else Vector3(0, 0, 1)
 	var side := Vector3(0, 0, 1) if span_x else Vector3(1, 0, 0)
-	var demi_long := (sx if span_x else sz) * 0.5
-	var demi_large := (sz if span_x else sx) * 0.5
-	var y0 := centre.y                        # dessous du tablier
-	var y1 := centre.y + ep                   # dessus du tablier
-	var yr := y1 + rail_h                      # main courante
-	var yb := maxf(0.02, centre.y - taille_cellule * 0.5)   # corde basse du treillis
-	var pas := maxi(2, roundi((2.0 * demi_long) / taille_cellule))
+	var centre_sol := _world(bbox.position.x + (bbox.size.x - 1) * 0.5,
+			bbox.position.y + (bbox.size.y - 1) * 0.5, 0.0)
+	var demi_long := float(long_cells) * taille_cellule * 0.5
+	var demi_large := float(larg_cells) * taille_cellule * 0.47
+	var end_a := centre_sol - along * demi_long
+	var end_b := centre_sol + along * demi_long
+	var nb := maxi(6, long_cells * 3)
+	var n := 0
+	var nf := 0
+	var centers: Array[Vector3] = []
+	for i in nb + 1:
+		var t := float(i) / float(nb)
+		centers.append(end_a.lerp(end_b, t) + Vector3(0, _profil_pont(t, alt, rf), 0))
+	# Tablier : surface (faces) + bords gauche/droite + traverses.
+	for i in nb:
+		var c0 := centers[i] + Vector3(0, ep, 0)
+		var c1 := centers[i + 1] + Vector3(0, ep, 0)
+		var l0 := c0 + side * demi_large; var r0 := c0 - side * demi_large
+		var l1 := c1 + side * demi_large; var r1 := c1 - side * demi_large
+		nf += HoloMesh3D._quad(sf, l0, r0, r1, l1, Vector3.UP)
+		n += HoloMesh3D.line(s, l0, l1, col)
+		n += HoloMesh3D.line(s, r0, r1, col)
+		n += HoloMesh3D.line(s, l0, r0, col)
+	var cf := centers[nb] + Vector3(0, ep, 0)
+	n += HoloMesh3D.line(s, cf + side * demi_large, cf - side * demi_large, col)
+	# Garde-corps + treillis le long des deux bords (suivent le profil en rampe).
 	for cote: float in [-1.0, 1.0]:
-		var off := side * (demi_large * cote)
-		var a := centre + off - along * demi_long
-		var b := centre + off + along * demi_long
-		n += HoloMesh3D.line(s, Vector3(a.x, yr, a.z), Vector3(b.x, yr, b.z), col)   # main courante
-		n += HoloMesh3D.line(s, Vector3(a.x, yb, a.z), Vector3(b.x, yb, b.z), col)   # corde basse
-		for i in pas + 1:
-			var t := float(i) / float(pas)
-			var px := lerpf(a.x, b.x, t)
-			var pz := lerpf(a.z, b.z, t)
-			n += HoloMesh3D.line(s, Vector3(px, y1, pz), Vector3(px, yr, pz), col)   # montant garde-corps
-			n += HoloMesh3D.line(s, Vector3(px, y0, pz), Vector3(px, yb, pz), col)   # montant treillis
-			if i < pas:
-				var t2 := float(i + 1) / float(pas)
-				n += HoloMesh3D.line(s, Vector3(px, y0, pz),
-						Vector3(lerpf(a.x, b.x, t2), yb, lerpf(a.z, b.z, t2)), col)   # diagonale
-	# Piliers (si « Ouvrages d'art » le précise) : colonnes vers le sol/l'eau.
+		var prev_rail := Vector3.ZERO
+		var prev_bot := Vector3.ZERO
+		for i in nb + 1:
+			var c := centers[i]
+			var edge := c + side * (demi_large * cote)
+			var deck := edge + Vector3(0, ep, 0)
+			var rail := deck + Vector3(0, rail_h, 0)
+			var bot := Vector3(edge.x, maxf(0.02, c.y - taille_cellule * 0.5), edge.z)
+			n += HoloMesh3D.line(s, deck, rail, col)         # montant de garde-corps
+			if c.y - 0.03 > bot.y:
+				n += HoloMesh3D.line(s, edge, bot, col)      # montant de treillis (partie élevée)
+			if i > 0:
+				n += HoloMesh3D.line(s, prev_rail, rail, col)   # main courante
+				n += HoloMesh3D.line(s, prev_bot, bot, col)     # corde basse
+			prev_rail = rail
+			prev_bot = bot
+	# Piliers (si « Ouvrages d'art » le précise) : sous la partie élevée, vers le sol.
 	if pont["piliers"]:
-		for i in range(1, pas, 2):
-			var t := float(i) / float(pas)
-			var c0 := centre + along * (-demi_long + 2.0 * demi_long * t)
-			n += HoloMesh3D.line(s, Vector3(c0.x, yb, c0.z), Vector3(c0.x, 0.0, c0.z), col)
-	return [n, nf]
+		for i in range(1, nb, 2):
+			var c := centers[i]
+			if c.y > alt * 0.6:
+				n += HoloMesh3D.line(s, Vector3(c.x, maxf(0.02, c.y - taille_cellule * 0.5), c.z),
+						Vector3(c.x, 0.0, c.z), col)
+	# Trafic : voitures qui montent la rampe, traversent, redescendent.
+	var ncar := 0
+	if trafic_actif:
+		ncar = _semer_pont_trafic(st, centers, ep, rng)
+	return [n, nf, ncar]
+
+# Sème des voitures sur le pont, sur 3 tronçons (montée / plateau / descente) dans
+# les deux sens → la circulation suit la rampe. Renvoie le nb de voitures.
+func _semer_pont_trafic(st: SurfaceTool, centers: Array, ep: float, rng: RandomNumberGenerator) -> int:
+	var nb: int = centers.size() - 1
+	var iu := clampi(roundi(0.4 * float(nb)), 1, nb / 2)
+	var dy := Vector3(0, ep + taille_cellule * 0.03, 0)   # roule SUR le tablier
+	var troncons := [
+		[centers[0], centers[iu]], [centers[iu], centers[nb - iu]], [centers[nb - iu], centers[nb]]]
+	var carlen := taille_cellule * 0.5
+	var ncar := 0
+	for tr: Array in troncons:
+		var a: Vector3 = tr[0] + dy
+		var b: Vector3 = tr[1] + dy
+		if a.distance_to(b) < 0.05:
+			continue
+		_semer_voitures(st, a, b - a, carlen, rng, couleur_voiture_aller, 1, 1.0)
+		_semer_voitures(st, b, a - b, carlen, rng, couleur_voiture_retour, 1, 1.0)
+		ncar += 2
+	return ncar
 
 # Routes magenta surélevées (autoroutes) : tuiles néon à leur altitude. Vide pour
 # l'instant (le calque ne porte que des ponts) ; code prêt si l'auteur en peint.
