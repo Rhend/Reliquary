@@ -717,8 +717,8 @@ func _build_marquage_voirie(s: SurfaceTool) -> int:
 			while R.has(Vector2i(hi + 1, c.y)) and int(axis.get(Vector2i(hi + 1, c.y), -1)) == 1: hi += 1
 			node[c] = Vector2((float(lo) + float(hi)) * 0.5, float(c.y))
 			larg[c] = hi - lo + 1
-	var col_med := Color(1.0, 0.45, 0.78)
-	var col_voie := Color(0.85, 0.28, 0.58)
+	# UNE seule médiane pointillée au centre du corridor (épuré, suit les angles).
+	var col_med := Color(0.95, 0.55, 0.82)
 	var n := 0
 	var vus := {}
 	for c: Vector2i in _excel.routes:
@@ -736,19 +736,8 @@ func _build_marquage_voirie(s: SurfaceTool) -> int:
 			if vus.has(key):
 				continue
 			vus[key] = true
-			var a3 := _world(na.x, na.y, 0.045)
-			var b3 := _world(nb.x, nb.y, 0.045)
-			var dir := (b3 - a3).normalized()
-			var perp := Vector3(-dir.z, 0.0, dir.x)
-			n += HoloMesh3D.line(s, a3 + perp * 0.012, b3 + perp * 0.012, col_med)
-			n += HoloMesh3D.line(s, a3 - perp * 0.012, b3 - perp * 0.012, col_med)
-			var w: int = maxi(int(larg[c]), int(larg[nc]))
-			var demi := float(w) * taille_cellule * 0.5
-			var nl := _n_voies(w)
-			for cote: float in [-1.0, 1.0]:
-				for k in range(1, nl):
-					var off := perp * (demi * float(k) / float(nl) * cote)
-					n += _dashes(s, a3 + off, b3 + off, col_voie, taille_cellule * 0.4, taille_cellule * 0.3)
+			n += _dashes(s, _world(na.x, na.y, 0.045), _world(nb.x, nb.y, 0.045), col_med,
+					taille_cellule * 0.5, taille_cellule * 0.35)
 	return n
 
 # Cases d'INTERSECTION = couvertes par une bande horizontale ET une bande verticale.
@@ -798,16 +787,16 @@ func _build_trottoirs_excel() -> void:
 		routes[c] = true
 	var s := HoloMesh3D.st()
 	var n := 0
-	var col := Color(0.55, 0.60, 0.66)   # béton clair, discret
+	var col := Color(1.0, 0.45, 0.78)   # contour néon vif (définit la forme de la route)
 	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for cell: Vector2i in _excel.routes:
 		for d: Vector2i in dirs:
 			if routes.has(cell + d):
 				continue
 			var seg := _cote_cellule(cell, d)
-			n += HoloMesh3D.line(s, _world(seg[0].x, seg[0].y, 0.025),
-					_world(seg[1].x, seg[1].y, 0.025), col)
-	_ajouter_mesh(HoloMesh3D.commit(s, n), "TrottoirsExcel", _mat_ambiance)
+			n += HoloMesh3D.line(s, _world(seg[0].x, seg[0].y, 0.03),
+					_world(seg[1].x, seg[1].y, 0.03), col)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "ContourRoutesExcel", _mat_neon)
 
 # Éclairage public : petits lampadaires (mât sombre + tête chaude qui glow) posés
 # le long des axes de voirie, à intervalle régulier, décalés sur le trottoir.
