@@ -578,14 +578,11 @@ func _build_routes_excel() -> void:
 		mi.mesh = surf
 		mi.material_override = _mat_routes
 		_monde.add_child(mi)
-	var inter := _routes_intersections()             # trafic (verrou plein, sécurité)
-	var inter_marq := _routes_intersections(true)    # marquage (vrais croisements seulement)
-	# 2) Marquage au sol : médiane + lignes de voie, INTERROMPUS aux VRAIS carrefours
-	#    seulement → plus de marquages qui se chevauchent, ni de portions effacées.
+	var inter := _routes_intersections()   # trafic (verrou plein, sécurité)
+	# 2) Marquage au sol par GRAPHE de centerline : médiane + lignes de voie qui
+	#    suivent les ANGLES et s'OUVRENT aux vrais carrefours (T / croisements).
 	var sm := HoloMesh3D.st()
-	var nm := 0
-	for b in _routes_bandes():
-		nm += _bande_marquage(b, sm, inter_marq)
+	var nm := _build_marquage_voirie(sm)
 	_ajouter_mesh(HoloMesh3D.commit(sm, nm), "RoutesMarquage", _mat_neon)
 	# 3) Trafic SIMULÉ (HoloTraffic) : les voitures suivent les voies, tournent au
 	#    bon sens aux intersections et NE SE CROISENT PAS (réservation de cases).
@@ -670,47 +667,92 @@ func _pt_bande(horiz: bool, av: float, wv: float, y: float) -> Vector3:
 
 # Marquage au sol d'une bande : médiane vive (double trait) séparant les deux sens
 # + lignes de voie pointillées (nb selon le type). Renvoie le nb d'arêtes.
-func _bande_marquage(b: Dictionary, s: SurfaceTool, inter: Dictionary) -> int:
-	var horiz: bool = b["axe"] == "H"
-	var a0: int = b["x0"] if horiz else b["y0"]
-	var a1: int = b["x1"] if horiz else b["y1"]
-	var w0: int = b["y0"] if horiz else b["x0"]
-	var w1: int = b["y1"] if horiz else b["x1"]
-	var wa := float(w0) - 0.5
-	var wb := float(w1) + 0.5
-	var wmid := (float(w0) + float(w1)) * 0.5
-	var nl := _n_voies(w1 - w0 + 1)
-	var y := 0.045
+# Longueur du segment de route traversant `c` selon l'axe de `dir`.
+func _run_len(R: Dictionary, c: Vector2i, dir: Vector2i) -> int:
+	var n := 1
+	var p := c + dir
+	while R.has(p):
+		n += 1; p += dir
+	p = c - dir
+	while R.has(p):
+		n += 1; p -= dir
+	return n
+
+# Marquage de voirie par GRAPHE de centerline. Pour chaque case on déduit son AXE
+# dominant (corridor H ou V) → la médiane/les voies suivent le corridor, tournent
+# aux ANGLES, et s'OUVRENT aux cases « carrefour » (≥ 3 bras de corridor = T ou
+# croisement). Robuste aux largeurs : une voie 2-large reste un seul corridor.
+func _build_marquage_voirie(s: SurfaceTool) -> int:
+	var R := {}
+	for c: Vector2i in _excel.routes:
+		R[c] = true
+	var axis := {}
+	for c: Vector2i in _excel.routes:
+		axis[c] = 0 if _run_len(R, c, Vector2i(1, 0)) >= _run_len(R, c, Vector2i(0, 1)) else 1
+	# Cases ouvertes (T / croisement) : ≥ 3 bras (le long + branche perpendiculaire).
+	var ouvert := {}
+	for c: Vector2i in _excel.routes:
+		var ax: int = axis[c]
+		var ad := [Vector2i(1, 0), Vector2i(-1, 0)] if ax == 0 else [Vector2i(0, 1), Vector2i(0, -1)]
+		var pd := [Vector2i(0, 1), Vector2i(0, -1)] if ax == 0 else [Vector2i(1, 0), Vector2i(-1, 0)]
+		var deg := 0
+		for d: Vector2i in ad:
+			if R.has(c + d):
+				deg += 1
+		for d: Vector2i in pd:
+			if R.has(c + d) and int(axis.get(c + d, -1)) == 1 - ax:
+				deg += 1
+		if deg >= 3:
+			ouvert[c] = true
+	# Nœud médian (centre de la coupe transversale du corridor) + largeur.
+	var node := {}
+	var larg := {}
+	for c: Vector2i in _excel.routes:
+		var ax: int = axis[c]
+		if ax == 0:
+			var lo := c.y; var hi := c.y
+			while R.has(Vector2i(c.x, lo - 1)) and int(axis.get(Vector2i(c.x, lo - 1), -1)) == 0: lo -= 1
+			while R.has(Vector2i(c.x, hi + 1)) and int(axis.get(Vector2i(c.x, hi + 1), -1)) == 0: hi += 1
+			node[c] = Vector2(float(c.x), (float(lo) + float(hi)) * 0.5)
+			larg[c] = hi - lo + 1
+		else:
+			var lo := c.x; var hi := c.x
+			while R.has(Vector2i(lo - 1, c.y)) and int(axis.get(Vector2i(lo - 1, c.y), -1)) == 1: lo -= 1
+			while R.has(Vector2i(hi + 1, c.y)) and int(axis.get(Vector2i(hi + 1, c.y), -1)) == 1: hi += 1
+			node[c] = Vector2((float(lo) + float(hi)) * 0.5, float(c.y))
+			larg[c] = hi - lo + 1
+	var col_med := Color(1.0, 0.45, 0.78)
+	var col_voie := Color(0.85, 0.28, 0.58)
 	var n := 0
-	var col_med := Color(1.0, 0.45, 0.78)    # médiane vive
-	var col_voie := Color(0.85, 0.28, 0.58)  # lignes de voie (plus discrètes)
-	# Positions le long de la bande où la coupe transversale touche un carrefour :
-	# on n'y trace pas de marquage (la voirie « s'ouvre » au croisement).
-	var skip := {}
-	for a in range(a0, a1 + 1):
-		for w in range(w0, w1 + 1):
-			if inter.has(Vector2i(a, w) if horiz else Vector2i(w, a)):
-				skip[a] = true
-				break
-	# Trace par sous-plages contiguës HORS carrefour.
-	var a := a0
-	while a <= a1:
-		if skip.has(a):
-			a += 1
+	var vus := {}
+	for c: Vector2i in _excel.routes:
+		if ouvert.has(c):
 			continue
-		var bend := a
-		while bend + 1 <= a1 and not skip.has(bend + 1):
-			bend += 1
-		var s0 := float(a) - 0.5
-		var s1 := float(bend) + 0.5
-		n += HoloMesh3D.line(s, _pt_bande(horiz, s0, wmid - 0.05, y), _pt_bande(horiz, s1, wmid - 0.05, y), col_med)
-		n += HoloMesh3D.line(s, _pt_bande(horiz, s0, wmid + 0.05, y), _pt_bande(horiz, s1, wmid + 0.05, y), col_med)
-		for ch: Array in [[wa, wmid], [wmid, wb]]:
-			for k in range(1, nl):
-				var wv := lerpf(ch[0], ch[1], float(k) / float(nl))
-				n += _dashes(s, _pt_bande(horiz, s0, wv, y), _pt_bande(horiz, s1, wv, y), col_voie,
-						taille_cellule * 0.4, taille_cellule * 0.3)
-		a = bend + 1
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var nc := c + d
+			if not R.has(nc) or ouvert.has(nc):
+				continue
+			var na: Vector2 = node[c]
+			var nb: Vector2 = node[nc]
+			if na.distance_to(nb) < 0.01:
+				continue
+			var key := "%.1f,%.1f,%.1f,%.1f" % [minf(na.x, nb.x), minf(na.y, nb.y), maxf(na.x, nb.x), maxf(na.y, nb.y)]
+			if vus.has(key):
+				continue
+			vus[key] = true
+			var a3 := _world(na.x, na.y, 0.045)
+			var b3 := _world(nb.x, nb.y, 0.045)
+			var dir := (b3 - a3).normalized()
+			var perp := Vector3(-dir.z, 0.0, dir.x)
+			n += HoloMesh3D.line(s, a3 + perp * 0.012, b3 + perp * 0.012, col_med)
+			n += HoloMesh3D.line(s, a3 - perp * 0.012, b3 - perp * 0.012, col_med)
+			var w: int = maxi(int(larg[c]), int(larg[nc]))
+			var demi := float(w) * taille_cellule * 0.5
+			var nl := _n_voies(w)
+			for cote: float in [-1.0, 1.0]:
+				for k in range(1, nl):
+					var off := perp * (demi * float(k) / float(nl) * cote)
+					n += _dashes(s, a3 + off, b3 + off, col_voie, taille_cellule * 0.4, taille_cellule * 0.3)
 	return n
 
 # Cases d'INTERSECTION = couvertes par une bande horizontale ET une bande verticale.
