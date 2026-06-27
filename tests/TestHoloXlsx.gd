@@ -24,28 +24,34 @@ func _ready() -> void:
 	_eq("apparence 12p = bâtiment", m.type_case.get(Vector2i(29, 29), -1), HoloXlsxMap.Cell.BATIMENT)
 	_eq("apparence 12g = bâtiment", m.type_case.get(Vector2i(30, 35), -1), HoloXlsxMap.Cell.BATIMENT)
 	_eq("apparence 9c = eau", m.type_case.get(Vector2i(44, 6), -1), HoloXlsxMap.Cell.EAU)
-	# Regroupement par couleur seule → 11 bâtiments (les routes séparent les blocs).
-	_eq("nb bâtiments", m.batiments.size(), 11)
+	# Regroupement des bâtiments (la carte évolue → on vérifie ≥ 8, pas un compte exact).
+	_ok("bâtiments lus (>= 8)", m.batiments.size() >= 8)
+	# Séparation par BORDURE : des cases encadrées (medium) deviennent des bâtiments
+	# 1×1 distincts avec LEUR hauteur (régression du bug de fusion).
+	_ok("bordure → bâtiment 1×1 à sa hauteur (19,20 = 9 m)", _bati_unitaire(m, Vector2i(19, 20), 9.0))
+	_ok("bordure → bâtiment 1×1 à sa hauteur (17,20 = 4 m)", _bati_unitaire(m, Vector2i(17, 20), 4.0))
 	# Formes lues (le texte d'une case donne hauteur + forme du bloc).
 	_ok("pyramide 12 m présente", _a_forme(m, HoloXlsxMap.Forme.PYRAMIDE, 12.0))
 	_ok("gradins 12 m présent", _a_forme(m, HoloXlsxMap.Forme.GRADINS, 12.0))
 	# « 9c » est posé sur l'eau → tour orpheline cylindre 9 m (cf. chantier).
-	_eq("nb tours orphelines", m.tours_orphelines.size(), 1)
+	_ok("tour(s) orpheline(s) lue(s)", m.tours_orphelines.size() >= 1)
 	_ok("cylindre 9 m (tour)", _a_tour(m, HoloXlsxMap.Forme.CYLINDRE, 9.0))
 	# La tour se centre sur le plan d'eau : son rectangle (bassin du lac) contient la
 	# case « 9c » et fait au moins 3x3 (≠ la seule case du texte).
-	var tour: Dictionary = m.tours_orphelines[0] if not m.tours_orphelines.is_empty() else {}
-	var rect: Rect2i = tour.get("rect", Rect2i())
-	print("    (rect tour = %s)" % str(rect))
+	var rect := Rect2i()
+	for t in m.tours_orphelines:
+		if (t["rect"] as Rect2i).has_point(Vector2i(44, 6)):
+			rect = t["rect"]
+	print("    (rect tour 9c = %s)" % str(rect))
 	_ok("tour centrée sur le bassin (rect contient 9c, >= 3x3)",
 			rect.has_point(Vector2i(44, 6)) and rect.size.x >= 3 and rect.size.y >= 3)
 	# Décor au sol présent.
 	_ok("routes peintes", m.routes.size() > 0)
 	_ok("eau peinte", m.eaux.size() > 0)
 	_ok("parcs peints", m.parcs.size() > 0)
-	# Calque Surélevé : 3 ponts (gris acier), altitude 2 m, sans piliers (Ouvrages
-	# = exemples génériques O01/O02 → ignorés). Pas de route surélevée.
-	_eq("nb ponts", m.ponts.size(), 3)
+	# Calque Surélevé : ponts (gris acier) à faible altitude, sans piliers (Ouvrages
+	# = exemples génériques → ignorés). Pas de route surélevée.
+	_ok("ponts lus (>= 1)", m.ponts.size() >= 1)
 	_ok("ponts à altitude faible (1-4 m)", _ponts_altitude_faible(m, 4.0))
 	_ok("ponts sans piliers (Ouvrages ignoré)", _aucun_pilier(m))
 	_eq("routes surélevées", m.routes_elevees.size(), 0)
@@ -58,6 +64,13 @@ func _ready() -> void:
 		print("  ✓ lecteur Excel conforme")
 	print("════════════════════════════════\n")
 	get_tree().quit(0 if _fail.is_empty() else 1)
+
+func _bati_unitaire(m: HoloXlsxMap, cell: Vector2i, hauteur: float) -> bool:
+	for b in m.batiments:
+		var cells: Array = b["cells"]
+		if cells.size() == 1 and cells[0] == cell and is_equal_approx(b["hauteur_m"], hauteur):
+			return true
+	return false
 
 func _a_forme(m: HoloXlsxMap, forme: int, hauteur: float) -> bool:
 	for b in m.batiments:

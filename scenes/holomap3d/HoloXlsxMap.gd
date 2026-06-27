@@ -67,6 +67,9 @@ var routes_elevees: Array = []   # calque « Surélevé » : cases ROUTE magenta
 # Tables internes du classeur.
 var _fills: Array = []       # fillId → Color (ou null)
 var _xf_fill: Array = []     # styleIndex (s) → fillId
+var _xf_border: Array = []   # styleIndex (s) → borderId
+var _borders: Array = []     # borderId → masque de MURS (L=1 R=2 T=4 B=8 ; bordure medium/thick)
+var border_case := {}        # Vector2i → masque de murs (cases de la Carte, séparateurs)
 var _strings: Array = []     # sharedStrings
 var _feuilles := {}          # nom de feuille → chemin xml interne
 
@@ -89,15 +92,18 @@ func charger(chemin: String) -> bool:
 	ok = true
 	return true
 
-# ─── styles.xml : fills (fillId→rgb) + cellXfs (s→fillId) ──────
+# ─── styles.xml : fills (s→rgb), cellXfs (s→fillId/borderId), borders (murs) ──
 func _lire_styles(zip: ZIPReader) -> void:
 	_fills.clear()
 	_xf_fill.clear()
+	_xf_border.clear()
+	_borders.clear()
 	var p := _parser(zip, "xl/styles.xml")
 	if p == null:
 		return
 	var dans_fills := false
 	var dans_cellxfs := false
+	var dans_borders := false
 	while p.read() == OK:
 		var t := p.get_node_type()
 		if t == XMLParser.NODE_ELEMENT:
@@ -105,22 +111,46 @@ func _lire_styles(zip: ZIPReader) -> void:
 			match n:
 				"fills": dans_fills = true
 				"cellXfs": dans_cellxfs = true
+				"borders": dans_borders = true
 				"fgColor":
 					if dans_fills:
 						_fills[_fills.size() - 1] = _rgb(p.get_named_attribute_value_safe("rgb"))
 				"fill":
 					if dans_fills:
 						_fills.append(null)   # rempli si un fgColor suit
+				"border":
+					if dans_borders:
+						_borders.append(0)
+				"left", "right", "top", "bottom":
+					if dans_borders and not _borders.is_empty() \
+							and _est_mur_style(p.get_named_attribute_value_safe("style")):
+						_borders[_borders.size() - 1] |= _bit_cote(n)
 				"xf":
 					if dans_cellxfs:
 						var fid := -1
 						if p.has_attribute("fillId"):
 							fid = int(p.get_named_attribute_value("fillId"))
 						_xf_fill.append(fid)
+						var bid := 0
+						if p.has_attribute("borderId"):
+							bid = int(p.get_named_attribute_value("borderId"))
+						_xf_border.append(bid)
 		elif t == XMLParser.NODE_ELEMENT_END:
 			match p.get_node_name():
 				"fills": dans_fills = false
 				"cellXfs": dans_cellxfs = false
+				"borders": dans_borders = false
+
+# Bordure de SÉPARATION volontaire (≠ fin quadrillage décoratif « thin »/« hair »).
+func _est_mur_style(st: String) -> bool:
+	return st == "medium" or st == "thick" or st == "double" or st.begins_with("medium")
+
+func _bit_cote(cote: String) -> int:
+	match cote:
+		"left": return 1
+		"right": return 2
+		"top": return 4
+		_: return 8   # bottom
 
 # « FFRRGGBB » (ARGB) → Color. Renvoie null si vide/illisible.
 func _rgb(hex: String) -> Variant:
@@ -215,15 +245,17 @@ func _valeurs_cellules(zip: ZIPReader, chemin: String) -> Dictionary:
 func _lire_carte(zip: ZIPReader) -> void:
 	type_case.clear()
 	texte_case.clear()
+	border_case.clear()
 	var chemin := _chemin_feuille("Carte")
 	if chemin == "":
 		return
-	_lire_grille(zip, chemin, type_case, texte_case)
+	_lire_grille(zip, chemin, type_case, texte_case, border_case)
 
 # Parse une feuille-grille : remplit type[Vector2i]→Cell et texte[Vector2i]→String.
 # Coordonnées de données 0-based : B2 → (0,0), BI61 → (59,59) (ligne 1 / colonne A
 # = en-têtes de coordonnées, ignorées).
-func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_texte: Dictionary) -> void:
+func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_texte: Dictionary,
+		dico_border: Dictionary = {}) -> void:
 	var p := _parser(zip, chemin)
 	if p == null:
 		return
@@ -251,6 +283,9 @@ func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_te
 					var gy := ligne - 2
 					if gx >= 0 and gy >= 0 and gx < grille and gy < grille:
 						dico_type[Vector2i(gx, gy)] = _classer(fill)
+						var bid: int = int(_xf_border[s]) if s >= 0 and s < _xf_border.size() else 0
+						if bid > 0 and bid < _borders.size() and int(_borders[bid]) != 0:
+							dico_border[Vector2i(gx, gy)] = int(_borders[bid])
 				"v":
 					lire_v = true
 		elif t == XMLParser.NODE_TEXT and lire_v:
@@ -276,23 +311,25 @@ func _lire_sureleve(zip: ZIPReader) -> void:
 		return
 	var dico_type := {}
 	var dico_texte := {}
-	_lire_grille(zip, chemin, dico_type, dico_texte)
+	var dico_border := {}
+	_lire_grille(zip, chemin, dico_type, dico_texte, dico_border)
 	# Routes magenta surélevées (autoroutes) — distinctes des ponts.
 	for cell: Vector2i in dico_type:
 		if dico_type[cell] == Cell.ROUTE:
 			routes_elevees.append(cell)
-	# Ponts (gris acier) regroupés par adjacence 4-connexe.
+	# Ponts (gris acier) regroupés par adjacence 4-connexe (séparés par les bordures).
 	var vus := {}
 	for cell: Vector2i in dico_type:
 		if dico_type[cell] != Cell.PONT or vus.has(cell):
 			continue
-		var bloc := _flood_type(cell, dico_type, Cell.PONT, vus)
+		var bloc := _flood_type(cell, dico_type, Cell.PONT, vus, dico_border)
 		ponts.append(_finaliser_pont(bloc, dico_texte))
 	# Piliers : affinés depuis « Ouvrages d'art » (optionnel ; sinon sans piliers).
 	_appliquer_ouvrages(zip)
 
-# Flood-fill 4-connexe d'un bloc de type `t` dans `dico` ; marque dans `vus`.
-func _flood_type(depart: Vector2i, dico: Dictionary, t: int, vus: Dictionary) -> Array:
+# Flood-fill 4-connexe d'un bloc de type `t` dans `dico`, SANS franchir un mur
+# (bordure medium/thick). Marque dans `vus`.
+func _flood_type(depart: Vector2i, dico: Dictionary, t: int, vus: Dictionary, bord: Dictionary = {}) -> Array:
 	var bloc: Array = []
 	var pile: Array = [depart]
 	while not pile.is_empty():
@@ -301,9 +338,23 @@ func _flood_type(depart: Vector2i, dico: Dictionary, t: int, vus: Dictionary) ->
 			continue
 		vus[c] = true
 		bloc.append(c)
-		pile.append(c + Vector2i(1, 0)); pile.append(c + Vector2i(-1, 0))
-		pile.append(c + Vector2i(0, 1)); pile.append(c + Vector2i(0, -1))
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if not _mur(c, d, bord):
+				pile.append(c + d)
 	return bloc
+
+# Y a-t-il un MUR (bordure de séparation) entre la case `a` et sa voisine `a+d` ?
+# Bits : L=1 R=2 T=4 B=8. Le mur peut être posé sur l'une OU l'autre des deux cases.
+func _mur(a: Vector2i, d: Vector2i, bord: Dictionary) -> bool:
+	var wa: int = bord.get(a, 0)
+	var wb: int = bord.get(a + d, 0)
+	if d.x == 1:
+		return (wa & 2) != 0 or (wb & 1) != 0
+	if d.x == -1:
+		return (wa & 1) != 0 or (wb & 2) != 0
+	if d.y == 1:
+		return (wa & 8) != 0 or (wb & 4) != 0
+	return (wa & 4) != 0 or (wb & 8) != 0
 
 # Bloc-pont : bbox + altitude (max des textes du bloc, défaut faible).
 func _finaliser_pont(cells: Array, dico_texte: Dictionary) -> Dictionary:
@@ -368,7 +419,8 @@ func _regrouper_batiments() -> void:
 			Cell.ROUTE: routes.append(cell)
 			Cell.EAU: eaux.append(cell)
 			Cell.PARC: parcs.append(cell)
-	# Bâtiments : flood-fill 4-connexe sur l'apparence BATIMENT (couleur seule).
+	# Bâtiments : flood-fill 4-connexe sur l'apparence BATIMENT, séparés par les
+	# bordures medium/thick (cf. _mur) → on peut encadrer une case pour l'isoler.
 	var vus := {}
 	for cell: Vector2i in type_case:
 		if type_case[cell] != Cell.BATIMENT or vus.has(cell):
@@ -380,7 +432,7 @@ func _regrouper_batiments() -> void:
 	for cell: Vector2i in type_case:
 		if type_case[cell] != Cell.SPORT or vus_sp.has(cell):
 			continue
-		var bloc := _flood_type(cell, type_case, Cell.SPORT, vus_sp)
+		var bloc := _flood_type(cell, type_case, Cell.SPORT, vus_sp, border_case)
 		var minx := 1 << 30; var miny := 1 << 30; var maxx := -(1 << 30); var maxy := -(1 << 30)
 		for c: Vector2i in bloc:
 			minx = mini(minx, c.x); miny = mini(miny, c.y)
@@ -414,10 +466,9 @@ func _flood(depart: Vector2i, vus: Dictionary) -> Array:
 			continue
 		vus[c] = true
 		bloc.append(c)
-		pile.append(c + Vector2i(1, 0))
-		pile.append(c + Vector2i(-1, 0))
-		pile.append(c + Vector2i(0, 1))
-		pile.append(c + Vector2i(0, -1))
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if not _mur(c, d, border_case):   # une bordure medium/thick sépare deux bâtiments
+				pile.append(c + d)
 	return bloc
 
 # Calcule bbox + hauteur (max des textes du bloc) + forme (1re lettre trouvée).
