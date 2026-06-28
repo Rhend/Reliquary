@@ -1152,7 +1152,6 @@ func _build_parkings_excel() -> void:
 	var col_mur := Color(0.46, 0.49, 0.55)
 	var murh := unite_maison * 0.5
 	var hc := taille_cellule * 0.5    # demi-case (place pleine, bord à bord)
-	var ah := taille_cellule * 0.14   # demi-largeur de l'allée de circulation
 	var vus := {}
 	for start: Vector2i in _excel.parkings:
 		if vus.has(start):
@@ -1176,29 +1175,33 @@ func _build_parkings_excel() -> void:
 		var horiz := (maxx - minx) >= (maxy - miny)
 		var av := Vector3(1, 0, 0) if horiz else Vector3(0, 0, 1)   # axe des allées (long)
 		var bv := Vector3(0, 0, 1) if horiz else Vector3(1, 0, 0)   # axe perpendiculaire (rangées)
-		# ── Marquages alignés sur la grille (places entières) ──
+		# ── Marquages : LOGIQUE de lot (pas le même motif partout) ──
+		# Le rôle d'une case dépend de son indice de RANGÉE (le long de B) : une rangée
+		# sur 3 est une ALLÉE de circulation (fléchée, sens alterné), les autres sont des
+		# rangées de PLACES (dos à dos). Tout est aligné sur la grille → places entières.
+		var b0idx := miny if horiz else minx
 		for cell: Vector2i in lot:
 			var c := _world(cell.x, cell.y, y)
 			var col := _moduler(Color(0.74, 0.79, 0.88), c)
-			# Fonds de rangée (bords ±0.5 sur B) + bords de l'allée centrale (±ah).
-			n += HoloMesh3D.line(s, c + av * (-hc) + bv * (-hc), c + av * hc + bv * (-hc), col)
-			n += HoloMesh3D.line(s, c + av * (-hc) + bv * hc,    c + av * hc + bv * hc,    col)
-			n += HoloMesh3D.line(s, c + av * (-hc) + bv * (-ah), c + av * hc + bv * (-ah), col)
-			n += HoloMesh3D.line(s, c + av * (-hc) + bv * ah,    c + av * hc + bv * ah,    col)
-			# Séparateurs de places : tous les 0.5 case en A (alignés bord à bord avec
-			# les voisines → places entières). Côté gauche (k=-0.5) + centre (k=0) ; le
-			# bord droit est fourni par la case suivante (sinon doublons).
-			for k: float in [-0.5, 0.0]:
-				var u := c + av * (k * taille_cellule)
-				n += HoloMesh3D.line(s, u + bv * (-ah), u + bv * (-hc), col)   # places côté -
-				n += HoloMesh3D.line(s, u + bv * ah,    u + bv * hc,    col)   # places côté +
-			# Flèche de sens de circulation dans l'allée (alterne 1 rangée sur 2).
-			var row: int = cell.y if horiz else cell.x
-			var sgn := 1.0 if (row % 2 == 0) else -1.0
-			var tip := c + av * (sgn * taille_cellule * 0.24)
-			n += HoloMesh3D.line(s, c - av * (sgn * taille_cellule * 0.12), tip, col)   # hampe
-			n += HoloMesh3D.line(s, tip, tip - av * (sgn * taille_cellule * 0.12) + bv * (taille_cellule * 0.07), col)
-			n += HoloMesh3D.line(s, tip, tip - av * (sgn * taille_cellule * 0.12) - bv * (taille_cellule * 0.07), col)
+			var row: int = (cell.y if horiz else cell.x) - b0idx
+			if row % 3 == 1:
+				# ALLÉE de circulation : bords + flèche (sens alterné une allée sur deux).
+				n += HoloMesh3D.line(s, c + av * (-hc) + bv * (-hc), c + av * hc + bv * (-hc), col)
+				n += HoloMesh3D.line(s, c + av * (-hc) + bv * hc,    c + av * hc + bv * hc,    col)
+				var sgn := 1.0 if (((row - 1) / 3) % 2 == 0) else -1.0
+				var tip := c + av * (sgn * taille_cellule * 0.30)
+				n += HoloMesh3D.line(s, c - av * (sgn * taille_cellule * 0.12), tip, col)   # hampe
+				n += HoloMesh3D.line(s, tip, tip - av * (sgn * taille_cellule * 0.13) + bv * (taille_cellule * 0.08), col)
+				n += HoloMesh3D.line(s, tip, tip - av * (sgn * taille_cellule * 0.13) - bv * (taille_cellule * 0.08), col)
+			else:
+				# Rangée de PLACES : fonds (±0.5) + séparateur central (dos à dos) +
+				# séparateurs de places tous les 0.5 case (alignés bord à bord, entiers).
+				n += HoloMesh3D.line(s, c + av * (-hc) + bv * (-hc), c + av * hc + bv * (-hc), col)  # bord -
+				n += HoloMesh3D.line(s, c + av * (-hc) + bv * hc,    c + av * hc + bv * hc,    col)  # bord +
+				n += HoloMesh3D.line(s, c + av * (-hc),              c + av * hc,              col)  # dos à dos
+				for k: float in [-0.5, 0.0]:
+					var u := c + av * (k * taille_cellule)
+					n += HoloMesh3D.line(s, u + bv * (-hc), u + bv * hc, col)   # séparateur de place
 		# ── Muret béton ceinturant le lot (base + sommet + poteaux) + rail glow ──
 		for cell: Vector2i in lot:
 			for d: Vector2i in dirs:
