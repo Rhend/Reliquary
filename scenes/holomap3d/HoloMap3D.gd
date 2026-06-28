@@ -34,6 +34,7 @@ const FACE_SHADER := preload("res://scenes/holomap3d/holo_face.gdshader")
 const MOTES_SHADER := preload("res://scenes/holomap3d/holo_motes.gdshader")
 const TRAFFIC_SHADER := preload("res://scenes/holomap3d/holo_traffic.gdshader")
 const WATER_SHADER := preload("res://scenes/holomap3d/holo_water.gdshader")
+const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
 const TAILLE_MONDE_CIBLE := 13.0   # largeur monde visée pour la grille Excel (cadrage caméra)
 const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit de carte par défaut
@@ -304,9 +305,9 @@ func _setup_materials() -> void:
 	# Balises rouges (sommets de tours) : clignotement via alpha_mult (cf. _process).
 	_mat_balise = _make_mat(LINE_SHADER, {"emission_strength": 3.2, "alpha_mult": 1.0})
 
-	# Fumée d'usine : panache vert-ocre qui monte (réutilise le shader de poussières).
-	_mat_fumee = _make_mat(MOTES_SHADER, {
-		"mote_color": Color(0.52, 0.60, 0.26), "hauteur": 1.0, "vitesse": 0.04,
+	# Fumée d'usine : vrai panache de volutes (billboards doux qui montent et gonflent).
+	_mat_fumee = _make_mat(FUMEE_SHADER, {
+		"fumee_color": Color(0.50, 0.58, 0.28), "hauteur": 1.3, "vitesse": 0.05, "expansion": 1.8,
 	})
 
 	# Lumière chaude (ambiance supermarché) : nappes additives ambrées, glow doux.
@@ -1393,8 +1394,8 @@ func _build_usines_excel() -> void:
 	var s := HoloMesh3D.st()       # coque corrodée (sombre, peu de glow)
 	var sf := HoloMesh3D.st_tri()
 	var sn := HoloMesh3D.st()       # accents NÉON (verrières, conduits, cheminée)
-	var su := SurfaceTool.new()    # fumée (segments montants, shader de poussières)
-	su.begin(Mesh.PRIMITIVE_LINES)
+	var su := SurfaceTool.new()    # fumée (billboards de volutes, shader holo_fumee)
+	su.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val ^ 0x05111E
 	var n := 0
@@ -1426,22 +1427,26 @@ func _build_usines_excel() -> void:
 		miu.material_override = _mat_fumee
 		_monde.add_child(miu)
 
-# Sème un petit panache de fumée (segments verticaux courts, phases aléatoires) au-
-# dessus d'un point : le shader de poussières les fait monter et boucler.
+# Sème un panache de fumée : des QUADS billboard (bouffées) posés au sommet, chacun
+# avec sa phase et sa taille. Le shader holo_fumee les fait monter/gonfler/estomper
+# en disques doux → vrai nuage de volutes (et non des traits). Renvoie le nb de tris.
 func _semer_fumee(s: SurfaceTool, sommet: Vector3, rng: RandomNumberGenerator) -> int:
+	var coins := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
+	var ordre := [0, 1, 2, 0, 2, 3]
 	var n := 0
-	for _i in 18:
-		# L'écart horizontal s'élargit avec la phase → le panache « gonfle » en montant.
+	for _i in 12:
 		var ph := rng.randf()
-		var spread := taille_cellule * (0.18 + 0.5 * ph)
-		var off := Vector3((rng.randf() - 0.5) * spread, ph * taille_cellule * 0.2,
-				(rng.randf() - 0.5) * spread)
-		var base := sommet + off
-		var a := 0.28 + 0.34 * rng.randf()
-		var seg := taille_cellule * (0.14 + 0.06 * rng.randf())
-		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(base)
-		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(base + Vector3(0, seg, 0))
-		n += 1
+		var jit := Vector3((rng.randf() - 0.5) * taille_cellule * 0.28, 0.0,
+				(rng.randf() - 0.5) * taille_cellule * 0.28)
+		var base := sommet + jit
+		var taille := taille_cellule * (0.30 + 0.16 * rng.randf())   # demi-taille de base
+		var a := 0.14 + 0.14 * rng.randf()
+		for idx: int in ordre:
+			s.set_color(Color(1, 1, 1, a))
+			s.set_uv(Vector2(ph, taille))
+			s.set_uv2(coins[idx])
+			s.add_vertex(base)
+		n += 2
 	return n
 
 # Verrières en dents de scie (sheds industriels) ÉMISSIVES : chaque dent = montant
