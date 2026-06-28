@@ -1413,10 +1413,16 @@ func _build_usines_excel() -> void:
 		n += r[0]; nf += r[1]
 		nn += _toit_sheds_neon(bb, h, neon, sn)       # verrières en dents de scie (glow)
 		nn += _conduits_facade(bb, h, neon, sn)        # tuyauterie ceinturant le hall
-		nn += _cheminee_neon(bb, h, neon, sn)          # cheminée lumineuse + balise
-		# Panache de fumée vert-ocre au RAS de la cheminée (montée animée).
-		var sommet := _world(float(bb.position.x), float(bb.position.y), h + ch_h + unite_maison * 0.12)
-		nfu += _semer_fumee(su, sommet, rng)
+		# 3 cheminées réparties sur le grand axe du hall, chacune avec son panache.
+		var x0 := float(bb.position.x); var x1 := float(bb.position.x + bb.size.x - 1)
+		var y0 := float(bb.position.y); var y1 := float(bb.position.y + bb.size.y - 1)
+		var span_x := bb.size.x >= bb.size.y
+		for f: float in [0.2, 0.5, 0.8]:
+			var gx := lerpf(x0, x1, f) if span_x else lerpf(x0, x1, 0.28)
+			var gy := lerpf(y0, y1, 0.28) if span_x else lerpf(y0, y1, f)
+			var cbase := _world(gx, gy, h)
+			nn += _cheminee_neon(cbase, neon, sn)
+			nfu += _semer_fumee(su, cbase + Vector3(0, ch_h + unite_maison * 0.12, 0), rng)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Usines")
 	_ajouter_faces(HoloMesh3D.commit(sf, nf), "UsinesFaces")
 	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "UsinesNeon", _mat_neon)
@@ -1506,9 +1512,8 @@ func _conduits_facade(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
 				+ HoloMesh3D.line(s, c2, c3, col) + HoloMesh3D.line(s, c3, c0, col)
 	return n
 
-# Cheminée ÉMISSIVE à un coin du toit : fût lumineux + 2 anneaux de fumée + balise.
-func _cheminee_neon(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
-	var base := _world(float(bb.position.x), float(bb.position.y), h)
+# Cheminée ÉMISSIVE posée en `base` (sur le toit) : fût lumineux + 2 anneaux + balise.
+func _cheminee_neon(base: Vector3, col: Color, s: SurfaceTool) -> int:
 	var w := taille_cellule * 0.16
 	var ch := unite_maison * 2.4
 	var n := HoloMesh3D.box(s, base, w, ch, w, col)
