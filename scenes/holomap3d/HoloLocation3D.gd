@@ -28,7 +28,6 @@ var col: Color = Color(0.7, 0.7, 0.7)   # couleur de palier (UIColors.tier_color
 var taille_x: float = 0.7                # emprise monde X
 var taille_z: float = 0.7                # emprise monde Z
 var hauteur: float = 1.0                 # hauteur monde du bâtiment
-var etages: int = 4                      # subdivision (lignes d'étages)
 var pin_float: float = 0.6               # distance du pin au-dessus du toit
 var ring_radius: float = 0.8
 var sans_batiment: bool = false          # true → pas de boîte/faces/tige (le décor EST le corps)

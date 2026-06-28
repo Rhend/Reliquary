@@ -205,7 +205,6 @@ var _post_mat: ShaderMaterial
 
 var _yaw := 0.0
 var _dragging := false
-var _debug_label: Label
 var _tooltip: HoloTooltip
 var _hovered: HoloLocation3D
 var _radar: Node3D
@@ -280,92 +279,63 @@ func _setup_camera() -> void:
 	_distance_cible = distance
 	_appliquer_camera()
 
+# Crée un ShaderMaterial et applique les paramètres en bloc (clé→valeur).
+func _make_mat(shader: Shader, params: Dictionary) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = shader
+	for k in params:
+		m.set_shader_parameter(k, params[k])
+	return m
+
 func _setup_materials() -> void:
-	_mat_decor = ShaderMaterial.new()
-	_mat_decor.shader = LINE_SHADER
-	_mat_decor.set_shader_parameter("emission_strength", luminosite_decor)
-	_mat_decor.set_shader_parameter("alpha_mult", 1.0)
-
-	_mat_ambiance = ShaderMaterial.new()
-	_mat_ambiance.shader = LINE_SHADER
-	_mat_ambiance.set_shader_parameter("emission_strength", luminosite_ambiance)
-	_mat_ambiance.set_shader_parameter("alpha_mult", 1.0)
-
-	_mat_routes = ShaderMaterial.new()
-	_mat_routes.shader = ROUTE_SHADER
-	_mat_routes.set_shader_parameter("route_color", couleur_route)
-	_mat_routes.set_shader_parameter("emission_base", route_emission_base)
-	_mat_routes.set_shader_parameter("flux_intensite", flux_intensite)
-	_mat_routes.set_shader_parameter("flux_vitesse", flux_vitesse)
-	_mat_routes.set_shader_parameter("flux_frequence", flux_frequence)
+	_mat_decor = _make_mat(LINE_SHADER, {"emission_strength": luminosite_decor, "alpha_mult": 1.0})
+	_mat_ambiance = _make_mat(LINE_SHADER, {"emission_strength": luminosite_ambiance, "alpha_mult": 1.0})
+	_mat_routes = _make_mat(ROUTE_SHADER, {
+		"route_color": couleur_route, "emission_base": route_emission_base,
+		"flux_intensite": flux_intensite, "flux_vitesse": flux_vitesse,
+		"flux_frequence": flux_frequence,
+	})
 
 	# Faces sombres : dessinées AVANT les arêtes (render_priority plus bas) et
 	# écrivant la profondeur → occlusion des lignes derrière.
-	_mat_faces = ShaderMaterial.new()
-	_mat_faces.shader = FACE_SHADER
-	_mat_faces.set_shader_parameter("face_color", couleur_faces)
-	_mat_faces.set_shader_parameter("opacite", opacite_faces)
-	_mat_faces.set_shader_parameter("fenetre_densite", fenetre_densite)
-	_mat_faces.set_shader_parameter("fenetre_emission", fenetre_emission)
-	_mat_faces.set_shader_parameter("fenetre_color", couleur_fenetre)
+	_mat_faces = _make_mat(FACE_SHADER, {
+		"face_color": couleur_faces, "opacite": opacite_faces,
+		"fenetre_densite": fenetre_densite, "fenetre_emission": fenetre_emission,
+		"fenetre_color": couleur_fenetre,
+	})
 	_mat_faces.render_priority = -1
 
 	# Poussières de données (montée animée).
-	_mat_motes = ShaderMaterial.new()
-	_mat_motes.shader = MOTES_SHADER
-	_mat_motes.set_shader_parameter("mote_color", couleur_motes)
-	_mat_motes.set_shader_parameter("hauteur", motes_hauteur)
+	_mat_motes = _make_mat(MOTES_SHADER, {"mote_color": couleur_motes, "hauteur": motes_hauteur})
 
 	# Trafic (traînées le long des routes).
-	_mat_trafic = ShaderMaterial.new()
-	_mat_trafic.shader = TRAFFIC_SHADER
-	_mat_trafic.set_shader_parameter("vitesse", vitesse_voitures)
+	_mat_trafic = _make_mat(TRAFFIC_SHADER, {"vitesse": vitesse_voitures})
 
 	# Accents néon (enseignes holographiques, nœuds d'intersection) — glow.
-	_mat_neon = ShaderMaterial.new()
-	_mat_neon.shader = LINE_SHADER
-	_mat_neon.set_shader_parameter("emission_strength", 2.0)
-	_mat_neon.set_shader_parameter("alpha_mult", 1.0)
+	_mat_neon = _make_mat(LINE_SHADER, {"emission_strength": 2.0, "alpha_mult": 1.0})
 
 	# Décor d'un lieu SANS bâtiment (parc-lieu) : tier-coloré + glow marqué pour
 	# que la zone ressorte comme un lieu (pas un simple décor vert).
-	_mat_lieu_decor = ShaderMaterial.new()
-	_mat_lieu_decor.shader = LINE_SHADER
-	_mat_lieu_decor.set_shader_parameter("emission_strength", lieu_decor_emission)
-	_mat_lieu_decor.set_shader_parameter("alpha_mult", 1.0)
+	_mat_lieu_decor = _make_mat(LINE_SHADER, {"emission_strength": lieu_decor_emission, "alpha_mult": 1.0})
 
 	# Lac satellite (hors carré) : nappe pleine, bleu franc et lisible.
-	_mat_lac = ShaderMaterial.new()
-	_mat_lac.shader = LINE_SHADER
-	_mat_lac.set_shader_parameter("emission_strength", 1.3)
-	_mat_lac.set_shader_parameter("alpha_mult", 1.0)
+	_mat_lac = _make_mat(LINE_SHADER, {"emission_strength": 1.3, "alpha_mult": 1.0})
 
 	# Eau qui s'écoule (carte Excel) : bandes de courant animées par le shader.
-	_mat_eau = ShaderMaterial.new()
-	_mat_eau.shader = WATER_SHADER
-	_mat_eau.set_shader_parameter("eau_color", couleur_eau)
+	_mat_eau = _make_mat(WATER_SHADER, {"eau_color": couleur_eau})
 
 	# Halo d'horizon / brume d'ambiance : émission douce, brume repoussée très loin
 	# (l'horizon est volontairement distant et doit rester visible).
-	_mat_horizon = ShaderMaterial.new()
-	_mat_horizon.shader = LINE_SHADER
-	_mat_horizon.set_shader_parameter("emission_strength", 1.0)
-	_mat_horizon.set_shader_parameter("alpha_mult", 1.0)
-	_mat_horizon.set_shader_parameter("fog_debut", 1.0e6)
-	_mat_horizon.set_shader_parameter("fog_fin", 1.0e6)
+	_mat_horizon = _make_mat(LINE_SHADER, {
+		"emission_strength": 1.0, "alpha_mult": 1.0, "fog_debut": 1.0e6, "fog_fin": 1.0e6,
+	})
 
 	# Balises rouges (sommets de tours) : clignotement via alpha_mult (cf. _process).
-	_mat_balise = ShaderMaterial.new()
-	_mat_balise.shader = LINE_SHADER
-	_mat_balise.set_shader_parameter("emission_strength", 3.2)
-	_mat_balise.set_shader_parameter("alpha_mult", 1.0)
+	_mat_balise = _make_mat(LINE_SHADER, {"emission_strength": 3.2, "alpha_mult": 1.0})
 
 	# Sol : émission faible (la luminosité réelle vient des vertex colors — nappe
 	# très sombre + maillage discret) → matérialise le terrain sans écraser la ville.
-	_mat_sol = ShaderMaterial.new()
-	_mat_sol.shader = LINE_SHADER
-	_mat_sol.set_shader_parameter("emission_strength", 0.7)
-	_mat_sol.set_shader_parameter("alpha_mult", 1.0)
+	_mat_sol = _make_mat(LINE_SHADER, {"emission_strength": 0.7, "alpha_mult": 1.0})
 
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
@@ -393,18 +363,6 @@ func _setup_post() -> void:
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rect.material = _post_mat
 	layer.add_child(rect)
-
-func _setup_debug() -> void:
-	var layer := CanvasLayer.new()
-	layer.layer = 2
-	add_child(layer)
-	var lbl := Label.new()
-	lbl.name = "DebugLabel"
-	lbl.position = Vector2(14, 690)
-	lbl.add_theme_color_override("font_color", Color(0.6, 0.95, 1.0, 0.9))
-	lbl.text = "HoloMap3D — glisser pour orbiter · molette = zoom · clic sur un lieu"
-	layer.add_child(lbl)
-	_debug_label = lbl
 
 func _setup_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -619,15 +577,6 @@ func _routes_runs(horizontal: bool) -> Array:
 				prev = arr[i]
 		runs.append([ligne, debut, prev])
 	return runs
-
-# Nb de voies PAR SENS selon la largeur (cases) : départementale 1×1 (1 voie),
-# nationale 2×2 (2 voies), autoroute 3×3 (3 voies) — cf. demande auteur.
-func _n_voies(largeur: int) -> int:
-	if largeur <= 1:
-		return 1
-	if largeur <= 3:
-		return 2
-	return 3
 
 # Décompose la voirie en BANDES rectangulaires (rangées/colonnes contiguës de même
 # emprise) → chaque bande connaît son axe (H/V) et sa largeur. On ne garde une bande
@@ -2390,7 +2339,6 @@ func _construire_lieux(liste: Array) -> void:
 		loc.taille_x     = float(l.emprise.x) * taille_cellule * 0.9
 		loc.taille_z     = float(l.emprise.y) * taille_cellule * 0.9
 		loc.hauteur      = float(l.etages) * unite_maison
-		loc.etages       = l.etages
 		loc.ring_radius  = maxf(l.emprise.x, l.emprise.y) * taille_cellule * 0.7
 		loc.sans_batiment = l.sans_batiment
 		loc.line_shader  = LINE_SHADER
@@ -2440,8 +2388,6 @@ func _on_lieu_clique(id: String) -> void:
 			nom = l.nom_affichage_fr
 			break
 	print("[HoloMap3D] lieu sélectionné : %s (%s)" % [id, nom])
-	if is_instance_valid(_debug_label):
-		_debug_label.text = "Lieu sélectionné : %s" % nom
 
 # ─── Caméra orbitale (monde fixe) ─────────────────────────────
 func _appliquer_camera() -> void:
