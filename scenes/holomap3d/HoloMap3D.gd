@@ -1129,49 +1129,98 @@ func _build_terrains_excel() -> void:
 	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "StadeLumieres", _mat_neon)
 
 # ─── Parking (apparence gris clair) : aire de stationnement plate au sol ──────
-# Surface plate (PAS de volume) : marquages de places lumineux (allée centrale +
-# dividers de bays de part et d'autre), contour de l'aire, + lampadaires ponctuels.
-# Aucune hauteur (comme route/eau/parc) ; le gradient délave les marquages au bord.
+# Traité PAR LOT (cases connexes) : muret béton tout autour (cloisonne le lieu),
+# rangées de places ALIGNÉES sur la grille (places entières, jamais coupées) de
+# part et d'autre d'une allée de circulation fléchée (sens alterné une rangée sur
+# deux). Surface plate (aucun volume) ; le gradient délave les marquages au bord.
 func _build_parkings_excel() -> void:
 	if _excel.parkings.is_empty():
 		return
 	var setd := {}
 	for c: Vector2i in _excel.parkings:
 		setd[c] = true
-	var s := HoloMesh3D.st()        # marquages (glow)
+	var s := HoloMesh3D.st()        # marquages + rail de muret (glow)
 	var n := 0
+	var sm := HoloMesh3D.st()       # muret béton (structure)
+	var nmur := 0
 	var mats := HoloMesh3D.st()     # mâts de lampadaires (sombres)
 	var nm := 0
 	var tetes := HoloMesh3D.st()    # têtes lumineuses (glow chaud)
 	var nt := 0
 	var y := 0.03
-	var hw := taille_cellule * 0.46   # demi-emprise marquée dans la case
-	var ah := taille_cellule * 0.12   # demi-largeur de l'allée centrale
-	var nb := 4                        # nb de places de part et d'autre de l'allée
 	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-	for cell: Vector2i in _excel.parkings:
-		var c := _world(cell.x, cell.y, y)
-		var col := _moduler(Color(0.74, 0.79, 0.88), c)   # peinture claire (délavée au bord)
-		# Allée centrale (deux lignes axe X) + dividers de places perpendiculaires.
-		n += HoloMesh3D.line(s, c + Vector3(-hw, 0, -ah), c + Vector3(hw, 0, -ah), col)
-		n += HoloMesh3D.line(s, c + Vector3(-hw, 0, ah), c + Vector3(hw, 0, ah), col)
-		for i in nb + 1:
-			var x := lerpf(-hw, hw, float(i) / float(nb))
-			n += HoloMesh3D.line(s, c + Vector3(x, 0, -hw), c + Vector3(x, 0, -ah), col)  # places côté -Z
-			n += HoloMesh3D.line(s, c + Vector3(x, 0, ah), c + Vector3(x, 0, hw), col)    # places côté +Z
-		# Contour de l'aire : côté frontière (voisin non-parking) → liseré franc.
-		for d: Vector2i in dirs:
-			if setd.has(cell + d):
+	var col_mur := Color(0.46, 0.49, 0.55)
+	var murh := unite_maison * 0.5
+	var hc := taille_cellule * 0.5    # demi-case (place pleine, bord à bord)
+	var ah := taille_cellule * 0.14   # demi-largeur de l'allée de circulation
+	var vus := {}
+	for start: Vector2i in _excel.parkings:
+		if vus.has(start):
+			continue
+		# Lot = cases parking 4-connexes (flood-fill).
+		var lot: Array = []
+		var pile: Array = [start]
+		while not pile.is_empty():
+			var cc: Vector2i = pile.pop_back()
+			if vus.has(cc) or not setd.has(cc):
 				continue
-			var seg := _cote_cellule(cell, d)
-			n += HoloMesh3D.line(s, _world(seg[0].x, seg[0].y, y), _world(seg[1].x, seg[1].y, y), col)
-		# Lampadaire ponctuel (une case sur ~5, à un coin) : mât sombre + tête chaude.
-		if (cell.x + cell.y) % 5 == 0:
-			var base := _world(cell.x - 0.35, cell.y - 0.35, 0.0)
-			var tete := base + Vector3(0, unite_maison * 1.4, 0)
-			nm += HoloMesh3D.line(mats, base, tete, Color(0.35, 0.38, 0.42))
-			nt += HoloMesh3D.diamond(tetes, tete, taille_cellule * 0.08, unite_maison * 0.18, Color(1.0, 0.82, 0.50))
+			vus[cc] = true
+			lot.append(cc)
+			for d: Vector2i in dirs:
+				pile.append(cc + d)
+		# Orientation : allées le long du GRAND axe de la bbox du lot.
+		var minx := 1 << 30; var miny := 1 << 30; var maxx := -(1 << 30); var maxy := -(1 << 30)
+		for c2: Vector2i in lot:
+			minx = mini(minx, c2.x); miny = mini(miny, c2.y)
+			maxx = maxi(maxx, c2.x); maxy = maxi(maxy, c2.y)
+		var horiz := (maxx - minx) >= (maxy - miny)
+		var av := Vector3(1, 0, 0) if horiz else Vector3(0, 0, 1)   # axe des allées (long)
+		var bv := Vector3(0, 0, 1) if horiz else Vector3(1, 0, 0)   # axe perpendiculaire (rangées)
+		# ── Marquages alignés sur la grille (places entières) ──
+		for cell: Vector2i in lot:
+			var c := _world(cell.x, cell.y, y)
+			var col := _moduler(Color(0.74, 0.79, 0.88), c)
+			# Fonds de rangée (bords ±0.5 sur B) + bords de l'allée centrale (±ah).
+			n += HoloMesh3D.line(s, c + av * (-hc) + bv * (-hc), c + av * hc + bv * (-hc), col)
+			n += HoloMesh3D.line(s, c + av * (-hc) + bv * hc,    c + av * hc + bv * hc,    col)
+			n += HoloMesh3D.line(s, c + av * (-hc) + bv * (-ah), c + av * hc + bv * (-ah), col)
+			n += HoloMesh3D.line(s, c + av * (-hc) + bv * ah,    c + av * hc + bv * ah,    col)
+			# Séparateurs de places : tous les 0.5 case en A (alignés bord à bord avec
+			# les voisines → places entières). Côté gauche (k=-0.5) + centre (k=0) ; le
+			# bord droit est fourni par la case suivante (sinon doublons).
+			for k: float in [-0.5, 0.0]:
+				var u := c + av * (k * taille_cellule)
+				n += HoloMesh3D.line(s, u + bv * (-ah), u + bv * (-hc), col)   # places côté -
+				n += HoloMesh3D.line(s, u + bv * ah,    u + bv * hc,    col)   # places côté +
+			# Flèche de sens de circulation dans l'allée (alterne 1 rangée sur 2).
+			var row: int = cell.y if horiz else cell.x
+			var sgn := 1.0 if (row % 2 == 0) else -1.0
+			var tip := c + av * (sgn * taille_cellule * 0.24)
+			n += HoloMesh3D.line(s, c - av * (sgn * taille_cellule * 0.12), tip, col)   # hampe
+			n += HoloMesh3D.line(s, tip, tip - av * (sgn * taille_cellule * 0.12) + bv * (taille_cellule * 0.07), col)
+			n += HoloMesh3D.line(s, tip, tip - av * (sgn * taille_cellule * 0.12) - bv * (taille_cellule * 0.07), col)
+		# ── Muret béton ceinturant le lot (base + sommet + poteaux) + rail glow ──
+		for cell: Vector2i in lot:
+			for d: Vector2i in dirs:
+				if setd.has(cell + d):
+					continue
+				var seg := _cote_cellule(cell, d)
+				var a0 := _world(seg[0].x, seg[0].y, 0.0)
+				var b0 := _world(seg[1].x, seg[1].y, 0.0)
+				var up := Vector3(0, murh, 0)
+				nmur += HoloMesh3D.line(sm, a0, b0, col_mur)            # base
+				nmur += HoloMesh3D.line(sm, a0 + up, b0 + up, col_mur)  # sommet
+				nmur += HoloMesh3D.line(sm, a0, a0 + up, col_mur)       # poteau A
+				nmur += HoloMesh3D.line(sm, b0, b0 + up, col_mur)       # poteau B
+				n += HoloMesh3D.line(s, a0 + up, b0 + up, Color(0.55, 0.75, 1.0))  # rail néon (lisibilité)
+		# ── Lampadaire d'angle (1 par lot) ──
+		var lc: Vector2i = lot[0]
+		var base := _world(lc.x - 0.3, lc.y - 0.3, 0.0)
+		var tete := base + Vector3(0, unite_maison * 1.4, 0)
+		nm += HoloMesh3D.line(mats, base, tete, Color(0.35, 0.38, 0.42))
+		nt += HoloMesh3D.diamond(tetes, tete, taille_cellule * 0.08, unite_maison * 0.18, Color(1.0, 0.82, 0.50))
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "ParkingMarquage", _mat_neon)
+	_ajouter_mesh(HoloMesh3D.commit(sm, nmur), "ParkingMuret", _mat_decor)
 	_ajouter_mesh(HoloMesh3D.commit(mats, nm), "ParkingLampMats", _mat_ambiance)
 	_ajouter_mesh(HoloMesh3D.commit(tetes, nt), "ParkingLampTetes", _mat_neon)
 
