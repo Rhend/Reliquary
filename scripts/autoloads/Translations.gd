@@ -40,6 +40,7 @@ const STRINGS: Dictionary = {
 		# ── Menu items (MENU_ITEMS labels) ────────────────────
 		"menu.hero":      "HÉROS",
 		"menu.adventure": "EXPÉDITIONS",
+		"menu.map":       "CARTE",
 		"menu.forge":     "FORGE",
 		"menu.sanctuary": "SANCTUAIRE",
 		"menu.relic":     "RELIQUE",
@@ -48,6 +49,7 @@ const STRINGS: Dictionary = {
 		# ── Tooltips hexagones ────────────────────────────────
 		"hex_tt.hero":      "Votre héros et ses passifs.\nConsultez ses équipements et sa progression.",
 		"hex_tt.adventure": "Partez en expédition.\nChoisissez un biome et affrontez ses créatures.",
+		"hex_tt.map":       "Carte holographique 3D.\nExplorez le secteur et sélectionnez un biome découvert.",
 		"hex_tt.forge":     "Le Forgeron.\nAméliorez vos équipements avec les ingrédients récoltés.",
 		"hex_tt.sanctuary": "Sanctuaire des Évolutions.\nFaites évoluer vos entités au rang supérieur.",
 		"hex_tt.relic":     "Reliques anciennes.\nDébloquez des pouvoirs permanents rares.",
@@ -415,6 +417,7 @@ const STRINGS: Dictionary = {
 		# ── Menu items ────────────────────────────────────────
 		"menu.hero":      "HERO",
 		"menu.adventure": "EXPEDITIONS",
+		"menu.map":       "MAP",
 		"menu.forge":     "FORGE",
 		"menu.sanctuary": "SANCTUARY",
 		"menu.relic":     "RELIC",
@@ -423,6 +426,7 @@ const STRINGS: Dictionary = {
 		# ── Tooltips hexagones ────────────────────────────────
 		"hex_tt.hero":      "Your hero and their passives.\nCheck equipment and progression.",
 		"hex_tt.adventure": "Go on an expedition.\nChoose a biome and face its creatures.",
+		"hex_tt.map":       "3D holographic map.\nExplore the sector and select a discovered biome.",
 		"hex_tt.forge":     "The Blacksmith.\nUpgrade your gear using collected ingredients.",
 		"hex_tt.sanctuary": "Evolution Sanctuary.\nEvolve your entities to the next rank.",
 		"hex_tt.relic":     "Ancient Relics.\nUnlock rare permanent powers.",

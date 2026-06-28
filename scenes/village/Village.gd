@@ -54,6 +54,7 @@ const TIER_0_COLOR := UIColors.VILLAGE_NASCENT
 const MENU_ITEMS: Array = [
 	["HÉROS",       "👤", 0, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  0, "_go_adventure", "adventure" ],
+	["CARTE",       "🗺", 0, "_go_map",       "map"       ],
 	["FORGE",       "🔨", 1, "_go_forge",     "forge"     ],
 	["SANCTUAIRE",  "✦",  2, "_go_sanctuary", "sanctuary" ],
 	["RELIQUE",     "◈",  3, "_go_relic",     "relic"     ],
@@ -1321,6 +1322,9 @@ func _hex_tooltip(panel_id: String) -> String:
 # ─── Navigation → panneaux ────────────────────────────────────
 func _go_hero()       -> void: _open_panel("hero")
 func _go_adventure()  -> void: _open_panel("adventure")
+# « Carte » n'est pas un panneau mais un overlay : on ouvre directement la carte
+# holo 3D depuis le hub (raccourci — plus besoin de passer par les Expéditions).
+func _go_map()        -> void: open_expedition_map()
 func _go_forge()     -> void: _open_panel("forge")
 func _go_sanctuary() -> void: _open_panel("sanctuary")
 func _go_relic()     -> void: _open_panel("relic")
