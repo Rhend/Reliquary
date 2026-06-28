@@ -884,11 +884,13 @@ func _build_batiments_excel() -> void:
 				# Groupe ENTOURÉ d'une bordure épaisse → UN bâtiment plein (100 %).
 				var r := _bati_boite(cells, h, bcol, s, sf)
 				n += r[0]; nf += r[1]
+				n += _etages_bloc(b["bbox"], cells.size(), h, bcol, s)
 			else:
-				# Par défaut : chaque case = une maison à 80 % (même si collées) → une
-				# rangée de cases se lit comme des maisons distinctes.
+				# Par défaut : chaque case = une maison à 80 %, avec une SILHOUETTE variée
+				# (toit plat / toit en pointe / étages / retrait au sommet) piochée de
+				# façon déterministe → la rangée de maisons n'est plus monotone.
 				for cell: Vector2i in cells:
-					var r := _bati_boite_isolee(cell, h, bcol, s, sf)
+					var r := _maison_variee(cell, h, bcol, s, sf)
 					n += r[0]; nf += r[1]
 		else:
 			var bb: Rect2i = b["bbox"]
@@ -1832,14 +1834,53 @@ func _bati_boite(cells: Array, h: float, col: Color, s: SurfaceTool, sf: Surface
 				n += HoloMesh3D.line(s, pv, pv + Vector3(0, h, 0), col)
 	return [n, nf]
 
-# Bâtiment d'UNE seule case : boîte centrée à 90 % de la case (laisse un liseré de
-# vide autour → les maisons isolées ne se collent pas). Renvoie [nb arêtes, nb faces].
-func _bati_boite_isolee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
+# Hash déterministe d'une case → [0,1) (variété stable d'un build à l'autre, variée
+# d'une case à l'autre). `salt` permet plusieurs tirages indépendants par case.
+func _hash01(cell: Vector2i, salt: int) -> float:
+	var hraw := ((cell.x + 1) * 73856093) ^ ((cell.y + 1) * 19349663) ^ (salt * 83492791)
+	return float(hraw & 0xFFFF) / 65535.0
+
+# Bâtiment générique d'UNE case : boîte à 80 % + une silhouette piochée dans un POOL
+# (selon la case et la hauteur) → toit plat, toit en pointe, étages, ou retrait au
+# sommet. Aucun « accessoire » de toit (antennes/citernes retirées). [arêtes, faces].
+func _maison_variee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
 	var centre := _world(cell.x, cell.y, 0.0)
 	var sz := taille_cellule * 0.8
 	var n := HoloMesh3D.box(s, centre, sz, h, sz, col)
 	var nf := HoloMesh3D.box_faces(sf, centre, sz * FACE_INSET, h, sz * FACE_INSET)
+	var top := centre + Vector3(0, h, 0)
+	var floors := maxi(1, int(round(h / maxf(unite_maison, 0.001))))
+	var v := _hash01(cell, 7)
+	if floors <= 2:
+		# Pool RÉSIDENTIEL (maisons basses) : ~45 % toit en pointe, sinon toit plat.
+		if v < 0.45:
+			var rh := unite_maison * lerpf(0.5, 0.95, _hash01(cell, 11))
+			n += HoloMesh3D.pyramid(s, top, sz, sz, rh, col)
+			nf += HoloMesh3D.pyramid_faces(sf, top, sz * FACE_INSET, sz * FACE_INSET, rh)
+	else:
+		# Pool TOUR (immeubles) : étages / retrait sommet / étages serrés.
+		if v < 0.4:
+			n += HoloMesh3D.etages(s, centre, sz, h, sz, col, clampi(floors - 1, 1, 6))
+		elif v < 0.72:
+			var sz2 := sz * lerpf(0.55, 0.74, _hash01(cell, 13))
+			var h2 := h * lerpf(0.16, 0.30, _hash01(cell, 17))
+			n += HoloMesh3D.box(s, top, sz2, h2, sz2, col)
+			nf += HoloMesh3D.box_faces(sf, top, sz2 * FACE_INSET, h2, sz2 * FACE_INSET)
+		else:
+			n += HoloMesh3D.etages(s, centre, sz, h, sz, col, clampi(floors / 2, 1, 4))
 	return [n, nf]
+
+# Étages (lignes de planchers) sur un BLOC plein rectangulaire et assez haut → casse la
+# monotonie des grands bâtiments. Renvoie le nb d'arêtes (0 si non applicable).
+func _etages_bloc(bb: Rect2i, ncells: int, h: float, col: Color, s: SurfaceTool) -> int:
+	if ncells != bb.size.x * bb.size.y:
+		return 0   # silhouette non rectangulaire → éviterait des lignes hors emprise
+	var floors := maxi(1, int(round(h / maxf(unite_maison, 0.001))))
+	if floors < 3:
+		return 0
+	var sx := float(bb.size.x) * taille_cellule
+	var sz := float(bb.size.y) * taille_cellule
+	return HoloMesh3D.etages(s, _centre_bbox(bb), sx, h, sz, col, clampi(floors - 1, 1, 6))
 
 # Côté `d` de la case `c` → [coin a, coin b] en coordonnées de grille (demi-entiers).
 func _cote_cellule(c: Vector2i, d: Vector2i) -> Array:
