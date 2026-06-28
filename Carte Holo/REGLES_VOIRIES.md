@@ -133,6 +133,11 @@ luminosité/désaturation au plus pauvre).
 ## 1. Bâtiment générique — toutes proportions
 Famille **Bâtiment**. Du carré minimal au grand bloc, **hauteur libre**, forme libre
 (`B`/`P`/`C`/`D`/`G`). Aucune contrainte : type passe-partout.
+> **Case isolée vs bloc** : un bâtiment d'**une seule case** (non peint en bloc) est
+> rendu à **90 % de la case** → un liseré de vide le sépare de ses voisins (rangée de
+> maisons lisible). Un **bloc peint** (≥ 2 cases d'un tenant) garde son **emprise pleine
+> (100 %)**. Donc : pour des maisons distinctes, peindre des cases séparées (bordure
+> medium entre elles) ; pour un grand bâtiment massif, peindre un bloc plein.
 
 ## 2. Usine désaffectée — large et basse
 Famille **Usine** (brun rouille). Footprint **rectangulaire allongé**, **nettement plus

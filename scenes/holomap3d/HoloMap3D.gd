@@ -194,6 +194,8 @@ var _mat_eau: ShaderMaterial           # eau qui s'écoule (carte Excel, shader 
 var _mat_sol: ShaderMaterial           # sol : nappe de terre + maillage fin (liant)
 var _mat_horizon: ShaderMaterial       # halo d'horizon / brume (sans atténuation de brume)
 var _mat_balise: ShaderMaterial        # balises rouges clignotantes (sommets de tours)
+var _mat_fumee: ShaderMaterial         # fumée d'usine (vert ocre, montée animée)
+var _mat_glow_chaud: ShaderMaterial    # nappes de lumière chaude (ambiance supermarché)
 var _discos: Array[Node3D] = []        # boules à facettes (sommets de pyramides) — tournent
 var _balise_t := 0.0                   # phase de clignotement des balises
 var _distance_cible := 15.0
@@ -302,6 +304,14 @@ func _setup_materials() -> void:
 	# Balises rouges (sommets de tours) : clignotement via alpha_mult (cf. _process).
 	_mat_balise = _make_mat(LINE_SHADER, {"emission_strength": 3.2, "alpha_mult": 1.0})
 
+	# Fumée d'usine : panache vert-ocre qui monte (réutilise le shader de poussières).
+	_mat_fumee = _make_mat(MOTES_SHADER, {
+		"mote_color": Color(0.52, 0.60, 0.26), "hauteur": 1.0, "vitesse": 0.04,
+	})
+
+	# Lumière chaude (ambiance supermarché) : nappes additives ambrées, glow doux.
+	_mat_glow_chaud = _make_mat(LINE_SHADER, {"emission_strength": 1.1, "alpha_mult": 1.0})
+
 	# Sol : émission faible (la luminosité réelle vient des vertex colors — nappe
 	# très sombre + maillage discret) → matérialise le terrain sans écraser la ville.
 	_mat_sol = _make_mat(LINE_SHADER, {"emission_strength": 0.7, "alpha_mult": 1.0})
@@ -309,12 +319,12 @@ func _setup_materials() -> void:
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -874,7 +884,14 @@ func _build_batiments_excel() -> void:
 		# Gradient de richesse : le bâti se ternit/désature vers la périphérie.
 		var bcol := _moduler(col, _centre_bbox(b["bbox"]))
 		if forme == HoloXlsxMap.Forme.BOITE:
-			var r := _bati_boite(b["cells"], h, bcol, s, sf)
+			var r: Array
+			if b["cells"].size() == 1:
+				# Bâtiment ISOLÉ (case non peinte en bloc) : boîte centrée à 90 % de la
+				# case → un jeu apparaît entre maisons (elles ne se touchent plus). Un
+				# vrai bloc peint (≥ 2 cases) garde son emprise pleine.
+				r = _bati_boite_isolee(b["cells"][0], h, bcol, s, sf)
+			else:
+				r = _bati_boite(b["cells"], h, bcol, s, sf)
 			n += r[0]; nf += r[1]
 			# Détails de toit (#3) : antenne/citerne + balise + enseigne.
 			var rd := _toit_details_excel(b["bbox"], h, bcol, s, sb, sban, rng)
@@ -1329,9 +1346,15 @@ func _build_usines_excel() -> void:
 	var s := HoloMesh3D.st()       # coque corrodée (sombre, peu de glow)
 	var sf := HoloMesh3D.st_tri()
 	var sn := HoloMesh3D.st()       # accents NÉON (verrières, conduits, cheminée)
+	var su := SurfaceTool.new()    # fumée (segments montants, shader de poussières)
+	su.begin(Mesh.PRIMITIVE_LINES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x05111E
 	var n := 0
 	var nf := 0
 	var nn := 0
+	var nfu := 0
+	var ch_h := unite_maison * 2.4   # hauteur de cheminée (cf. _cheminee_neon)
 	for b in _excel.usines:
 		var bb: Rect2i = b["bbox"]
 		var centre := _centre_bbox(bb)
@@ -1343,9 +1366,34 @@ func _build_usines_excel() -> void:
 		nn += _toit_sheds_neon(bb, h, neon, sn)       # verrières en dents de scie (glow)
 		nn += _conduits_facade(bb, h, neon, sn)        # tuyauterie ceinturant le hall
 		nn += _cheminee_neon(bb, h, neon, sn)          # cheminée lumineuse + balise
+		# Panache de fumée vert-ocre au sommet de la cheminée (montée animée).
+		var sommet := _world(float(bb.position.x), float(bb.position.y), h + ch_h + unite_maison * 0.4)
+		nfu += _semer_fumee(su, sommet, rng)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Usines")
 	_ajouter_faces(HoloMesh3D.commit(sf, nf), "UsinesFaces")
 	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "UsinesNeon", _mat_neon)
+	if nfu > 0:
+		var miu := MeshInstance3D.new()
+		miu.name = "UsinesFumee"
+		miu.mesh = su.commit()
+		miu.material_override = _mat_fumee
+		_monde.add_child(miu)
+
+# Sème un petit panache de fumée (segments verticaux courts, phases aléatoires) au-
+# dessus d'un point : le shader de poussières les fait monter et boucler.
+func _semer_fumee(s: SurfaceTool, sommet: Vector3, rng: RandomNumberGenerator) -> int:
+	var n := 0
+	for _i in 6:
+		var off := Vector3((rng.randf() - 0.5) * taille_cellule * 0.22, 0.0,
+				(rng.randf() - 0.5) * taille_cellule * 0.22)
+		var base := sommet + off
+		var ph := rng.randf()
+		var a := 0.22 + 0.28 * rng.randf()
+		var seg := taille_cellule * 0.13
+		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(base)
+		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(base + Vector3(0, seg, 0))
+		n += 1
+	return n
 
 # Verrières en dents de scie (sheds industriels) ÉMISSIVES : chaque dent = montant
 # vertical + crête + pente vitrée (mullions lumineux) → silhouette « usine » nette,
@@ -1469,10 +1517,12 @@ func _build_supermarches_excel() -> void:
 	var sf := HoloMesh3D.st_tri()
 	var sn := HoloMesh3D.st()   # enseignes ambre (glow)
 	var sc := HoloMesh3D.st()   # accents cyan (glow)
+	var sgl := HoloMesh3D.st_tri()   # nappes de lumière chaude (ambiance)
 	var n := 0
 	var nf := 0
 	var nn := 0
 	var ncy := 0
+	var ngl := 0
 	for b in _excel.supermarches:
 		var bb: Rect2i = b["bbox"]
 		var centre := _centre_bbox(bb)
@@ -1486,10 +1536,36 @@ func _build_supermarches_excel() -> void:
 		nn += _billboard_toit(bb, h, ambre, cyan, sn, sc) # panneau géant + barres cyan
 		ncy += _toit_skylights(bb, h, cyan, sc)           # grille de verrières (toit)
 		ncy += _entree_facade(bb, h, cyan, sc)            # entrée illuminée
+		ngl += _ambiance_supermarche(bb, h, ambre, sgl)   # lueur intérieure + débord au sol
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Supermarches")
 	_ajouter_faces(HoloMesh3D.commit(sf, nf), "SupermarchesFaces")
 	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "SupermarchesEnseignes", _mat_neon)
 	_ajouter_mesh(HoloMesh3D.commit(sc, ncy), "SupermarchesAccents", _mat_neon)
+	_ajouter_mesh(HoloMesh3D.commit(sgl, ngl), "SupermarchesAmbiance", _mat_glow_chaud)
+
+# Ambiance lumineuse : une nappe chaude à l'intérieur du volume (le magasin « éclairé »)
+# + une nappe au sol qui déborde (light spill ambré sur le parvis). Additif → halo.
+func _ambiance_supermarche(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
+	var x0 := float(bb.position.x) - 0.5
+	var x1 := float(bb.position.x + bb.size.x - 1) + 0.5
+	var y0 := float(bb.position.y) - 0.5
+	var y1 := float(bb.position.y + bb.size.y - 1) + 0.5
+	var n := 0
+	# Lueur intérieure (plan chaud baignant le volume, vu à travers le wireframe).
+	n += _quad_plat(s, x0, y0, x1, y1, h * 0.45, Color(col.r, col.g, col.b, 0.16))
+	# Débord lumineux au sol (le magasin éclaire ses abords).
+	var m := 0.7
+	n += _quad_plat(s, x0 - m, y0 - m, x1 + m, y1 + m, 0.016, Color(col.r, col.g, col.b, 0.09))
+	return n
+
+# Quad plat (2 triangles) dans le plan XZ aux coins de grille (x0,y0)-(x1,y1), à
+# hauteur `yy`. Couleur uniforme (vertex color → émission additive).
+func _quad_plat(s: SurfaceTool, x0: float, y0: float, x1: float, y1: float, yy: float, col: Color) -> int:
+	var p0 := _world(x0, y0, yy); var p1 := _world(x1, y0, yy)
+	var p2 := _world(x1, y1, yy); var p3 := _world(x0, y1, yy)
+	for v in [p0, p1, p2, p0, p2, p3]:
+		s.set_color(col); s.add_vertex(v)
+	return 2
 
 # Bandeau-marquee : double rail lumineux sur TOUT le périmètre du toit + ampoules
 # verticales rapprochées → enseigne commerciale qui ceinture le magasin.
@@ -1711,6 +1787,15 @@ func _bati_boite(cells: Array, h: float, col: Color, s: SurfaceTool, sf: Surface
 			if _est_coin(setd, vi, vj):
 				var pv := _world(float(vi) - 0.5, float(vj) - 0.5, 0.0)
 				n += HoloMesh3D.line(s, pv, pv + Vector3(0, h, 0), col)
+	return [n, nf]
+
+# Bâtiment d'UNE seule case : boîte centrée à 90 % de la case (laisse un liseré de
+# vide autour → les maisons isolées ne se collent pas). Renvoie [nb arêtes, nb faces].
+func _bati_boite_isolee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
+	var centre := _world(cell.x, cell.y, 0.0)
+	var sz := taille_cellule * 0.9
+	var n := HoloMesh3D.box(s, centre, sz, h, sz, col)
+	var nf := HoloMesh3D.box_faces(sf, centre, sz * FACE_INSET, h, sz * FACE_INSET)
 	return [n, nf]
 
 # Côté `d` de la case `c` → [coin a, coin b] en coordonnées de grille (demi-entiers).
