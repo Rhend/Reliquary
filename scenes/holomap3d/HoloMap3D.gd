@@ -307,7 +307,7 @@ func _setup_materials() -> void:
 
 	# Fumée d'usine : vrai panache de volutes (billboards doux qui montent et gonflent).
 	_mat_fumee = _make_mat(FUMEE_SHADER, {
-		"fumee_color": Color(0.50, 0.58, 0.28), "hauteur": 1.3, "vitesse": 0.05, "expansion": 1.8,
+		"fumee_color": Color(0.50, 0.58, 0.28), "hauteur": 0.95, "vitesse": 0.05, "expansion": 0.85,
 	})
 
 	# Lumière chaude (ambiance supermarché) : nappes additives ambrées, glow doux.
@@ -1414,8 +1414,8 @@ func _build_usines_excel() -> void:
 		nn += _toit_sheds_neon(bb, h, neon, sn)       # verrières en dents de scie (glow)
 		nn += _conduits_facade(bb, h, neon, sn)        # tuyauterie ceinturant le hall
 		nn += _cheminee_neon(bb, h, neon, sn)          # cheminée lumineuse + balise
-		# Panache de fumée vert-ocre au sommet de la cheminée (montée animée).
-		var sommet := _world(float(bb.position.x), float(bb.position.y), h + ch_h + unite_maison * 0.4)
+		# Panache de fumée vert-ocre au RAS de la cheminée (montée animée).
+		var sommet := _world(float(bb.position.x), float(bb.position.y), h + ch_h + unite_maison * 0.12)
 		nfu += _semer_fumee(su, sommet, rng)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Usines")
 	_ajouter_faces(HoloMesh3D.commit(sf, nf), "UsinesFaces")
@@ -1434,13 +1434,14 @@ func _semer_fumee(s: SurfaceTool, sommet: Vector3, rng: RandomNumberGenerator) -
 	var coins := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
 	var ordre := [0, 1, 2, 0, 2, 3]
 	var n := 0
-	for _i in 12:
+	for _i in 26:
 		var ph := rng.randf()
-		var jit := Vector3((rng.randf() - 0.5) * taille_cellule * 0.28, 0.0,
-				(rng.randf() - 0.5) * taille_cellule * 0.28)
+		# Faible dispersion au sol → colonne serrée qui colle à la cheminée.
+		var jit := Vector3((rng.randf() - 0.5) * taille_cellule * 0.12, 0.0,
+				(rng.randf() - 0.5) * taille_cellule * 0.12)
 		var base := sommet + jit
-		var taille := taille_cellule * (0.30 + 0.16 * rng.randf())   # demi-taille de base
-		var a := 0.14 + 0.14 * rng.randf()
+		var taille := taille_cellule * (0.22 + 0.12 * rng.randf())   # demi-taille de base
+		var a := 0.18 + 0.16 * rng.randf()
 		for idx: int in ordre:
 			s.set_color(Color(1, 1, 1, a))
 			s.set_uv(Vector2(ph, taille))
