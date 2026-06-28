@@ -207,6 +207,7 @@ var _focus_tw: Tween
 
 var _eau := {}
 var _parc := {}
+var _routes_set := {}    # Vector2i → true : toutes les cases ROUTE (portes face aux routes)
 var _lieu_sol := {}      # Vector2i → Color : cellule de décor portée par un lieu sans bâtiment
 var _lieu_arbres := {}   # Vector2i → Color : cellules CHOISIES pour un arbre coloré (plafonné)
 
@@ -420,6 +421,9 @@ func _charger_excel() -> void:
 func _build_all_excel() -> void:
 	_eau.clear()
 	_parc.clear()
+	_routes_set.clear()
+	for c: Vector2i in _excel.routes:
+		_routes_set[c] = true
 	_lieu_sol.clear()
 	_lieu_arbres.clear()
 	_discos.clear()
@@ -1297,6 +1301,8 @@ func _build_cimetieres_excel() -> void:
 		var fy := maxf(0.3, b["hauteur_m"] / maxf(0.5, _excel.hauteur_defaut_m))
 		# Enceinte : contour bas lumineux qui ceinture le champ (lecture « mémorial clos »).
 		ng += _contour_cimetiere(cells, col_stele, sg)
+		# Portail face aux routes (un peu plus haut que la clôture → vraie entrée).
+		ng += _portes_vers_routes(cells, unite_maison * 0.6, col_stele, sg)
 		# Chapelle au centre du bloc (si le champ est assez grand) : on repère la case
 		# la plus proche du centre, elle accueille la chapelle au lieu d'une stèle.
 		var cell_chapelle := Vector2i(-9999, -9999)
@@ -1379,6 +1385,33 @@ func _contour_cimetiere(cells: Array, col: Color, s: SurfaceTool) -> int:
 			n += HoloMesh3D.line(s, b0, b0 + up, col)
 	return n
 
+# Portes face aux routes : pour chaque côté frontière d'un bloc directement adjacent
+# à une case ROUTE, dessine une porte (deux jambages + linteau) sur la paroi, au sol.
+# `dh` = hauteur de porte (monde). Renvoie le nombre d'arêtes. Appelée par les lieux
+# bâtis (usine/casse/supermarché/cimetière) — PAS le sport (terrain plat, sans paroi).
+func _portes_vers_routes(cells: Array, dh: float, col: Color, s: SurfaceTool) -> int:
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var n := 0
+	var up := Vector3(0, dh, 0)
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for c: Vector2i in cells:
+		for d: Vector2i in dirs:
+			if setd.has(c + d) or not _routes_set.has(c + d):
+				continue   # côté frontière touchant une route → porte
+			var seg := _cote_cellule(c, d)
+			var pa := _world(seg[0].x, seg[0].y, 0.0)
+			var pb := _world(seg[1].x, seg[1].y, 0.0)
+			var mid := (pa + pb) * 0.5
+			var half := (pb - pa) * 0.22          # demi-largeur (~44 % du côté)
+			var jl := mid - half
+			var jr := mid + half
+			n += HoloMesh3D.line(s, jl, jl + up, col)        # jambage gauche
+			n += HoloMesh3D.line(s, jr, jr + up, col)        # jambage droit
+			n += HoloMesh3D.line(s, jl + up, jr + up, col)   # linteau
+	return n
+
 # ─── Usine désaffectée : hall bas et large + toit en dents de scie + cheminée ──
 # Métal corrodé : la couleur (brun rouille) est ternie par le gradient. Hauteur
 # plafonnée (jamais une tour). Faces sombres comme les bâtiments.
@@ -1407,6 +1440,7 @@ func _build_usines_excel() -> void:
 		var h := _hauteur_monde(b["hauteur_m"])
 		var r := _bati_boite(b["cells"], h, col, s, sf)
 		n += r[0]; nf += r[1]
+		nn += _portes_vers_routes(b["cells"], minf(unite_maison * 0.75, h * 0.85), neon, sn)  # entrées face aux routes
 		nn += _toit_sheds_neon(bb, h, neon, sn)       # verrières en dents de scie (glow)
 		nn += _conduits_facade(bb, h, neon, sn)        # tuyauterie ceinturant le hall
 		# 3 cheminées réparties sur le grand axe du hall, chacune avec son panache.
@@ -1534,6 +1568,8 @@ func _build_casses_excel() -> void:
 		var fy := maxf(0.3, b["hauteur_m"] / maxf(0.5, _excel.hauteur_defaut_m))
 		# Murs d'enceinte : bas mais ÉPAIS (rim à double paroi) → lecture « casse murée ».
 		n += _murs_casse(b["cells"], unite_maison * 0.85 * fy, 0.14, col, s)
+		# Portail (entrée du grillage) face aux routes.
+		n += _portes_vers_routes(b["cells"], unite_maison * 0.7 * fy, col.lightened(0.35), s)
 		# Empilements de voitures : piles de 1 à 3 carcasses aplaties par case.
 		for cell: Vector2i in b["cells"]:
 			if rng.randf() > 0.72:
@@ -1610,6 +1646,7 @@ func _build_supermarches_excel() -> void:
 		var h := _hauteur_monde(b["hauteur_m"])
 		var r := _bati_boite(b["cells"], h, col, s, sf)
 		n += r[0]; nf += r[1]
+		nn += _portes_vers_routes(b["cells"], minf(unite_maison * 0.75, h * 0.85), ambre, sn)  # entrées face aux routes
 		nn += _enseignes_marquee(bb, h, ambre, sn)        # bandeau lumineux périmètre
 		nn += _billboard_toit(bb, h, ambre, cyan, sn, sc) # panneau géant + barres cyan
 		ncy += _toit_skylights(bb, h, cyan, sc)           # grille de verrières (toit)
