@@ -246,6 +246,10 @@ func _avancer(id: int, dt: float) -> void:
 	car["tgt"] = ncell
 	car["tdir"] = ndir
 
+func _seg(a: Vector3, b: Vector3, col: Color) -> void:
+	_im.surface_set_color(col); _im.surface_add_vertex(a)
+	_im.surface_set_color(col); _im.surface_add_vertex(b)
+
 func _bezier(a: Vector3, b: Vector3, c: Vector3, t: float) -> Vector3:
 	var u := 1.0 - t
 	return a * (u * u) + b * (2.0 * u * t) + c * (t * t)
@@ -276,7 +280,12 @@ func _dessiner() -> void:
 			col = Color(0.30, 1.0, 0.40) if ph == int(lt["axe"]) else Color(1.0, 0.20, 0.18)
 		_im.surface_set_color(col); _im.surface_add_vertex(lt["a"])
 		_im.surface_set_color(col); _im.surface_add_vertex(lt["b"])
-	var hl := _cell * 0.18
+	# Silhouette futuriste (vue de dessus en relief) : coque en goutte d'eau effilée
+	# (nez pointu, flancs galbés, poupe resserrée) + bulle de cockpit basse et facettée.
+	# Tout en arêtes lumineuses → speeder / pod plutôt que berline.
+	var hl := _cell * 0.20    # demi-longueur (axe de marche)
+	var hw := _cell * 0.08    # demi-largeur (au maître-bau)
+	var ht := _cell * 0.075   # hauteur de la bulle (basse → profil aérodynamique)
 	for car: Dictionary in _cars:
 		var t: float = car["t"]
 		var cf: Vector3 = car["from"]
@@ -287,8 +296,22 @@ func _dessiner() -> void:
 		if tang.length() < 0.0001:
 			tang = ct - cf
 		tang = tang.normalized()
+		var perp := Vector3(-tang.z, 0.0, tang.x)   # côté (gauche/droite) dans le plan
+		var up := Vector3(0, ht, 0)
 		var tdir: Vector2i = car["tdir"]
 		var col := _col_av if (tdir.x + tdir.y > 0) else _col_ret
-		_im.surface_set_color(col); _im.surface_add_vertex(p - tang * hl)
-		_im.surface_set_color(col); _im.surface_add_vertex(p + tang * hl)
+		# Empreinte au sol en goutte d'eau : nez (pointe avant), maître-bau (galbe,
+		# légèrement avancé), poupe (resserrée). Arête de proue effilée.
+		var nez := p + tang * hl
+		var ml := p + tang * (hl * 0.18) - perp * hw
+		var mr := p + tang * (hl * 0.18) + perp * hw
+		var pl := p - tang * hl - perp * (hw * 0.45)
+		var pr := p - tang * hl + perp * (hw * 0.45)
+		_seg(nez, mr, col); _seg(mr, pr, col); _seg(pr, pl, col); _seg(pl, ml, col); _seg(ml, nez, col)
+		# Bulle de cockpit : apex bas, légèrement reculé → facettes vers nez/flancs/poupe.
+		var apex := p - tang * (hl * 0.08) + up
+		var poupe := (pl + pr) * 0.5
+		_seg(apex, nez, col)                       # pare-brise effilé
+		_seg(apex, ml, col); _seg(apex, mr, col)   # montants latéraux (galbe)
+		_seg(apex, poupe, col)                      # carène arrière
 	_im.surface_end()

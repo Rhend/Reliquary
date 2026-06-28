@@ -1293,6 +1293,10 @@ func _build_cimetieres_excel() -> void:
 		var col_stele := _moduler(Color(0.52, 0.68, 0.84), centre)   # cyan-ardoise lumineux
 		var col_socle := _moduler(Color(0.34, 0.44, 0.56), centre)
 		var cells: Array = b["cells"]
+		# Hauteur tapée → facteur d'élancement des stèles/chapelle (défaut = 1, look actuel).
+		var fy := maxf(0.3, b["hauteur_m"] / maxf(0.5, _excel.hauteur_defaut_m))
+		# Enceinte : contour bas lumineux qui ceinture le champ (lecture « mémorial clos »).
+		ng += _contour_cimetiere(cells, col_stele, sg)
 		# Chapelle au centre du bloc (si le champ est assez grand) : on repère la case
 		# la plus proche du centre, elle accueille la chapelle au lieu d'une stèle.
 		var cell_chapelle := Vector2i(-9999, -9999)
@@ -1312,24 +1316,24 @@ func _build_cimetieres_excel() -> void:
 			# Stèle = dalle fine verticale + barre de tête (mémoriel holographique).
 			var w := taille_cellule * 0.18
 			var d := taille_cellule * 0.05
-			var hs := unite_maison * 1.05
+			var hs := unite_maison * 1.05 * fy
 			ng += HoloMesh3D.box(sg, c, w, hs, d, col_stele)
 			ng += HoloMesh3D.line(sg, c + Vector3(-w * 0.6, hs * 0.78, 0),
 					c + Vector3(w * 0.6, hs * 0.78, 0), col_stele)
 		if cell_chapelle.x > -9000:
-			ng += _chapelle(_world(cell_chapelle.x, cell_chapelle.y, 0.0), col_stele, sg)
+			ng += _chapelle(_world(cell_chapelle.x, cell_chapelle.y, 0.0), col_stele, sg, fy)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "CimetiereSocles", _mat_ambiance)
 	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "CimetiereSteles", _mat_lieu_decor)
 
 # Petite chapelle holographique : nef (boîte) + toit à deux pans (faîtage + pignons)
 # + croix sur le faîtage. Repère central du mémorial. Renvoie le nb d'arêtes.
-func _chapelle(c: Vector3, col: Color, s: SurfaceTool) -> int:
+func _chapelle(c: Vector3, col: Color, s: SurfaceTool, fy: float = 1.0) -> int:
 	var w := taille_cellule * 0.55
 	var d := taille_cellule * 0.78
 	var hw := w * 0.5
 	var hd := d * 0.5
-	var wall := unite_maison * 1.4
-	var roof := unite_maison * 0.95
+	var wall := unite_maison * 1.4 * fy
+	var roof := unite_maison * 0.95 * fy
 	var n := HoloMesh3D.box(s, c, w, wall, d, col)        # nef (murs)
 	var ry := c.y + wall + roof
 	var ridge_a := Vector3(c.x, ry, c.z - hd)             # faîtage (axe Z)
@@ -1349,6 +1353,30 @@ func _chapelle(c: Vector3, col: Color, s: SurfaceTool) -> int:
 	var arm := taille_cellule * 0.1
 	var ay := ridge_a.y + cross_h * 0.6
 	n += HoloMesh3D.line(s, Vector3(c.x - arm, ay, ridge_a.z), Vector3(c.x + arm, ay, ridge_a.z), col)
+	return n
+
+# Enceinte du mémorial : contour bas qui ceinture le champ de stèles (lecture « clos »).
+# Pour chaque côté frontière du bloc : ligne au sol + parapet bas + montants aux bouts.
+# Renvoie le nombre d'arêtes.
+func _contour_cimetiere(cells: Array, col: Color, s: SurfaceTool) -> int:
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var n := 0
+	var hw := unite_maison * 0.4   # mur bas (sous les stèles)
+	var up := Vector3(0, hw, 0)
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for c: Vector2i in cells:
+		for d: Vector2i in dirs:
+			if setd.has(c + d):
+				continue
+			var seg := _cote_cellule(c, d)
+			var a0 := _world(seg[0].x, seg[0].y, 0.0)
+			var b0 := _world(seg[1].x, seg[1].y, 0.0)
+			n += HoloMesh3D.line(s, a0, b0, col)             # liseré au sol
+			n += HoloMesh3D.line(s, a0 + up, b0 + up, col)   # parapet bas
+			n += HoloMesh3D.line(s, a0, a0 + up, col)        # montants aux bouts
+			n += HoloMesh3D.line(s, b0, b0 + up, col)
 	return n
 
 # ─── Usine désaffectée : hall bas et large + toit en dents de scie + cheminée ──
@@ -1374,7 +1402,9 @@ func _build_usines_excel() -> void:
 		var centre := _centre_bbox(bb)
 		var col := _moduler(Color(0.40, 0.30, 0.24, 0.85), centre)    # brun rouille sombre
 		var neon := _moduler(Color(1.0, 0.50, 0.16), centre)           # néon orange industriel
-		var h := minf(_hauteur_monde(b["hauteur_m"]), unite_maison * 2.0)
+		# Hauteur tapée honorée (sans plafond) : « 9 » sur une usine = usine de 9 m.
+		# Sans chiffre, la hauteur par défaut (≈ 1 unité) garde le hall bas et large.
+		var h := _hauteur_monde(b["hauteur_m"])
 		var r := _bati_boite(b["cells"], h, col, s, sf)
 		n += r[0]; nf += r[1]
 		nn += _toit_sheds_neon(bb, h, neon, sn)       # verrières en dents de scie (glow)
@@ -1500,8 +1530,10 @@ func _build_casses_excel() -> void:
 	rng.seed = seed_val ^ 0xCA55E
 	for b in _excel.casses:
 		var col := _moduler(Color(0.70, 0.42, 0.18, 0.9), _centre_bbox(b["bbox"]))
+		# Hauteur tapée → hauteur des murs d'enceinte (défaut = 1, look actuel).
+		var fy := maxf(0.3, b["hauteur_m"] / maxf(0.5, _excel.hauteur_defaut_m))
 		# Murs d'enceinte : bas mais ÉPAIS (rim à double paroi) → lecture « casse murée ».
-		n += _murs_casse(b["cells"], unite_maison * 0.85, 0.14, col, s)
+		n += _murs_casse(b["cells"], unite_maison * 0.85 * fy, 0.14, col, s)
 		# Empilements de voitures : piles de 1 à 3 carcasses aplaties par case.
 		for cell: Vector2i in b["cells"]:
 			if rng.randf() > 0.72:
@@ -1574,7 +1606,8 @@ func _build_supermarches_excel() -> void:
 		var col := _moduler(Color(0.36, 0.37, 0.44, 0.85), centre)   # coque béton sombre
 		var ambre := _moduler(Color(1.0, 0.60, 0.18), centre)
 		var cyan := _moduler(Color(0.32, 0.95, 1.0), centre)
-		var h := minf(_hauteur_monde(b["hauteur_m"]), unite_maison * 1.7)
+		# Hauteur tapée honorée (sans plafond) ; défaut bas → volume étalé d'hyper.
+		var h := _hauteur_monde(b["hauteur_m"])
 		var r := _bati_boite(b["cells"], h, col, s, sf)
 		n += r[0]; nf += r[1]
 		nn += _enseignes_marquee(bb, h, ambre, sn)        # bandeau lumineux périmètre
@@ -1842,7 +1875,7 @@ func _hash01(cell: Vector2i, salt: int) -> float:
 
 # Bâtiment générique d'UNE case : silhouette piochée dans un POOL non-cubique (selon
 # la case + la hauteur) → toit en pointe, tour fuselée (biseautée), chapeau biseauté,
-# redents, ou boîte simple (minoritaire). Aucun accessoire de toit. [arêtes, faces].
+# ou redents (gratte-ciel étagé). Aucun toit cubique, aucun accessoire. [arêtes, faces].
 func _maison_variee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
 	var centre := _world(cell.x, cell.y, 0.0)
 	var sz := taille_cellule * 0.8
@@ -1851,7 +1884,10 @@ func _maison_variee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: Su
 	var v := _hash01(cell, 7)
 	var n := 0
 	var nf := 0
-	if v < 0.30:
+	# Les redents (gratte-ciel étagé) ne valent que pour les volumes assez hauts ;
+	# sinon on retombe sur le chapeau biseauté → jamais de toit cubique.
+	var redents := v >= 0.78 and floors >= 3
+	if v < 0.33:
 		# Toit en POINTE : corps droit + toiture pyramidale.
 		var body := h * lerpf(0.60, 0.78, _hash01(cell, 11))
 		n += HoloMesh3D.box(s, centre, sz, body, sz, col)
@@ -1860,21 +1896,12 @@ func _maison_variee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: Su
 		var rh := (h - body) + unite_maison * 0.5
 		n += HoloMesh3D.pyramid(s, top, sz, sz, rh, col)
 		nf += HoloMesh3D.pyramid_faces(sf, top, ins, ins, rh)
-	elif v < 0.55:
+	elif v < 0.58:
 		# Tour FUSELÉE : tronc de pyramide sur toute la hauteur (parois biseautées).
 		var k := lerpf(0.55, 0.78, _hash01(cell, 13))
 		n += HoloMesh3D.frustum(s, centre, sz, sz, h, k, col)
 		nf += HoloMesh3D.frustum_faces(sf, centre, ins, ins, h, k)
-	elif v < 0.75:
-		# Chapeau BISEAUTÉ : corps droit + couronne en tronc de pyramide rentré.
-		var body := h * 0.80
-		n += HoloMesh3D.box(s, centre, sz, body, sz, col)
-		nf += HoloMesh3D.box_faces(sf, centre, ins, body, ins)
-		var top := centre + Vector3(0, body, 0)
-		var hc := h - body
-		n += HoloMesh3D.frustum(s, top, sz, sz, hc, 0.45, col)
-		nf += HoloMesh3D.frustum_faces(sf, top, ins, ins, hc, 0.45)
-	elif v < 0.90 and floors >= 3:
+	elif redents:
 		# REDENTS : corps + volume plus petit empilé (gratte-ciel étagé).
 		n += HoloMesh3D.box(s, centre, sz, h, sz, col)
 		nf += HoloMesh3D.box_faces(sf, centre, ins, h, ins)
@@ -1884,11 +1911,14 @@ func _maison_variee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: Su
 		n += HoloMesh3D.box(s, top, sz2, h2, sz2, col)
 		nf += HoloMesh3D.box_faces(sf, top, sz2 * FACE_INSET, h2, sz2 * FACE_INSET)
 	else:
-		# Boîte simple (minorité) + étages si assez haute.
-		n += HoloMesh3D.box(s, centre, sz, h, sz, col)
-		nf += HoloMesh3D.box_faces(sf, centre, ins, h, ins)
-		if floors >= 3:
-			n += HoloMesh3D.etages(s, centre, sz, h, sz, col, clampi(floors - 1, 1, 6))
+		# Chapeau BISEAUTÉ : corps droit + couronne en tronc de pyramide rentré.
+		var body := h * 0.80
+		n += HoloMesh3D.box(s, centre, sz, body, sz, col)
+		nf += HoloMesh3D.box_faces(sf, centre, ins, body, ins)
+		var top := centre + Vector3(0, body, 0)
+		var hc := h - body
+		n += HoloMesh3D.frustum(s, top, sz, sz, hc, 0.45, col)
+		nf += HoloMesh3D.frustum_faces(sf, top, ins, ins, hc, 0.45)
 	return [n, nf]
 
 # Étages (lignes de planchers) sur un BLOC plein rectangulaire et assez haut → casse la

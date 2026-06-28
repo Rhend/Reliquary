@@ -44,6 +44,11 @@ const _FAMILLES := {
 	Cell.SUPERMARCHE: Color8(0xE8, 0xA2, 0x3D),   # ambre → hypermarché (distinct du sable sport)
 	Cell.COLLINE:     Color8(0xC8, 0xA8, 0x6A),   # ocre/sable terne → relief de bordure (colline/désert)
 }
+# Familles BÂTIES : regroupées en blocs (flood-fill) qui consomment leur texte
+# (hauteur/forme) via _finaliser_bloc. Une case de ces familles ne doit JAMAIS
+# devenir une « tour orpheline » (sinon double rendu : bloc + bâtiment générique).
+const _FAMILLE_BATIE := [Cell.BATIMENT, Cell.USINE, Cell.CIMETIERE, Cell.CASSE, Cell.SUPERMARCHE]
+
 # Familles « non-carte » → VIDE (fonds neutres du gabarit).
 const _NEUTRES := [
 	Color8(0xFF, 0xFF, 0xFF),  # blanc
@@ -481,7 +486,11 @@ func _regrouper_batiments() -> void:
 	# ajoute un volume paramétrique compact à cette case (cf. chantier : le
 	# cylindre/pyramide/gradins DOIVENT apparaître).
 	for cell: Vector2i in texte_case:
-		if type_case.get(cell, Cell.VIDE) == Cell.BATIMENT:
+		# On EXCLUT toutes les familles bâties qui consomment déjà leur texte via
+		# _finaliser_bloc (bâtiment + usine/cimetière/casse/supermarché), sinon un
+		# code de hauteur tapé sur l'une d'elles créerait EN DOUBLE un bâtiment
+		# générique par-dessus (bug : « 9 » sur une usine).
+		if _FAMILLE_BATIE.has(type_case.get(cell, Cell.VIDE)):
 			continue
 		var hf := _parse_hauteur_forme(texte_case[cell])
 		if hf.z > 0.5:   # un code reconnu (hauteur et/ou lettre de forme)
@@ -503,7 +512,10 @@ func _blocs_famille(t: int) -> Array:
 	for cell: Vector2i in type_case:
 		if type_case[cell] != t or vus.has(cell):
 			continue
-		out.append(_finaliser_bloc(_flood_type(cell, type_case, t, vus, border_case)))
+		# honorer_forme = false : sur une apparence SPÉCIFIQUE (usine, cimetière, casse,
+		# supermarché) la lettre de forme est IGNORÉE (silhouette dédiée non
+		# remplaçable). Seul le chiffre de hauteur compte. Cf. spec gabarit.
+		out.append(_finaliser_bloc(_flood_type(cell, type_case, t, vus, border_case), false))
 	return out
 
 # Flood-fill 4-connexe d'un bloc bâtiment ; marque les cases dans `vus`.
@@ -522,7 +534,9 @@ func _flood(depart: Vector2i, vus: Dictionary) -> Array:
 	return bloc
 
 # Calcule bbox + hauteur (max des textes du bloc) + forme (1re lettre trouvée).
-func _finaliser_bloc(cells: Array) -> Dictionary:
+# `honorer_forme` : true pour les bâtiments génériques (la lettre choisit la silhouette) ;
+# false pour les apparences spécifiques (la lettre est ignorée, silhouette dédiée).
+func _finaliser_bloc(cells: Array, honorer_forme: bool = true) -> Dictionary:
 	var minx := 1 << 30; var miny := 1 << 30; var maxx := -(1 << 30); var maxy := -(1 << 30)
 	var h := 0.0
 	var f := Forme.BOITE
@@ -533,7 +547,7 @@ func _finaliser_bloc(cells: Array) -> Dictionary:
 			var hf := _parse_hauteur_forme(texte_case[c])
 			if hf.x > h:
 				h = hf.x
-			if int(hf.y) != Forme.BOITE:
+			if honorer_forme and int(hf.y) != Forme.BOITE:
 				f = int(hf.y)
 	if h <= 0.0:
 		h = hauteur_defaut_m
