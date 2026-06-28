@@ -870,15 +870,9 @@ func _build_bordure_eau_excel() -> void:
 func _build_batiments_excel() -> void:
 	var s := HoloMesh3D.st()
 	var sf := HoloMesh3D.st_tri()
-	var sb := HoloMesh3D.st()    # balises rouges (clignotantes)
-	var sban := HoloMesh3D.st()  # enseignes holographiques
 	var n := 0
 	var nf := 0
-	var nb := 0
-	var nban := 0
 	var col := Color(couleur_decor_bati, 0.85)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_val ^ 0x70175
 	for b in _excel.batiments:
 		var h := _hauteur_monde(b["hauteur_m"])
 		var forme: int = b["forme"]
@@ -890,16 +884,12 @@ func _build_batiments_excel() -> void:
 				# Groupe ENTOURÉ d'une bordure épaisse → UN bâtiment plein (100 %).
 				var r := _bati_boite(cells, h, bcol, s, sf)
 				n += r[0]; nf += r[1]
-				var rd := _toit_details_excel(b["bbox"], h, bcol, s, sb, sban, rng)
-				n += rd[0]; nb += rd[1]; nban += rd[2]
 			else:
 				# Par défaut : chaque case = une maison à 80 % (même si collées) → une
 				# rangée de cases se lit comme des maisons distinctes.
 				for cell: Vector2i in cells:
 					var r := _bati_boite_isolee(cell, h, bcol, s, sf)
 					n += r[0]; nf += r[1]
-					var rd := _toit_details_excel(Rect2i(cell, Vector2i(1, 1)), h, bcol, s, sb, sban, rng)
-					n += rd[0]; nb += rd[1]; nban += rd[2]
 		else:
 			var bb: Rect2i = b["bbox"]
 			var sx := float(bb.size.x) * taille_cellule * FACE_INSET
@@ -919,8 +909,6 @@ func _build_batiments_excel() -> void:
 				_moduler(col, _centre_bbox(rect)), s, sf)
 		n += r[0]; nf += r[1]
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "BatimentsExcel")
-	_ajouter_mesh(HoloMesh3D.commit(sb, nb), "Balises", _mat_balise)
-	_ajouter_mesh(HoloMesh3D.commit(sban, nban), "Enseignes", _mat_neon)
 	var fmesh := HoloMesh3D.commit(sf, nf)
 	if fmesh != null:
 		var mif := MeshInstance3D.new()
@@ -928,33 +916,6 @@ func _build_batiments_excel() -> void:
 		mif.mesh = fmesh
 		mif.material_override = _mat_faces
 		_monde.add_child(mif)
-
-# Détails de toit (#3) sur un bâtiment BOÎTE : antenne ou citerne (la plupart),
-# balise rouge clignotante au sommet des HAUTES tours, et enseigne holographique
-# sur quelques façades. Renvoie [nb arêtes, nb balises, nb enseignes].
-func _toit_details_excel(bbox: Rect2i, h: float, col: Color, s: SurfaceTool,
-		sb: SurfaceTool, sban: SurfaceTool, rng: RandomNumberGenerator) -> Array:
-	var sx := float(bbox.size.x) * taille_cellule * 0.86
-	var sz := float(bbox.size.y) * taille_cellule * 0.86
-	var toit := _centre_bbox(bbox) + Vector3(0, h, 0)
-	var n := 0
-	var grand := bbox.size.x * bbox.size.y >= 9
-	var haut := h >= _hauteur_monde(7.0)
-	var roll := rng.randf()
-	# Détail STRUCTUREL discret (antenne ou citerne) — PAS de signal lumineux
-	# (balises / enseignes retirées à la demande de l'auteur).
-	if haut or grand or roll < 0.5:
-		if haut or roll < 0.3:
-			var tip := toit + Vector3(0, maxf(unite_maison * 1.2, h * 0.35), 0)
-			n += HoloMesh3D.line(s, toit, tip, col)
-			var cw := taille_cellule * 0.1
-			n += HoloMesh3D.line(s, tip + Vector3(-cw, 0, 0), tip + Vector3(cw, 0, 0), col)
-			n += HoloMesh3D.line(s, tip + Vector3(0, 0, -cw), tip + Vector3(0, 0, cw), col)
-		else:
-			var tw := taille_cellule * 0.2
-			var off := Vector3(sx * 0.5 - tw * 0.6, 0, sz * 0.5 - tw * 0.6)
-			n += HoloMesh3D.box(s, toit + off, tw, unite_maison * 0.7, tw, col)
-	return [n, 0, 0]
 
 # ─── Ponts (calque Surélevé) : tablier en RAMPE + structure + garde-corps + trafic ──
 # Le tablier part du sol à un bout, monte (/), traverse en hauteur, redescend (\)
