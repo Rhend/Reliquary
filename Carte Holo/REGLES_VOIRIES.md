@@ -84,85 +84,98 @@ Idée directrice :
   proportions servent ça.
 
 ## 0. Ce que le moteur sait réellement rendre (vocabulaire)
-Le moteur **ne connaît pas** de type « usine », « cimetière », « supermarché »… Il lit
-seulement, par case :
+Le moteur classe chaque case dans une **FAMILLE** d'après sa couleur de fond (plus
+proche teinte). Chaque famille a un **rendu dédié** ; le reste de la lecture vient de
+la **proportion de l'emprise** et du **code hauteur/forme** tapé dans une case.
 
-1. **Une APPARENCE** = la couleur de fond, classée dans **6 familles** :
+| Famille | Couleur peinte | Rendu |
+|---|---|---|
+| **Bâtiment** | gris-bleu `3A4253` | volume (boîte par défaut) à la hauteur tapée |
+| **Route** | magenta `D6248F` | voirie (cf. règles de voirie ci-dessus) |
+| **Eau** | cyan `17C3C3` | nappe animée + liseré cyan |
+| **Parc** | vert olive `5E7349` | champ d'arbres épars, **plat** |
+| **Sport** | sable / tan `D2B48C` | **stade complet** (gazon + losange + gradins + projecteurs) |
+| **Cimetière** | gris-ardoise `6B7A8F` | **champ de stèles holographiques** en grille + socles |
+| **Usine** | brun rouille `8B5E3C` | **hall bas** + toit en dents de scie + cheminée |
+| **Casse auto** | orange-rouille `B0560F` | **enclos clôturé** + petites épaves empilées |
+| **Supermarché** | ambre `E8A23D` | **volume bas étalé** + bandeau d'enseignes néon |
+| **Colline / désert** | ocre `C8A86A` | **ruban de relief** (buttes/dunes) — **bordure uniquement** |
+| **Pont** | gris acier `9FB2C4` | ouvrage en hauteur — **feuille « Surélevé » uniquement** |
 
-   | Famille | Couleur peinte | Rendu |
-   |---|---|---|
-   | **Bâtiment** | gris-bleu | volume (boîte par défaut) à la hauteur tapée |
-   | **Route** | magenta | voirie (cf. règles de voirie ci-dessus) |
-   | **Eau** | cyan | nappe animée + liseré cyan |
-   | **Parc** | vert olive | champ d'arbres épars, **plat** |
-   | **Sport** | sable / tan | **stade de baseball complet** (gazon + losange + gradins + projecteurs) |
-   | **Pont** | gris acier | ouvrage en hauteur — **feuille « Surélevé » uniquement** |
+Une couleur qui ne tombe dans aucune famille → **VIDE** (rien dessiné).
 
-   Une couleur qui ne tombe dans aucune famille → **VIDE** (rien dessiné).
+**HAUTEUR + FORME** = le texte tapé dans une case du bloc (ex. `12g`, `6`, `18P`).
+Hauteur en mètres ; **5 formes** : `B`=boîte, `P`=pyramide, `C`=cylindre, `D`=dôme,
+`G`=gradins. Sans nombre → **hauteur par défaut (3 m)** ; **la hauteur 0 n'existe pas**
+(taper un petit nombre, ex. `1`, pour « plat »).
 
-2. **Une HAUTEUR + une FORME** = le texte tapé dans une case du bloc (ex. `12g`,
-   `6`, `18P`). Hauteur en mètres ; **5 formes** seulement :
-   `B`=boîte, `P`=pyramide, `C`=cylindre, `D`=dôme, `G`=gradins.
-   Sans nombre → **hauteur par défaut (3 m)** ; **la hauteur 0 n'existe pas** (taper
-   un petit nombre, ex. `1`, pour « plat »).
-
-### Contraintes dures (valables pour TOUS les bâtiments)
+### Contraintes dures (valables pour TOUTES les familles bâties)
 - **Forme non-boîte (P/C/D/G) → se dessine sur le RECTANGLE englobant** le bloc. Pour
-  un cylindre/dôme/pyramide/gradins **net, peindre un footprint rectangulaire plein**
-  (sinon la forme flotte au-dessus de cases vides). La **boîte** suit les cases telles
-  quelles (emprises en L permises).
+  un cylindre/dôme/pyramide/gradins **net, peindre un footprint rectangulaire plein**.
+  La **boîte** suit les cases telles quelles (emprises en L permises).
 - **Hauteur/forme = le code tapé sur UNE case du bloc** (le plus haut gagne si
-  plusieurs).
+  plusieurs). Usine/Casse/Supermarché **plafonnent** leur hauteur (zones basses) :
+  inutile de taper un grand nombre, il sera écrêté.
 - **Deux blocs de même couleur qui se touchent FUSIONNENT.** Pour les séparer (deux
-  bâtiments distincts, un « enclos »), poser une **bordure medium/thick** entre eux
+  parcelles distinctes, un « enclos »), poser une **bordure medium/thick** entre eux
   (même mécanisme que la voirie).
+
+## Gradient de richesse (automatique, toutes familles)
+Le moteur ternit chaque zone selon sa **distance au centre géométrique** de la grille :
+cœur = couleurs vives / néons actifs, périphérie = couleurs ternies / délabrement.
+**Aucun marqueur à peindre** — c'est appliqué seul, à toutes les apparences, et ça ne
+change **pas la nature** d'une zone (un supermarché reste un supermarché, juste plus
+éteint en bord de carte). Réglable côté moteur (rayon du cœur riche, vitesse de chute,
+luminosité/désaturation au plus pauvre).
 
 ---
 
 ## 1. Bâtiment générique — toutes proportions
 Famille **Bâtiment**. Du carré minimal au grand bloc, **hauteur libre**, forme libre
-(`B`/`P`/`C`/`D`). Aucune contrainte : type passe-partout.
+(`B`/`P`/`C`/`D`/`G`). Aucune contrainte : type passe-partout.
 
 ## 2. Usine désaffectée — large et basse
-Famille **Bâtiment**, forme `B`. Footprint **rectangulaire allongé**, **nettement plus
-étalé que haut** (hauteur basse, ex. `2`). **Jamais une tour.**
+Famille **Usine** (brun rouille). Footprint **rectangulaire allongé**, **nettement plus
+étalé que haut**. Le moteur en fait un **hall** (toit en dents de scie + cheminée),
+hauteur **écrêtée** (jamais une tour, même si on tape un grand nombre).
 
 ```
-BON (hall allongé, bas)        MAUVAIS (carré haut = lit comme une tour)
-B B B B B B  (h=2)             B B
-B B B B B B                    B B  (h=18)
+BON (hall allongé, bas)        MAUVAIS (carré étroit)
+U U U U U U                    U U
+U U U U U U                    U U
 ```
-> Note rendu : pas de primitive « hall industriel » ; l'effet vient **uniquement** de
-> la proportion large+basse. Une boîte fine et haute lira « gratte-ciel ».
+> Le toit en dents de scie se répartit sur le **grand axe** : un hall allongé donne
+> plusieurs sheds lisibles ; un carré étroit n'en donne qu'un ou deux.
 
 ## 3. Casse auto — enclos plat compact
-Famille **Bâtiment**, forme `B`, footprint **tendant au carré**, **hauteur quasi nulle**
-(`1`). Entourer d'une **bordure medium** pour la lecture « enclos ».
-> Ajustement technique : **les épaves au sol ne sont pas modélisées**. Le rendu réel est
-> une **dalle basse** ceinturée — c'est l'enclos plat qui porte la lecture, pas un détail
-> de carcasses.
+Famille **Casse** (orange-rouille), footprint **tendant au carré**. Le moteur ceinture
+le bloc d'une **clôture basse** et parsème de **petites épaves empilées** → lecture
+« enclos ». Hauteur ignorée (toujours basse). Pour bien isoler l'enclos d'un voisin de
+même couleur, **bordure medium** autour.
 
 ## 4. Supermarché / hypermarché — bas et très étalé
-Famille **Bâtiment**, forme `B`, footprint **large, peu haut** (`2`).
+Famille **Supermarché** (ambre), footprint **large, peu haut**. Le moteur pose un
+**volume bas** + un **bandeau d'enseignes néon** sur la façade `+Z` (le bas de l'emprise).
 > **Le parking n'est jamais généré automatiquement** : le moteur ne dessine **que** ce
-> qui est peint. Peindre soi-même le parking à côté (cases de la famille voulue) si on
-> en veut un.
+> qui est peint. Peindre soi-même le parking à côté (cases de la famille voulue).
 
 ## 5. Cimetière — champ plat étendu, régulier
-Peindre en famille **Parc** (recommandé) sur une **emprise vaste et régulière, d'un seul
-tenant**.
-> Ajustement technique **important** : **« stèles fines en grille » n'est pas rendu** (pas
-> de primitive de stèles). Le rendu honnête le plus proche est un **champ plat** : soit
-> Parc (arbres épars), soit une **dalle Bâtiment basse** (`1`) si l'on veut une surface
-> nue. Choisir selon l'effet voulu, mais **ne pas attendre une grille de stèles**.
+Famille **Cimetière** (gris-ardoise) sur une **emprise vaste et régulière, d'un seul
+tenant**. Le moteur sème **une stèle holographique lumineuse par case**, alignée en
+grille, sur un socle plat → mémorial numérique. **Hauteur ignorée** (stèles fixes).
+
+```
+BON (champ régulier d'un tenant)   MAUVAIS (cases éparses)
+K K K K K                          K . K . K
+K K K K K                          . K . K .
+K K K K K                          K . K . K
+```
 
 ## 6. Stade / arène — empreinte massive et compacte
-**Tendance carrée ou ovale, ramassée (jamais allongée)**, hauteur moyenne. Deux rendus
-possibles — choisir explicitement :
-- **Famille Sport** (sable/tan) → **stade de baseball complet** (gazon, losange,
-  gradins en bol, projecteurs, tableau). L'ellipse s'ajuste à l'emprise.
-- **Famille Bâtiment + forme `G`** (gradins) → **arène générique** en gradins étagés
-  (footprint **rectangulaire** obligatoire, cf. §0).
+Famille **Sport** (sable/tan). **Tendance carrée ou ovale, ramassée (jamais allongée)**.
+Le moteur ajuste un **stade complet** (gazon, losange, gradins en bol, projecteurs,
+tableau) à l'emprise. Pour une **arène générique** étagée, utiliser plutôt la famille
+**Bâtiment + forme `G`** (gradins ; footprint rectangulaire obligatoire, cf. §0).
 
 ```
 BON (ramassé, ~carré)          MAUVAIS (allongé = ne lit pas « stade »)
@@ -191,26 +204,33 @@ BON (ruban continu)            MAUVAIS (gouttes éparses)
 > n'est PAS de l'eau haute** — il crée une **tour posée sur l'eau** (cas « 9c » sur le
 > lac). Ne taper un code sur l'eau que si l'on veut volontairement cette tour.
 
-## 9. Colline / désert (bordure) — NON SUPPORTÉ aujourd'hui
-**Aucune famille « colline » ni « désert » n'existe** sur la feuille Carte (le relief
-procédural a été retiré ; la carte est 100 % data-driven).
-> ⚠ **Piège** : la seule couleur sable/tan est la famille **Sport** → peindre du
-> « désert » sable produirait un **stade de baseball**, pas une étendue aride.
->
-> Tant qu'une famille dédiée + son rendu de relief n'existent pas, **ne pas peindre de
-> colline/désert**. (Feature à ajouter côté moteur si on la veut : nouvelle famille de
-> couleur + builder de ruban de relief en périphérie.)
+## 9. Colline / désert — ruban de relief de BORDURE
+Famille **Colline** (ocre `C8A86A`). Le moteur en fait un **ruban de buttes/dunes** qui
+**cadre la ville**. Règle stricte : **périphérie uniquement**.
+- Peindre un **cadre épais** (2–4 cases) le long des **bords** de la grille.
+- **Ne pas en mettre au centre** : une butte ocre au milieu de la ville casse la lecture
+  (le moteur la dessine quand même — c'est à l'auteur de l'éviter).
+- Emprise **continue** le long du bord (comme l'eau) ; les hauteurs varient seules
+  (dunes organiques), aucun code à taper.
+
+```
+BON (cadre de bord, 3 cases)       MAUVAIS (butte au centre)
+O O O O O O O O                    . . . . . . . .
+O . . . . . . O                    . . . O O . . .
+O . ville . . O                    . . . O O . . .
+O O O O O O O O                    . . . . . . . .
+```
 
 ---
 
 ## Pourquoi ces règles
-Le moteur **n'a aucune sémantique de type** : il classe chaque case dans 1 des 6
-familles de couleur, regroupe les bâtiments par adjacence, et leur applique la
-hauteur + la forme tapées. Toute la lecture « usine », « stade », « cimetière » repose
-donc **sur la proportion de l'emprise et le code de forme/hauteur** — pas sur un type
-caché. Respecter la silhouette de chaque type, c'est donner au moteur les seules
-informations qu'il sait traduire ; une proportion fausse (tour étalée, stade allongé,
-désert sable) sort un rendu faux ou un autre objet. Les formes non-boîte exigent un
-footprint rectangulaire parce qu'elles se calent sur le rectangle englobant ; les blocs
-de même couleur se séparent par bordure pour ne pas fusionner. C'est le pendant, côté
-volumes, de la règle de voirie « rectangles nets reliés par des blocs carrés ».
+Le moteur classe chaque case dans une famille de couleur, regroupe les blocs par
+adjacence (séparés par les bordures medium), et applique un **rendu dédié** par famille
++ la hauteur/forme tapée. La lecture « usine », « cimetière », « supermarché »… repose
+sur **la famille (couleur) ET la proportion de l'emprise** : une proportion fausse (hall
+en tour, stade allongé, cimetière épars, colline au centre) sort un rendu faux. Les
+formes non-boîte exigent un footprint rectangulaire parce qu'elles se calent sur le
+rectangle englobant ; les blocs de même couleur se séparent par bordure pour ne pas
+fusionner. Le gradient de richesse, lui, ne dépend que de la **distance au centre** et
+s'applique tout seul. C'est le pendant, côté volumes, de la règle de voirie
+« rectangles nets reliés par des blocs carrés ».

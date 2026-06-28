@@ -23,7 +23,8 @@
 class_name HoloXlsxMap
 extends RefCounted
 
-enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC, PONT, SPORT }
+enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC, PONT, SPORT,
+	CIMETIERE, USINE, CASSE, SUPERMARCHE, COLLINE }
 enum Forme { BOITE, PYRAMIDE, CYLINDRE, DOME, GRADINS }
 
 const ALTITUDE_PONT_DEFAUT := 3.0   # m, si aucune altitude tapée (faible : décolle le tablier)
@@ -31,12 +32,17 @@ const ALTITUDE_PONT_DEFAUT := 3.0   # m, si aucune altitude tapée (faible : dé
 # Centroïdes de famille (repères d'auteur ; on classe au plus proche). Le gris
 # acier (PONT) n'apparaît que sur le calque Surélevé (jamais sur la Carte).
 const _FAMILLES := {
-	Cell.BATIMENT: Color8(0x3A, 0x42, 0x53),
-	Cell.ROUTE:    Color8(0xD6, 0x24, 0x8F),
-	Cell.EAU:      Color8(0x17, 0xC3, 0xC3),
-	Cell.PARC:     Color8(0x5E, 0x73, 0x49),
-	Cell.PONT:     Color8(0x9F, 0xB2, 0xC4),
-	Cell.SPORT:    Color8(0xD2, 0xB4, 0x8C),   # sable/tan → terrain de sport (baseball)
+	Cell.BATIMENT:    Color8(0x3A, 0x42, 0x53),
+	Cell.ROUTE:       Color8(0xD6, 0x24, 0x8F),
+	Cell.EAU:         Color8(0x17, 0xC3, 0xC3),
+	Cell.PARC:        Color8(0x5E, 0x73, 0x49),
+	Cell.PONT:        Color8(0x9F, 0xB2, 0xC4),
+	Cell.SPORT:       Color8(0xD2, 0xB4, 0x8C),   # sable/tan → terrain de sport (baseball)
+	Cell.CIMETIERE:   Color8(0x6B, 0x7A, 0x8F),   # gris-ardoise bleuté → mémorial numérique
+	Cell.USINE:       Color8(0x8B, 0x5E, 0x3C),   # brun rouille → usine désaffectée
+	Cell.CASSE:       Color8(0xB0, 0x56, 0x0F),   # orange-rouille foncé → casse auto
+	Cell.SUPERMARCHE: Color8(0xE8, 0xA2, 0x3D),   # ambre → hypermarché (distinct du sable sport)
+	Cell.COLLINE:     Color8(0xC8, 0xA8, 0x6A),   # ocre/sable terne → relief de bordure (colline/désert)
 }
 # Familles « non-carte » → VIDE (fonds neutres du gabarit).
 const _NEUTRES := [
@@ -60,6 +66,13 @@ var routes: Array = []      # Array[Vector2i]
 var eaux: Array = []        # Array[Vector2i]
 var parcs: Array = []       # Array[Vector2i]
 var terrains: Array = []    # terrains de sport (baseball) : [{cells, bbox}]
+# Familles bâties spécialisées : mêmes blocs que les bâtiments (cells, bbox,
+# hauteur_m, forme), séparés par les bordures medium → un bloc = une parcelle.
+var cimetieres: Array = []  # mémorial numérique (champ de stèles)
+var usines: Array = []      # usine désaffectée (hall industriel bas et large)
+var casses: Array = []      # casse auto (enclos plat + épaves)
+var supermarches: Array = [] # hypermarché (volume bas étalé + enseignes)
+var collines: Array = []    # relief de bordure : Array[Vector2i] (cases ocre)
 var tours_orphelines: Array = []   # codes forme/hauteur posés sur une case NON-bâtiment (cf. 9c sur l'eau)
 var ponts: Array = []       # calque « Surélevé » : {cells, bbox, altitude_m, piliers}
 var routes_elevees: Array = []   # calque « Surélevé » : cases ROUTE magenta (autoroutes surélevées)
@@ -413,12 +426,14 @@ func _regrouper_batiments() -> void:
 	eaux.clear()
 	parcs.clear()
 	terrains.clear()
+	collines.clear()
 	tours_orphelines.clear()
 	for cell: Vector2i in type_case:
 		match type_case[cell]:
 			Cell.ROUTE: routes.append(cell)
 			Cell.EAU: eaux.append(cell)
 			Cell.PARC: parcs.append(cell)
+			Cell.COLLINE: collines.append(cell)
 	# Bâtiments : flood-fill 4-connexe sur l'apparence BATIMENT, séparés par les
 	# bordures medium/thick (cf. _mur) → on peut encadrer une case pour l'isoler.
 	var vus := {}
@@ -438,6 +453,13 @@ func _regrouper_batiments() -> void:
 			minx = mini(minx, c.x); miny = mini(miny, c.y)
 			maxx = maxi(maxx, c.x); maxy = maxi(maxy, c.y)
 		terrains.append({"cells": bloc, "bbox": Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1)})
+	# Familles bâties spécialisées : chaque bloc 4-connexe (séparé par les bordures
+	# medium/thick) = une parcelle, avec sa bbox + hauteur/forme tapées. Le rendu de
+	# chaque famille est dédié (cf. HoloMap3D), mais le regroupement est identique.
+	cimetieres = _blocs_famille(Cell.CIMETIERE)
+	usines = _blocs_famille(Cell.USINE)
+	casses = _blocs_famille(Cell.CASSE)
+	supermarches = _blocs_famille(Cell.SUPERMARCHE)
 	# Codes posés sur une case NON-bâtiment (ex. « 9c » sur l'eau) : tour isolée.
 	# Le canal apparence reste celui du fond (l'eau garde son shimmer) ; le code
 	# ajoute un volume paramétrique compact à cette case (cf. chantier : le
@@ -455,6 +477,18 @@ func _regrouper_batiments() -> void:
 				"hauteur_m": (hf.x if hf.x > 0.0 else hauteur_defaut_m),
 				"forme": int(hf.y),
 			})
+
+# Regroupe une FAMILLE bâtie (cimetière / usine / casse / supermarché) en blocs :
+# flood-fill 4-connexe séparé par les bordures medium/thick → un bloc = une parcelle,
+# finalisée comme un bâtiment (bbox + hauteur/forme tapées, défaut sinon).
+func _blocs_famille(t: int) -> Array:
+	var out: Array = []
+	var vus := {}
+	for cell: Vector2i in type_case:
+		if type_case[cell] != t or vus.has(cell):
+			continue
+		out.append(_finaliser_bloc(_flood_type(cell, type_case, t, vus, border_case)))
+	return out
 
 # Flood-fill 4-connexe d'un bloc bâtiment ; marque les cases dans `vus`.
 func _flood(depart: Vector2i, vus: Dictionary) -> Array:
@@ -605,7 +639,9 @@ func _parser(zip: ZIPReader, chemin: String) -> XMLParser:
 
 # Résumé texte (debug / test headless).
 func resume() -> String:
-	return "grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d sport=%d tours=%d ponts=%d routes_élevées=%d" % [
+	return ("grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d sport=%d " + \
+		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d tours=%d ponts=%d routes_élevées=%d") % [
 		grille, taille_case_m, hauteur_defaut_m,
 		batiments.size(), routes.size(), eaux.size(), parcs.size(), terrains.size(),
+		cimetieres.size(), usines.size(), casses.size(), supermarches.size(), collines.size(),
 		tours_orphelines.size(), ponts.size(), routes_elevees.size()]

@@ -103,6 +103,21 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # Fond : noir.
 @export var couleur_fond := Color(0.0, 0.0, 0.0)
 
+# ─── Gradient de richesse (centre riche → périphérie à l'abandon) ──
+# Module l'intensité/saturation de TOUTES les apparences selon la distance au centre
+# géométrique de la grille (sans changer la nature de la zone). Centre = néons vifs,
+# structures intactes ; bord = couleurs ternies, néons « morts », délabrement.
+@export_group("Gradient richesse")
+@export var gradient_actif := true
+# Rayon du « cœur riche » (fraction du rayon de la carte) où la richesse reste à 100 %.
+@export_range(0.0, 1.0) var gradient_coeur := 0.32
+# Forme de la décroissance cœur→bord : <1 chute tôt, >1 garde la richesse plus loin.
+@export_range(0.2, 4.0) var gradient_chute := 1.35
+# Luminosité résiduelle au point le plus pauvre (0 = noir, 1 = pas d'assombrissement).
+@export_range(0.0, 1.0) var gradient_pauvre_lum := 0.42
+# Désaturation au point le plus pauvre (0 = couleur conservée, 1 = gris total).
+@export_range(0.0, 1.0) var gradient_pauvre_desat := 0.6
+
 # ─── Décor d'ambiance ─────────────────────────────────────────
 @export_group("Décor")
 @export var decor_actif := true
@@ -413,8 +428,13 @@ func _build_all_excel() -> void:
 	_build_bordure_eau_excel()  # liseré cyan vif → l'eau se détache de la carte
 	if decor_actif:
 		_build_decor()          # parcs (arbres) — _eau vide → pas de vaguelettes
+	_build_collines_excel()     # relief de bordure (collines / désert) — cadre la ville
 	_build_terrains_excel()     # terrains de sport (baseball)
 	_build_batiments_excel()
+	_build_cimetieres_excel()   # mémorial numérique (champ de stèles)
+	_build_usines_excel()       # usine désaffectée (hall bas + dents de scie + cheminée)
+	_build_casses_excel()       # casse auto (enclos + épaves empilées)
+	_build_supermarches_excel() # hypermarché (volume bas + enseignes néon)
 	_build_ponts_excel()          # ouvrages du calque Surélevé (au-dessus de l'eau/route)
 	_build_routes_elevees_excel() # autoroutes surélevées (magenta) — vide pour l'instant
 	if motes_actif:
@@ -851,18 +871,20 @@ func _build_batiments_excel() -> void:
 	for b in _excel.batiments:
 		var h := _hauteur_monde(b["hauteur_m"])
 		var forme: int = b["forme"]
+		# Gradient de richesse : le bâti se ternit/désature vers la périphérie.
+		var bcol := _moduler(col, _centre_bbox(b["bbox"]))
 		if forme == HoloXlsxMap.Forme.BOITE:
-			var r := _bati_boite(b["cells"], h, col, s, sf)
+			var r := _bati_boite(b["cells"], h, bcol, s, sf)
 			n += r[0]; nf += r[1]
 			# Détails de toit (#3) : antenne/citerne + balise + enseigne.
-			var rd := _toit_details_excel(b["bbox"], h, col, s, sb, sban, rng)
+			var rd := _toit_details_excel(b["bbox"], h, bcol, s, sb, sban, rng)
 			n += rd[0]; nb += rd[1]; nban += rd[2]
 		else:
 			var bb: Rect2i = b["bbox"]
 			var sx := float(bb.size.x) * taille_cellule * FACE_INSET
 			var sz := float(bb.size.y) * taille_cellule * FACE_INSET
 			var centre := _centre_bbox(bb)
-			var r := _bati_forme(centre, sx, sz, h, forme, col, s, sf)
+			var r := _bati_forme(centre, sx, sz, h, forme, bcol, s, sf)
 			n += r[0]; nf += r[1]
 			# Boule à facettes au sommet de la pyramide (rayons lumineux 360°).
 			if forme == HoloXlsxMap.Forme.PYRAMIDE:
@@ -872,7 +894,8 @@ func _build_batiments_excel() -> void:
 		var rect: Rect2i = t["rect"]
 		# Centrée et dimensionnée sur le plan d'eau (≈ 70 % de sa plus petite dimension).
 		var taille := float(mini(rect.size.x, rect.size.y)) * taille_cellule * 0.7
-		var r := _bati_forme(_centre_bbox(rect), taille, taille, h, t["forme"], col, s, sf)
+		var r := _bati_forme(_centre_bbox(rect), taille, taille, h, t["forme"],
+				_moduler(col, _centre_bbox(rect)), s, sf)
 		n += r[0]; nf += r[1]
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "BatimentsExcel")
 	_ajouter_mesh(HoloMesh3D.commit(sb, nb), "Balises", _mat_balise)
@@ -1235,6 +1258,325 @@ func _stade_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool, sn: SurfaceT
 	n += HoloMesh3D.line(s, sb + Vector3(sw * 0.7, -sh, 0), sb + Vector3(sw * 0.7, -hb * 0.45, 0), acier)
 	return [ng, n, nn]
 
+# ─── Colline / désert : relief de bordure (apparence ocre) ────
+# Les cases ocre peintes en périphérie forment un ruban de relief inerte qui cadre la
+# ville. Chaque case reçoit une « butte » basse (hauteur variée déterministe) → dunes
+# continues. Le gradient de richesse les ternit encore vers l'extérieur (désert mort).
+func _build_collines_excel() -> void:
+	if _excel.collines.is_empty():
+		return
+	var s := HoloMesh3D.st()
+	var n := 0
+	var base_col := Color(0.74, 0.62, 0.40)   # ocre sable (DA holo, faible glow)
+	for cell: Vector2i in _excel.collines:
+		var c := _world(cell.x, cell.y, 0.0)
+		# Hash déterministe par case → hauteur + léger décalage du sommet (organique).
+		var hsh := float(((cell.x * 73856093) ^ (cell.y * 19349663)) & 0xFFFF) / 65535.0
+		var jsh := float(((cell.x * 19349663) ^ (cell.y * 83492791)) & 0xFFFF) / 65535.0
+		var h := unite_maison * lerpf(0.7, 2.0, hsh)
+		var jx := (jsh - 0.5) * taille_cellule * 0.4
+		var jz := (hsh - 0.5) * taille_cellule * 0.4
+		n += _butte(s, c, taille_cellule * 0.62, h, _moduler(base_col, c), jx, jz)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "CollinesRelief", _mat_ambiance)
+
+# Butte basse : base hexagonale + arêtes vers un sommet (légèrement décalé) → dune.
+func _butte(s: SurfaceTool, c: Vector3, r: float, h: float, col: Color, jx: float, jz: float) -> int:
+	var seg := 6
+	var apex := c + Vector3(jx, h, jz)
+	var prev := c + Vector3(r, 0, 0)
+	var n := 0
+	for i in range(1, seg + 1):
+		var a := TAU * float(i) / float(seg)
+		var cur := c + Vector3(cos(a) * r, 0, sin(a) * r)
+		n += HoloMesh3D.line(s, prev, cur, col)   # contour au sol
+		n += HoloMesh3D.line(s, cur, apex, col)   # arête vers le sommet
+		prev = cur
+	return n
+
+# ─── Cimetière : mémorial numérique (champ de stèles holographiques) ──
+# Chaque case porte une stèle fine verticale lumineuse, alignée en grille régulière,
+# posée sur un socle plat discret. Pas de pierres tombales : des dalles holographiques.
+func _build_cimetieres_excel() -> void:
+	if _excel.cimetieres.is_empty():
+		return
+	var s := HoloMesh3D.st()       # socles (décor discret)
+	var n := 0
+	var sg := HoloMesh3D.st()      # stèles (glow)
+	var ng := 0
+	for b in _excel.cimetieres:
+		var centre := _centre_bbox(b["bbox"])
+		var col_stele := _moduler(Color(0.52, 0.68, 0.84), centre)   # cyan-ardoise lumineux
+		var col_socle := _moduler(Color(0.34, 0.44, 0.56), centre)
+		for cell: Vector2i in b["cells"]:
+			var c := _world(cell.x, cell.y, 0.0)
+			n += _carre_plat(s, c, taille_cellule * 0.30, col_socle)
+			# Stèle = dalle fine verticale + barre de tête (mémoriel holographique).
+			var w := taille_cellule * 0.18
+			var d := taille_cellule * 0.05
+			var hs := unite_maison * 1.05
+			ng += HoloMesh3D.box(sg, c, w, hs, d, col_stele)
+			ng += HoloMesh3D.line(sg, c + Vector3(-w * 0.6, hs * 0.78, 0),
+					c + Vector3(w * 0.6, hs * 0.78, 0), col_stele)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "CimetiereSocles", _mat_ambiance)
+	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "CimetiereSteles", _mat_lieu_decor)
+
+# ─── Usine désaffectée : hall bas et large + toit en dents de scie + cheminée ──
+# Métal corrodé : la couleur (brun rouille) est ternie par le gradient. Hauteur
+# plafonnée (jamais une tour). Faces sombres comme les bâtiments.
+func _build_usines_excel() -> void:
+	if _excel.usines.is_empty():
+		return
+	var s := HoloMesh3D.st()       # coque corrodée (sombre, peu de glow)
+	var sf := HoloMesh3D.st_tri()
+	var sn := HoloMesh3D.st()       # accents NÉON (verrières, conduits, cheminée)
+	var n := 0
+	var nf := 0
+	var nn := 0
+	for b in _excel.usines:
+		var bb: Rect2i = b["bbox"]
+		var centre := _centre_bbox(bb)
+		var col := _moduler(Color(0.40, 0.30, 0.24, 0.85), centre)    # brun rouille sombre
+		var neon := _moduler(Color(1.0, 0.50, 0.16), centre)           # néon orange industriel
+		var h := minf(_hauteur_monde(b["hauteur_m"]), unite_maison * 2.0)
+		var r := _bati_boite(b["cells"], h, col, s, sf)
+		n += r[0]; nf += r[1]
+		nn += _toit_sheds_neon(bb, h, neon, sn)       # verrières en dents de scie (glow)
+		nn += _conduits_facade(bb, h, neon, sn)        # tuyauterie ceinturant le hall
+		nn += _cheminee_neon(bb, h, neon, sn)          # cheminée lumineuse + balise
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Usines")
+	_ajouter_faces(HoloMesh3D.commit(sf, nf), "UsinesFaces")
+	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "UsinesNeon", _mat_neon)
+
+# Verrières en dents de scie (sheds industriels) ÉMISSIVES : chaque dent = montant
+# vertical + crête + pente vitrée (mullions lumineux) → silhouette « usine » nette,
+# qui glow. Réparties sur le grand axe.
+func _toit_sheds_neon(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
+	var x0 := float(bb.position.x) - 0.5
+	var x1 := float(bb.position.x + bb.size.x - 1) + 0.5
+	var y0 := float(bb.position.y) - 0.5
+	var y1 := float(bb.position.y + bb.size.y - 1) + 0.5
+	var span_x := bb.size.x >= bb.size.y
+	var longn: int = bb.size.x if span_x else bb.size.y
+	var nb := clampi(int(longn / 2), 2, 7)
+	var th := unite_maison * 0.6
+	var n := 0
+	for k in nb:
+		var fa := float(k) / float(nb)         # début de la dent (crête haute)
+		var fb := float(k + 1) / float(nb)     # fin (retombée au niveau du toit)
+		var a0: Vector3; var a1: Vector3       # crête (haut)
+		var b0: Vector3; var b1: Vector3       # bas (côté pente)
+		var r0: Vector3; var r1: Vector3       # pied du montant (sous la crête)
+		if span_x:
+			var ga := lerpf(x0, x1, fa); var gb := lerpf(x0, x1, fb)
+			a0 = _world(ga, y0, h + th); a1 = _world(ga, y1, h + th)
+			b0 = _world(gb, y0, h); b1 = _world(gb, y1, h)
+			r0 = _world(ga, y0, h); r1 = _world(ga, y1, h)
+		else:
+			var ga := lerpf(y0, y1, fa); var gb := lerpf(y0, y1, fb)
+			a0 = _world(x0, ga, h + th); a1 = _world(x1, ga, h + th)
+			b0 = _world(x0, gb, h); b1 = _world(x1, gb, h)
+			r0 = _world(x0, ga, h); r1 = _world(x1, ga, h)
+		n += HoloMesh3D.line(s, a0, a1, col)   # crête vitrée
+		n += HoloMesh3D.line(s, r0, a0, col)   # montant vertical (la « dent »)
+		n += HoloMesh3D.line(s, r1, a1, col)
+		n += HoloMesh3D.line(s, r0, r1, col)   # base de la dent
+		n += HoloMesh3D.line(s, a0, b0, col)   # pente vitrée
+		n += HoloMesh3D.line(s, a1, b1, col)
+		for m in 2:                            # mullions sur la pente (verre)
+			var t := float(m + 1) / 3.0
+			n += HoloMesh3D.line(s, a0.lerp(b0, t), a1.lerp(b1, t), col)
+	return n
+
+# Tuyauterie industrielle : 2 conduits lumineux qui ceinturent le hall à mi-hauteur
+# (anneaux périmètre) → lecture « usine » immédiate, même de loin.
+func _conduits_facade(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
+	var x0 := float(bb.position.x) - 0.5
+	var x1 := float(bb.position.x + bb.size.x - 1) + 0.5
+	var y0 := float(bb.position.y) - 0.5
+	var y1 := float(bb.position.y + bb.size.y - 1) + 0.5
+	var n := 0
+	for yf: float in [0.42, 0.72]:
+		var yy := h * yf
+		var c0 := _world(x0, y0, yy); var c1 := _world(x1, y0, yy)
+		var c2 := _world(x1, y1, yy); var c3 := _world(x0, y1, yy)
+		n += HoloMesh3D.line(s, c0, c1, col) + HoloMesh3D.line(s, c1, c2, col) \
+				+ HoloMesh3D.line(s, c2, c3, col) + HoloMesh3D.line(s, c3, c0, col)
+	return n
+
+# Cheminée ÉMISSIVE à un coin du toit : fût lumineux + 2 anneaux de fumée + balise.
+func _cheminee_neon(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
+	var base := _world(float(bb.position.x), float(bb.position.y), h)
+	var w := taille_cellule * 0.16
+	var ch := unite_maison * 2.4
+	var n := HoloMesh3D.box(s, base, w, ch, w, col)
+	for rf: float in [0.55, 0.8]:
+		n += HoloMesh3D.circle(s, base + Vector3(0, ch * rf, 0), w * 0.95, col, 10)
+	n += HoloMesh3D.diamond(s, base + Vector3(0, ch + w, 0), w * 0.7, w * 0.9, Color(1.0, 0.32, 0.20))
+	return n
+
+# ─── Casse auto : enclos plat ceinturé + épaves empilées ──────
+# Dalle basse entourée d'une clôture (lecture « enclos »), parsemée de petites boîtes
+# empilées (carcasses). Orange rouille ternie par le gradient.
+func _build_casses_excel() -> void:
+	if _excel.casses.is_empty():
+		return
+	var s := HoloMesh3D.st()
+	var n := 0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0xCA55E
+	for b in _excel.casses:
+		var col := _moduler(Color(0.70, 0.42, 0.18, 0.9), _centre_bbox(b["bbox"]))
+		n += _cloture_bloc(b["cells"], unite_maison * 0.7, col, s)
+		for cell: Vector2i in b["cells"]:
+			if rng.randf() > 0.55:
+				continue
+			var c := _world(cell.x, cell.y, 0.0)
+			var w := taille_cellule * lerpf(0.30, 0.46, rng.randf())
+			var hh := unite_maison * lerpf(0.28, 0.62, rng.randf())
+			n += HoloMesh3D.box(s, c, w, hh, w * 0.7, col)
+			if rng.randf() < 0.4:   # carcasse empilée par-dessus
+				n += HoloMesh3D.box(s, c + Vector3(0, hh, 0), w * 0.8, hh * 0.7, w * 0.55, col)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Casses")
+
+# Clôture basse le long du périmètre d'un bloc : main courante + poteaux aux côtés
+# frontière (voisin hors du bloc). Donne la lecture « enclos ».
+func _cloture_bloc(cells: Array, hf: float, col: Color, s: SurfaceTool) -> int:
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var n := 0
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for c: Vector2i in cells:
+		for d: Vector2i in dirs:
+			if setd.has(c + d):
+				continue
+			var seg := _cote_cellule(c, d)
+			var a := _world(seg[0].x, seg[0].y, 0.0)
+			var b := _world(seg[1].x, seg[1].y, 0.0)
+			var up := Vector3(0, hf, 0)
+			n += HoloMesh3D.line(s, a + up, b + up, col)   # main courante
+			n += HoloMesh3D.line(s, a, a + up, col)        # poteau
+	return n
+
+# ─── Supermarché / hypermarché : volume bas + DÉBAUCHE d'enseignes lumineuses ──
+# Coque basse sombre noyée sous le néon : bandeau-marquee qui ceinture tout le toit,
+# grille lumineuse de verrières au sommet, panneau géant dressé sur le toit, et entrée
+# illuminée en façade. C'est le néon (ambre + cyan) qui porte l'identité, pas la boîte.
+func _build_supermarches_excel() -> void:
+	if _excel.supermarches.is_empty():
+		return
+	var s := HoloMesh3D.st()
+	var sf := HoloMesh3D.st_tri()
+	var sn := HoloMesh3D.st()   # enseignes ambre (glow)
+	var sc := HoloMesh3D.st()   # accents cyan (glow)
+	var n := 0
+	var nf := 0
+	var nn := 0
+	var ncy := 0
+	for b in _excel.supermarches:
+		var bb: Rect2i = b["bbox"]
+		var centre := _centre_bbox(bb)
+		var col := _moduler(Color(0.36, 0.37, 0.44, 0.85), centre)   # coque béton sombre
+		var ambre := _moduler(Color(1.0, 0.60, 0.18), centre)
+		var cyan := _moduler(Color(0.32, 0.95, 1.0), centre)
+		var h := minf(_hauteur_monde(b["hauteur_m"]), unite_maison * 1.7)
+		var r := _bati_boite(b["cells"], h, col, s, sf)
+		n += r[0]; nf += r[1]
+		nn += _enseignes_marquee(bb, h, ambre, sn)        # bandeau lumineux périmètre
+		nn += _billboard_toit(bb, h, ambre, cyan, sn, sc) # panneau géant + barres cyan
+		ncy += _toit_skylights(bb, h, cyan, sc)           # grille de verrières (toit)
+		ncy += _entree_facade(bb, h, cyan, sc)            # entrée illuminée
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "Supermarches")
+	_ajouter_faces(HoloMesh3D.commit(sf, nf), "SupermarchesFaces")
+	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "SupermarchesEnseignes", _mat_neon)
+	_ajouter_mesh(HoloMesh3D.commit(sc, ncy), "SupermarchesAccents", _mat_neon)
+
+# Bandeau-marquee : double rail lumineux sur TOUT le périmètre du toit + ampoules
+# verticales rapprochées → enseigne commerciale qui ceinture le magasin.
+func _enseignes_marquee(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
+	var x0 := float(bb.position.x) - 0.5
+	var x1 := float(bb.position.x + bb.size.x - 1) + 0.5
+	var y0 := float(bb.position.y) - 0.5
+	var y1 := float(bb.position.y + bb.size.y - 1) + 0.5
+	var band := unite_maison * 0.45
+	var n := 0
+	for yy: float in [h, h + band]:   # rails haut/bas du bandeau, périmètre complet
+		var c0 := _world(x0, y0, yy); var c1 := _world(x1, y0, yy)
+		var c2 := _world(x1, y1, yy); var c3 := _world(x0, y1, yy)
+		n += HoloMesh3D.line(s, c0, c1, col) + HoloMesh3D.line(s, c1, c2, col) \
+				+ HoloMesh3D.line(s, c2, c3, col) + HoloMesh3D.line(s, c3, c0, col)
+	# Ampoules : montants verticaux serrés le long des 4 arêtes.
+	var aretes := [[x0, y0, x1, y0], [x1, y0, x1, y1], [x1, y1, x0, y1], [x0, y1, x0, y0]]
+	for e: Array in aretes:
+		var steps := 6
+		for k in range(steps + 1):
+			var t := float(k) / float(steps)
+			var px := lerpf(e[0], e[2], t)
+			var py := lerpf(e[1], e[3], t)
+			n += HoloMesh3D.line(s, _world(px, py, h), _world(px, py, h + band), col)
+	return n
+
+# Verrières de toit : grille lumineuse fine posée à plat sur le toit (skylights / blocs
+# de clim) → lecture « grande surface » vue du dessus.
+func _toit_skylights(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
+	var x0 := float(bb.position.x) - 0.4
+	var x1 := float(bb.position.x + bb.size.x - 1) + 0.4
+	var y0 := float(bb.position.y) - 0.4
+	var y1 := float(bb.position.y + bb.size.y - 1) + 0.4
+	var yy := h + 0.012
+	var n := 0
+	var nx := clampi(bb.size.x, 2, 8)
+	var ny := clampi(bb.size.y, 2, 8)
+	for k in range(nx + 1):
+		var gx := lerpf(x0, x1, float(k) / float(nx))
+		n += HoloMesh3D.line(s, _world(gx, y0, yy), _world(gx, y1, yy), col)
+	for k in range(ny + 1):
+		var gy := lerpf(y0, y1, float(k) / float(ny))
+		n += HoloMesh3D.line(s, _world(x0, gy, yy), _world(x1, gy, yy), col)
+	return n
+
+# Panneau publicitaire géant dressé sur le toit (plan XY, centré) : cadre ambre +
+# barres horizontales cyan (le « texte » de l'enseigne) → totem visible de loin.
+func _billboard_toit(bb: Rect2i, h: float, col: Color, col2: Color, s: SurfaceTool, sc: SurfaceTool) -> int:
+	var c := _centre_bbox(bb)
+	var bw := maxf(taille_cellule * 1.2, float(mini(bb.size.x, bb.size.y)) * taille_cellule * 0.55)
+	var bh := unite_maison * 1.7
+	var y := h
+	var p0 := c + Vector3(-bw * 0.5, y, 0)
+	var p1 := c + Vector3(bw * 0.5, y, 0)
+	var p2 := c + Vector3(bw * 0.5, y + bh, 0)
+	var p3 := c + Vector3(-bw * 0.5, y + bh, 0)
+	var n := HoloMesh3D.line(s, p0, p1, col) + HoloMesh3D.line(s, p1, p2, col) \
+			+ HoloMesh3D.line(s, p2, p3, col) + HoloMesh3D.line(s, p3, p0, col)
+	for m in 2:   # barres « texte » cyan
+		var t := float(m + 1) / 3.0
+		HoloMesh3D.line(sc, c + Vector3(-bw * 0.38, y + bh * t, 0), c + Vector3(bw * 0.38, y + bh * t, 0), col2)
+	return n
+
+# Entrée illuminée en façade (+Z) : portique lumineux + auvent → point d'accès lisible.
+func _entree_facade(bb: Rect2i, h: float, col: Color, s: SurfaceTool) -> int:
+	var x0 := float(bb.position.x) - 0.5
+	var x1 := float(bb.position.x + bb.size.x - 1) + 0.5
+	var ay := float(bb.position.y + bb.size.y - 1) + 0.5
+	var ex0 := lerpf(x0, x1, 0.38)
+	var ex1 := lerpf(x0, x1, 0.62)
+	var eh := h * 0.62
+	var n := HoloMesh3D.line(s, _world(ex0, ay, 0.02), _world(ex0, ay, eh), col)
+	n += HoloMesh3D.line(s, _world(ex1, ay, 0.02), _world(ex1, ay, eh), col)
+	n += HoloMesh3D.line(s, _world(ex0, ay, eh), _world(ex1, ay, eh), col)
+	n += HoloMesh3D.line(s, _world(ex0 - 0.35, ay, eh + 0.06), _world(ex1 + 0.35, ay, eh + 0.06), col)  # auvent
+	return n
+
+# Ajoute un mesh de FACES sombres (occlusion) sous le matériau de faces partagé.
+func _ajouter_faces(mesh: ArrayMesh, nom: String) -> void:
+	if mesh == null:
+		return
+	var mi := MeshInstance3D.new()
+	mi.name = nom
+	mi.mesh = mesh
+	mi.material_override = _mat_faces
+	_monde.add_child(mi)
+
 # ─── Halo d'horizon + brume au sol (#6) ───────────────────────
 # Une « jupe » cylindrique à dégradé vertical autour de la ville (bleu-cyan en bas,
 # transparent en haut) + une nappe de brume au sol qui s'éclaire vers l'horizon →
@@ -1290,6 +1632,32 @@ func _carre_plat(s: SurfaceTool, c: Vector3, r: float, col: Color) -> int:
 	var e := c + Vector3(-r, 0, r)
 	return HoloMesh3D.line(s, a, b, col) + HoloMesh3D.line(s, b, d, col) \
 			+ HoloMesh3D.line(s, d, e, col) + HoloMesh3D.line(s, e, a, col)
+
+# ─── Gradient de richesse ─────────────────────────────────────
+# Richesse d'un point monde (plan XZ) : 1 dans le cœur central → 0 en périphérie.
+# Le centre de la grille est l'origine monde (cf. _world soustrait _cgrid).
+func _richesse(p: Vector3) -> float:
+	if not gradient_actif:
+		return 1.0
+	var rmax := maxf(0.001, _cgrid() * taille_cellule)
+	var d := Vector2(p.x, p.z).length() / rmax        # 0 au centre, ~1 au bord
+	var t := clampf((d - gradient_coeur) / maxf(0.001, 1.0 - gradient_coeur), 0.0, 1.0)
+	return pow(1.0 - t, gradient_chute)
+
+# Ternit une couleur selon la richesse du lieu (centre vif → périphérie morte) :
+# baisse de luminosité + désaturation. La NATURE de la zone est conservée (l'alpha
+# et la teinte de base restent ; seules l'intensité et la saturation chutent).
+func _moduler(col: Color, p: Vector3) -> Color:
+	if not gradient_actif:
+		return col
+	var r := _richesse(p)
+	var lum := lerpf(gradient_pauvre_lum, 1.0, r)
+	var c := Color(col.r * lum, col.g * lum, col.b * lum, col.a)
+	var desat := (1.0 - r) * gradient_pauvre_desat
+	if desat > 0.001:
+		var g := c.get_luminance()
+		c = c.lerp(Color(g, g, g, c.a), desat)
+	return c
 
 # Hauteur en mètres → hauteur monde (1 hauteur-défaut = 1 unité-maison × exagération).
 func _hauteur_monde(h_m: float) -> float:
@@ -1599,10 +1967,11 @@ func _build_decor() -> void:
 		elif _lieu_sol.has(cell):
 			continue   # reste du sol du lieu : laissé vide (peu d'arbres voulus)
 		elif rng.randf() <= 0.55:
-			# Parc ordinaire : arbres verts épars.
-			n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), cp)
+			# Parc ordinaire : arbres verts épars (ternis vers la périphérie).
+			var tc := _moduler(cp, c)
+			n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), tc)
 			n += HoloMesh3D.diamond(s, c + Vector3(0, ht + ht * 0.4, 0),
-					taille_cellule * 0.22, ht * 0.5, cp)
+					taille_cellule * 0.22, ht * 0.5, tc)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Decor", _mat_ambiance)
 	_ajouter_mesh(HoloMesh3D.commit(sl, nl), "DecorLieu", _mat_lieu_decor)
 

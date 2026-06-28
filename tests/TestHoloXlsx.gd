@@ -49,6 +49,20 @@ func _ready() -> void:
 	_ok("routes peintes", m.routes.size() > 0)
 	_ok("eau peinte", m.eaux.size() > 0)
 	_ok("parcs peints", m.parcs.size() > 0)
+	# Nouvelles familles (peintes sur la carte réelle) : classées + regroupées en blocs.
+	_ok("colline (ruban de bordure) lue (> 0)", m.collines.size() > 0)
+	_ok("usine(s) lue(s) (>= 1)", m.usines.size() >= 1)
+	_ok("casse(s) auto lue(s) (>= 1)", m.casses.size() >= 1)
+	_ok("supermarché(s) lu(s) (>= 1)", m.supermarches.size() >= 1)
+	_ok("cimetière(s) lu(s) (>= 1)", m.cimetieres.size() >= 1)
+	# Classification par famille de couleur (nearest-match) — y compris la distinction
+	# ambre (supermarché) / ocre (colline) / sable (sport), proches mais distincts.
+	_eq("classe 6B7A8F → cimetière", _classe(Color8(0x6B, 0x7A, 0x8F)), HoloXlsxMap.Cell.CIMETIERE)
+	_eq("classe 8B5E3C → usine", _classe(Color8(0x8B, 0x5E, 0x3C)), HoloXlsxMap.Cell.USINE)
+	_eq("classe B0560F → casse", _classe(Color8(0xB0, 0x56, 0x0F)), HoloXlsxMap.Cell.CASSE)
+	_eq("classe E8A23D → supermarché", _classe(Color8(0xE8, 0xA2, 0x3D)), HoloXlsxMap.Cell.SUPERMARCHE)
+	_eq("classe C8A86A → colline", _classe(Color8(0xC8, 0xA8, 0x6A)), HoloXlsxMap.Cell.COLLINE)
+	_eq("classe D2B48C → sport", _classe(Color8(0xD2, 0xB4, 0x8C)), HoloXlsxMap.Cell.SPORT)
 	# Calque Surélevé : ponts (gris acier) à faible altitude, sans piliers (Ouvrages
 	# = exemples génériques → ignorés). Pas de route surélevée.
 	_ok("ponts lus (>= 1)", m.ponts.size() >= 1)
@@ -64,6 +78,12 @@ func _ready() -> void:
 		print("  ✓ lecteur Excel conforme")
 	print("════════════════════════════════\n")
 	get_tree().quit(0 if _fail.is_empty() else 1)
+
+# Classe une couleur de fond isolée → Cell (teste les centroïdes de famille sans fichier).
+func _classe(col: Color) -> int:
+	var m := HoloXlsxMap.new()
+	m._fills = [col]
+	return m._classer(0)
 
 func _bati_unitaire(m: HoloXlsxMap, cell: Vector2i, hauteur: float) -> bool:
 	for b in m.batiments:
