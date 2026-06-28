@@ -182,9 +182,9 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # bandes d'étage + pulse de scan vertical → la ville respire (cf. holo_face).
 @export var couleur_glow_coeur := Color(0.35, 0.95, 1.00)     # cyan chaud (centre riche)
 @export var couleur_glow_peripherie := Color(0.16, 0.30, 0.52) # bleu froid (abandon)
-@export_range(0.0, 1.5) var glow_facade := 0.34
-@export_range(0.0, 1.5) var etage_force := 0.55
-@export_range(0.0, 1.5) var pulse_force := 0.6
+@export_range(0.0, 2.0) var glow_facade := 0.38   # corps vitré translucide (≠ néon plein)
+@export_range(0.0, 2.5) var etage_force := 1.3    # barres d'étage (crèvent le bloom)
+@export_range(0.0, 2.5) var pulse_force := 1.15   # front de scan lumineux
 # Skyline : les tours hautes virent au cyan-blanc (cœur corpo), les bâtis bas
 # restent froids → hiérarchie de hauteur lisible (heat des arêtes).
 @export var couleur_tour_haute := Color(0.55, 0.95, 1.00)
