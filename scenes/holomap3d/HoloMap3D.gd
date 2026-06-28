@@ -1652,25 +1652,39 @@ func _pile_carcasses(c: Vector3, col: Color, neon: Color, rng: RandomNumberGener
 		y += hh + unite_maison * 0.015
 	return [n, ng]
 
-# Épave de voiture : caisse basse + cabine décalée + phare néon. Orientée au hasard
-# (le long de X ou Y). Renvoie [arêtes, glow].
+# Épave de voiture : MÊME silhouette futuriste que les voitures du trafic (coque en
+# goutte d'eau effilée + bulle de cockpit facettée), posée au sol, orientée le long de
+# X ou Y au hasard. Phare néon à l'avant. Renvoie [arêtes, glow].
 func _epave_voiture(c: Vector3, col: Color, neon: Color, rng: RandomNumberGenerator, s: SurfaceTool, sg: SurfaceTool) -> Array:
 	var n := 0
 	var ng := 0
-	var swap := rng.randf() < 0.5
-	var lng := taille_cellule * 0.52   # longueur (sens de l'épave)
-	var wid := taille_cellule * 0.26   # largeur
-	var bl := wid if swap else lng
-	var bw := lng if swap else wid
-	var bodyh := unite_maison * 0.20
-	n += HoloMesh3D.box(s, c, bl, bodyh, bw, col)                     # caisse
-	# Cabine décalée vers l'arrière (donne une vraie silhouette de voiture).
-	var off := lng * 0.12
-	var cabin_c := c + Vector3(0 if swap else -off, bodyh, -off if swap else 0)
-	n += HoloMesh3D.box(s, cabin_c, bl * (0.95 if swap else 0.5), unite_maison * 0.17, bw * (0.5 if swap else 0.95), col)
+	var tang := Vector3(0, 0, 1) if rng.randf() < 0.5 else Vector3(1, 0, 0)
+	var perp := Vector3(-tang.z, 0.0, tang.x)
+	var hl := taille_cellule * 0.22    # demi-longueur
+	var hw := taille_cellule * 0.10    # demi-largeur (au maître-bau)
+	var ht := taille_cellule * 0.085   # hauteur de la bulle
+	var up := Vector3(0, ht, 0)
+	# Empreinte au sol en goutte d'eau (identique au trafic : nez / maître-bau / poupe).
+	var nez := c + tang * hl
+	var ml := c + tang * (hl * 0.18) - perp * hw
+	var mr := c + tang * (hl * 0.18) + perp * hw
+	var pl := c - tang * hl - perp * (hw * 0.45)
+	var pr := c - tang * hl + perp * (hw * 0.45)
+	n += HoloMesh3D.line(s, nez, mr, col)
+	n += HoloMesh3D.line(s, mr, pr, col)
+	n += HoloMesh3D.line(s, pr, pl, col)
+	n += HoloMesh3D.line(s, pl, ml, col)
+	n += HoloMesh3D.line(s, ml, nez, col)
+	# Bulle de cockpit facettée (apex bas, légèrement reculé).
+	var apex := c - tang * (hl * 0.08) + up
+	var poupe := (pl + pr) * 0.5
+	n += HoloMesh3D.line(s, apex, nez, col)
+	n += HoloMesh3D.line(s, apex, ml, col)
+	n += HoloMesh3D.line(s, apex, mr, col)
+	n += HoloMesh3D.line(s, apex, poupe, col)
 	# Phare néon à l'avant (petite balise → « c'est une voiture »).
-	var nose := c + Vector3(0 if swap else lng * 0.42, bodyh * 0.45, lng * 0.42 if swap else 0)
-	ng += HoloMesh3D.diamond(sg, nose, taille_cellule * 0.045, taille_cellule * 0.05, neon)
+	ng += HoloMesh3D.diamond(sg, nez + Vector3(0, ht * 0.25, 0),
+			taille_cellule * 0.04, taille_cellule * 0.045, neon)
 	return [n, ng]
 
 # Grue à électro-aimant : mât treillis + flèche + contrepoids + câble et aimant (glow).
