@@ -24,7 +24,7 @@ class_name HoloXlsxMap
 extends RefCounted
 
 enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC, PONT, SPORT,
-	CIMETIERE, USINE, CASSE, SUPERMARCHE, COLLINE }
+	CIMETIERE, USINE, CASSE, SUPERMARCHE, COLLINE, PARKING }
 enum Forme { BOITE, PYRAMIDE, CYLINDRE, DOME, GRADINS }
 
 const ALTITUDE_PONT_DEFAUT := 3.0   # m, si aucune altitude tapée (faible : décolle le tablier)
@@ -43,6 +43,7 @@ const _FAMILLES := {
 	Cell.CASSE:       Color8(0xB0, 0x56, 0x0F),   # orange-rouille foncé → casse auto
 	Cell.SUPERMARCHE: Color8(0xE8, 0xA2, 0x3D),   # ambre → hypermarché (distinct du sable sport)
 	Cell.COLLINE:     Color8(0xC8, 0xA8, 0x6A),   # ocre/sable terne → relief de bordure (colline/désert)
+	Cell.PARKING:     Color8(0xB5, 0xB5, 0xB8),   # gris clair neutre → aire de stationnement (au sol)
 }
 # Familles BÂTIES : regroupées en blocs (flood-fill) qui consomment leur texte
 # (hauteur/forme) via _finaliser_bloc. Une case de ces familles ne doit JAMAIS
@@ -78,6 +79,7 @@ var usines: Array = []      # usine désaffectée (hall industriel bas et large)
 var casses: Array = []      # casse auto (enclos plat + épaves)
 var supermarches: Array = [] # hypermarché (volume bas étalé + enseignes)
 var collines: Array = []    # relief de bordure : Array[Vector2i] (cases ocre)
+var parkings: Array = []    # aire de stationnement au sol : Array[Vector2i] (cases gris clair)
 var tours_orphelines: Array = []   # codes forme/hauteur posés sur une case NON-bâtiment (cf. 9c sur l'eau)
 var ponts: Array = []       # calque « Surélevé » : {cells, bbox, altitude_m, piliers}
 var routes_elevees: Array = []   # calque « Surélevé » : cases ROUTE magenta (autoroutes surélevées)
@@ -448,6 +450,7 @@ func _regrouper_batiments() -> void:
 	parcs.clear()
 	terrains.clear()
 	collines.clear()
+	parkings.clear()
 	tours_orphelines.clear()
 	for cell: Vector2i in type_case:
 		match type_case[cell]:
@@ -455,6 +458,7 @@ func _regrouper_batiments() -> void:
 			Cell.EAU: eaux.append(cell)
 			Cell.PARC: parcs.append(cell)
 			Cell.COLLINE: collines.append(cell)
+			Cell.PARKING: parkings.append(cell)
 	# Bâtiments : flood-fill 4-connexe sur l'apparence BATIMENT, séparés par les
 	# bordures medium/thick (cf. _mur) → on peut encadrer une case pour l'isoler.
 	var vus := {}
@@ -489,8 +493,10 @@ func _regrouper_batiments() -> void:
 		# On EXCLUT toutes les familles bâties qui consomment déjà leur texte via
 		# _finaliser_bloc (bâtiment + usine/cimetière/casse/supermarché), sinon un
 		# code de hauteur tapé sur l'une d'elles créerait EN DOUBLE un bâtiment
-		# générique par-dessus (bug : « 9 » sur une usine).
-		if _FAMILLE_BATIE.has(type_case.get(cell, Cell.VIDE)):
+		# générique par-dessus (bug : « 9 » sur une usine). Le parking (élément au
+		# sol) ignore aussi tout chiffre de hauteur → exclu.
+		var ct: int = type_case.get(cell, Cell.VIDE)
+		if _FAMILLE_BATIE.has(ct) or ct == Cell.PARKING:
 			continue
 		var hf := _parse_hauteur_forme(texte_case[cell])
 		if hf.z > 0.5:   # un code reconnu (hauteur et/ou lettre de forme)
@@ -670,8 +676,8 @@ func _parser(zip: ZIPReader, chemin: String) -> XMLParser:
 # Résumé texte (debug / test headless).
 func resume() -> String:
 	return ("grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d sport=%d " + \
-		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d tours=%d ponts=%d routes_élevées=%d") % [
+		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d parking=%d tours=%d ponts=%d routes_élevées=%d") % [
 		grille, taille_case_m, hauteur_defaut_m,
 		batiments.size(), routes.size(), eaux.size(), parcs.size(), terrains.size(),
 		cimetieres.size(), usines.size(), casses.size(), supermarches.size(), collines.size(),
-		tours_orphelines.size(), ponts.size(), routes_elevees.size()]
+		parkings.size(), tours_orphelines.size(), ponts.size(), routes_elevees.size()]

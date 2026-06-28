@@ -445,6 +445,7 @@ func _build_all_excel() -> void:
 		_build_decor()          # parcs (arbres) — _eau vide → pas de vaguelettes
 	_build_collines_excel()     # relief de bordure (collines / désert) — cadre la ville
 	_build_terrains_excel()     # terrains de sport (baseball)
+	_build_parkings_excel()     # aires de stationnement (marquages au sol + lampadaires)
 	_build_batiments_excel()
 	_build_cimetieres_excel()   # mémorial numérique (champ de stèles)
 	_build_usines_excel()       # usine désaffectée (hall bas + dents de scie + cheminée)
@@ -1126,6 +1127,53 @@ func _build_terrains_excel() -> void:
 	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "StadeGazon", _mat_ambiance)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "StadeStructure", _mat_decor)
 	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "StadeLumieres", _mat_neon)
+
+# ─── Parking (apparence gris clair) : aire de stationnement plate au sol ──────
+# Surface plate (PAS de volume) : marquages de places lumineux (allée centrale +
+# dividers de bays de part et d'autre), contour de l'aire, + lampadaires ponctuels.
+# Aucune hauteur (comme route/eau/parc) ; le gradient délave les marquages au bord.
+func _build_parkings_excel() -> void:
+	if _excel.parkings.is_empty():
+		return
+	var setd := {}
+	for c: Vector2i in _excel.parkings:
+		setd[c] = true
+	var s := HoloMesh3D.st()        # marquages (glow)
+	var n := 0
+	var mats := HoloMesh3D.st()     # mâts de lampadaires (sombres)
+	var nm := 0
+	var tetes := HoloMesh3D.st()    # têtes lumineuses (glow chaud)
+	var nt := 0
+	var y := 0.03
+	var hw := taille_cellule * 0.46   # demi-emprise marquée dans la case
+	var ah := taille_cellule * 0.12   # demi-largeur de l'allée centrale
+	var nb := 4                        # nb de places de part et d'autre de l'allée
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for cell: Vector2i in _excel.parkings:
+		var c := _world(cell.x, cell.y, y)
+		var col := _moduler(Color(0.74, 0.79, 0.88), c)   # peinture claire (délavée au bord)
+		# Allée centrale (deux lignes axe X) + dividers de places perpendiculaires.
+		n += HoloMesh3D.line(s, c + Vector3(-hw, 0, -ah), c + Vector3(hw, 0, -ah), col)
+		n += HoloMesh3D.line(s, c + Vector3(-hw, 0, ah), c + Vector3(hw, 0, ah), col)
+		for i in nb + 1:
+			var x := lerpf(-hw, hw, float(i) / float(nb))
+			n += HoloMesh3D.line(s, c + Vector3(x, 0, -hw), c + Vector3(x, 0, -ah), col)  # places côté -Z
+			n += HoloMesh3D.line(s, c + Vector3(x, 0, ah), c + Vector3(x, 0, hw), col)    # places côté +Z
+		# Contour de l'aire : côté frontière (voisin non-parking) → liseré franc.
+		for d: Vector2i in dirs:
+			if setd.has(cell + d):
+				continue
+			var seg := _cote_cellule(cell, d)
+			n += HoloMesh3D.line(s, _world(seg[0].x, seg[0].y, y), _world(seg[1].x, seg[1].y, y), col)
+		# Lampadaire ponctuel (une case sur ~5, à un coin) : mât sombre + tête chaude.
+		if (cell.x + cell.y) % 5 == 0:
+			var base := _world(cell.x - 0.35, cell.y - 0.35, 0.0)
+			var tete := base + Vector3(0, unite_maison * 1.4, 0)
+			nm += HoloMesh3D.line(mats, base, tete, Color(0.35, 0.38, 0.42))
+			nt += HoloMesh3D.diamond(tetes, tete, taille_cellule * 0.08, unite_maison * 0.18, Color(1.0, 0.82, 0.50))
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "ParkingMarquage", _mat_neon)
+	_ajouter_mesh(HoloMesh3D.commit(mats, nm), "ParkingLampMats", _mat_ambiance)
+	_ajouter_mesh(HoloMesh3D.commit(tetes, nt), "ParkingLampTetes", _mat_neon)
 
 # Point sur une ellipse ajustée à la bbox (k = fraction du demi-axe), à hauteur y.
 func _pt_ell(c: Vector3, ax: float, az: float, k: float, a: float, y: float) -> Vector3:

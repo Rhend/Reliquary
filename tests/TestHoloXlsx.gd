@@ -63,6 +63,8 @@ func _ready() -> void:
 	_eq("classe E8A23D → supermarché", _classe(Color8(0xE8, 0xA2, 0x3D)), HoloXlsxMap.Cell.SUPERMARCHE)
 	_eq("classe C8A86A → colline", _classe(Color8(0xC8, 0xA8, 0x6A)), HoloXlsxMap.Cell.COLLINE)
 	_eq("classe D2B48C → sport", _classe(Color8(0xD2, 0xB4, 0x8C)), HoloXlsxMap.Cell.SPORT)
+	_eq("classe B5B5B8 = parking", _classe(Color8(0xB5, 0xB5, 0xB8)), HoloXlsxMap.Cell.PARKING)
+	_eq("classe 3A4253 = batiment (pas parking)", _classe(Color8(0x3A, 0x42, 0x53)), HoloXlsxMap.Cell.BATIMENT)
 	# Bloc ceinturé (rendu : groupe entouré d'une bordure épaisse = bâtiment plein).
 	var me := HoloXlsxMap.new()
 	me.border_case = {Vector2i(0, 0): 15}   # 15 = murs sur les 4 côtés
