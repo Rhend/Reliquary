@@ -35,6 +35,7 @@ const MOTES_SHADER := preload("res://scenes/holomap3d/holo_motes.gdshader")
 const TRAFFIC_SHADER := preload("res://scenes/holomap3d/holo_traffic.gdshader")
 const WATER_SHADER := preload("res://scenes/holomap3d/holo_water.gdshader")
 const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
+const BEAM_SHADER := preload("res://scenes/holomap3d/holo_beam.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
 const TAILLE_MONDE_CIBLE := 13.0   # largeur monde visée pour la grille Excel (cadrage caméra)
 const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit de carte par défaut
@@ -127,12 +128,17 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 
 # ─── Hologramme (glow + post-process) ─────────────────────────
 @export_group("Hologramme")
-@export var glow_intensity := 1.0
-@export_range(0.0, 1.0) var scanline_intensity := 0.0
+@export var glow_intensity := 1.15
+# Post-process « écran cathodique » : valeurs ACTIVES mais douces (non-épileptogène).
+@export_range(0.0, 1.0) var scanline_intensity := 0.05
 @export var scanline_count := 240.0
 @export var scanline_speed := 0.6
-@export_range(0.0, 0.5) var flicker_amplitude := 0.0
-@export_range(0.0, 0.02) var distortion_amplitude := 0.0
+@export_range(0.0, 0.5) var flicker_amplitude := 0.015
+@export_range(0.0, 0.02) var distortion_amplitude := 0.0008
+@export_range(0.0, 0.01) var aberration := 0.0007        # séparation chromatique (subtile)
+@export_range(0.0, 1.0) var vignette_force := 0.32        # coins assombris
+@export_range(0.0, 1.0) var glitch_force := 0.45          # rafales rares de tranches
+@export_range(0.0, 0.1) var breathe_amplitude := 0.02     # respiration lumineuse
 @export var post_process_interne := true
 
 # ─── Effets / Juice ───────────────────────────────────────────
@@ -153,6 +159,15 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 @export var vitesse_voitures := 0.08          # tours/seconde
 @export var couleur_voiture_aller := Color(0.55, 0.90, 1.00)   # cyan (phares)
 @export var couleur_voiture_retour := Color(1.00, 0.55, 0.25)  # ambre (feux arrière)
+# Spires corpo : les plus hautes tours projettent un FAISCEAU de lumière vertical
+# (+ mât d'antenne à tête pulsante) → verticalité dramatique, signal de pouvoir.
+@export var spires_actif := true
+@export var spires_max := 8                    # nb max de faisceaux (spires héros distinctes)
+@export_range(0.0, 5.0) var beam_emission := 2.4
+# Trafic AÉRIEN : couloirs de véhicules volants à plusieurs altitudes au-dessus de
+# la ville (VTOL) → la mégalopole vit en 3D, pas seulement au sol.
+@export var trafic_aerien_actif := true
+@export var couloirs_aeriens := 9
 # Brume de profondeur : les arêtes lointaines s'estompent (focus centre).
 @export var brume_debut := 16.0
 @export var brume_fin := 30.0
@@ -163,6 +178,17 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 @export_range(0.0, 1.0) var fenetre_densite := 0.24
 @export var fenetre_emission := 1.9
 @export var couleur_fenetre := Color(0.98, 0.86, 0.58)  # ambre chaud
+# Façades vivantes (shader de faces) : lueur de structure teintée par district +
+# bandes d'étage + pulse de scan vertical → la ville respire (cf. holo_face).
+@export var couleur_glow_coeur := Color(0.35, 0.95, 1.00)     # cyan chaud (centre riche)
+@export var couleur_glow_peripherie := Color(0.16, 0.30, 0.52) # bleu froid (abandon)
+@export_range(0.0, 1.5) var glow_facade := 0.34
+@export_range(0.0, 1.5) var etage_force := 0.55
+@export_range(0.0, 1.5) var pulse_force := 0.6
+# Skyline : les tours hautes virent au cyan-blanc (cœur corpo), les bâtis bas
+# restent froids → hiérarchie de hauteur lisible (heat des arêtes).
+@export var couleur_tour_haute := Color(0.55, 0.95, 1.00)
+@export var hauteur_tour_ref := 1.4   # hauteur monde au-delà de laquelle le bâti « chauffe »
 # Décor d'un lieu SANS bâtiment (parc-lieu) : émission du décor tier-coloré.
 @export var lieu_decor_emission := 3.4
 
@@ -197,6 +223,8 @@ var _mat_horizon: ShaderMaterial       # halo d'horizon / brume (sans atténuati
 var _mat_balise: ShaderMaterial        # balises rouges clignotantes (sommets de tours)
 var _mat_fumee: ShaderMaterial         # fumée d'usine (vert ocre, montée animée)
 var _mat_glow_chaud: ShaderMaterial    # nappes de lumière chaude (ambiance supermarché)
+var _mat_beam: ShaderMaterial          # faisceaux de spires corpo (shaft vertical)
+var _mat_trafic_aerien: ShaderMaterial # trafic aérien (VTOL, plus rapide/brillant)
 var _discos: Array[Node3D] = []        # boules à facettes (sommets de pyramides) — tournent
 var _balise_t := 0.0                   # phase de clignotement des balises
 var _distance_cible := 15.0
@@ -234,8 +262,8 @@ func _setup_environment() -> void:
 	env.ambient_light_color = Color(0.1, 0.12, 0.18)
 	env.glow_enabled = true
 	env.glow_intensity = glow_intensity
-	env.glow_bloom = 0.12
-	env.glow_hdr_threshold = 1.05   # décor sous le seuil (pas de bloom), lieux au-dessus
+	env.glow_bloom = 0.18
+	env.glow_hdr_threshold = 1.02   # décor sous le seuil (pas de bloom), lieux au-dessus
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	we.environment = env
 	add_child(we)
@@ -270,11 +298,18 @@ func _setup_materials() -> void:
 	})
 
 	# Faces sombres : dessinées AVANT les arêtes (render_priority plus bas) et
-	# écrivant la profondeur → occlusion des lignes derrière.
+	# écrivant la profondeur → occlusion des lignes derrière. Les façades sont
+	# VIVANTES : teinte de district (coeur cyan → périphérie froide), bandes
+	# d'étage, pulse de scan vertical + fenêtres ambre (cf. holo_face.gdshader).
 	_mat_faces = _make_mat(FACE_SHADER, {
 		"face_color": couleur_faces, "opacite": opacite_faces,
 		"fenetre_densite": fenetre_densite, "fenetre_emission": fenetre_emission,
 		"fenetre_color": couleur_fenetre,
+		"glow_coeur": couleur_glow_coeur, "glow_peripherie": couleur_glow_peripherie,
+		"glow_force": glow_facade, "etage_haut": unite_maison,
+		"etage_force": etage_force, "pulse_force": pulse_force,
+		"rich_coeur": gradient_coeur, "rich_chute": gradient_chute,
+		"rich_rmax": maxf(0.001, _cgrid() * taille_cellule),
 	})
 	_mat_faces.render_priority = -1
 
@@ -283,6 +318,11 @@ func _setup_materials() -> void:
 
 	# Trafic (traînées le long des routes).
 	_mat_trafic = _make_mat(TRAFFIC_SHADER, {"vitesse": vitesse_voitures})
+
+	# Trafic aérien : plus rapide et plus brillant (VTOL qui filent dans le ciel).
+	_mat_trafic_aerien = _make_mat(TRAFFIC_SHADER, {
+		"vitesse": vitesse_voitures * 1.9, "emission": 2.9,
+	})
 
 	# Accents néon (enseignes holographiques, nœuds d'intersection) — glow.
 	_mat_neon = _make_mat(LINE_SHADER, {"emission_strength": 2.0, "alpha_mult": 1.0})
@@ -314,6 +354,11 @@ func _setup_materials() -> void:
 	# Lumière chaude (ambiance supermarché) : nappes additives ambrées, glow doux.
 	_mat_glow_chaud = _make_mat(LINE_SHADER, {"emission_strength": 1.1, "alpha_mult": 1.0})
 
+	# Faisceaux de spires corpo : shaft de lumière vertical (billboard cylindrique).
+	_mat_beam = _make_mat(BEAM_SHADER, {
+		"emission": beam_emission, "fog_debut": brume_debut, "fog_fin": brume_fin,
+	})
+
 	# Sol : émission faible (la luminosité réelle vient des vertex colors — nappe
 	# très sombre + maillage discret) → matérialise le terrain sans écraser la ville.
 	_mat_sol = _make_mat(LINE_SHADER, {"emission_strength": 0.7, "alpha_mult": 1.0})
@@ -321,12 +366,12 @@ func _setup_materials() -> void:
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_trafic, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -339,6 +384,10 @@ func _setup_post() -> void:
 	_post_mat.set_shader_parameter("scanline_speed", scanline_speed)
 	_post_mat.set_shader_parameter("flicker_amplitude", flicker_amplitude)
 	_post_mat.set_shader_parameter("distortion_amplitude", distortion_amplitude)
+	_post_mat.set_shader_parameter("aberration", aberration)
+	_post_mat.set_shader_parameter("vignette_force", vignette_force)
+	_post_mat.set_shader_parameter("glitch_force", glitch_force)
+	_post_mat.set_shader_parameter("breathe_amp", breathe_amplitude)
 	var rect := ColorRect.new()
 	rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -432,6 +481,7 @@ func _build_all_excel() -> void:
 	for c: Vector2i in _excel.parcs:
 		_parc[c] = true
 	_build_horizon_excel()      # halo d'horizon + brume au sol (atmosphère)
+	_build_skyline_lointain()   # silhouette de mégastructures à l'horizon (profondeur)
 	if socle_actif:
 		_build_socle()
 	if sol_actif:
@@ -447,6 +497,10 @@ func _build_all_excel() -> void:
 	_build_terrains_excel()     # terrains de sport (baseball)
 	_build_parkings_excel()     # aires de stationnement (marquages au sol + lampadaires)
 	_build_batiments_excel()
+	if spires_actif:
+		_build_spires_excel()       # faisceaux corpo + mâts d'antenne (verticalité)
+	if trafic_aerien_actif:
+		_build_trafic_aerien_excel() # couloirs de VTOL au-dessus de la ville
 	_build_cimetieres_excel()   # mémorial numérique (champ de stèles)
 	_build_usines_excel()       # usine désaffectée (hall bas + dents de scie + cheminée)
 	_build_casses_excel()       # casse auto (enclos + épaves empilées)
@@ -793,17 +847,19 @@ func _build_disco(apex: Vector3, rayon_boule: float, longueur_rayons: float) -> 
 	node.position = apex
 	var s := HoloMesh3D.st()
 	var n := 0
-	var blanc := Color(0.90, 0.96, 1.0)
+	var blanc := Color(0.55, 0.78, 0.95)   # cyan doux (plus de blanc-supernova)
 	n += HoloMesh3D.circle(s, Vector3.ZERO, rayon_boule, blanc, 18)   # plan XZ
 	n += _cercle_plan(s, rayon_boule, blanc, 18, true)               # plan XY
 	n += _cercle_plan(s, rayon_boule, blanc, 18, false)              # plan YZ
-	var pal := [Color(0.40, 0.90, 1.0), Color(1.0, 0.40, 0.80),
-			Color(1.0, 0.85, 0.50), Color(0.70, 1.0, 0.75)]
-	var nb := 44
+	var pal := [Color(0.32, 0.72, 0.90), Color(0.85, 0.34, 0.70),
+			Color(0.90, 0.72, 0.42), Color(0.55, 0.85, 0.65)]
+	var nb := 28
 	for i in nb:
 		var dir := _point_sphere(i, nb)
 		var c: Color = pal[i % pal.size()]
-		n += HoloMesh3D.line(s, dir * rayon_boule, dir * longueur_rayons, c)
+		# Rayons de longueur variée → halo organique, pas une étoile pleine.
+		var lon := lerpf(rayon_boule * 1.6, longueur_rayons, _hash01(Vector2i(i, 3), 5))
+		n += HoloMesh3D.line(s, dir * rayon_boule, dir * lon, c)
 	var mi := MeshInstance3D.new()
 	mi.name = "DiscoMesh"
 	mi.mesh = HoloMesh3D.commit(s, n)
@@ -881,8 +937,9 @@ func _build_batiments_excel() -> void:
 	for b in _excel.batiments:
 		var h := _hauteur_monde(b["hauteur_m"])
 		var forme: int = b["forme"]
-		# Gradient de richesse : le bâti se ternit/désature vers la périphérie.
-		var bcol := _moduler(col, _centre_bbox(b["bbox"]))
+		# Heat de skyline (tour haute → cyan-blanc) PUIS gradient de richesse :
+		# la hiérarchie de hauteur se lit, la périphérie se ternit.
+		var bcol := _accent_hauteur(col, h, _centre_bbox(b["bbox"]))
 		if forme == HoloXlsxMap.Forme.BOITE:
 			var cells: Array = b["cells"]
 			if cells.size() > 1 and _excel.bloc_enclos(cells):
@@ -906,14 +963,14 @@ func _build_batiments_excel() -> void:
 			n += r[0]; nf += r[1]
 			# Boule à facettes au sommet de la pyramide (rayons lumineux 360°).
 			if forme == HoloXlsxMap.Forme.PYRAMIDE:
-				_build_disco(centre + Vector3(0, h, 0), taille_cellule * 0.85, taille_cellule * 3.2)
+				_build_disco(centre + Vector3(0, h, 0), taille_cellule * 0.7, taille_cellule * 1.7)
 	for t in _excel.tours_orphelines:
 		var h := _hauteur_monde(t["hauteur_m"])
 		var rect: Rect2i = t["rect"]
 		# Centrée et dimensionnée sur le plan d'eau (≈ 70 % de sa plus petite dimension).
 		var taille := float(mini(rect.size.x, rect.size.y)) * taille_cellule * 0.7
 		var r := _bati_forme(_centre_bbox(rect), taille, taille, h, t["forme"],
-				_moduler(col, _centre_bbox(rect)), s, sf)
+				_accent_hauteur(col, h, _centre_bbox(rect)), s, sf)
 		n += r[0]; nf += r[1]
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "BatimentsExcel")
 	var fmesh := HoloMesh3D.commit(sf, nf)
@@ -923,6 +980,109 @@ func _build_batiments_excel() -> void:
 		mif.mesh = fmesh
 		mif.material_override = _mat_faces
 		_monde.add_child(mif)
+
+# ─── Spires corpo : faisceaux de lumière verticaux + mâts d'antenne ───────────
+# Les plus hautes tours (vraies « corpos ») projettent un SHAFT de lumière qui
+# stabe le ciel + un mât d'antenne fuselé → verticalité dramatique, signal de
+# pouvoir au-dessus du tissu urbain. Limité aux `spires_max` plus hautes (clarté).
+func _build_spires_excel() -> void:
+	var tours: Array = []
+	for b in _excel.batiments:
+		var h := _hauteur_monde(b["hauteur_m"])
+		if h >= hauteur_tour_ref * 0.7:
+			tours.append({"c": _centre_bbox(b["bbox"]), "h": h})
+	for t in _excel.tours_orphelines:
+		var h := _hauteur_monde(t["hauteur_m"])
+		if h >= hauteur_tour_ref * 0.7:
+			tours.append({"c": _centre_bbox(t["rect"]), "h": h})
+	if tours.is_empty():
+		return
+	tours.sort_custom(func(a, b): return a["h"] > b["h"])
+	# Espacement : on retient les plus hautes MAIS distinctes (≥ sep) → des spires
+	# HÉROS réparties sur des landmarks, pas une grappe de faisceaux au même endroit.
+	var sep := taille_cellule * 4.5
+	var picked: Array = []
+	for t in tours:
+		var ok := true
+		for p in picked:
+			if Vector2(t["c"].x - p["c"].x, t["c"].z - p["c"].z).length() < sep:
+				ok = false
+				break
+		if ok:
+			picked.append(t)
+			if picked.size() >= spires_max:
+				break
+	var smast := HoloMesh3D.st()    # mâts + têtes (lignes néon, monde absolu)
+	var nmast := 0
+	for t in picked:
+		var c: Vector3 = t["c"]
+		var h: float = t["h"]
+		var top := c + Vector3(0, h, 0)
+		var acc := _accent_hauteur(Color(couleur_decor_bati, 1.0), h, c)
+		# Faisceau LARGE et HAUT : plus la tour est haute, plus le shaft monte loin.
+		_build_beam(top, lerpf(2.6, 4.2, clampf(h / (hauteur_tour_ref * 2.0), 0.0, 1.0)) * h,
+				taille_cellule * 0.7, Color(acc.r, acc.g, acc.b, 0.6))
+		# Mât d'antenne : segment fin + 2 haubans + tête lumineuse (nœud de données).
+		var mh := h * 0.42
+		var tip := top + Vector3(0, mh, 0)
+		var lc := Color(acc.r, acc.g, acc.b, 0.95)
+		nmast += HoloMesh3D.line(smast, top, tip, lc)
+		var hub := taille_cellule * 0.22
+		nmast += HoloMesh3D.line(smast, tip, top + Vector3(hub, mh * 0.45, 0.0), lc)
+		nmast += HoloMesh3D.line(smast, tip, top + Vector3(-hub, mh * 0.45, 0.0), lc)
+		nmast += HoloMesh3D.diamond(smast, tip, taille_cellule * 0.06, taille_cellule * 0.10, lc)
+	_ajouter_mesh(HoloMesh3D.commit(smast, nmast), "SpiresMats", _mat_neon)
+
+# Faisceau vertical (billboard cylindrique) : une instance dédiée par spire — le
+# shader holo_beam lit la base via MODEL_MATRIX, d'où une instance positionnée.
+func _build_beam(base: Vector3, hauteur: float, demi_l: float, col: Color) -> void:
+	var s := HoloMesh3D.st_tri()
+	var bl := Vector3.ZERO
+	var br := Vector3.ZERO
+	var tl := Vector3(0, hauteur, 0)
+	var tr := Vector3(0, hauteur, 0)
+	_beam_vert(s, bl, 0.0, -1.0, demi_l, col)
+	_beam_vert(s, br, 0.0, 1.0, demi_l, col)
+	_beam_vert(s, tr, 1.0, 1.0, demi_l, col)
+	_beam_vert(s, bl, 0.0, -1.0, demi_l, col)
+	_beam_vert(s, tr, 1.0, 1.0, demi_l, col)
+	_beam_vert(s, tl, 1.0, -1.0, demi_l, col)
+	var mi := MeshInstance3D.new()
+	mi.name = "Beam"
+	mi.mesh = s.commit()
+	mi.material_override = _mat_beam
+	mi.position = base
+	_monde.add_child(mi)
+
+func _beam_vert(s: SurfaceTool, v: Vector3, t: float, side: float, hw: float, col: Color) -> void:
+	s.set_color(col)
+	s.set_uv(Vector2(t, 0.0))
+	s.set_uv2(Vector2(side, hw))
+	s.add_vertex(v)
+
+# ─── Trafic aérien : couloirs de VTOL à plusieurs altitudes au-dessus de la ville ──
+# Réutilise le shader de trafic (segment translaté le long d'un trajet). Des
+# traînées cyan/ambre traversent le ciel → la mégalopole circule en 3D, pas qu'au sol.
+func _build_trafic_aerien_excel() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x5A1B2C
+	var s := HoloMesh3D.st()
+	var total := 0
+	var span := _cgrid() * taille_cellule
+	for i in maxi(0, couloirs_aeriens):
+		var alt := lerpf(hauteur_tour_ref * 1.3, hauteur_tour_ref * 3.0, rng.randf())
+		var ang := rng.randf() * TAU
+		var dir := Vector3(cos(ang), 0.0, sin(ang))
+		var perp := Vector3(-dir.z, 0.0, dir.x)
+		var off := perp * rng.randf_range(-span * 0.55, span * 0.55)
+		var lon := span * 2.4
+		var depart := -dir * (lon * 0.5) + off + Vector3(0.0, alt, 0.0)
+		var couleur := couleur_voiture_aller if rng.randf() < 0.5 else couleur_voiture_retour
+		var nb := rng.randi_range(4, 7)
+		_semer_voitures(s, depart, dir * lon, taille_cellule * 2.4, rng, couleur, nb,
+				rng.randf_range(0.7, 1.5))
+		total += nb
+	_ajouter_mesh(HoloMesh3D.commit(s, total), "TraficAerien", _mat_trafic_aerien)
 
 # ─── Ponts (calque Surélevé) : tablier en RAMPE + structure + garde-corps + trafic ──
 # Le tablier part du sol à un bout, monte (/), traverse en hauteur, redescend (\)
@@ -2006,6 +2166,39 @@ func _build_horizon_excel() -> void:
 		prevp = cur
 	_ajouter_mesh(HoloMesh3D.commit(sd, nd), "BrumeSol", _mat_horizon)
 
+# ─── Skyline lointain : silhouette de mégastructures à l'horizon ──────────────
+# Un anneau de tours sombres jaillit AU-DELÀ des collines → la ville n'est plus une
+# île posée sur une table, elle est un fragment d'une mégalopole sans fin. Tours
+# fines, hauteurs irrégulières (jagged), teinte froide qui recule ; quelques têtes
+# néon (enseignes lointaines) ponctuent la ligne d'horizon.
+func _build_skyline_lointain() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x5C1701
+	var rv := (_cgrid() + 1.0) * taille_cellule
+	var s := HoloMesh3D.st()       # tours sombres (froides, reculées)
+	var n := 0
+	var sn := HoloMesh3D.st()      # têtes néon (enseignes lointaines) — glow
+	var nn := 0
+	var nb := 150
+	var froid := Color(0.16, 0.30, 0.50)
+	for i in nb:
+		var a := TAU * float(i) / float(nb) + rng.randf_range(-0.02, 0.02)
+		var rad := rv * rng.randf_range(1.28, 1.62)
+		var c := Vector3(cos(a) * rad, 0.0, sin(a) * rad)
+		var hh := rng.randf_range(rv * 0.16, rv * 0.52)   # hauteurs irrégulières
+		var w := taille_cellule * rng.randf_range(0.25, 0.6)
+		var col := froid * rng.randf_range(0.5, 1.0)
+		col.a = 0.9
+		n += HoloMesh3D.box(s, c, w, hh, w, col)
+		# ~1 sur 7 : tête néon (enseigne/balise lointaine), teinte chaude ou magenta.
+		if rng.randf() < 0.14:
+			var tete := c + Vector3(0.0, hh, 0.0)
+			var nc := couleur_route if rng.randf() < 0.5 else couleur_fenetre
+			nc = Color(nc.r, nc.g, nc.b, 0.85)
+			nn += HoloMesh3D.line(sn, tete, tete + Vector3(0.0, taille_cellule * 0.25, 0.0), nc)
+	_ajouter_mesh(HoloMesh3D.commit(s, n), "SkylineLointain", _mat_horizon)
+	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "SkylineEnseignes", _mat_neon)
+
 # Petit carré plat (plan XZ) centré en `c`, demi-côté `r`.
 func _carre_plat(s: SurfaceTool, c: Vector3, r: float, col: Color) -> int:
 	var a := c + Vector3(-r, 0, -r)
@@ -2027,8 +2220,10 @@ func _richesse(p: Vector3) -> float:
 	return pow(1.0 - t, gradient_chute)
 
 # Ternit une couleur selon la richesse du lieu (centre vif → périphérie morte) :
-# baisse de luminosité + désaturation. La NATURE de la zone est conservée (l'alpha
-# et la teinte de base restent ; seules l'intensité et la saturation chutent).
+# baisse de luminosité + désaturation + DÉRIVE FROIDE (la périphérie vire au
+# bleu-cyan blafard, lumière de secours d'un quartier à l'abandon). La NATURE de
+# la zone est conservée (teinte de base + alpha) ; seuls intensité, saturation et
+# température chutent vers les bords.
 func _moduler(col: Color, p: Vector3) -> Color:
 	if not gradient_actif:
 		return col
@@ -2039,7 +2234,19 @@ func _moduler(col: Color, p: Vector3) -> Color:
 	if desat > 0.001:
 		var g := c.get_luminance()
 		c = c.lerp(Color(g, g, g, c.a), desat)
+		# Dérive froide : on repousse un soupçon de bleu blafard dans les gris.
+		c = c.lerp(Color(g * 0.7, g * 0.92, g * 1.15, c.a), desat * 0.5)
 	return c
+
+# Teinte un bâti par sa HAUTEUR (tour haute → cyan-blanc « corpo ») puis applique
+# le gradient de richesse. Donne une skyline lisible : le regard accroche les tours.
+func _accent_hauteur(base: Color, h: float, p: Vector3) -> Color:
+	var heat := clampf(h / maxf(0.1, hauteur_tour_ref), 0.0, 1.0)
+	heat = heat * heat   # seules les vraies tours chauffent franchement
+	var c := Color(base.r, base.g, base.b, base.a).lerp(
+			Color(couleur_tour_haute.r, couleur_tour_haute.g, couleur_tour_haute.b, base.a),
+			heat * 0.75)
+	return _moduler(c, p)
 
 # Hauteur en mètres → hauteur monde (1 hauteur-défaut = 1 unité-maison × exagération).
 func _hauteur_monde(h_m: float) -> float:
