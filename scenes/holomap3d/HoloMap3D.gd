@@ -1552,49 +1552,68 @@ func _cheminee_neon(base: Vector3, col: Color, s: SurfaceTool) -> int:
 	n += HoloMesh3D.diamond(s, base + Vector3(0, ch + w, 0), w * 0.7, w * 0.9, Color(1.0, 0.32, 0.20))
 	return n
 
-# ─── Casse auto : enclos plat ceinturé + épaves empilées ──────
-# Dalle basse entourée d'une clôture (lecture « enclos »), parsemée de petites boîtes
-# empilées (carcasses). Orange rouille ternie par le gradient.
+# ─── Casse auto : enclos grillagé + épaves de voitures + piles de carcasses + grue ──
+# Lecture « casse de bagnoles » : clôture basse (rail néon de sécurité), vraies épaves
+# (caisse + cabine + phare), piles de carcasses ÉCRASÉES (dalles empilées), et une grue
+# à électro-aimant (icône forte). Deux couches : structure sombre + accents glow (néon).
 func _build_casses_excel() -> void:
 	if _excel.casses.is_empty():
 		return
-	var s := HoloMesh3D.st()
+	var s := HoloMesh3D.st()       # structure sombre (clôture, caisses, dalles)
+	var sg := HoloMesh3D.st()      # accents NÉON (rail, phares, aimant de grue)
 	var n := 0
+	var ng := 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val ^ 0xCA55E
 	for b in _excel.casses:
-		var col := _moduler(Color(0.70, 0.42, 0.18, 0.9), _centre_bbox(b["bbox"]))
-		# Hauteur tapée → hauteur des murs d'enceinte (défaut = 1, look actuel).
+		var centre := _centre_bbox(b["bbox"])
+		var col := _moduler(Color(0.52, 0.33, 0.16, 0.95), centre)   # tôle rouille sombre
+		var neon := _moduler(Color(1.0, 0.55, 0.18), centre)          # néon ambre-rouille (glow)
 		var fy := maxf(0.3, b["hauteur_m"] / maxf(0.5, _excel.hauteur_defaut_m))
-		# Murs d'enceinte : bas mais ÉPAIS (rim à double paroi) → lecture « casse murée ».
-		n += _murs_casse(b["cells"], unite_maison * 0.85 * fy, 0.14, col, s)
-		# Portail (entrée du grillage) face aux routes.
-		n += _portes_vers_routes(b["cells"], unite_maison * 0.7 * fy, col.lightened(0.35), s)
-		# Empilements de voitures : piles de 1 à 3 carcasses aplaties par case.
-		for cell: Vector2i in b["cells"]:
-			if rng.randf() > 0.72:
-				continue
+		var hw := unite_maison * 0.7 * fy
+		# Clôture d'enceinte (poteaux + grillage) + rail néon de sécurité au sommet.
+		var rc := _cloture_casse(b["cells"], hw, col, neon, s, sg)
+		n += rc[0]; ng += rc[1]
+		# Portail (entrée) face aux routes.
+		ng += _portes_vers_routes(b["cells"], hw * 1.1, neon, sg)
+		# Grue à aimant : posée sur la case la plus centrale d'un bloc assez grand.
+		var cells: Array = b["cells"]
+		var cell_grue := Vector2i(-9999, -9999)
+		if cells.size() >= 6:
+			var bb: Rect2i = b["bbox"]
+			var gcx := bb.position.x + (bb.size.x - 1) * 0.5
+			var gcy := bb.position.y + (bb.size.y - 1) * 0.5
+			var best := 1.0e9
+			for cell: Vector2i in cells:
+				var dd := Vector2(float(cell.x) - gcx, float(cell.y) - gcy).length_squared()
+				if dd < best:
+					best = dd; cell_grue = cell
+		# Remplissage : grue / pile de carcasses écrasées / épave / vide (allées).
+		for cell: Vector2i in cells:
 			var c := _world(cell.x, cell.y, 0.0)
-			var pile := 1 + rng.randi() % 3
-			var y := 0.0
-			for _k in pile:
-				var cw := taille_cellule * lerpf(0.34, 0.50, rng.randf())
-				var cd := cw * lerpf(0.52, 0.72, rng.randf())
-				var chh := unite_maison * lerpf(0.20, 0.34, rng.randf())   # carcasse aplatie
-				var ox := (rng.randf() - 0.5) * taille_cellule * 0.12
-				var oz := (rng.randf() - 0.5) * taille_cellule * 0.12
-				n += HoloMesh3D.box(s, c + Vector3(ox, y, oz), cw, chh, cd, col)
-				y += chh
+			if cell == cell_grue:
+				var rg := _grue_casse(c, col, neon, s, sg)
+				n += rg[0]; ng += rg[1]
+				continue
+			var roll := rng.randf()
+			if roll < 0.42:
+				var rp := _pile_carcasses(c, col, neon, rng, s, sg)
+				n += rp[0]; ng += rp[1]
+			elif roll < 0.78:
+				var re := _epave_voiture(c, col, neon, rng, s, sg)
+				n += re[0]; ng += re[1]
+			# sinon : case laissée vide (allée de circulation entre les tas)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Casses")
+	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "CassesNeon", _mat_neon)
 
-# Murs d'enceinte BAS et ÉPAIS le long du périmètre d'un bloc : pour chaque côté
-# frontière, une paroi double (extérieur + intérieur décalé de `ep` case) couronnée
-# d'un rim plein → lecture « mur épais mais bas » qui encadre la casse.
-func _murs_casse(cells: Array, hw: float, ep: float, col: Color, s: SurfaceTool) -> int:
+# Clôture d'une casse : poteaux aux coins de chaque côté frontière + grillage (trame
+# en X discrète) + rail NÉON au sommet (lisibilité « enclos »). Renvoie [arêtes, glow].
+func _cloture_casse(cells: Array, hw: float, col: Color, neon: Color, s: SurfaceTool, sg: SurfaceTool) -> Array:
 	var setd := {}
 	for c: Vector2i in cells:
 		setd[c] = true
 	var n := 0
+	var ng := 0
 	var up := Vector3(0, hw, 0)
 	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for c: Vector2i in cells:
@@ -1602,22 +1621,80 @@ func _murs_casse(cells: Array, hw: float, ep: float, col: Color, s: SurfaceTool)
 			if setd.has(c + d):
 				continue
 			var seg := _cote_cellule(c, d)
-			var inward := Vector2(-float(d.x), -float(d.y)) * ep
-			var ao: Vector2 = seg[0]
-			var bo: Vector2 = seg[1]
-			var ai := ao + inward
-			var bi := bo + inward
-			var ao0 := _world(ao.x, ao.y, 0.0); var bo0 := _world(bo.x, bo.y, 0.0)
-			var ai0 := _world(ai.x, ai.y, 0.0); var bi0 := _world(bi.x, bi.y, 0.0)
-			# Rim supérieur plein (épaisseur visible) + base extérieure + montants.
-			n += HoloMesh3D.line(s, ao0 + up, bo0 + up, col)   # arête haute extérieure
-			n += HoloMesh3D.line(s, ai0 + up, bi0 + up, col)   # arête haute intérieure
-			n += HoloMesh3D.line(s, ao0 + up, ai0 + up, col)   # épaisseur (bout A)
-			n += HoloMesh3D.line(s, bo0 + up, bi0 + up, col)   # épaisseur (bout B)
-			n += HoloMesh3D.line(s, ao0, bo0, col)             # base extérieure
-			n += HoloMesh3D.line(s, ao0, ao0 + up, col)        # montant extérieur A
-			n += HoloMesh3D.line(s, bo0, bo0 + up, col)        # montant extérieur B
-	return n
+			var a0 := _world(seg[0].x, seg[0].y, 0.0)
+			var b0 := _world(seg[1].x, seg[1].y, 0.0)
+			n += HoloMesh3D.line(s, a0, b0, col)             # lisse basse (sol)
+			n += HoloMesh3D.line(s, a0, a0 + up, col)        # poteau A
+			n += HoloMesh3D.line(s, b0, b0 + up, col)        # poteau B
+			n += HoloMesh3D.line(s, a0, b0 + up, col)        # grillage (croix)
+			n += HoloMesh3D.line(s, b0, a0 + up, col)
+			ng += HoloMesh3D.line(sg, a0 + up, b0 + up, neon)  # rail néon de sécurité (sommet)
+	return [n, ng]
+
+# Pile de carcasses ÉCRASÉES : 2 à 4 dalles très plates empilées (cube de ferraille),
+# une arête néon une dalle sur deux → on distingue chaque voiture. Renvoie [arêtes, glow].
+func _pile_carcasses(c: Vector3, col: Color, neon: Color, rng: RandomNumberGenerator, s: SurfaceTool, sg: SurfaceTool) -> Array:
+	var n := 0
+	var ng := 0
+	var nb := 2 + rng.randi() % 3
+	var y := 0.0
+	for k in nb:
+		var w := taille_cellule * lerpf(0.42, 0.54, rng.randf())
+		var d := w * lerpf(0.62, 0.80, rng.randf())
+		var hh := unite_maison * lerpf(0.10, 0.16, rng.randf())   # dalle aplatie (voiture compactée)
+		var ox := (rng.randf() - 0.5) * taille_cellule * 0.07
+		var oz := (rng.randf() - 0.5) * taille_cellule * 0.07
+		var p := c + Vector3(ox, y, oz)
+		n += HoloMesh3D.box(s, p, w, hh, d, col)
+		if k % 2 == 1:   # liseré néon de séparation → lecture « voitures distinctes empilées »
+			ng += HoloMesh3D.line(sg, p + Vector3(-w * 0.5, hh * 0.5, 0),
+					p + Vector3(w * 0.5, hh * 0.5, 0), neon)
+		y += hh + unite_maison * 0.015
+	return [n, ng]
+
+# Épave de voiture : caisse basse + cabine décalée + phare néon. Orientée au hasard
+# (le long de X ou Y). Renvoie [arêtes, glow].
+func _epave_voiture(c: Vector3, col: Color, neon: Color, rng: RandomNumberGenerator, s: SurfaceTool, sg: SurfaceTool) -> Array:
+	var n := 0
+	var ng := 0
+	var swap := rng.randf() < 0.5
+	var lng := taille_cellule * 0.52   # longueur (sens de l'épave)
+	var wid := taille_cellule * 0.26   # largeur
+	var bl := wid if swap else lng
+	var bw := lng if swap else wid
+	var bodyh := unite_maison * 0.20
+	n += HoloMesh3D.box(s, c, bl, bodyh, bw, col)                     # caisse
+	# Cabine décalée vers l'arrière (donne une vraie silhouette de voiture).
+	var off := lng * 0.12
+	var cabin_c := c + Vector3(0 if swap else -off, bodyh, -off if swap else 0)
+	n += HoloMesh3D.box(s, cabin_c, bl * (0.95 if swap else 0.5), unite_maison * 0.17, bw * (0.5 if swap else 0.95), col)
+	# Phare néon à l'avant (petite balise → « c'est une voiture »).
+	var nose := c + Vector3(0 if swap else lng * 0.42, bodyh * 0.45, lng * 0.42 if swap else 0)
+	ng += HoloMesh3D.diamond(sg, nose, taille_cellule * 0.045, taille_cellule * 0.05, neon)
+	return [n, ng]
+
+# Grue à électro-aimant : mât treillis + flèche + contrepoids + câble et aimant (glow).
+# Icône immédiate de casse auto. Renvoie [arêtes, glow].
+func _grue_casse(base: Vector3, col: Color, neon: Color, s: SurfaceTool, sg: SurfaceTool) -> Array:
+	var n := 0
+	var ng := 0
+	var mw := taille_cellule * 0.10
+	var mh := unite_maison * 2.6
+	n += HoloMesh3D.box(s, base, mw, mh, mw, col)              # mât
+	var top := base + Vector3(0, mh, 0)
+	var tip := top + Vector3(taille_cellule * 0.9, 0, 0)       # bout de flèche
+	var back := top + Vector3(-taille_cellule * 0.32, 0, 0)    # arrière (contrepoids)
+	var knee := top + Vector3(0, -mh * 0.16, 0)
+	n += HoloMesh3D.line(s, back, tip, col)                    # membrure haute de la flèche
+	n += HoloMesh3D.line(s, knee, tip, col)                    # treillis avant
+	n += HoloMesh3D.line(s, knee, back, col)                   # treillis arrière
+	n += HoloMesh3D.box(s, back + Vector3(0, -taille_cellule * 0.16, 0),
+			taille_cellule * 0.16, taille_cellule * 0.18, taille_cellule * 0.16, col)  # contrepoids
+	# Câble + électro-aimant pendu (glow → on lit la grue de loin).
+	var hook := tip + Vector3(0, -mh * 0.5, 0)
+	ng += HoloMesh3D.line(sg, tip, hook, neon)                 # câble
+	ng += HoloMesh3D.box(sg, hook, taille_cellule * 0.20, taille_cellule * 0.10, taille_cellule * 0.20, neon)  # aimant
+	return [n, ng]
 
 # ─── Supermarché / hypermarché : volume bas + DÉBAUCHE d'enseignes lumineuses ──
 # Coque basse sombre noyée sous le néon : bandeau-marquee qui ceinture tout le toit,
