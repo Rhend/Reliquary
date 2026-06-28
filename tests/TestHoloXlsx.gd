@@ -63,6 +63,12 @@ func _ready() -> void:
 	_eq("classe E8A23D → supermarché", _classe(Color8(0xE8, 0xA2, 0x3D)), HoloXlsxMap.Cell.SUPERMARCHE)
 	_eq("classe C8A86A → colline", _classe(Color8(0xC8, 0xA8, 0x6A)), HoloXlsxMap.Cell.COLLINE)
 	_eq("classe D2B48C → sport", _classe(Color8(0xD2, 0xB4, 0x8C)), HoloXlsxMap.Cell.SPORT)
+	# Bloc ceinturé (rendu : groupe entouré d'une bordure épaisse = bâtiment plein).
+	var me := HoloXlsxMap.new()
+	me.border_case = {Vector2i(0, 0): 15}   # 15 = murs sur les 4 côtés
+	_ok("bloc_enclos : case ceinturée = oui", me.bloc_enclos([Vector2i(0, 0)]))
+	var me2 := HoloXlsxMap.new()
+	_ok("bloc_enclos : 2 cases nues = non", not me2.bloc_enclos([Vector2i(0, 0), Vector2i(1, 0)]))
 	# Calque Surélevé : ponts (gris acier) à faible altitude, sans piliers (Ouvrages
 	# = exemples génériques → ignorés). Pas de route surélevée.
 	_ok("ponts lus (>= 1)", m.ponts.size() >= 1)

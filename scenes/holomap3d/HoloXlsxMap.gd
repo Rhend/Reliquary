@@ -369,6 +369,22 @@ func _mur(a: Vector2i, d: Vector2i, bord: Dictionary) -> bool:
 		return (wa & 8) != 0 or (wb & 4) != 0
 	return (wa & 4) != 0 or (wb & 8) != 0
 
+# Le bloc (liste de cases) est-il ENTIÈREMENT ceinturé de murs (bordure medium/thick) ?
+# = chaque côté frontière (voisin hors du bloc) porte un mur. Sert au rendu des
+# bâtiments : un groupe de cases entouré d'une bordure épaisse = un bâtiment plein ;
+# sinon (cases nues) = des maisons séparées (cf. HoloMap3D).
+func bloc_enclos(cells: Array) -> bool:
+	if cells.is_empty():
+		return false
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	for c: Vector2i in cells:
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if not setd.has(c + d) and not _mur(c, d, border_case):
+				return false
+	return true
+
 # Bloc-pont : bbox + altitude (max des textes du bloc, défaut faible).
 func _finaliser_pont(cells: Array, dico_texte: Dictionary) -> Dictionary:
 	var minx := 1 << 30; var miny := 1 << 30; var maxx := -(1 << 30); var maxy := -(1 << 30)

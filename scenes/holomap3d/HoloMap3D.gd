@@ -885,18 +885,21 @@ func _build_batiments_excel() -> void:
 		# Gradient de richesse : le bâti se ternit/désature vers la périphérie.
 		var bcol := _moduler(col, _centre_bbox(b["bbox"]))
 		if forme == HoloXlsxMap.Forme.BOITE:
-			var r: Array
-			if b["cells"].size() == 1:
-				# Bâtiment ISOLÉ (case non peinte en bloc) : boîte centrée à 90 % de la
-				# case → un jeu apparaît entre maisons (elles ne se touchent plus). Un
-				# vrai bloc peint (≥ 2 cases) garde son emprise pleine.
-				r = _bati_boite_isolee(b["cells"][0], h, bcol, s, sf)
+			var cells: Array = b["cells"]
+			if cells.size() > 1 and _excel.bloc_enclos(cells):
+				# Groupe ENTOURÉ d'une bordure épaisse → UN bâtiment plein (100 %).
+				var r := _bati_boite(cells, h, bcol, s, sf)
+				n += r[0]; nf += r[1]
+				var rd := _toit_details_excel(b["bbox"], h, bcol, s, sb, sban, rng)
+				n += rd[0]; nb += rd[1]; nban += rd[2]
 			else:
-				r = _bati_boite(b["cells"], h, bcol, s, sf)
-			n += r[0]; nf += r[1]
-			# Détails de toit (#3) : antenne/citerne + balise + enseigne.
-			var rd := _toit_details_excel(b["bbox"], h, bcol, s, sb, sban, rng)
-			n += rd[0]; nb += rd[1]; nban += rd[2]
+				# Par défaut : chaque case = une maison à 80 % (même si collées) → une
+				# rangée de cases se lit comme des maisons distinctes.
+				for cell: Vector2i in cells:
+					var r := _bati_boite_isolee(cell, h, bcol, s, sf)
+					n += r[0]; nf += r[1]
+					var rd := _toit_details_excel(Rect2i(cell, Vector2i(1, 1)), h, bcol, s, sb, sban, rng)
+					n += rd[0]; nb += rd[1]; nban += rd[2]
 		else:
 			var bb: Rect2i = b["bbox"]
 			var sx := float(bb.size.x) * taille_cellule * FACE_INSET
