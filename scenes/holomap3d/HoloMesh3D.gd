@@ -165,6 +165,51 @@ static func cylinder_faces(s: SurfaceTool, c: Vector3, rx: float, rz: float, h: 
 		prev = cur
 	return n
 
+# Tronc de pyramide (frustum) wireframe : base rect sx×sz au sol, sommet rétréci
+# d'un facteur `k` (0..1) à hauteur `h` → parois BISEAUTÉES (tour fuselée, chapeau).
+static func frustum(s: SurfaceTool, c: Vector3, sx: float, sz: float, h: float, k: float, col: Color) -> int:
+	var hx := sx * 0.5
+	var hz := sz * 0.5
+	var tx := hx * k
+	var tz := hz * k
+	var y1 := c.y + h
+	var b := [
+		c + Vector3(-hx, 0, -hz), c + Vector3(hx, 0, -hz),
+		c + Vector3(hx, 0, hz), c + Vector3(-hx, 0, hz)]
+	var t := [
+		Vector3(c.x - tx, y1, c.z - tz), Vector3(c.x + tx, y1, c.z - tz),
+		Vector3(c.x + tx, y1, c.z + tz), Vector3(c.x - tx, y1, c.z + tz)]
+	var n := 0
+	for i in 4:
+		n += line(s, b[i], b[(i + 1) % 4], col)   # base
+		n += line(s, t[i], t[(i + 1) % 4], col)   # sommet
+		n += line(s, b[i], t[i], col)              # arête biseautée
+	return n
+
+# Faces pleines d'un frustum (4 parois biseautées + toit ; base omise).
+static func frustum_faces(s: SurfaceTool, c: Vector3, sx: float, sz: float, h: float, k: float) -> int:
+	var hx := sx * 0.5
+	var hz := sz * 0.5
+	var tx := hx * k
+	var tz := hz * k
+	var y1 := c.y + h
+	var b := [
+		c + Vector3(-hx, 0, -hz), c + Vector3(hx, 0, -hz),
+		c + Vector3(hx, 0, hz), c + Vector3(-hx, 0, hz)]
+	var t := [
+		Vector3(c.x - tx, y1, c.z - tz), Vector3(c.x + tx, y1, c.z - tz),
+		Vector3(c.x + tx, y1, c.z + tz), Vector3(c.x - tx, y1, c.z + tz)]
+	var n := 0
+	for i in 4:
+		var p0: Vector3 = b[i]
+		var p1: Vector3 = b[(i + 1) % 4]
+		var q1: Vector3 = t[(i + 1) % 4]
+		var q0: Vector3 = t[i]
+		var nrm := (p1 - p0).cross(q0 - p0).normalized()
+		n += _quad(s, p0, p1, q1, q0, nrm)
+	n += _quad(s, t[0], t[1], t[2], t[3], Vector3(0, 1, 0))   # toit
+	return n
+
 # Pyramide wireframe : base rect sx×sz centrée `c` au sol, apex à hauteur `h`.
 static func pyramid(s: SurfaceTool, c: Vector3, sx: float, sz: float, h: float, col: Color) -> int:
 	var hx := sx * 0.5
