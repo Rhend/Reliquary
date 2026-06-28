@@ -1318,15 +1318,30 @@ func _build_cimetieres_excel() -> void:
 		return
 	var s := HoloMesh3D.st()       # socles (décor discret)
 	var n := 0
-	var sg := HoloMesh3D.st()      # stèles (glow)
+	var sg := HoloMesh3D.st()      # stèles + chapelle (glow)
 	var ng := 0
 	for b in _excel.cimetieres:
-		var centre := _centre_bbox(b["bbox"])
+		var bb: Rect2i = b["bbox"]
+		var centre := _centre_bbox(bb)
 		var col_stele := _moduler(Color(0.52, 0.68, 0.84), centre)   # cyan-ardoise lumineux
 		var col_socle := _moduler(Color(0.34, 0.44, 0.56), centre)
-		for cell: Vector2i in b["cells"]:
+		var cells: Array = b["cells"]
+		# Chapelle au centre du bloc (si le champ est assez grand) : on repère la case
+		# la plus proche du centre, elle accueille la chapelle au lieu d'une stèle.
+		var cell_chapelle := Vector2i(-9999, -9999)
+		if cells.size() >= 4:
+			var gcx := bb.position.x + (bb.size.x - 1) * 0.5
+			var gcy := bb.position.y + (bb.size.y - 1) * 0.5
+			var best := 1.0e9
+			for cell: Vector2i in cells:
+				var dd := Vector2(float(cell.x) - gcx, float(cell.y) - gcy).length_squared()
+				if dd < best:
+					best = dd; cell_chapelle = cell
+		for cell: Vector2i in cells:
 			var c := _world(cell.x, cell.y, 0.0)
 			n += _carre_plat(s, c, taille_cellule * 0.30, col_socle)
+			if cell == cell_chapelle:
+				continue   # la chapelle occupe cette case (pas de stèle)
 			# Stèle = dalle fine verticale + barre de tête (mémoriel holographique).
 			var w := taille_cellule * 0.18
 			var d := taille_cellule * 0.05
@@ -1334,8 +1349,40 @@ func _build_cimetieres_excel() -> void:
 			ng += HoloMesh3D.box(sg, c, w, hs, d, col_stele)
 			ng += HoloMesh3D.line(sg, c + Vector3(-w * 0.6, hs * 0.78, 0),
 					c + Vector3(w * 0.6, hs * 0.78, 0), col_stele)
+		if cell_chapelle.x > -9000:
+			ng += _chapelle(_world(cell_chapelle.x, cell_chapelle.y, 0.0), col_stele, sg)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "CimetiereSocles", _mat_ambiance)
 	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "CimetiereSteles", _mat_lieu_decor)
+
+# Petite chapelle holographique : nef (boîte) + toit à deux pans (faîtage + pignons)
+# + croix sur le faîtage. Repère central du mémorial. Renvoie le nb d'arêtes.
+func _chapelle(c: Vector3, col: Color, s: SurfaceTool) -> int:
+	var w := taille_cellule * 0.55
+	var d := taille_cellule * 0.78
+	var hw := w * 0.5
+	var hd := d * 0.5
+	var wall := unite_maison * 1.4
+	var roof := unite_maison * 0.95
+	var n := HoloMesh3D.box(s, c, w, wall, d, col)        # nef (murs)
+	var ry := c.y + wall + roof
+	var ridge_a := Vector3(c.x, ry, c.z - hd)             # faîtage (axe Z)
+	var ridge_b := Vector3(c.x, ry, c.z + hd)
+	var tla := Vector3(c.x - hw, c.y + wall, c.z - hd)
+	var tra := Vector3(c.x + hw, c.y + wall, c.z - hd)
+	var tlb := Vector3(c.x - hw, c.y + wall, c.z + hd)
+	var trb := Vector3(c.x + hw, c.y + wall, c.z + hd)
+	n += HoloMesh3D.line(s, ridge_a, ridge_b, col)        # faîtage
+	n += HoloMesh3D.line(s, tla, ridge_a, col) + HoloMesh3D.line(s, tra, ridge_a, col)   # pignon avant
+	n += HoloMesh3D.line(s, tlb, ridge_b, col) + HoloMesh3D.line(s, trb, ridge_b, col)   # pignon arrière
+	n += HoloMesh3D.line(s, tla, tlb, col) + HoloMesh3D.line(s, tra, trb, col)           # bas des pans
+	# Croix au-dessus du pignon avant.
+	var cross_h := unite_maison * 0.7
+	var top := ridge_a + Vector3(0, cross_h, 0)
+	n += HoloMesh3D.line(s, ridge_a, top, col)
+	var arm := taille_cellule * 0.1
+	var ay := ridge_a.y + cross_h * 0.6
+	n += HoloMesh3D.line(s, Vector3(c.x - arm, ay, ridge_a.z), Vector3(c.x + arm, ay, ridge_a.z), col)
+	return n
 
 # ─── Usine désaffectée : hall bas et large + toit en dents de scie + cheminée ──
 # Métal corrodé : la couleur (brun rouille) est ternie par le gradient. Hauteur
@@ -1383,13 +1430,15 @@ func _build_usines_excel() -> void:
 # dessus d'un point : le shader de poussières les fait monter et boucler.
 func _semer_fumee(s: SurfaceTool, sommet: Vector3, rng: RandomNumberGenerator) -> int:
 	var n := 0
-	for _i in 6:
-		var off := Vector3((rng.randf() - 0.5) * taille_cellule * 0.22, 0.0,
-				(rng.randf() - 0.5) * taille_cellule * 0.22)
-		var base := sommet + off
+	for _i in 18:
+		# L'écart horizontal s'élargit avec la phase → le panache « gonfle » en montant.
 		var ph := rng.randf()
-		var a := 0.22 + 0.28 * rng.randf()
-		var seg := taille_cellule * 0.13
+		var spread := taille_cellule * (0.18 + 0.5 * ph)
+		var off := Vector3((rng.randf() - 0.5) * spread, ph * taille_cellule * 0.2,
+				(rng.randf() - 0.5) * spread)
+		var base := sommet + off
+		var a := 0.28 + 0.34 * rng.randf()
+		var seg := taille_cellule * (0.14 + 0.06 * rng.randf())
 		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(base)
 		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(base + Vector3(0, seg, 0))
 		n += 1
@@ -1474,36 +1523,55 @@ func _build_casses_excel() -> void:
 	rng.seed = seed_val ^ 0xCA55E
 	for b in _excel.casses:
 		var col := _moduler(Color(0.70, 0.42, 0.18, 0.9), _centre_bbox(b["bbox"]))
-		n += _cloture_bloc(b["cells"], unite_maison * 0.7, col, s)
+		# Murs d'enceinte : bas mais ÉPAIS (rim à double paroi) → lecture « casse murée ».
+		n += _murs_casse(b["cells"], unite_maison * 0.85, 0.14, col, s)
+		# Empilements de voitures : piles de 1 à 3 carcasses aplaties par case.
 		for cell: Vector2i in b["cells"]:
-			if rng.randf() > 0.55:
+			if rng.randf() > 0.72:
 				continue
 			var c := _world(cell.x, cell.y, 0.0)
-			var w := taille_cellule * lerpf(0.30, 0.46, rng.randf())
-			var hh := unite_maison * lerpf(0.28, 0.62, rng.randf())
-			n += HoloMesh3D.box(s, c, w, hh, w * 0.7, col)
-			if rng.randf() < 0.4:   # carcasse empilée par-dessus
-				n += HoloMesh3D.box(s, c + Vector3(0, hh, 0), w * 0.8, hh * 0.7, w * 0.55, col)
+			var pile := 1 + rng.randi() % 3
+			var y := 0.0
+			for _k in pile:
+				var cw := taille_cellule * lerpf(0.34, 0.50, rng.randf())
+				var cd := cw * lerpf(0.52, 0.72, rng.randf())
+				var chh := unite_maison * lerpf(0.20, 0.34, rng.randf())   # carcasse aplatie
+				var ox := (rng.randf() - 0.5) * taille_cellule * 0.12
+				var oz := (rng.randf() - 0.5) * taille_cellule * 0.12
+				n += HoloMesh3D.box(s, c + Vector3(ox, y, oz), cw, chh, cd, col)
+				y += chh
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "Casses")
 
-# Clôture basse le long du périmètre d'un bloc : main courante + poteaux aux côtés
-# frontière (voisin hors du bloc). Donne la lecture « enclos ».
-func _cloture_bloc(cells: Array, hf: float, col: Color, s: SurfaceTool) -> int:
+# Murs d'enceinte BAS et ÉPAIS le long du périmètre d'un bloc : pour chaque côté
+# frontière, une paroi double (extérieur + intérieur décalé de `ep` case) couronnée
+# d'un rim plein → lecture « mur épais mais bas » qui encadre la casse.
+func _murs_casse(cells: Array, hw: float, ep: float, col: Color, s: SurfaceTool) -> int:
 	var setd := {}
 	for c: Vector2i in cells:
 		setd[c] = true
 	var n := 0
+	var up := Vector3(0, hw, 0)
 	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for c: Vector2i in cells:
 		for d: Vector2i in dirs:
 			if setd.has(c + d):
 				continue
 			var seg := _cote_cellule(c, d)
-			var a := _world(seg[0].x, seg[0].y, 0.0)
-			var b := _world(seg[1].x, seg[1].y, 0.0)
-			var up := Vector3(0, hf, 0)
-			n += HoloMesh3D.line(s, a + up, b + up, col)   # main courante
-			n += HoloMesh3D.line(s, a, a + up, col)        # poteau
+			var inward := Vector2(-float(d.x), -float(d.y)) * ep
+			var ao: Vector2 = seg[0]
+			var bo: Vector2 = seg[1]
+			var ai := ao + inward
+			var bi := bo + inward
+			var ao0 := _world(ao.x, ao.y, 0.0); var bo0 := _world(bo.x, bo.y, 0.0)
+			var ai0 := _world(ai.x, ai.y, 0.0); var bi0 := _world(bi.x, bi.y, 0.0)
+			# Rim supérieur plein (épaisseur visible) + base extérieure + montants.
+			n += HoloMesh3D.line(s, ao0 + up, bo0 + up, col)   # arête haute extérieure
+			n += HoloMesh3D.line(s, ai0 + up, bi0 + up, col)   # arête haute intérieure
+			n += HoloMesh3D.line(s, ao0 + up, ai0 + up, col)   # épaisseur (bout A)
+			n += HoloMesh3D.line(s, bo0 + up, bi0 + up, col)   # épaisseur (bout B)
+			n += HoloMesh3D.line(s, ao0, bo0, col)             # base extérieure
+			n += HoloMesh3D.line(s, ao0, ao0 + up, col)        # montant extérieur A
+			n += HoloMesh3D.line(s, bo0, bo0 + up, col)        # montant extérieur B
 	return n
 
 # ─── Supermarché / hypermarché : volume bas + DÉBAUCHE d'enseignes lumineuses ──
@@ -1793,7 +1861,7 @@ func _bati_boite(cells: Array, h: float, col: Color, s: SurfaceTool, sf: Surface
 # vide autour → les maisons isolées ne se collent pas). Renvoie [nb arêtes, nb faces].
 func _bati_boite_isolee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
 	var centre := _world(cell.x, cell.y, 0.0)
-	var sz := taille_cellule * 0.9
+	var sz := taille_cellule * 0.8
 	var n := HoloMesh3D.box(s, centre, sz, h, sz, col)
 	var nf := HoloMesh3D.box_faces(sf, centre, sz * FACE_INSET, h, sz * FACE_INSET)
 	return [n, nf]

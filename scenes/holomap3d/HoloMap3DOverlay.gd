@@ -59,6 +59,11 @@ func _ready() -> void:
 	_vp.transparent_bg = false
 	_vp.physics_object_picking = true   # picking 3D des pins
 	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# Anti-aliasing : les arêtes wireframe (lignes 1px) crawlent sans MSAA → elles
+	# paraissent décalées/dentelées quand la caméra orbite. MSAA 4× + FXAA les garde
+	# droites et nettes quel que soit l'angle.
+	_vp.msaa_3d = Viewport.MSAA_4X
+	_vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
 	cont.add_child(_vp)
 
 	_map = HoloMap3D.new()
