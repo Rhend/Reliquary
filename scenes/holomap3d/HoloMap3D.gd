@@ -40,6 +40,7 @@ const PARC_SHADER := preload("res://scenes/holomap3d/holo_parc.gdshader")
 # class_name, donc pas de régénération du cache de classes (cf. CLAUDE.md).
 const Geo := preload("res://scenes/holomap3d/build/holo_geo.gd")
 const Decor := preload("res://scenes/holomap3d/build/holo_decor.gd")
+const Env := preload("res://scenes/holomap3d/build/holo_env.gd")
 const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
 const BEAM_SHADER := preload("res://scenes/holomap3d/holo_beam.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
@@ -495,12 +496,12 @@ func _build_all_excel() -> void:
 	# → Decor.decor n'ajoute pas de vaguelettes statiques par-dessus le courant.
 	for c: Vector2i in _excel.parcs:
 		_parc[c] = true
-	_build_horizon_excel()      # halo d'horizon + brume au sol (atmosphère)
-	_build_skyline_lointain()   # silhouette de mégastructures à l'horizon (profondeur)
+	Env.horizon(self)           # halo d'horizon + brume au sol (atmosphère)
+	Env.skyline_lointain(self)  # silhouette de mégastructures à l'horizon (profondeur)
 	if socle_actif:
-		_build_socle()
+		Env.socle(self)
 	if sol_actif:
-		_build_sol_disc(Vector2(_cgrid(), _cgrid()), _cgrid() * 1.28 + 2.0)
+		Env.sol_disc(self, Vector2(_cgrid(), _cgrid()), _cgrid() * 1.28 + 2.0)
 	_build_routes_excel()
 	_build_trottoirs_excel()    # bordures de voirie (trottoirs)
 	_build_eclairage_excel()    # lampadaires (points lumineux chauds)
@@ -524,9 +525,9 @@ func _build_all_excel() -> void:
 	_build_ponts_excel()          # ouvrages du calque Surélevé (au-dessus de l'eau/route)
 	_build_routes_elevees_excel() # autoroutes surélevées (magenta) — vide pour l'instant
 	if motes_actif:
-		_build_motes()
+		Env.motes(self)
 	if radar_actif:
-		_build_radar()
+		Env.radar(self)
 	_construire_lieux(lieux)    # lieux découverts (feuille « Lieux ») posés sur le décor
 	if intro_actif:
 		_jouer_intro()
@@ -1250,86 +1251,6 @@ func _ajouter_faces(mesh: ArrayMesh, nom: String) -> void:
 	mi.material_override = _mat_faces
 	_monde.add_child(mi)
 
-# ─── Halo d'horizon + brume au sol (#6) ───────────────────────
-# Une « jupe » cylindrique à dégradé vertical autour de la ville (bleu-cyan en bas,
-# transparent en haut) + une nappe de brume au sol qui s'éclaire vers l'horizon →
-# la ville se décolle du noir et gagne en profondeur.
-func _build_horizon_excel() -> void:
-	var rv := (_cgrid() + 1.0) * taille_cellule
-	var rh := rv * 1.7
-	var hh := rv * 0.6
-	var seg := 72
-	var c_bas := Color(0.10, 0.28, 0.48, 0.42)
-	var c_haut := Color(0.10, 0.28, 0.48, 0.0)
-	var sc := HoloMesh3D.st_tri()
-	var nc := 0
-	var prev := Vector2(rh, 0.0)
-	for i in range(1, seg + 1):
-		var a := TAU * float(i) / float(seg)
-		var cur := Vector2(cos(a) * rh, sin(a) * rh)
-		var b0 := Vector3(prev.x, 0.0, prev.y)
-		var b1 := Vector3(cur.x, 0.0, cur.y)
-		var t0 := Vector3(prev.x, hh, prev.y)
-		var t1 := Vector3(cur.x, hh, cur.y)
-		sc.set_color(c_bas); sc.add_vertex(b0)
-		sc.set_color(c_bas); sc.add_vertex(b1)
-		sc.set_color(c_haut); sc.add_vertex(t1)
-		sc.set_color(c_bas); sc.add_vertex(b0)
-		sc.set_color(c_haut); sc.add_vertex(t1)
-		sc.set_color(c_haut); sc.add_vertex(t0)
-		nc += 2
-		prev = cur
-	_ajouter_mesh(HoloMesh3D.commit(sc, nc), "Horizon", _mat_horizon)
-	# Brume au sol : éventail centre (transparent) → bord (faible lueur).
-	var sd := HoloMesh3D.st_tri()
-	var nd := 0
-	var c_centre := Color(0.06, 0.16, 0.30, 0.0)
-	var c_bord := Color(0.10, 0.26, 0.44, 0.28)
-	var y := -0.006
-	var prevp := Vector3(rh, y, 0.0)
-	for i in range(1, seg + 1):
-		var a := TAU * float(i) / float(seg)
-		var cur := Vector3(cos(a) * rh, y, sin(a) * rh)
-		sd.set_color(c_centre); sd.add_vertex(Vector3(0, y, 0))
-		sd.set_color(c_bord); sd.add_vertex(prevp)
-		sd.set_color(c_bord); sd.add_vertex(cur)
-		nd += 1
-		prevp = cur
-	_ajouter_mesh(HoloMesh3D.commit(sd, nd), "BrumeSol", _mat_horizon)
-
-# ─── Skyline lointain : silhouette de mégastructures à l'horizon ──────────────
-# Un anneau de tours sombres jaillit AU-DELÀ des collines → la ville n'est plus une
-# île posée sur une table, elle est un fragment d'une mégalopole sans fin. Tours
-# fines, hauteurs irrégulières (jagged), teinte froide qui recule ; quelques têtes
-# néon (enseignes lointaines) ponctuent la ligne d'horizon.
-func _build_skyline_lointain() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_val ^ 0x5C1701
-	var rv := (_cgrid() + 1.0) * taille_cellule
-	var s := HoloMesh3D.st()       # tours sombres (froides, reculées)
-	var n := 0
-	var sn := HoloMesh3D.st()      # têtes néon (enseignes lointaines) — glow
-	var nn := 0
-	var nb := 150
-	var froid := Color(0.16, 0.30, 0.50)
-	for i in nb:
-		var a := TAU * float(i) / float(nb) + rng.randf_range(-0.02, 0.02)
-		var rad := rv * rng.randf_range(1.28, 1.62)
-		var c := Vector3(cos(a) * rad, 0.0, sin(a) * rad)
-		var hh := rng.randf_range(rv * 0.16, rv * 0.52)   # hauteurs irrégulières
-		var w := taille_cellule * rng.randf_range(0.25, 0.6)
-		var col := froid * rng.randf_range(0.5, 1.0)
-		col.a = 0.9
-		n += HoloMesh3D.box(s, c, w, hh, w, col)
-		# ~1 sur 7 : tête néon (enseigne/balise lointaine), teinte chaude ou magenta.
-		if rng.randf() < 0.14:
-			var tete := c + Vector3(0.0, hh, 0.0)
-			var nc := couleur_route if rng.randf() < 0.5 else couleur_fenetre
-			nc = Color(nc.r, nc.g, nc.b, 0.85)
-			nn += HoloMesh3D.line(sn, tete, tete + Vector3(0.0, taille_cellule * 0.25, 0.0), nc)
-	_ajouter_mesh(HoloMesh3D.commit(s, n), "SkylineLointain", _mat_horizon)
-	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "SkylineEnseignes", _mat_neon)
-
 # ─── Gradient de richesse ─────────────────────────────────────
 # Richesse d'un point monde (plan XZ) : 1 dans le cœur central → 0 en périphérie.
 # Le centre de la grille est l'origine monde (cf. _world soustrait _cgrid).
@@ -1544,112 +1465,6 @@ func _bati_forme(centre: Vector3, sx: float, sz: float, h: float, forme: int, co
 			n += HoloMesh3D.box(s, centre, sx, h, sz, col)
 			nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, h * FACE_INSET, sz * FACE_INSET)
 	return [n, nf]
-
-# ─── Poussières de données (montée animée par shader) ─────────
-func _build_motes() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_val ^ 0x310C0DE
-	var r := (_cgrid() + 1.0) * taille_cellule
-	var seg := 0.12
-	var s := SurfaceTool.new()
-	s.begin(Mesh.PRIMITIVE_LINES)
-	for _i in maxi(0, motes_count):
-		var ang := rng.randf() * TAU
-		var rad := sqrt(rng.randf()) * r        # disque uniforme
-		var x := cos(ang) * rad
-		var z := sin(ang) * rad
-		var ph := rng.randf()                    # phase de montée
-		var a := 0.35 + 0.45 * rng.randf()
-		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(Vector3(x, 0, z))
-		s.set_color(Color(1, 1, 1, a)); s.set_uv(Vector2(ph, 0)); s.add_vertex(Vector3(x, seg, z))
-	var mi := MeshInstance3D.new()
-	mi.name = "Motes"
-	mi.mesh = s.commit()
-	mi.material_override = _mat_motes
-	_monde.add_child(mi)
-
-# ─── Socle « table tactique » (anneau + ticks au sol) ─────────
-func _build_socle() -> void:
-	var s := HoloMesh3D.st()
-	var n := 0
-	var r := (_cgrid() + 1.0) * taille_cellule * 1.10
-	n += HoloMesh3D.circle(s, Vector3.ZERO, r, Color(couleur_socle, 0.55), 96)
-	n += HoloMesh3D.circle(s, Vector3.ZERO, r * 0.965, Color(couleur_socle, 0.22), 96)
-	# Ticks radiaux (graduations) — plus longs tous les 1/8 de tour.
-	var ticks := 48
-	for i in ticks:
-		var a := TAU * float(i) / float(ticks)
-		var dir := Vector3(cos(a), 0.0, sin(a))
-		var long := i % 6 == 0
-		var ext := taille_cellule * (0.65 if long else 0.3)
-		n += HoloMesh3D.line(s, dir * r, dir * (r + ext),
-				Color(couleur_socle, 0.5 if long else 0.28))
-	_ajouter_mesh(HoloMesh3D.commit(s, n), "Socle")   # _mat_decor → léger glow cyan
-
-# ─── Sol : nappe de terre + maillage fin (liant visuel sous tout) ──
-# Un grand disque sombre (la « matière » du terrain) + un quadrillage fin de
-# tout petits carrés posés dessus, le tout clippé au disque (pas de bord carré).
-# Couvre la ville, le lac, les collines et les faubourgs proches → tout est
-# rattaché à un même sol. Centre décalé vers le lac pour englober l'ensemble.
-# Disque-terrain + maillage fin, centré sur `sc` (cellules), rayon `R` (cellules).
-func _build_sol_disc(sc: Vector2, R: float) -> void:
-	# 1) Nappe de terre pleine (disque sombre) — additif → léger relief de fond.
-	var sp := HoloMesh3D.st_tri()
-	var npq := 0
-	var c_terre := Color(0.05, 0.07, 0.10, 1.0)
-	var cw := _world(sc.x, sc.y, -0.004)
-	var seg := 96
-	var prev := _world(sc.x + R, sc.y, -0.004)
-	for i in range(1, seg + 1):
-		var a := TAU * float(i) / float(seg)
-		var cur := _world(sc.x + cos(a) * R, sc.y + sin(a) * R, -0.004)
-		sp.set_color(c_terre); sp.add_vertex(cw)
-		sp.set_color(c_terre); sp.add_vertex(prev)
-		sp.set_color(c_terre); sp.add_vertex(cur)
-		npq += 1
-		prev = cur
-	_ajouter_mesh(HoloMesh3D.commit(sp, npq), "SolTerre", _mat_sol)
-	# 2) Maillage fin (petits carrés) clippé au disque (chordes dans le cercle).
-	var sg := HoloMesh3D.st()
-	var ng := 0
-	var c_grille := Color(0.16, 0.22, 0.30, 0.42)
-	var pas := 0.5                  # demi-cellule → tout petits carrés
-	var yg := -0.003
-	var k := -R
-	while k <= R + 0.001:
-		var half := sqrt(maxf(0.0, R * R - k * k))
-		if half > 0.05:
-			ng += HoloMesh3D.line(sg, _world(sc.x + k, sc.y - half, yg), _world(sc.x + k, sc.y + half, yg), c_grille)
-			ng += HoloMesh3D.line(sg, _world(sc.x - half, sc.y + k, yg), _world(sc.x + half, sc.y + k, yg), c_grille)
-		k += pas
-	_ajouter_mesh(HoloMesh3D.commit(sg, ng), "SolGrille", _mat_sol)
-
-# ─── Balayage radar (sweep en éventail, tourne lentement) ─────
-func _build_radar() -> void:
-	var r := (_cgrid() + 1.0) * taille_cellule * 1.06
-	var seg := 12
-	var span := deg_to_rad(28.0)
-	var s := SurfaceTool.new()
-	s.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var y := 0.02
-	for i in seg:
-		var a0 := -span * 0.5 + span * float(i) / float(seg)
-		var a1 := -span * 0.5 + span * float(i + 1) / float(seg)
-		# Alpha croît vers le bord d'attaque (a = +span/2) : effet comète.
-		var al0 := 0.32 * (a0 + span * 0.5) / span
-		var al1 := 0.32 * (a1 + span * 0.5) / span
-		var p0 := Vector3(cos(a0), 0, sin(a0)) * r + Vector3(0, y, 0)
-		var p1 := Vector3(cos(a1), 0, sin(a1)) * r + Vector3(0, y, 0)
-		s.set_color(Color(couleur_socle, 0.10)); s.add_vertex(Vector3(0, y, 0))
-		s.set_color(Color(couleur_socle, al0)); s.add_vertex(p0)
-		s.set_color(Color(couleur_socle, al1)); s.add_vertex(p1)
-	_radar = Node3D.new()
-	_radar.name = "Radar"
-	var mi := MeshInstance3D.new()
-	mi.mesh = s.commit()
-	mi.material_override = _mat_ambiance   # additif, émission faible → discret
-	_radar.add_child(mi)
-	_monde.add_child(_radar)
 
 # ─── Intro : MATÉRIALISATION RADIALE (la carte se peint du centre) + caméra ─
 # Un front lumineux s'étend du centre vers les bords ; au-delà du rayon courant,
