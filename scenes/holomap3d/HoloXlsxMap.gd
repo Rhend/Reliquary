@@ -760,6 +760,30 @@ func _tier_sur_arete(a: Vector2i, d: Vector2i) -> int:
 func rapport() -> Array:
 	return _rapport
 
+# Hauteur (m) du décor BÂTI sous une zone : max hauteur_m des blocs bâtis (bâtiments,
+# usines, cimetières, casses, supermarchés, tours) recouvrant l'une des cellules. 0 si
+# la zone est plate (parc, eau, place…). Sert à faire flotter le pin d'un lieu au-dessus
+# du toit RÉEL — SANS dessiner de bâtiment (le décor existant tient lieu de corps).
+func hauteur_m_zone(cells: Array) -> float:
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var hmax := 0.0
+	for liste: Array in [batiments, usines, cimetieres, casses, supermarches]:
+		for b: Dictionary in liste:
+			var hb := float(b.get("hauteur_m", 0.0))
+			if hb <= hmax:
+				continue
+			for c: Vector2i in b["cells"]:
+				if setd.has(c):
+					hmax = hb
+					break
+	for t: Dictionary in tours_orphelines:
+		var ht := float(t.get("hauteur_m", 0.0))
+		if ht > hmax and setd.has(t["cell"]):
+			hmax = ht
+	return hmax
+
 # ─── Helpers ──────────────────────────────────────────────────
 # Texte « 12g » / « 6 » / « 18P » / « P » → Vector3(hauteur_m, Forme, reconnu?0/1).
 func _parse_hauteur_forme(txt: String) -> Vector3:

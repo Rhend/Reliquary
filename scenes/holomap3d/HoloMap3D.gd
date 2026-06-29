@@ -2657,12 +2657,12 @@ func _construire_lieux(liste: Array) -> void:
 		loc.col          = UIColors.tier_color(l.tier)   # DA : couleur de palier
 		loc.taille_x     = float(l.emprise.x) * taille_cellule * 0.9
 		loc.taille_z     = float(l.emprise.y) * taille_cellule * 0.9
-		loc.hauteur      = float(l.etages) * unite_maison
-		loc.ring_radius  = maxf(l.emprise.x, l.emprise.y) * taille_cellule * 0.7
-		loc.sans_batiment = l.sans_batiment
+		# Le pin flotte au-dessus du toit RÉEL du décor sous la zone (jamais de bâtiment
+		# ajouté : usine/cimetière/pyramide/bâtiment générique sont déjà rendus par le décor).
+		loc.hauteur      = _hauteur_monde(_excel.hauteur_m_zone(l.cells))
+		loc.barriere_h   = taille_cellule * 5.4   # hauteur des piliers d'énergie (3× l'ancienne)
+		loc.pilier_hw    = taille_cellule * 0.22  # demi-largeur (piliers fins, distincts)
 		loc.line_shader  = LINE_SHADER
-		loc.face_material = _mat_faces
-		loc.face_inset   = FACE_INSET
 		loc.position     = _centre_emprise(l.cellule.x, l.cellule.y, l.emprise)
 		loc.perimetre    = _perimetre_local(l.cells, loc.position)
 		loc.clique.connect(_on_lieu_clique)
@@ -2699,11 +2699,11 @@ func _on_survol(loc: HoloLocation3D, actif: bool) -> void:
 		# Accent du tooltip = couleur de palier du lieu.
 		_tooltip.montrer(loc.lieu_nom, GameData.get_tier_name(loc.tier),
 				UIColors.tier_color(loc.tier), loc.lore, UIColors.tier_color(loc.tier))
-		_focus(loc.global_position, true)
+		# On n'éclaire PAS le décor au survol (pas de _focus) → le bâtiment garde son
+		# aspect normal (ne devient pas blanc). Piliers + pin + tooltip suffisent.
 	elif _hovered == loc:
 		_hovered = null
 		_tooltip.cacher()
-		_focus(Vector3.ZERO, false)
 
 # Focus cinématographique : le quartier autour du lieu survolé s'intensifie
 # (halo dans holo_line) pendant que le trafic ralentit et s'atténue.

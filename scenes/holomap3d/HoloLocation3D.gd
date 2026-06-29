@@ -1,14 +1,12 @@
 # ============================================================
-# HoloLocation3D — Lieu d'expédition cliquable en 3D.
+# HoloLocation3D — Lieu d'expédition cliquable en 3D (PUR OVERLAY).
 #
-# Area3D placée à la position monde du lieu. Dessine, en COULEUR DE PALIER
-# (UIColors.tier_color, trait plein + glow marqué → ressort du tissu urbain) :
-#   • le bâtiment-lieu (boîte d'emprise N×M, étages, subdivision légère) ;
-#   • un PIN diamant flottant relié par une tige (repère permanent) ;
-#   • un ANNEAU « ping radar » + un HALO au sol, ÉMIS AU SURVOL SEULEMENT
-#     (fondu doux) — hors survol le lieu n'émet plus rien en continu.
-# Seuls le pin et la boîte restent visibles en permanence ; le survol fait
-# apparaître halo + ping + faisceau et intensifie le tout.
+# Area3D placée sur la zone du lieu. N'ajoute JAMAIS de bâtiment : le décor sous la
+# zone (usine, cimetière, pyramide, bâtiment générique, parc…) est DÉJÀ rendu par
+# HoloMap3D. Pose seulement, en COULEUR DE PALIER (UIColors.tier_color) :
+#   • un PIN diamant flottant au-dessus du toit réel (repère permanent) ;
+#   • une BARRIÈRE D'ÉNERGIE verticale le long du périmètre de la zone — la
+#     délimitation de la propriété exploitable : discrète au repos, vive au survol.
 #
 # Picking 3D via le viewport (Area3D + CollisionShape3D + input_ray_pickable) →
 # survol/clic suivent la caméra. Clic gauche → émet `clique(id)`.
@@ -25,57 +23,44 @@ var lieu_nom: String = ""
 var tier: int = 0
 var lore: String = ""
 var col: Color = Color(0.7, 0.7, 0.7)   # couleur de palier (UIColors.tier_color)
-var taille_x: float = 0.7                # emprise monde X
-var taille_z: float = 0.7                # emprise monde Z
-var hauteur: float = 1.0                 # hauteur monde du bâtiment
+var taille_x: float = 0.7                # emprise monde X (zone) — pour la collision
+var taille_z: float = 0.7                # emprise monde Z (zone) — pour la collision
+var hauteur: float = 1.0                 # hauteur monde du DÉCOR sous la zone (pour flotter le pin)
 var pin_float: float = 0.6               # distance du pin au-dessus du toit
-var ring_radius: float = 0.8
-var sans_batiment: bool = false          # true → pas de boîte/faces/tige (le décor EST le corps)
+var barriere_h: float = 0.6              # hauteur monde des piliers d'énergie
+var pilier_hw: float = 0.06              # demi-largeur d'un pilier (indépendante de la hauteur)
 var line_shader: Shader
-var face_material: Material               # faces sombres semi-opaques (occlusion)
-var face_inset: float = 0.96
-# Contour de périmètre de la zone (paires de points LOCAUX = segments d'arête),
-# fourni par HoloMap3D. Illuminé au survol → feedback PRINCIPAL de sélection. Vide →
-# pas de contour (le lieu se repère alors par sa boîte d'emprise + son pin).
+# Périmètre de la zone : paires de points LOCAUX (segments d'arête au sol), fourni par
+# HoloMap3D. Extrudé vers le haut → barrière verticale. Vide → pas de barrière (pin seul).
 var perimetre: PackedVector3Array = PackedVector3Array()
 
 var _t := 0.0
 var _hover := false
 var _pin: MeshInstance3D
-var _ring: MeshInstance3D
-var _beam: MeshInstance3D
-var _halo: MeshInstance3D
-var _contour: MeshInstance3D
+var _barriere: MeshInstance3D
 var _pin_y := 0.0
-var _beam_a := 0.0          # opacité courante du faisceau (fondu au survol)
-var _emit_a := 0.0          # opacité des halos émis (ping anneau + halo sol) — survol seul
-var _contour_a := 0.0       # opacité du contour de zone (fondu au survol)
-var _mat_bat: ShaderMaterial
+var _barriere_a := 0.0       # intensité du survol (0 = repos discret, 1 = sélection vive)
 var _mat_pin: ShaderMaterial
-var _mat_ring: ShaderMaterial
-var _mat_beam: ShaderMaterial
-var _mat_halo: ShaderMaterial
-var _mat_contour: ShaderMaterial
+var _mat_barriere: ShaderMaterial
 
 const PIN_R := 0.26
 const PIN_H := 0.34
+const BARRIERE_SHADER := preload("res://scenes/holomap3d/holo_barriere.gdshader")
 
 func _ready() -> void:
 	input_ray_pickable = true
-	_mat_bat  = _mk_mat()
-	_mat_pin  = _mk_mat()
-	_mat_ring = _mk_mat()
-	_mat_beam = _mk_mat()
-	_mat_halo = _mk_mat()
-	_mat_contour = _mk_mat()
+	_mat_pin = _mk_mat()
+	_mat_barriere = ShaderMaterial.new()
+	_mat_barriere.shader = BARRIERE_SHADER
+	_mat_barriere.set_shader_parameter("alpha_mult", 0.0)   # invisible au repos
 	_pin_y = hauteur + pin_float
 	_construire()
 
-	# Collision : boîte englobant bâtiment + pin (clic sur tout le marqueur).
+	# Collision : colonne englobant la zone + le pin (clic sur tout le marqueur).
 	var c := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	var total_h := _pin_y + PIN_H
-	shape.size = Vector3(maxf(taille_x, ring_radius * 2.0), total_h, maxf(taille_z, ring_radius * 2.0))
+	shape.size = Vector3(maxf(taille_x, 0.2), total_h, maxf(taille_z, 0.2))
 	c.shape = shape
 	c.position = Vector3(0, total_h * 0.5, 0)
 	add_child(c)
@@ -94,7 +79,7 @@ func ancre_globale() -> Vector3:
 
 # Reveal d'intro : rayon de matérialisation poussé sur tous les matériaux.
 func set_reveal(r: float) -> void:
-	for m in [_mat_bat, _mat_pin, _mat_ring, _mat_beam, _mat_halo, _mat_contour]:
+	for m in [_mat_pin, _mat_barriere]:
 		if m != null:
 			m.set_shader_parameter("reveal_r", r)
 
@@ -110,59 +95,7 @@ func _on_input_event(_cam: Node, ev: InputEvent, _pos: Vector3, _nrm: Vector3, _
 			clique.emit(lieu_id)
 
 func _construire() -> void:
-	# Lieu SANS bâtiment : on saute faces + boîte + tige ; le décor sous l'emprise
-	# (ex. parc) tient lieu de corps. Seuls anneau + pin + collision subsistent.
-	if not sans_batiment:
-		# ── Faces sombres semi-opaques (occlusion douce), légèrement insérées ──
-		if face_material != null:
-			var sf := HoloMesh3D.st_tri()
-			var nf := HoloMesh3D.box_faces(sf, Vector3.ZERO,
-					taille_x * face_inset, hauteur * face_inset, taille_z * face_inset)
-			var fmesh := HoloMesh3D.commit(sf, nf)
-			if fmesh != null:
-				var mif := MeshInstance3D.new()
-				mif.mesh = fmesh
-				mif.material_override = face_material
-				add_child(mif)
-
-		# ── Bâtiment-lieu : contour creux UNIQUEMENT (12 arêtes) ──
-		var sb := HoloMesh3D.st()
-		var n := HoloMesh3D.box(sb, Vector3.ZERO, taille_x, hauteur, taille_z, col)
-		n += HoloMesh3D.line(sb, Vector3(0, hauteur, 0), Vector3(0, _pin_y - PIN_H, 0), col)  # tige
-		var bat := MeshInstance3D.new()
-		bat.mesh = HoloMesh3D.commit(sb, n)
-		bat.material_override = _mat_bat
-		add_child(bat)
-
-	# ── Halo au sol (disque dégradé tier-coloré, ancre le lieu) ──
-	var shd := SurfaceTool.new()
-	shd.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var hrad := ring_radius * 1.5
-	var hseg := 28
-	for i in hseg:
-		var a0 := TAU * float(i) / float(hseg)
-		var a1 := TAU * float(i + 1) / float(hseg)
-		shd.set_color(Color(col, 0.40)); shd.add_vertex(Vector3.ZERO)
-		shd.set_color(Color(col, 0.0)); shd.add_vertex(Vector3(cos(a0) * hrad, 0, sin(a0) * hrad))
-		shd.set_color(Color(col, 0.0)); shd.add_vertex(Vector3(cos(a1) * hrad, 0, sin(a1) * hrad))
-	_halo = MeshInstance3D.new()
-	_halo.mesh = shd.commit()
-	_halo.material_override = _mat_halo
-	_halo.position = Vector3(0, 0.012, 0)
-	_halo.visible = false   # halos émis au survol seulement
-	add_child(_halo)
-
-	# ── Anneau pulsant au sol ──
-	var sr := HoloMesh3D.st()
-	var nr := HoloMesh3D.circle(sr, Vector3.ZERO, ring_radius, col, 36)
-	_ring = MeshInstance3D.new()
-	_ring.mesh = HoloMesh3D.commit(sr, nr)
-	_ring.material_override = _mat_ring
-	_ring.position = Vector3(0, 0.03, 0)
-	_ring.visible = false   # ping radar au survol seulement
-	add_child(_ring)
-
-	# ── Pin diamant flottant ──
+	# ── Pin diamant flottant (repère permanent, au-dessus du toit réel) ──
 	var sp := HoloMesh3D.st()
 	var np := HoloMesh3D.diamond(sp, Vector3.ZERO, PIN_R, PIN_H, col)
 	_pin = MeshInstance3D.new()
@@ -171,88 +104,59 @@ func _construire() -> void:
 	_pin.position = Vector3(0, _pin_y, 0)
 	add_child(_pin)
 
-	# ── Faisceau vertical (visible au survol) : colonne de lumière vers le ciel ──
-	var bh := maxf(hauteur * 2.4, 2.2)
-	var rb := maxf(PIN_R * 0.6, taille_x * 0.12)
-	var sm := HoloMesh3D.st()
-	var nb := HoloMesh3D.line(sm, Vector3.ZERO, Vector3(0, bh, 0), col)
-	for corner in [Vector2(rb, rb), Vector2(-rb, rb), Vector2(rb, -rb), Vector2(-rb, -rb)]:
-		nb += HoloMesh3D.line(sm, Vector3(corner.x, 0, corner.y), Vector3(corner.x, bh, corner.y), col)
-	nb += HoloMesh3D.circle(sm, Vector3(0, bh, 0), rb * 1.5, col, 16)
-	_beam = MeshInstance3D.new()
-	_beam.mesh = HoloMesh3D.commit(sm, nb)
-	_beam.material_override = _mat_beam
-	_beam.visible = false
-	add_child(_beam)
-
-	# ── Contour de périmètre de la zone (épouse les cellules) : feedback PRINCIPAL
-	# de sélection, illuminé au survol. Masqué au repos (le pin suffit comme repère). ──
+	# ── Piliers d'énergie verticaux (champ de force VIVANT, cf. holo_barriere), plantés
+	# à INTERVALLE RÉGULIER le long du périmètre (un au milieu de chaque arête de zone) →
+	# des colonnes qui ceinturent la propriété. Invisibles au repos, apparaissent au survol. ──
 	if perimetre.size() >= 2:
-		var sc := HoloMesh3D.st()
-		var nc := 0
+		var up := Vector3(0, barriere_h, 0)
+		var hw := pilier_hw   # piliers fins, distincts (largeur indépendante de la hauteur)
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 		var i := 0
 		while i + 1 < perimetre.size():
-			nc += HoloMesh3D.line(sc, perimetre[i], perimetre[i + 1], col)
+			var mid: Vector3 = (perimetre[i] + perimetre[i + 1]) * 0.5
+			_pilier(st, mid, hw, up)
 			i += 2
-		_contour = MeshInstance3D.new()
-		_contour.mesh = HoloMesh3D.commit(sc, nc)
-		_contour.material_override = _mat_contour
-		_contour.visible = false   # apparaît au survol
-		add_child(_contour)
+		_barriere = MeshInstance3D.new()
+		_barriere.mesh = st.commit()
+		_barriere.material_override = _mat_barriere
+		_barriere.visible = false   # apparaît au survol
+		add_child(_barriere)
 
 func _process(dt: float) -> void:
 	_t += dt
 	var pulse := 0.5 + 0.5 * sin(_t * 4.0)
-
-	# Bâtiment-lieu : trait plein TRÈS lumineux (glow saturé) pour ressortir
-	# nettement du tissu urbain teinté ; encore boosté au survol.
-	_mat_bat.set_shader_parameter("emission_strength",
-			(9.0 + 1.0 * pulse) if _hover else 6.5)
 
 	if is_instance_valid(_pin):
 		_pin.position.y = _pin_y + sin(_t * 2.0) * 0.06
 		_mat_pin.set_shader_parameter("emission_strength",
 				(10.5 + 1.2 * pulse) if _hover else (7.5 + 0.6 * pulse))
 
-	# Halos émis (ping radar + halo au sol) : fondu d'apparition au survol seul ;
-	# hors survol ils disparaissent (le lieu n'émet plus rien en continu, le pin
-	# flottant suffisant comme repère permanent).
-	_emit_a = lerpf(_emit_a, 1.0 if _hover else 0.0, 1.0 - exp(-10.0 * dt))
-	var emet := _emit_a >= 0.01
-
-	if is_instance_valid(_ring):
-		_ring.visible = emet
-		if emet:
-			var phase := fposmod(_t * 0.6, 1.0)
-			var s := 0.5 + 0.9 * phase
-			_ring.scale = Vector3(s, 1.0, s)
-			_mat_ring.set_shader_parameter("alpha_mult", (1.0 - phase) * 1.5 * _emit_a)
-			_mat_ring.set_shader_parameter("emission_strength", 3.4)
-
-	# Halo au sol : respiration douce, au survol seulement.
-	if is_instance_valid(_halo):
-		_halo.visible = emet
-		if emet:
-			_mat_halo.set_shader_parameter("alpha_mult", (0.55 + 0.3 * pulse) * 1.6 * _emit_a)
-			_mat_halo.set_shader_parameter("emission_strength", 1.9)
-
-	# Faisceau : fondu d'apparition au survol (disparaît hors survol).
-	if is_instance_valid(_beam):
-		_beam_a = lerpf(_beam_a, 1.0 if _hover else 0.0, 1.0 - exp(-10.0 * dt))
-		if _beam_a < 0.01:
-			_beam.visible = false
+	# Barrière : INVISIBLE au repos, fondu d'apparition au survol — l'animation VIVANTE
+	# (bandes montantes, impulsion qui tourne, crépitement) est portée par le shader.
+	if is_instance_valid(_barriere):
+		_barriere_a = lerpf(_barriere_a, 1.0 if _hover else 0.0, 1.0 - exp(-10.0 * dt))
+		if _barriere_a < 0.01:
+			_barriere.visible = false
 		else:
-			_beam.visible = true
-			_mat_beam.set_shader_parameter("alpha_mult", _beam_a * (0.45 + 0.35 * pulse))
-			_mat_beam.set_shader_parameter("emission_strength", 3.2)
+			_barriere.visible = true
+			_mat_barriere.set_shader_parameter("alpha_mult", _barriere_a)
 
-	# Contour de zone : fondu au survol, glow pulsant TRÈS lumineux pour ressortir
-	# nettement du décor néon (saillance demandée). Hors survol il s'efface.
-	if is_instance_valid(_contour):
-		_contour_a = lerpf(_contour_a, 1.0 if _hover else 0.0, 1.0 - exp(-9.0 * dt))
-		if _contour_a < 0.01:
-			_contour.visible = false
-		else:
-			_contour.visible = true
-			_mat_contour.set_shader_parameter("alpha_mult", _contour_a * (0.85 + 0.15 * pulse))
-			_mat_contour.set_shader_parameter("emission_strength", (12.0 + 2.0 * pulse) * _contour_a)
+# Un pilier d'énergie = croix de 2 quads verticaux (axes X et Z) sur `base`, montant de
+# `up` → une colonne lisible sous tout angle d'orbite.
+func _pilier(st: SurfaceTool, base: Vector3, hw: float, up: Vector3) -> void:
+	var dx := Vector3(hw, 0, 0)
+	var dz := Vector3(0, 0, hw)
+	_quad(st, base - dx, base + dx, base + dx + up, base - dx + up)
+	_quad(st, base - dz, base + dz, base + dz + up, base - dz + up)
+
+# Un panneau vertical (quad) du périmètre, en 2 triangles. UV.y = hauteur (0 base →
+# 1 haut) pour le shader ; COLOR = teinte de palier. cull_disabled → visible des 2 faces.
+func _quad(st: SurfaceTool, a: Vector3, b: Vector3, bt: Vector3, at: Vector3) -> void:
+	var cc := Color(col, 1.0)
+	st.set_color(cc); st.set_uv(Vector2(0, 0)); st.add_vertex(a)
+	st.set_color(cc); st.set_uv(Vector2(1, 0)); st.add_vertex(b)
+	st.set_color(cc); st.set_uv(Vector2(1, 1)); st.add_vertex(bt)
+	st.set_color(cc); st.set_uv(Vector2(0, 0)); st.add_vertex(a)
+	st.set_color(cc); st.set_uv(Vector2(1, 1)); st.add_vertex(bt)
+	st.set_color(cc); st.set_uv(Vector2(0, 1)); st.add_vertex(at)
