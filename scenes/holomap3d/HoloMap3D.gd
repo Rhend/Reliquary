@@ -39,6 +39,7 @@ const PARC_SHADER := preload("res://scenes/holomap3d/holo_parc.gdshader")
 # Modules de build extraits (refactor). Appelés en static via la const → pas de
 # class_name, donc pas de régénération du cache de classes (cf. CLAUDE.md).
 const Geo := preload("res://scenes/holomap3d/build/holo_geo.gd")
+const Decor := preload("res://scenes/holomap3d/build/holo_decor.gd")
 const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
 const BEAM_SHADER := preload("res://scenes/holomap3d/holo_beam.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
@@ -508,7 +509,7 @@ func _build_all_excel() -> void:
 	if decor_actif:
 		_build_parcs_sol_excel()    # nappe verte au sol sous les parcs (les arbres se posent dessus)
 		_build_decor()          # parcs (arbres) — _eau vide → pas de vaguelettes
-	_build_collines_excel()     # relief de bordure (collines / désert) — cadre la ville
+	Decor.collines(self)        # relief de bordure (collines / désert) — cadre la ville
 	_build_terrains_excel()     # terrains de sport (baseball)
 	_build_parkings_excel()     # aires de stationnement (marquages au sol + lampadaires)
 	_build_batiments_excel()
@@ -1434,27 +1435,6 @@ func _stade_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool, sn: SurfaceT
 	n += HoloMesh3D.line(s, sb + Vector3(-sw * 0.7, -sh, 0), sb + Vector3(-sw * 0.7, -hb * 0.45, 0), acier)
 	n += HoloMesh3D.line(s, sb + Vector3(sw * 0.7, -sh, 0), sb + Vector3(sw * 0.7, -hb * 0.45, 0), acier)
 	return [ng, n, nn]
-
-# ─── Colline / désert : relief de bordure (apparence ocre) ────
-# Les cases ocre peintes en périphérie forment un ruban de relief inerte qui cadre la
-# ville. Chaque case reçoit une « butte » basse (hauteur variée déterministe) → dunes
-# continues. Le gradient de richesse les ternit encore vers l'extérieur (désert mort).
-func _build_collines_excel() -> void:
-	if _excel.collines.is_empty():
-		return
-	var s := HoloMesh3D.st()
-	var n := 0
-	var base_col := Color(0.74, 0.62, 0.40)   # ocre sable (DA holo, faible glow)
-	for cell: Vector2i in _excel.collines:
-		var c := _world(cell.x, cell.y, 0.0)
-		# Hash déterministe par case → hauteur + léger décalage du sommet (organique).
-		var hsh := float(((cell.x * 73856093) ^ (cell.y * 19349663)) & 0xFFFF) / 65535.0
-		var jsh := float(((cell.x * 19349663) ^ (cell.y * 83492791)) & 0xFFFF) / 65535.0
-		var h := unite_maison * lerpf(0.7, 2.0, hsh)
-		var jx := (jsh - 0.5) * taille_cellule * 0.4
-		var jz := (hsh - 0.5) * taille_cellule * 0.4
-		n += Geo.butte(s, c, taille_cellule * 0.62, h, _moduler(base_col, c), jx, jz)
-	_ajouter_mesh(HoloMesh3D.commit(s, n), "CollinesRelief", _mat_ambiance)
 
 # ─── Cimetière : mémorial numérique (champ de stèles holographiques) ──
 # Chaque case porte une stèle fine verticale lumineuse, alignée en grille régulière,
