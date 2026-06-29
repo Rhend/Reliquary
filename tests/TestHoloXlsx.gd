@@ -78,37 +78,31 @@ func _ready() -> void:
 	_ok("ponts sans piliers (Ouvrages ignoré)", _aucun_pilier(m))
 	_eq("routes surélevées", m.routes_elevees.size(), 0)
 
-	# ── Canal LIEUX (chantier lieux d'expédition) ──
-	# Classification d'une couleur de bordure (vraie RGB) → famille de tier + seuil.
-	_eq("bordure FF9AA0A6 → Commun(0)", m._classer_tier(Color8(0x9A, 0xA0, 0xA6)), 0)
-	_eq("bordure FF2ECC71 → Peu Commun(1)", m._classer_tier(Color8(0x2E, 0xCC, 0x71)), 1)
-	_eq("bordure FF3B82F6 → Rare(2)", m._classer_tier(Color8(0x3B, 0x82, 0xF6)), 2)
-	_eq("bordure FF8B5CF6 → Épique(3)", m._classer_tier(Color8(0x8B, 0x5C, 0xF6)), 3)
-	_eq("bordure FFE0A526 → Légendaire(4)", m._classer_tier(Color8(0xE0, 0xA5, 0x26)), 4)
-	_eq("bordure FFB11226 → Unique(5)", m._classer_tier(Color8(0xB1, 0x12, 0x26)), 5)
-	_eq("couleur hors palette → -1 (ambigu)", m._classer_tier(Color8(0xFF, 0x7A, 0x00)), -1)
-	# La palette EXACTE du rendu en jeu (UIColors.tier_color) est AUSSI acceptée — l'auteur
-	# peut peindre l'une ou l'autre (ex. rouge Unique #B11226 OU #FF1A2E).
-	for tl in 6:
-		_eq("UIColors tier %d reconnu (palette jeu)" % tl, m._classer_tier(UIColors.tier_color(tl)), tl)
-	_eq("rouge en jeu #FF1A2E → Unique(5)", m._classer_tier(Color8(0xFF, 0x1A, 0x2E)), 5)
-	# Un id de lieu (contient « _ ») n'est PAS lu comme code de hauteur/forme du décor.
-	_ok("« biome_foret » ignoré par le parsing hauteur/forme",
+	# ── Canal LIEUX (système ID) ──
+	# Distinction code hauteur/forme (^\d+[BPCDGX]?$) vs ID de lieu.
+	_ok("« 15P » = code hauteur/forme", m._est_code_hauteur_forme("15P"))
+	_ok("« 9 » = code", m._est_code_hauteur_forme("9"))
+	_ok("« 12G » = code", m._est_code_hauteur_forme("12G"))
+	_ok("« P » = code (lettre de forme seule)", m._est_code_hauteur_forme("P"))
+	_ok("« biome_marais » ≠ code", not m._est_code_hauteur_forme("biome_marais"))
+	_ok("« biome_marais » = ID de lieu", m._est_id_lieu("biome_marais"))
+	_ok("« 15P » n'est PAS un ID de lieu", not m._est_id_lieu("15P"))
+	_ok("ID ignoré par le parsing hauteur/forme du décor",
 			is_equal_approx(m._parse_hauteur_forme("biome_foret").z, 0.0))
 	print("    (zones détectées sur le gabarit = %d ; rapport = %d msg)" % [m.zones.size(), m.rapport().size()])
-	# Détection de zone : anneau de tier FERMÉ 2×2 → 1 zone, 4 cellules, tier du périmètre.
-	var mz := _zone_2x2(2)
+	# Détection : un ID dans une cellule d'un bloc d'apparence → 1 zone (flood bornée par
+	# bordure neutre). Carte synthétique : 2×2 cases BATIMENT + un ID dans l'une d'elles.
+	var mz := _carte_zone_id()
 	mz._detecter_zones()
-	_eq("anneau fermé 2×2 → 1 zone détectée", mz.zones.size(), 1)
-	_eq("zone → 4 cellules", (mz.zones[0]["cells"] as Array).size(), 4)
-	_eq("tier du périmètre = 2 (bleu)", mz.zones[0]["tier_bordure"], 2)
-	_eqv("bbox position", (mz.zones[0]["bbox"] as Rect2i).position, Vector2i(3, 3))
-	_eqv("bbox taille", (mz.zones[0]["bbox"] as Rect2i).size, Vector2i(2, 2))
-	# Zone OUVERTE (un côté retiré) → boucle non fermée → AUCUNE zone détectée.
-	var mo := _zone_2x2(2)
-	mo.border_tier_case[Vector2i(4, 4)] = 2   # ne garde que le côté droit (bas retiré)
+	_eq("ID dans une cellule → 1 zone détectée", mz.zones.size(), 1)
+	_ok("la zone porte l'ID lu", mz.zones.size() > 0 and str(mz.zones[0]["id"]) == "biome_foret")
+	_eq("zone = bloc d'apparence (4 cellules)",
+			(mz.zones[0]["cells"] as Array).size() if mz.zones.size() > 0 else -1, 4)
+	# Une zone SANS ID (que des codes hauteur/forme) → aucun lieu.
+	var mo := _carte_zone_id()
+	mo.texte_case[Vector2i(3, 3)] = "15P"   # remplace l'ID par un code → décor inerte
 	mo._detecter_zones()
-	_eq("anneau ouvert → 0 zone (boucle non fermée)", mo.zones.size(), 0)
+	_eq("zone sans ID → 0 lieu", mo.zones.size(), 0)
 	# Contour de périmètre (HoloMap3D._perimetre_local) : arêtes externes de la zone.
 	var hmap := HoloMap3D.new()
 	hmap.grille = 10
@@ -178,18 +172,12 @@ func _eq(nom: String, got: int, want: int) -> void:
 func _eqf(nom: String, got: float, want: float) -> void:
 	_ok("%s (=%.2f, attendu %.2f)" % [nom, got, want], is_equal_approx(got, want))
 
-func _eqv(nom: String, got: Vector2i, want: Vector2i) -> void:
-	_ok("%s (=%s, attendu %s)" % [nom, str(got), str(want)], got == want)
-
-# Carte synthétique : anneau de bordure-tier FERMÉ autour d'un carré 2×2 en (3,3).
-# Bits de mur L=1 R=2 T=4 B=8, posés sur les côtés EXTÉRIEURS de chaque cellule.
-func _zone_2x2(tier_lvl: int) -> HoloXlsxMap:
+# Carte synthétique : un bloc 2×2 de BATIMENT en (3,3)-(4,4), avec un ID de lieu posé
+# dans une cellule (border_case vide → la zone = la contiguïté d'apparence).
+func _carte_zone_id() -> HoloXlsxMap:
 	var m := HoloXlsxMap.new()
 	m.grille = 10
-	m.border_tier_case = {
-		Vector2i(3, 3): 4 | 1, Vector2i(4, 3): 4 | 2,
-		Vector2i(3, 4): 8 | 1, Vector2i(4, 4): 8 | 2,
-	}
-	for c: Vector2i in m.border_tier_case:
-		m.border_tier_val_case[c] = tier_lvl
+	for c: Vector2i in [Vector2i(3, 3), Vector2i(4, 3), Vector2i(3, 4), Vector2i(4, 4)]:
+		m.type_case[c] = HoloXlsxMap.Cell.BATIMENT
+	m.texte_case[Vector2i(3, 3)] = "biome_foret"
 	return m

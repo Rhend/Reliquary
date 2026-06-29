@@ -34,6 +34,7 @@ const FACE_SHADER := preload("res://scenes/holomap3d/holo_face.gdshader")
 const MOTES_SHADER := preload("res://scenes/holomap3d/holo_motes.gdshader")
 const TRAFFIC_SHADER := preload("res://scenes/holomap3d/holo_traffic.gdshader")
 const WATER_SHADER := preload("res://scenes/holomap3d/holo_water.gdshader")
+const PARC_SHADER := preload("res://scenes/holomap3d/holo_parc.gdshader")
 const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
 const BEAM_SHADER := preload("res://scenes/holomap3d/holo_beam.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
@@ -218,6 +219,7 @@ var _mat_neon: ShaderMaterial          # accents néon (enseignes, nœuds d'inte
 var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc tier-coloré)
 var _mat_lac: ShaderMaterial           # nappe d'eau pleine (lac satellite, hors carré)
 var _mat_eau: ShaderMaterial           # eau qui s'écoule (carte Excel, shader animé)
+var _mat_parc: ShaderMaterial          # sol de parc : herbe holo vivante (shader animé)
 var _mat_sol: ShaderMaterial           # sol : nappe de terre + maillage fin (liant)
 var _mat_horizon: ShaderMaterial       # halo d'horizon / brume (sans atténuation de brume)
 var _mat_balise: ShaderMaterial        # balises rouges clignotantes (sommets de tours)
@@ -337,6 +339,10 @@ func _setup_materials() -> void:
 	# Eau qui s'écoule (carte Excel) : bandes de courant animées par le shader.
 	_mat_eau = _make_mat(WATER_SHADER, {"eau_color": couleur_eau})
 
+	# Sol de parc : nappe verte VIVANTE (herbe holo — touffes + brins qui frémissent),
+	# même esprit de surface que l'eau (motif animé en coords monde, continu).
+	_mat_parc = _make_mat(PARC_SHADER, {"parc_color": couleur_parc})
+
 	# Halo d'horizon / brume d'ambiance : émission douce, brume repoussée très loin
 	# (l'horizon est volontairement distant et doit rester visible).
 	_mat_horizon = _make_mat(LINE_SHADER, {
@@ -366,12 +372,12 @@ func _setup_materials() -> void:
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -459,8 +465,11 @@ func _charger_excel() -> void:
 	couleur_decor_bati = Color(0.46, 0.56, 0.74)
 	luminosite_decor = 2.2
 	route_emission_base = 0.45
-	brume_debut = 22.0
-	brume_fin = 46.0
+	# Brume atmosphérique DÉSACTIVÉE (test) : poussée très loin → plus de fondu de
+	# distance, les éléments lointains restent à pleine intensité (remettre 22 / 46
+	# pour retrouver la brume de profondeur).
+	brume_debut = 1.0e6
+	brume_fin = 2.0e6
 	couleur_fond = Color(0.012, 0.022, 0.045)   # bleu nuit très sombre (≠ noir total) → atmosphère
 	print("[HoloMap3D] ", _excel.resume())
 
@@ -493,6 +502,7 @@ func _build_all_excel() -> void:
 	_build_eau_excel()          # eau qui s'écoule (shader animé)
 	_build_bordure_eau_excel()  # liseré cyan vif → l'eau se détache de la carte
 	if decor_actif:
+		_build_parcs_sol_excel()    # nappe verte au sol sous les parcs (les arbres se posent dessus)
 		_build_decor()          # parcs (arbres) — _eau vide → pas de vaguelettes
 	_build_collines_excel()     # relief de bordure (collines / désert) — cadre la ville
 	_build_terrains_excel()     # terrains de sport (baseball)
@@ -2587,6 +2597,31 @@ func _ajouter_mesh(mesh: ArrayMesh, nom: String, mat: Material = null) -> void:
 	_monde.add_child(mi)
 
 # ─── Décor d'ambiance (eau / parcs lus du gabarit) ────────────
+# Sol des parcs : nappe d'HERBE HOLO VIVANTE (shader holo_parc, motif animé en coords
+# monde → continu d'une tuile à l'autre), MÊME traitement de surface que l'eau/les
+# routes. Une tuile par case (couleur portée par le shader → sommets blancs). Dessiné
+# AVANT _build_decor (les arbres se posent par-dessus). Skip les cases d'un parc-LIEU
+# (rendu tier-coloré dédié).
+func _build_parcs_sol_excel() -> void:
+	if _parc.is_empty():
+		return
+	var st := HoloMesh3D.st_tri()
+	var nt := 0
+	var hw := taille_cellule * 0.5
+	for k in _parc:
+		var cell := k as Vector2i
+		if _lieu_sol.has(cell) or _lieu_arbres.has(cell):
+			continue
+		var c := _world(cell.x, cell.y, 0.01)
+		var p0 := c + Vector3(-hw, 0, -hw)
+		var p1 := c + Vector3(hw, 0, -hw)
+		var p2 := c + Vector3(hw, 0, hw)
+		var p3 := c + Vector3(-hw, 0, hw)
+		for v in [p0, p1, p2, p0, p2, p3]:
+			st.set_color(Color.WHITE); st.add_vertex(v)
+		nt += 2
+	_ajouter_mesh(HoloMesh3D.commit(st, nt), "ParcsSolExcel", _mat_parc)
+
 func _build_decor() -> void:
 	var s := HoloMesh3D.st()
 	var n := 0

@@ -1,114 +1,87 @@
 # Déclarer un LIEU d'expédition (HoloMap)
 
-Un **lieu** = un **biome** posé sur la carte, sur lequel le joueur peut cliquer pour
-lancer son expédition. Idée directrice :
+Un **lieu** = une zone explorable, reliée à son entité par un **ID**. Idée directrice :
 
-> **Un lieu = une ZONE entourée d'une bordure de couleur (= son tier) + l'id du biome
-> tapé dans UNE case de la zone.**
+> **Écris l'ID (ex. `biome_foret`) dans UNE cellule de la zone → elle devient explorable.
+> Sans ID = décor inerte.**
 
-Tout se fait sur la feuille **« Carte »**. **Pas de feuille séparée à tenir.**
-
----
-
-## ⚠️ La règle de fiabilité (à retenir avant tout)
-
-Le moteur ne lit **que les bordures en VRAIE couleur RGB**.
-
-```
-   BON  ✅                              MAUVAIS  ❌
-   Accueil → Bordures →                Barre rapide → petite flèche
-   « Autres bordures… » →              à côté de l'icône Bordures →
-   onglet Bordure → Couleur →          « Couleurs du thème »
-   Couleurs standard / Autres…
-   (= couleur RGB fixe)                (= couleur de THÈME → ignorée)
-```
-
-- Bordure en **couleur de thème** → traitée comme du **décor**, jamais comme un lieu.
-- Bordure **noire** (séparation de bâtiments) → décor, **jamais** un lieu.
-- Toujours passer par **« Autres bordures… → Couleur »** pour une vraie RGB.
+Tout se fait sur la feuille **« Carte »**. **Plus de couleurs de tier, plus de feuille « Lieux ».**
 
 ---
 
-## Les 2 gestes pour un lieu
+## Le geste principal : l'ID dans une cellule
 
-### 1️⃣ Entourer la zone (bordure = tier)
-
-Entoure la zone d'une bordure **fermée** (les 4 côtés font le tour), style **épais**,
-dans la **couleur de son tier** :
-
-| Tier | Couleur | RGB à saisir (R, G, B) |
-|---|---|---|
-| Commun | gris | **154, 160, 166** |
-| Peu Commun | vert | **46, 204, 113** |
-| Rare | bleu | **59, 130, 246** |
-| Épique | violet | **139, 92, 246** |
-| Légendaire | or | **224, 165, 38** |
-| Unique | rouge | **177, 18, 38** |
-
-> 💡 La détection **tolère** une variation de teinte : les **couleurs exactes affichées
-> en jeu** pour chaque rareté passent aussi. En cas de doute, prends celles ci-dessus.
-
-```
-Zone bordée FERMÉE  ✅           Bordure OUVERTE  ❌
-┌───────────┐                   ┌───────────
-│  ░░░░░░░  │                   │  ░░░░░░░
-│  ░░░░░░░  │                   │  ░░░░░░░     (un côté manque
-└───────────┘                   └───────────   → pas reconnu)
-```
-
-### 2️⃣ Écrire l'id du biome dans une case de la zone
-
-Dans **n'importe quelle case** à l'intérieur de la bordure, tape l'**id du biome** :
+Dans **n'importe quelle cellule** de la zone, tape l'**ID de l'entité** :
 
 ```
 ┌───────────────┐
-│ biome_foret   │   ← l'id, dans une case de la zone
+│ biome_foret   │   ← l'ID, dans une case de la zone
 │               │
 └───────────────┘
 ```
 
-- C'est l'id qui relie le lieu à la **bonne expédition**.
-- L'id contient toujours un **underscore** (`biome_foret`, `biome_marecage`…) → le
-  moteur le reconnaît tout seul et ne le confond pas avec un code de hauteur (`12g`).
-- Un seul id par zone suffit. Tu peux mettre la hauteur/forme dans une **autre** case.
-
-> 🔑 Le **fond** des cases (bâtiment, parc…) ne change pas : l'apparence reste, la
-> bordure + l'id s'**ajoutent** par-dessus.
+- L'ID est un **texte de type identifiant** (lettres, `_`), ex. `biome_foret`.
+- Il ne doit pas ressembler à un **code hauteur/forme** (`15P`, `9`, `12G`, `P`).
+- Tu peux mettre l'**ID** dans une cellule **ET** un **code hauteur/forme** dans une AUTRE
+  cellule de la même zone : ils cohabitent sans interférence.
+  Exemple : `biome_foret` + `15P` dans deux cellules = pyramide de 15 m, explorable.
 
 ---
 
-## Ce que le JEU décide (et pas l'Excel)
+## La bordure : NEUTRE, juste pour délimiter
 
-Comme un lieu **est** un biome, ces infos viennent de l'**état de jeu**, pas de la carte :
+Une bordure (trait **épais**, couleur quelconque — **aucune couleur signifiante**) sert
+**UNIQUEMENT** à séparer **deux zones de même fond collées**.
 
-| Info | Source réelle |
+```
+même apparence, 2 lieux distincts → une bordure neutre au milieu
+┌─────┬─────┐
+│ ░░░ │ ▓▓▓ │   (sinon le moteur les verrait comme une seule zone)
+└─────┴─────┘
+```
+
+Si tes zones ont déjà des apparences différentes (ou sont séparées par du vide / une
+route), **pas besoin de bordure**.
+
+---
+
+## Le reste vient de l'entité (`.tres`), pas d'Excel
+
+Comme l'ID pointe vers une entité, ces infos viennent du **jeu**, pas de la carte :
+
+| Info | Source |
 |---|---|
-| **Découverte** (le lieu apparaît ou non) | le biome est-il **découvert en jeu** ? |
-| **Tier** (couleur du pin/contour) | maîtrise actuelle du biome |
-| **Nom** + **lore** (tooltip) | fiche du biome dans le jeu |
+| **Tier** (couleur du pin / des piliers) | l'entité — **démarre Commun, évolue en jeu** |
+| **Nom** + **lore** (tooltip) | l'entité (`nom_affichage_fr`) |
+| **Découverte** (lieu visible ou non) | état de jeu (découvert ou non) |
 
-Conséquences :
-- Un biome **non découvert** → le décor **reste visible**, mais **aucun pin, aucun clic,
-  aucun contour**. Rien ne dit que c'est un lieu.
-- La **couleur de bordure** sert surtout à **repérer et délimiter** la zone. Si elle ne
-  correspond pas au tier réel du biome, **le jeu gagne** (un avertissement est logué).
+- **Non découvert** : le bâtiment/décor **reste visible**, mais **aucun** pin / clic /
+  contour. Rien ne dit que c'est un lieu.
+- **Découvert** : pin + tooltip + **piliers d'énergie** au survol + clic → expédition.
+
+---
+
+## IDs disponibles
+
+| ID à taper | Lieu |
+|---|---|
+| `biome_foret` | Forêt Sombre |
+| `biome_marecage` | Marécage Putride |
+| `biome_montagne` | Montagne |
+
+> Un ID **sans entité** correspondante → lieu **ignoré** (signalé dans la console). On
+> n'invente jamais un lieu à partir d'un ID inconnu.
 
 ---
 
 ## ☑️ Checklist d'un lieu
 
-- [ ] Une **bordure fermée** (4 côtés) autour de la zone, sur la feuille **Carte**
-- [ ] Couleur de la bordure = **vraie RGB** (via « Autres bordures… → Couleur »), pas un thème
-- [ ] Couleur = le **tier** voulu (cf. table)
-- [ ] L'**id du biome** (ex. `biome_foret`) tapé dans **une case** de la zone
+- [ ] Une **zone d'apparence** peinte sur la feuille **Carte**
+- [ ] (si besoin) une **bordure neutre** pour la séparer d'une zone de même fond collée
+- [ ] L'**ID de l'entité** (ex. `biome_foret`) tapé dans **UNE cellule** de la zone
 
 ---
 
 ## 💡 En une phrase
 
-> **Bordure de couleur fermée (vraie RGB) + l'id du biome dans une case = un lieu cliquable.**
-
----
-
-> *Note : la feuille « Lieux » du classeur n'est plus utilisée par le moteur (méthode
-> « id dans la case »). Tu peux l'ignorer ou la garder comme aide-mémoire.*
+> **L'ID dans une cellule = un lieu cliquable. La bordure ne sert qu'à délimiter.**

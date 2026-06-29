@@ -1004,31 +1004,27 @@ func open_expedition_map() -> void:
 	)
 	add_child(holo)
 
-# Construit les lieux d'expédition depuis les ZONES bordées de la feuille « Carte ».
-# Un LIEU = un BIOME : une bordure de tier FERMÉE délimite la zone ; l'id de biome est
-# tapé dans une CASE de la zone (pas de feuille séparée). tier / nom / lore / découverte
-# viennent de l'ÉTAT DE JEU (GameData) — un lieu n'apparaît que si son biome est
-# découvert (règle « non découvert = absent » appliquée au statut de lieu).
+# Construit les lieux d'expédition depuis les ZONES de la feuille « Carte ». Un LIEU =
+# une zone (bloc d'apparence) dont une cellule porte un ID (déjà détecté → zone["id"]).
+# L'ID pointe vers l'entité/.tres : tier / nom / lore / découverte en viennent (tous
+# démarrent Commun et évoluent en jeu). Un lieu n'apparaît que si l'entité est découverte
+# (règle « non découvert = absent », appliquée au statut de lieu, pas au décor-support).
 func _lieux_depuis_zones() -> Array[HoloLieuData]:
 	var out: Array[HoloLieuData] = []
 	var xlsx := HoloXlsxMap.new()
 	if not xlsx.charger(HoloMap3D.CHEMIN_GABARIT_DEFAUT):
 		return out
 	for zone: Dictionary in xlsx.zones:
-		var cells: Array = zone["cells"]
-		var eid := _id_biome_dans_zone(xlsx, cells)
-		if eid == "":
-			push_warning("[HoloMap/Lieux] zone bordée %s sans id de biome dans ses cases (tape l'id, ex. « biome_foret », dans une case de la zone)."
-					% str(zone["bbox"]))
-			continue
+		var eid: String = zone["id"]
 		var e := GameData.get_entity(eid)
-		if e.get("entity_type", "") != Enums.EntityType.BIOME:
-			push_warning("[HoloMap/Lieux] « %s » (zone %s) n'est pas un biome." % [eid, str(zone["bbox"])])
+		if e.is_empty():
+			push_warning("[HoloMap/Lieux] ID « %s » sans .tres/entité correspondant — lieu ignoré (ne pas inventer)." % eid)
 			continue
 		if not e.get("est_decouvert", false):
-			continue   # non découvert → aucun statut de lieu (le décor, lui, reste)
+			continue   # non découvert → aucun statut de lieu (le décor, lui, reste visible)
 		var tier := int(e.get("maitrise_actuelle", 0))
 		var bbox: Rect2i = zone["bbox"]
+		var cells: Array = zone["cells"]
 		var l := HoloLieuData.new()
 		l.id              = eid
 		l.nom_affichage_fr = Translations.entity_name(e, eid)
@@ -1040,25 +1036,10 @@ func _lieux_depuis_zones() -> Array[HoloLieuData]:
 		l.etages          = 4 + tier * 3
 		l.sans_batiment   = _zone_sans_batiment(xlsx, cells)
 		l.decouvert       = true
-		# Cohérence : la bordure de tier peinte diverge du tier réel du biome → signalé
-		# (l'état de jeu prime ; cf. brief).
-		var tb: int = zone.get("tier_bordure", -1)
-		if tb >= 0 and tb != tier:
-			push_warning("[HoloMap/Lieux] « %s » : bordure de tier %d ≠ tier de jeu %d (jeu prioritaire)."
-					% [eid, tb, tier])
 		out.append(l)
 	for msg: String in xlsx.rapport():
 		push_warning("[HoloMap/Lieux] " + str(msg))
 	return out
-
-# Cherche, dans les cases d'une zone, un texte qui est un id d'entité connu de GameData
-# (= l'id de biome tapé par l'auteur). Renvoie le 1er trouvé, ou "" (zone sans identité).
-func _id_biome_dans_zone(xlsx: HoloXlsxMap, cells: Array) -> String:
-	for c: Vector2i in cells:
-		var txt := str(xlsx.texte_case.get(c, "")).strip_edges()
-		if txt != "" and GameData.entities.has(txt):
-			return txt
-	return ""
 
 # Array non typé de Vector2i → Array[Vector2i] (pour HoloLieuData.cells).
 func _en_vec2i(src: Array) -> Array[Vector2i]:

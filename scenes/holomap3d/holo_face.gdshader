@@ -80,45 +80,13 @@ void fragment() {
 	float tw = 0.55 + 0.45 * sin(TIME * 1.3 + h21(cell) * 53.0);
 	float w = lit * win * tw;
 
-	// District : teinte + vie qui decroissent vers la peripherie.
-	float rich = richesse(w_pos.xz);
-	vec3 tint = mix(glow_peripherie.rgb, glow_coeur.rgb, rich);
-	float vie = mix(0.45, 1.0, rich);   // peripherie a l'abandon -> plus eteinte
-
-	// Paroi (normale horizontale) vs TOIT (normale verticale) : les deux brillent,
-	// mais differemment (barres d'etage sur les murs, balayage sur les toits).
-	float mur = 1.0 - clamp(abs(normalize(w_nrm + vec3(0.0, 0.0001, 0.0)).y), 0.0, 1.0);
-	float toit = 1.0 - mur;
-
-	// Bandes d'etage (murs) : ligne emissive a chaque plancher (pic NET -> creve le
-	// seuil de bloom -> vraies barres lumineuses, pas un voile).
-	float fy = fract(w_pos.y / max(0.001, etage_haut));
-	float bande = pow(smoothstep(0.30, 1.0, 1.0 - abs(fy - 0.5) * 2.0), 2.5);
-
-	// Scan vertical (murs) : front lumineux qui remonte la facade en boucle.
-	float vphase = fract(w_pos.y * 0.45 - TIME * pulse_vitesse);
-	float vscan = exp(-pow((vphase - 0.5) / 0.16, 2.0));
-
-	// Balayage de toit (XZ) : onde qui traverse les toits -> rooftops vivants vus
-	// du dessus (la camera plonge -> on voit surtout les toits, jamais noirs).
-	float rphase = fract((w_pos.x + w_pos.z) * 0.5 - TIME * pulse_vitesse * 1.3);
-	float rscan = exp(-pow((rphase - 0.5) / 0.18, 2.0));
-
-	// Corps VITRE : toute face porte une lueur de district (jamais de noir mort),
-	// qui respire ; les barres/scan crevent le bloom par-dessus.
-	float base = glow_force * (0.7 + 0.3 * sin(TIME * 0.7 + rich * 6.0));
-	float wall_lum = mur * (etage_force * bande + pulse_force * vscan);
-	float roof_lum = toit * (0.35 + pulse_force * 0.8 * rscan);
-	float lum = (base + wall_lum + roof_lum) * vie;
-	vec3 tintcol = tint * lum;
 	vec3 windows = fenetre_color.rgb * w * fenetre_emission;
 
-	// IMPORTANT (GL Compatibility) : en `unshaded`, la couleur VISIBLE vient de
-	// ALBEDO ; EMISSION ne nourrit que le bloom. On met donc la lueur de district
-	// dans ALBEDO (corps vitre coloré) ET dans EMISSION (les barres/scan/fenêtres
-	// qui dépassent le seuil HDR floutent) -> bâtiments lumineux, plus de blocs noirs.
-	ALBEDO = face_color.rgb + tintcol;
-	EMISSION = tintcol + windows;
-	// Corps plus dense (moins « vitre vide ») la ou ca s'allume.
-	ALPHA = clamp(opacite + w * 0.5 + (bande * mur + rscan * toit + 0.3 * vscan) * 0.3, 0.0, 1.0);
+	// Faces SOMBRES (occlusion) : PAS de lueur de district bleutee sur les batiments
+	// (retrait du « glow bleute »). En `unshaded`, la couleur visible vient d'ALBEDO ;
+	// EMISSION ne nourrit que le bloom. Seules les FENETRES ambre restent emissives.
+	ALBEDO = face_color.rgb;
+	EMISSION = windows;
+	// Corps plus dense la ou des fenetres s'allument.
+	ALPHA = clamp(opacite + w * 0.5, 0.0, 1.0);
 }
