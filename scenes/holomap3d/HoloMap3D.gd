@@ -492,7 +492,7 @@ func _build_all_excel() -> void:
 	_lieu_arbres.clear()
 	_discos.clear()
 	# L'eau est gérée par le shader animé (_build_eau_excel). On NE peuple PAS _eau
-	# → _build_decor n'ajoute pas de vaguelettes statiques par-dessus le courant.
+	# → Decor.decor n'ajoute pas de vaguelettes statiques par-dessus le courant.
 	for c: Vector2i in _excel.parcs:
 		_parc[c] = true
 	_build_horizon_excel()      # halo d'horizon + brume au sol (atmosphère)
