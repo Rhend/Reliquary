@@ -35,6 +35,10 @@ const MOTES_SHADER := preload("res://scenes/holomap3d/holo_motes.gdshader")
 const TRAFFIC_SHADER := preload("res://scenes/holomap3d/holo_traffic.gdshader")
 const WATER_SHADER := preload("res://scenes/holomap3d/holo_water.gdshader")
 const PARC_SHADER := preload("res://scenes/holomap3d/holo_parc.gdshader")
+
+# Modules de build extraits (refactor). Appelés en static via la const → pas de
+# class_name, donc pas de régénération du cache de classes (cf. CLAUDE.md).
+const Geo := preload("res://scenes/holomap3d/build/holo_geo.gd")
 const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
 const BEAM_SHADER := preload("res://scenes/holomap3d/holo_beam.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
@@ -666,30 +670,6 @@ func _franchissements() -> Dictionary:
 			cut[c] = true
 	return cut
 
-# Ligne pointillée le long d'une POLYLIGNE 3D (suit un profil, ex. rampe de pont).
-func _dashes_poly(s: SurfaceTool, pts: Array, col: Color, dash: float, gap: float) -> int:
-	var n := 0
-	var on := true
-	var rem := dash
-	for i in range(pts.size() - 1):
-		var a: Vector3 = pts[i]
-		var b: Vector3 = pts[i + 1]
-		var seg := a.distance_to(b)
-		if seg < 1e-5:
-			continue
-		var dir := (b - a) / seg
-		var d := 0.0
-		while d < seg - 1e-6:
-			var step := minf(rem, seg - d)
-			if on:
-				n += HoloMesh3D.line(s, a + dir * d, a + dir * (d + step), col)
-			d += step
-			rem -= step
-			if rem <= 1e-5:
-				on = not on
-				rem = dash if on else gap
-	return n
-
 # Marquage de voirie par GRAPHE de centerline. Pour chaque case on déduit son AXE
 # dominant (corridor H ou V) → la médiane/les voies suivent le corridor, tournent
 # aux ANGLES, et s'OUVRENT aux cases « carrefour » (≥ 3 bras de corridor = T ou
@@ -756,7 +736,7 @@ func _build_marquage_voirie(s: SurfaceTool) -> int:
 			if vus.has(key):
 				continue
 			vus[key] = true
-			n += _dashes(s, _world(na.x, na.y, 0.045), _world(nb.x, nb.y, 0.045), col_med,
+			n += Geo.dashes(s, _world(na.x, na.y, 0.045), _world(nb.x, nb.y, 0.045), col_med,
 					taille_cellule * 0.5, taille_cellule * 0.35)
 	return n
 
@@ -785,19 +765,6 @@ func _routes_intersections(directionnel := false) -> Dictionary:
 		if in_v.has(c):
 			inter[c] = true
 	return inter
-
-# Ligne pointillée a→b (segments `dash`, trous `gap`). Renvoie le nb de segments.
-func _dashes(s: SurfaceTool, a: Vector3, b: Vector3, col: Color, dash: float, gap: float) -> int:
-	var L := a.distance_to(b)
-	if L < 0.001:
-		return 0
-	var dir := (b - a) / L
-	var n := 0
-	var d := 0.0
-	while d < L:
-		n += HoloMesh3D.line(s, a + dir * d, a + dir * minf(d + dash, L), col)
-		d += dash + gap
-	return n
 
 # Trottoirs : trait clair (béton) le long de CHAQUE bord de voirie (côté d'une case
 # route dont le voisin n'est pas une route) → bordure de chaussée continue.
@@ -860,13 +827,13 @@ func _build_disco(apex: Vector3, rayon_boule: float, longueur_rayons: float) -> 
 	var n := 0
 	var blanc := Color(0.55, 0.78, 0.95)   # cyan doux (plus de blanc-supernova)
 	n += HoloMesh3D.circle(s, Vector3.ZERO, rayon_boule, blanc, 18)   # plan XZ
-	n += _cercle_plan(s, rayon_boule, blanc, 18, true)               # plan XY
-	n += _cercle_plan(s, rayon_boule, blanc, 18, false)              # plan YZ
+	n += Geo.cercle_plan(s, rayon_boule, blanc, 18, true)               # plan XY
+	n += Geo.cercle_plan(s, rayon_boule, blanc, 18, false)              # plan YZ
 	var pal := [Color(0.32, 0.72, 0.90), Color(0.85, 0.34, 0.70),
 			Color(0.90, 0.72, 0.42), Color(0.55, 0.85, 0.65)]
 	var nb := 28
 	for i in nb:
-		var dir := _point_sphere(i, nb)
+		var dir := Geo.point_sphere(i, nb)
 		var c: Color = pal[i % pal.size()]
 		# Rayons de longueur variée → halo organique, pas une étoile pleine.
 		var lon := lerpf(rayon_boule * 1.6, longueur_rayons, _hash01(Vector2i(i, 3), 5))
@@ -878,25 +845,6 @@ func _build_disco(apex: Vector3, rayon_boule: float, longueur_rayons: float) -> 
 	node.add_child(mi)
 	_monde.add_child(node)
 	_discos.append(node)
-
-# Cercle vertical (plan XY si `xy`, sinon YZ), centré à l'origine.
-func _cercle_plan(s: SurfaceTool, r: float, col: Color, seg: int, xy: bool) -> int:
-	var prev := Vector3(r, 0, 0) if xy else Vector3(0, r, 0)
-	var n := 0
-	for i in range(1, seg + 1):
-		var a := TAU * float(i) / float(seg)
-		var cur := Vector3(cos(a) * r, sin(a) * r, 0) if xy else Vector3(0, cos(a) * r, sin(a) * r)
-		n += HoloMesh3D.line(s, prev, cur, col)
-		prev = cur
-	return n
-
-# i-ème direction d'une distribution sphérique régulière (spirale de Fibonacci).
-func _point_sphere(i: int, n: int) -> Vector3:
-	var phi := PI * (3.0 - sqrt(5.0))
-	var y := 1.0 - (float(i) / float(maxi(1, n - 1))) * 2.0
-	var rad := sqrt(maxf(0.0, 1.0 - y * y))
-	var th := phi * float(i)
-	return Vector3(cos(th) * rad, y, sin(th) * rad)
 
 # Eau peinte → nappe pleine qui S'ÉCOULE (shader holo_water, motif animé en
 # coordonnées monde → courant continu d'une case à l'autre).
@@ -1052,24 +1000,18 @@ func _build_beam(base: Vector3, hauteur: float, demi_l: float, col: Color) -> vo
 	var br := Vector3.ZERO
 	var tl := Vector3(0, hauteur, 0)
 	var tr := Vector3(0, hauteur, 0)
-	_beam_vert(s, bl, 0.0, -1.0, demi_l, col)
-	_beam_vert(s, br, 0.0, 1.0, demi_l, col)
-	_beam_vert(s, tr, 1.0, 1.0, demi_l, col)
-	_beam_vert(s, bl, 0.0, -1.0, demi_l, col)
-	_beam_vert(s, tr, 1.0, 1.0, demi_l, col)
-	_beam_vert(s, tl, 1.0, -1.0, demi_l, col)
+	Geo.beam_vert(s, bl, 0.0, -1.0, demi_l, col)
+	Geo.beam_vert(s, br, 0.0, 1.0, demi_l, col)
+	Geo.beam_vert(s, tr, 1.0, 1.0, demi_l, col)
+	Geo.beam_vert(s, bl, 0.0, -1.0, demi_l, col)
+	Geo.beam_vert(s, tr, 1.0, 1.0, demi_l, col)
+	Geo.beam_vert(s, tl, 1.0, -1.0, demi_l, col)
 	var mi := MeshInstance3D.new()
 	mi.name = "Beam"
 	mi.mesh = s.commit()
 	mi.material_override = _mat_beam
 	mi.position = base
 	_monde.add_child(mi)
-
-func _beam_vert(s: SurfaceTool, v: Vector3, t: float, side: float, hw: float, col: Color) -> void:
-	s.set_color(col)
-	s.set_uv(Vector2(t, 0.0))
-	s.set_uv2(Vector2(side, hw))
-	s.add_vertex(v)
 
 # ─── Trafic aérien : couloirs de VTOL à plusieurs altitudes au-dessus de la ville ──
 # Réutilise le shader de trafic (segment translaté le long d'un trajet). Des
@@ -1090,7 +1032,7 @@ func _build_trafic_aerien_excel() -> void:
 		var depart := -dir * (lon * 0.5) + off + Vector3(0.0, alt, 0.0)
 		var couleur := couleur_voiture_aller if rng.randf() < 0.5 else couleur_voiture_retour
 		var nb := rng.randi_range(4, 7)
-		_semer_voitures(s, depart, dir * lon, taille_cellule * 2.4, rng, couleur, nb,
+		Geo.semer_voitures(s, depart, dir * lon, taille_cellule * 2.4, rng, couleur, nb,
 				rng.randf_range(0.7, 1.5))
 		total += nb
 	_ajouter_mesh(HoloMesh3D.commit(s, total), "TraficAerien", _mat_trafic_aerien)
@@ -1140,15 +1082,6 @@ func _build_ponts_excel() -> void:
 		mit.material_override = _mat_trafic
 		_monde.add_child(mit)
 
-# Profil du tablier le long de la travée (t∈[0,1]) : rampe / sur les `rf` premiers,
-# plateau au milieu, rampe \ sur les `rf` derniers. `alt` = hauteur du plateau.
-func _profil_pont(t: float, alt: float, rf: float) -> float:
-	if t < rf:
-		return alt * (t / rf)
-	if t > 1.0 - rf:
-		return alt * ((1.0 - t) / rf)
-	return alt
-
 # Un pont en rampe : tablier (surface + bords + traverses) suivant le profil,
 # garde-corps (main courante + montants) au-dessus, treillis (corde basse +
 # montants + diagonales) sous la partie élevée, piliers optionnels, et trafic.
@@ -1178,7 +1111,7 @@ func _bati_pont(pont: Dictionary, col: Color, s: SurfaceTool, sf: SurfaceTool,
 	var centers: Array[Vector3] = []
 	for i in nb + 1:
 		var t := float(i) / float(nb)
-		centers.append(end_a.lerp(end_b, t) + Vector3(0, _profil_pont(t, alt, rf), 0))
+		centers.append(end_a.lerp(end_b, t) + Vector3(0, Geo.profil_pont(t, alt, rf), 0))
 	# Tablier : surface (faces) + bords gauche/droite + traverses.
 	for i in nb:
 		var c0 := centers[i] + Vector3(0, ep, 0)
@@ -1223,7 +1156,7 @@ func _bati_pont(pont: Dictionary, col: Color, s: SurfaceTool, sf: SurfaceTool,
 		var deck: Array[Vector3] = []
 		for c2: Vector3 in centers:
 			deck.append(c2 + Vector3(0, ep + 0.02, 0))
-		nmed = _dashes_poly(smed, deck, Color(0.95, 0.55, 0.82),
+		nmed = Geo.dashes_poly(smed, deck, Color(0.95, 0.55, 0.82),
 				taille_cellule * 0.5, taille_cellule * 0.35)
 	# Trafic : voitures qui montent la rampe, traversent, redescendent.
 	var ncar := 0
@@ -1246,8 +1179,8 @@ func _semer_pont_trafic(st: SurfaceTool, centers: Array, ep: float, rng: RandomN
 		var b: Vector3 = tr[1] + dy
 		if a.distance_to(b) < 0.05:
 			continue
-		_semer_voitures(st, a, b - a, carlen, rng, couleur_voiture_aller, 1, 1.0)
-		_semer_voitures(st, b, a - b, carlen, rng, couleur_voiture_retour, 1, 1.0)
+		Geo.semer_voitures(st, a, b - a, carlen, rng, couleur_voiture_aller, 1, 1.0)
+		Geo.semer_voitures(st, b, a - b, carlen, rng, couleur_voiture_retour, 1, 1.0)
 		ncar += 2
 	return ncar
 
@@ -1398,21 +1331,6 @@ func _build_parkings_excel() -> void:
 	_ajouter_mesh(HoloMesh3D.commit(mats, nm), "ParkingLampMats", _mat_ambiance)
 	_ajouter_mesh(HoloMesh3D.commit(tetes, nt), "ParkingLampTetes", _mat_neon)
 
-# Point sur une ellipse ajustée à la bbox (k = fraction du demi-axe), à hauteur y.
-func _pt_ell(c: Vector3, ax: float, az: float, k: float, a: float, y: float) -> Vector3:
-	return c + Vector3(cos(a) * ax * k, y, sin(a) * az * k)
-
-# Anneau elliptique (échelle k, hauteur y). Renvoie le nb d'arêtes.
-func _anneau_ell(s: SurfaceTool, c: Vector3, ax: float, az: float, k: float, y: float, col: Color, seg: int) -> int:
-	var prev := _pt_ell(c, ax, az, k, 0.0, y)
-	var n := 0
-	for i in range(1, seg + 1):
-		var a := TAU * float(i) / float(seg)
-		var cur := _pt_ell(c, ax, az, k, a, y)
-		n += HoloMesh3D.line(s, prev, cur, col)
-		prev = cur
-	return n
-
 # Stade de baseball complet, ajusté à la bbox (ellipses → tout ratio remplit) :
 # terrain (gazon + losange + clôture) + GRADINS en bol + PROJECTEURS + TABLEAU.
 func _stade_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool, sn: SurfaceTool) -> Array:
@@ -1434,14 +1352,14 @@ func _stade_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool, sn: SurfaceT
 	var home := c + Vector3(0, 0, az * 0.40) + Vector3(0, 0.02, 0)
 	var a_rf := -PI * 0.25
 	var a_lf := -PI * 0.75
-	var rfp := _pt_ell(c, ax, az, kf, a_rf, 0.02)
-	var lfp := _pt_ell(c, ax, az, kf, a_lf, 0.02)
+	var rfp := Geo.pt_ell(c, ax, az, kf, a_rf, 0.02)
+	var lfp := Geo.pt_ell(c, ax, az, kf, a_lf, 0.02)
 	var seg := 30
 	# Gazon (territoire bon) : éventail du marbre vers l'arc de clôture.
 	var prevg := rfp
 	for i in range(1, seg + 1):
 		var a := lerpf(a_rf, a_lf, float(i) / float(seg))
-		var cur := _pt_ell(c, ax, az, kf, a, 0.02)
+		var cur := Geo.pt_ell(c, ax, az, kf, a, 0.02)
 		sg.set_color(vert_a); sg.add_vertex(home)
 		sg.set_color(vert_a); sg.add_vertex(prevg)
 		sg.set_color(vert_a); sg.add_vertex(cur)
@@ -1449,11 +1367,11 @@ func _stade_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool, sn: SurfaceT
 		prevg = cur
 	# Clôture + warning track.
 	var prev := rfp
-	var prev2 := _pt_ell(c, ax, az, kf * 0.93, a_rf, 0.02)
+	var prev2 := Geo.pt_ell(c, ax, az, kf * 0.93, a_rf, 0.02)
 	for i in range(1, seg + 1):
 		var a := lerpf(a_rf, a_lf, float(i) / float(seg))
-		var cur := _pt_ell(c, ax, az, kf, a, 0.02)
-		var cur2 := _pt_ell(c, ax, az, kf * 0.93, a, 0.02)
+		var cur := Geo.pt_ell(c, ax, az, kf, a, 0.02)
+		var cur2 := Geo.pt_ell(c, ax, az, kf * 0.93, a, 0.02)
 		n += HoloMesh3D.line(s, prev, cur, vert)
 		n += HoloMesh3D.line(s, prev2, cur2, Color(vert, 0.6))
 		prev = cur; prev2 = cur2
@@ -1471,7 +1389,7 @@ func _stade_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool, sn: SurfaceT
 	n += HoloMesh3D.line(s, second, third, terre)
 	n += HoloMesh3D.line(s, third, home, terre)
 	for base: Vector3 in [first, second, third, home]:
-		n += _carre_plat(s, base, taille_cellule * 0.06, blanc)
+		n += Geo.carre_plat(s, base, taille_cellule * 0.06, blanc)
 	n += HoloMesh3D.circle(s, home + (d1 + d3) * (b * 0.5), b * 0.13, terre, 12)
 	# ── Gradins en BOL : anneaux montants de la clôture (kf) au bord (1.0) ──
 	var nb_t := 4
@@ -1479,26 +1397,26 @@ func _stade_baseball(bbox: Rect2i, sg: SurfaceTool, s: SurfaceTool, sn: SurfaceT
 	for t in nb_t:
 		var k := lerpf(kf * 1.04, 1.0, float(t) / float(nb_t - 1))
 		var yy := lerpf(0.02, hb, float(t) / float(nb_t - 1))
-		n += _anneau_ell(s, c, ax, az, k, yy, acier, 56)
+		n += Geo.anneau_ell(s, c, ax, az, k, yy, acier, 56)
 	var nb_m := 28
 	for m in nb_m:
 		var a := TAU * float(m) / float(nb_m)
-		var pv := _pt_ell(c, ax, az, kf * 1.04, a, 0.02)
+		var pv := Geo.pt_ell(c, ax, az, kf * 1.04, a, 0.02)
 		for t in range(1, nb_t):
 			var k := lerpf(kf * 1.04, 1.0, float(t) / float(nb_t - 1))
 			var yy := lerpf(0.02, hb, float(t) / float(nb_t - 1))
-			var cur := _pt_ell(c, ax, az, k, a, yy)
+			var cur := Geo.pt_ell(c, ax, az, k, a, yy)
 			n += HoloMesh3D.line(s, pv, cur, Color(acier, 0.55))
 			pv = cur
 	# ── Projecteurs : mâts au sommet du bol + banc lumineux (glow) ──
 	for la: float in [-0.5, -1.05, -1.6, -2.1, -2.65, 0.05]:
-		var basep := _pt_ell(c, ax, az, 1.0, la, hb)
+		var basep := Geo.pt_ell(c, ax, az, 1.0, la, hb)
 		var topp := basep + Vector3(0, hb * 0.55, 0)
 		n += HoloMesh3D.line(s, basep, topp, acier)
 		var bw := minf(ax, az) * 0.06
-		nn += _carre_plat(sn, topp + Vector3(0, bw, 0), bw, Color(1.0, 0.98, 0.85))
+		nn += Geo.carre_plat(sn, topp + Vector3(0, bw, 0), bw, Color(1.0, 0.98, 0.85))
 	# ── Tableau d'affichage au centre du champ (au-delà de la clôture, −Z) ──
-	var sb := _pt_ell(c, ax, az, kf * 1.12, -PI * 0.5, hb * 0.45)
+	var sb := Geo.pt_ell(c, ax, az, kf * 1.12, -PI * 0.5, hb * 0.45)
 	var sw := ax * 0.28
 	var sh := hb * 0.30
 	var p0 := sb + Vector3(-sw, sh, 0)
@@ -1535,22 +1453,8 @@ func _build_collines_excel() -> void:
 		var h := unite_maison * lerpf(0.7, 2.0, hsh)
 		var jx := (jsh - 0.5) * taille_cellule * 0.4
 		var jz := (hsh - 0.5) * taille_cellule * 0.4
-		n += _butte(s, c, taille_cellule * 0.62, h, _moduler(base_col, c), jx, jz)
+		n += Geo.butte(s, c, taille_cellule * 0.62, h, _moduler(base_col, c), jx, jz)
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "CollinesRelief", _mat_ambiance)
-
-# Butte basse : base hexagonale + arêtes vers un sommet (légèrement décalé) → dune.
-func _butte(s: SurfaceTool, c: Vector3, r: float, h: float, col: Color, jx: float, jz: float) -> int:
-	var seg := 6
-	var apex := c + Vector3(jx, h, jz)
-	var prev := c + Vector3(r, 0, 0)
-	var n := 0
-	for i in range(1, seg + 1):
-		var a := TAU * float(i) / float(seg)
-		var cur := c + Vector3(cos(a) * r, 0, sin(a) * r)
-		n += HoloMesh3D.line(s, prev, cur, col)   # contour au sol
-		n += HoloMesh3D.line(s, cur, apex, col)   # arête vers le sommet
-		prev = cur
-	return n
 
 # ─── Cimetière : mémorial numérique (champ de stèles holographiques) ──
 # Chaque case porte une stèle fine verticale lumineuse, alignée en grille régulière,
@@ -1587,7 +1491,7 @@ func _build_cimetieres_excel() -> void:
 					best = dd; cell_chapelle = cell
 		for cell: Vector2i in cells:
 			var c := _world(cell.x, cell.y, 0.0)
-			n += _carre_plat(s, c, taille_cellule * 0.30, col_socle)
+			n += Geo.carre_plat(s, c, taille_cellule * 0.30, col_socle)
 			if cell == cell_chapelle:
 				continue   # la chapelle occupe cette case (pas de stèle)
 			# Stèle = dalle fine verticale + barre de tête (mémoriel holographique).
@@ -2210,15 +2114,6 @@ func _build_skyline_lointain() -> void:
 	_ajouter_mesh(HoloMesh3D.commit(s, n), "SkylineLointain", _mat_horizon)
 	_ajouter_mesh(HoloMesh3D.commit(sn, nn), "SkylineEnseignes", _mat_neon)
 
-# Petit carré plat (plan XZ) centré en `c`, demi-côté `r`.
-func _carre_plat(s: SurfaceTool, c: Vector3, r: float, col: Color) -> int:
-	var a := c + Vector3(-r, 0, -r)
-	var b := c + Vector3(r, 0, -r)
-	var d := c + Vector3(r, 0, r)
-	var e := c + Vector3(-r, 0, r)
-	return HoloMesh3D.line(s, a, b, col) + HoloMesh3D.line(s, b, d, col) \
-			+ HoloMesh3D.line(s, d, e, col) + HoloMesh3D.line(s, e, a, col)
-
 # ─── Gradient de richesse ─────────────────────────────────────
 # Richesse d'un point monde (plan XZ) : 1 dans le cœur central → 0 en périphérie.
 # Le centre de la grille est l'origine monde (cf. _world soustrait _cgrid).
@@ -2433,20 +2328,6 @@ func _bati_forme(centre: Vector3, sx: float, sz: float, h: float, forme: int, co
 			n += HoloMesh3D.box(s, centre, sx, h, sz, col)
 			nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, h * FACE_INSET, sz * FACE_INSET)
 	return [n, nf]
-
-# Sème `nb` segments sur une route : base = départ, UV2 = vecteur de trajet
-# complet, COLOR.a = multiplicateur de vitesse (le shader translate selon UV.x).
-func _semer_voitures(s: SurfaceTool, depart: Vector3, trajet: Vector3, carlen: float,
-		rng: RandomNumberGenerator, couleur: Color, nb: int, vit_mult: float) -> void:
-	var dirn := trajet.normalized()
-	var uv2 := Vector2(trajet.x, trajet.z)
-	var c := Color(couleur.r, couleur.g, couleur.b, vit_mult)
-	for _v in maxi(0, nb):
-		var ph := rng.randf()
-		var p0 := depart
-		var p1 := depart + dirn * carlen
-		s.set_color(c); s.set_uv(Vector2(ph, 0)); s.set_uv2(uv2); s.add_vertex(p0)
-		s.set_color(c); s.set_uv(Vector2(ph, 0)); s.set_uv2(uv2); s.add_vertex(p1)
 
 # ─── Poussières de données (montée animée par shader) ─────────
 func _build_motes() -> void:

@@ -4,9 +4,6 @@
 
 [node name="HoloMap3D" type="Node3D" unique_id=505832886]
 script = ExtResource("1_holo3d")
-rue_secondaire = 3
-avenue_largeur = 3
-avenue_tous_les = 4
 chemin_xlsx = "res://Carte Holo/carte_holomap.xlsx"
 opacite_faces = 0.4
 luminosite_decor = 1.5
