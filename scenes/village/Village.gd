@@ -1000,7 +1000,14 @@ func open_expedition_map() -> void:
 		adv_selected_biome_id = biome_id
 		if is_instance_valid(holo):
 			holo.queue_free()
-		_refresh_active_panel()
+		# La carte s'ouvre depuis le panneau Expéditions OU directement depuis le hub
+		# (hex « Carte »). Si le panneau est déjà actif → simple rafraîchissement ;
+		# sinon on l'OUVRE (sans quoi un clic depuis le hub sélectionnait le biome
+		# mais ne menait jamais au panneau). _open_panel togglerait s'il était actif.
+		if _active_panel_id == "adventure":
+			_refresh_active_panel()
+		else:
+			_open_panel("adventure")
 	)
 	add_child(holo)
 
