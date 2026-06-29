@@ -985,16 +985,16 @@ func start_selected_expedition() -> void:
 	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
 
 # ─── Carte holographique 3D des expéditions (overlay) ─────────
-# API publique appelée par le bouton « Carte » de l'AdventurePanel.
-# Ouvre la carte holo 3D (orbitable) reproduisant le gabarit Excel (décor seul à
-# ce stade — les LIEUX/pins cliquables sont reportés à un chantier ultérieur ; la
-# sélection de biome passe par l'accordéon du panneau). Embarque HoloMap3D dans un
-# SubViewport via HoloMap3DOverlay.
+# API publique appelée par le bouton « Carte » de l'AdventurePanel. Ouvre la carte
+# holo 3D (orbitable) reproduisant le gabarit Excel ; les LIEUX d'expédition découverts
+# y sont posés en pins/zones cliquables (lus de la feuille « Lieux »). Un clic
+# sélectionne le biome dans le panneau (rail existant adv_selected_biome_id).
 func open_expedition_map() -> void:
 	var holo := HoloMap3DOverlay.new()
 	holo.titre      = Translations.T("adv.map_title")
 	holo.sous_titre = Translations.T("adv.map_hint")
 	holo.chemin_xlsx = HoloMap3D.CHEMIN_GABARIT_DEFAUT   # carte lue depuis le gabarit
+	holo.lieux      = _lieux_depuis_zones()              # lieux découverts (zones bordées de la Carte)
 	holo.z_index    = 400
 	holo.lieu_selectionne.connect(func(biome_id: String) -> void:
 		adv_selected_biome_id = biome_id
@@ -1004,69 +1004,80 @@ func open_expedition_map() -> void:
 	)
 	add_child(holo)
 
-# DORMANT (réutilisé quand les pins de lieux reviendront — chantier ultérieur) :
-# construit la liste de lieux de la carte à partir des biomes découverts. Chaque
-# biome occupe une cellule distincte (placement déterministe → carte stable).
-func _discovered_biomes_as_lieux(grille: int) -> Array[HoloLieuData]:
-	var ids: Array = []
-	for eid: String in GameData.entities:
-		var e := GameData.entities[eid] as Dictionary
+# Construit les lieux d'expédition depuis les ZONES bordées de la feuille « Carte ».
+# Un LIEU = un BIOME : une bordure de tier FERMÉE délimite la zone ; l'id de biome est
+# tapé dans une CASE de la zone (pas de feuille séparée). tier / nom / lore / découverte
+# viennent de l'ÉTAT DE JEU (GameData) — un lieu n'apparaît que si son biome est
+# découvert (règle « non découvert = absent » appliquée au statut de lieu).
+func _lieux_depuis_zones() -> Array[HoloLieuData]:
+	var out: Array[HoloLieuData] = []
+	var xlsx := HoloXlsxMap.new()
+	if not xlsx.charger(HoloMap3D.CHEMIN_GABARIT_DEFAUT):
+		return out
+	for zone: Dictionary in xlsx.zones:
+		var cells: Array = zone["cells"]
+		var eid := _id_biome_dans_zone(xlsx, cells)
+		if eid == "":
+			push_warning("[HoloMap/Lieux] zone bordée %s sans id de biome dans ses cases (tape l'id, ex. « biome_foret », dans une case de la zone)."
+					% str(zone["bbox"]))
+			continue
+		var e := GameData.get_entity(eid)
 		if e.get("entity_type", "") != Enums.EntityType.BIOME:
+			push_warning("[HoloMap/Lieux] « %s » (zone %s) n'est pas un biome." % [eid, str(zone["bbox"])])
 			continue
 		if not e.get("est_decouvert", false):
-			continue
-		ids.append(eid)
-	ids.sort()  # ordre déterministe
-
-	var cells := _holo_spread_cells(ids.size(), grille)
-	var out: Array[HoloLieuData] = []
-	for i in ids.size():
-		var eid: String = ids[i]
-		var e := GameData.entities[eid] as Dictionary
+			continue   # non découvert → aucun statut de lieu (le décor, lui, reste)
 		var tier := int(e.get("maitrise_actuelle", 0))
-		# Emprise et hauteur croissent avec la rareté (les lieux rares ressortent).
-		var cote := clampi(2 + tier, 2, 4)
-		var emp := Vector2i(cote, cote)
-		var cell: Vector2i = cells[i]
-		var etages_l := 4 + tier * 3
-		var sans_bati := false
-		# Le Marécage Putride EST le parc : lieu SANS bâtiment, emprise calée sur
-		# la zone du parc (x[2..8] y[17..23], grille 28) → pin + zone cliquable
-		# par-dessus le décor vert, aucun bâtiment.
-		if eid == "biome_marecage":
-			emp = Vector2i(7, 7)
-			cell = Vector2i(2, 17)
-			etages_l = 2
-			sans_bati = true
-		cell.x = clampi(cell.x, 0, maxi(0, grille - emp.x))
-		cell.y = clampi(cell.y, 0, maxi(0, grille - emp.y))
+		var bbox: Rect2i = zone["bbox"]
 		var l := HoloLieuData.new()
 		l.id              = eid
 		l.nom_affichage_fr = Translations.entity_name(e, eid)
 		l.tier            = tier
 		l.lore_fr         = Translations.entity_lore(e)
-		l.cellule         = cell
-		l.emprise         = emp
-		l.etages          = etages_l
-		l.sans_batiment   = sans_bati
+		l.cellule         = bbox.position
+		l.emprise         = Vector2i(maxi(1, bbox.size.x), maxi(1, bbox.size.y))
+		l.cells           = _en_vec2i(cells)
+		l.etages          = 4 + tier * 3
+		l.sans_batiment   = _zone_sans_batiment(xlsx, cells)
 		l.decouvert       = true
+		# Cohérence : la bordure de tier peinte diverge du tier réel du biome → signalé
+		# (l'état de jeu prime ; cf. brief).
+		var tb: int = zone.get("tier_bordure", -1)
+		if tb >= 0 and tb != tier:
+			push_warning("[HoloMap/Lieux] « %s » : bordure de tier %d ≠ tier de jeu %d (jeu prioritaire)."
+					% [eid, tb, tier])
 		out.append(l)
+	for msg: String in xlsx.rapport():
+		push_warning("[HoloMap/Lieux] " + str(msg))
 	return out
 
-# n cellules distinctes réparties sur la grille, mélange déterministe.
-func _holo_spread_cells(n: int, grille: int) -> Array:
-	var all: Array = []
-	for i in grille:
-		for j in grille:
-			all.append(Vector2i(i, j))
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20260625
-	for k in range(all.size() - 1, 0, -1):
-		var r := rng.randi_range(0, k)
-		var tmp: Variant = all[k]
-		all[k] = all[r]
-		all[r] = tmp
-	return all.slice(0, mini(n, all.size()))
+# Cherche, dans les cases d'une zone, un texte qui est un id d'entité connu de GameData
+# (= l'id de biome tapé par l'auteur). Renvoie le 1er trouvé, ou "" (zone sans identité).
+func _id_biome_dans_zone(xlsx: HoloXlsxMap, cells: Array) -> String:
+	for c: Vector2i in cells:
+		var txt := str(xlsx.texte_case.get(c, "")).strip_edges()
+		if txt != "" and GameData.entities.has(txt):
+			return txt
+	return ""
+
+# Array non typé de Vector2i → Array[Vector2i] (pour HoloLieuData.cells).
+func _en_vec2i(src: Array) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for c: Vector2i in src:
+		out.append(c)
+	return out
+
+# Le sol de la zone est-il NON bâti (parc / eau / place) → lieu sans bâtiment : le
+# décor sous l'emprise tient lieu de corps. Une seule case bâtie suffit à le nier.
+func _zone_sans_batiment(xlsx: HoloXlsxMap, cells: Array) -> bool:
+	if cells.is_empty():
+		return false
+	for c: Vector2i in cells:
+		var ct: int = xlsx.type_case.get(c, HoloXlsxMap.Cell.VIDE)
+		if ct in [HoloXlsxMap.Cell.BATIMENT, HoloXlsxMap.Cell.USINE,
+				HoloXlsxMap.Cell.CIMETIERE, HoloXlsxMap.Cell.CASSE, HoloXlsxMap.Cell.SUPERMARCHE]:
+			return false
+	return true
 
 # Panneau générique "Bientôt disponible" pour les fonctionnalités non implémentées.
 func _panel_soon(label: String) -> void:

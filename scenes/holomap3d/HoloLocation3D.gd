@@ -34,6 +34,10 @@ var sans_batiment: bool = false          # true → pas de boîte/faces/tige (le
 var line_shader: Shader
 var face_material: Material               # faces sombres semi-opaques (occlusion)
 var face_inset: float = 0.96
+# Contour de périmètre de la zone (paires de points LOCAUX = segments d'arête),
+# fourni par HoloMap3D. Illuminé au survol → feedback PRINCIPAL de sélection. Vide →
+# pas de contour (le lieu se repère alors par sa boîte d'emprise + son pin).
+var perimetre: PackedVector3Array = PackedVector3Array()
 
 var _t := 0.0
 var _hover := false
@@ -41,14 +45,17 @@ var _pin: MeshInstance3D
 var _ring: MeshInstance3D
 var _beam: MeshInstance3D
 var _halo: MeshInstance3D
+var _contour: MeshInstance3D
 var _pin_y := 0.0
 var _beam_a := 0.0          # opacité courante du faisceau (fondu au survol)
 var _emit_a := 0.0          # opacité des halos émis (ping anneau + halo sol) — survol seul
+var _contour_a := 0.0       # opacité du contour de zone (fondu au survol)
 var _mat_bat: ShaderMaterial
 var _mat_pin: ShaderMaterial
 var _mat_ring: ShaderMaterial
 var _mat_beam: ShaderMaterial
 var _mat_halo: ShaderMaterial
+var _mat_contour: ShaderMaterial
 
 const PIN_R := 0.26
 const PIN_H := 0.34
@@ -60,6 +67,7 @@ func _ready() -> void:
 	_mat_ring = _mk_mat()
 	_mat_beam = _mk_mat()
 	_mat_halo = _mk_mat()
+	_mat_contour = _mk_mat()
 	_pin_y = hauteur + pin_float
 	_construire()
 
@@ -86,7 +94,7 @@ func ancre_globale() -> Vector3:
 
 # Reveal d'intro : rayon de matérialisation poussé sur tous les matériaux.
 func set_reveal(r: float) -> void:
-	for m in [_mat_bat, _mat_pin, _mat_ring, _mat_beam, _mat_halo]:
+	for m in [_mat_bat, _mat_pin, _mat_ring, _mat_beam, _mat_halo, _mat_contour]:
 		if m != null:
 			m.set_shader_parameter("reveal_r", r)
 
@@ -177,6 +185,21 @@ func _construire() -> void:
 	_beam.visible = false
 	add_child(_beam)
 
+	# ── Contour de périmètre de la zone (épouse les cellules) : feedback PRINCIPAL
+	# de sélection, illuminé au survol. Masqué au repos (le pin suffit comme repère). ──
+	if perimetre.size() >= 2:
+		var sc := HoloMesh3D.st()
+		var nc := 0
+		var i := 0
+		while i + 1 < perimetre.size():
+			nc += HoloMesh3D.line(sc, perimetre[i], perimetre[i + 1], col)
+			i += 2
+		_contour = MeshInstance3D.new()
+		_contour.mesh = HoloMesh3D.commit(sc, nc)
+		_contour.material_override = _mat_contour
+		_contour.visible = false   # apparaît au survol
+		add_child(_contour)
+
 func _process(dt: float) -> void:
 	_t += dt
 	var pulse := 0.5 + 0.5 * sin(_t * 4.0)
@@ -222,3 +245,14 @@ func _process(dt: float) -> void:
 			_beam.visible = true
 			_mat_beam.set_shader_parameter("alpha_mult", _beam_a * (0.45 + 0.35 * pulse))
 			_mat_beam.set_shader_parameter("emission_strength", 3.2)
+
+	# Contour de zone : fondu au survol, glow pulsant TRÈS lumineux pour ressortir
+	# nettement du décor néon (saillance demandée). Hors survol il s'efface.
+	if is_instance_valid(_contour):
+		_contour_a = lerpf(_contour_a, 1.0 if _hover else 0.0, 1.0 - exp(-9.0 * dt))
+		if _contour_a < 0.01:
+			_contour.visible = false
+		else:
+			_contour.visible = true
+			_mat_contour.set_shader_parameter("alpha_mult", _contour_a * (0.85 + 0.15 * pulse))
+			_mat_contour.set_shader_parameter("emission_strength", (12.0 + 2.0 * pulse) * _contour_a)

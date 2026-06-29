@@ -20,6 +20,10 @@ extends Resource
 @export var lore_fr: String = ""               # texte d'ambiance (tooltip)
 @export var cellule: Vector2i = Vector2i.ZERO  # cellule d'origine (coin) du bâtiment-lieu
 @export var emprise: Vector2i = Vector2i(2, 2) # emprise au sol N×M (cellules)
+# Cellules exactes de la zone (délimitée par la bordure de tier sur la grille).
+# Posées au runtime depuis la feuille Lieux ; servent à tracer le CONTOUR de
+# périmètre réel du lieu (≠ simple boîte d'emprise). Vide → contour = bbox d'emprise.
+var cells: Array[Vector2i] = []
 @export var etages: int = 5                    # hauteur en unités-maison
 # true → lieu SANS bâtiment : pas de boîte (ni faces), juste pin + anneau +
 # zone cliquable. Le décor sous l'emprise (ex. parc) EST le corps du lieu.

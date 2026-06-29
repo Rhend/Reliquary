@@ -67,9 +67,9 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 
 # ─── Source : gabarit Excel (sinon ville procédurale) ─────────
 @export_group("Carte Excel")
-# Chemin d'un classeur .xlsx (feuilles Carte / Surélevé / Paramètres). Vide → ville
-# PROCÉDURALE (comportement historique, conservé). Renseigné → la carte est LUE au
-# runtime (ZIPReader + XMLParser) et reproduite (décor seul, aucun lieu cliquable).
+# Chemin d'un classeur .xlsx (feuilles Carte / Surélevé / Paramètres / Lieux). Vide →
+# ville PROCÉDURALE (comportement historique, conservé). Renseigné → la carte est LUE
+# au runtime (ZIPReader + XMLParser) : décor + lieux d'expédition découverts (pins).
 @export var chemin_xlsx := ""
 # Gain vertical appliqué aux hauteurs lues (en mètres) : 1 = échelle réelle (ville
 # plate), >1 = relief plus lisible en holo. N'affecte PAS l'emprise au sol.
@@ -466,7 +466,8 @@ func _charger_excel() -> void:
 
 # Rendu de la carte Excel : décor d'apparence (eau/parc/route) + bâtiments lus,
 # le tout dans la DA holo existante (socle, sol, motes, radar, intro, post-process).
-# AUCUN lieu cliquable (chantier : décor seul).
+# Les lieux d'expédition découverts (`lieux`, lus de la feuille « Lieux ») sont
+# posés EN PLUS, en pins/zones cliquables (cf. _construire_lieux).
 func _build_all_excel() -> void:
 	_eau.clear()
 	_parc.clear()
@@ -511,7 +512,7 @@ func _build_all_excel() -> void:
 		_build_motes()
 	if radar_actif:
 		_build_radar()
-	_construire_lieux([])       # aucun lieu : décor seul
+	_construire_lieux(lieux)    # lieux découverts (feuille « Lieux ») posés sur le décor
 	if intro_actif:
 		_jouer_intro()
 
@@ -2663,9 +2664,34 @@ func _construire_lieux(liste: Array) -> void:
 		loc.face_material = _mat_faces
 		loc.face_inset   = FACE_INSET
 		loc.position     = _centre_emprise(l.cellule.x, l.cellule.y, l.emprise)
+		loc.perimetre    = _perimetre_local(l.cells, loc.position)
 		loc.clique.connect(_on_lieu_clique)
 		loc.survol_change.connect(_on_survol)
 		_lieux_node.add_child(loc)
+
+# Contour de périmètre d'une zone (cellules) en coords LOCALES au lieu (centré sur
+# `centre`) : paires de points = arêtes de cellule donnant sur l'EXTÉRIEUR de la zone.
+# Sert au contour illuminé du lieu au survol (HoloLocation3D). Vide → pas de contour
+# (le nœud retombe alors sur sa boîte d'emprise).
+func _perimetre_local(cells: Array, centre: Vector3) -> PackedVector3Array:
+	var segs := PackedVector3Array()
+	if cells.is_empty():
+		return segs
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var h := taille_cellule * 0.5
+	for c: Vector2i in cells:
+		var ctr := _world(c.x, c.y, 0.05) - centre
+		if not setd.has(c + Vector2i(1, 0)):    # arête droite (+x)
+			segs.append(ctr + Vector3(h, 0, -h)); segs.append(ctr + Vector3(h, 0, h))
+		if not setd.has(c + Vector2i(-1, 0)):   # arête gauche (-x)
+			segs.append(ctr + Vector3(-h, 0, -h)); segs.append(ctr + Vector3(-h, 0, h))
+		if not setd.has(c + Vector2i(0, 1)):    # arête bas (+z)
+			segs.append(ctr + Vector3(-h, 0, h)); segs.append(ctr + Vector3(h, 0, h))
+		if not setd.has(c + Vector2i(0, -1)):   # arête haut (-z)
+			segs.append(ctr + Vector3(-h, 0, -h)); segs.append(ctr + Vector3(h, 0, -h))
+	return segs
 
 func _on_survol(loc: HoloLocation3D, actif: bool) -> void:
 	if actif:

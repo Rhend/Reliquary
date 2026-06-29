@@ -11,8 +11,18 @@
 #
 # L'APPARENCE est lue par FAMILLE DE COULEUR (nearest-match sur le RGB de remplissage
 # réellement présent dans styles.xml) : la teinte exacte peut varier, l'auteur peut
-# la changer. Les BORDURES sont IGNORÉES (canal lieux/tier pas encore fiable — cf.
-# chantier) : tout est du décor, regroupé par couleur de fond uniquement.
+# la changer.
+#
+# Les BORDURES ont DEUX usages, distingués par leur COULEUR :
+#   • SÉPARATION de décor (mur de flood-fill) : bordure medium/thick quelconque →
+#     isole deux blocs voisins (cf. `border_case` / `_mur`). Inchangé.
+#   • STATUT DE LIEU (canal tier) : bordure medium/thick dont la COULEUR est une
+#     VRAIE RGB classable dans une famille de tier (gris=Commun, vert=Peu Commun,
+#     bleu=Rare, violet=Épique, or=Légendaire, rouge=Unique). Une telle bordure,
+#     FERMÉE autour d'une zone, marque un lieu (cf. `border_tier_case` / `zones`) ;
+#     l'IDENTITÉ du lieu (id de biome) est tapée dans une case de la zone (cf.
+#     `texte_case`). Les bordures en couleur de THÈME/INDEXÉE (non fiables) ne sont
+#     JAMAIS lues comme tier → simple séparation de décor (cf. brief lieux).
 #
 # Les bâtiments sont regroupés par adjacence 4-connexe de même apparence ; chaque
 # bloc reçoit la hauteur/forme tapée sur l'une de ses cases (max si plusieurs).
@@ -58,6 +68,28 @@ const _NEUTRES := [
 	Color8(0xFF, 0xF7, 0xD6),  # jaune (cellules éditables Paramètres)
 ]
 
+# Centroïdes de famille de TIER pour les BORDURES de lieu (palette de rareté du jeu,
+# alignée sur UIColors.tier_color). On classe au plus proche, mais SOUS un seuil :
+# au-delà la couleur est « ambiguë » → pas un tier (signalée, jamais devinée).
+const _FAMILLES_TIER := {
+	0: Color8(0x9A, 0xA0, 0xA6),  # gris neutre  → Commun
+	1: Color8(0x2E, 0xCC, 0x71),  # vert         → Peu Commun
+	2: Color8(0x3B, 0x82, 0xF6),  # bleu         → Rare
+	3: Color8(0x8B, 0x5C, 0xF6),  # violet       → Épique
+	4: Color8(0xE0, 0xA5, 0x26),  # or/jaune-doré→ Légendaire
+	5: Color8(0xB1, 0x12, 0x26),  # rouge        → Unique
+}
+# Distance² maximale (canaux 0..1) à une famille pour l'accepter comme tier. Assez
+# large pour tolérer une teinte d'auteur, assez serrée pour rejeter une couleur hors
+# palette. Le gris clair du quadrillage (thin) est de toute façon exclu en amont
+# (on n'examine QUE les bordures medium/thick).
+const _SEUIL_TIER := 0.055
+
+# Garde-fou de taille d'une zone-lieu (cellules) : exclut la région « extérieure » et
+# une carte ceinturée par erreur. Au-delà → pas un lieu (la vraie sélection se fait via
+# _zone_fermee). Large pour autoriser de grands lieux.
+const _ZONE_CAP := 1500
+
 # ─── Sorties (remplies par charger()) ─────────────────────────
 var ok := false
 var grille := 60
@@ -84,18 +116,31 @@ var tours_orphelines: Array = []   # codes forme/hauteur posés sur une case NON
 var ponts: Array = []       # calque « Surélevé » : {cells, bbox, altitude_m, piliers}
 var routes_elevees: Array = []   # calque « Surélevé » : cases ROUTE magenta (autoroutes surélevées)
 
+# Zones-lieux détectées : régions FERMÉES par une bordure de tier sur la grille.
+# Chaque entrée : {cells:Array[Vector2i], bbox:Rect2i, tier_bordure:int}. L'IDENTITÉ
+# (id de biome) est lue par l'appelant dans une case de la zone (cf. `texte_case`) ;
+# tier/nom/lore/découverte viennent ensuite de l'état de jeu (cf. Village).
+var zones: Array = []
+
 # Tables internes du classeur.
 var _fills: Array = []       # fillId → Color (ou null)
 var _xf_fill: Array = []     # styleIndex (s) → fillId
 var _xf_border: Array = []   # styleIndex (s) → borderId
 var _borders: Array = []     # borderId → masque de MURS (L=1 R=2 T=4 B=8 ; bordure medium/thick)
 var border_case := {}        # Vector2i → masque de murs (cases de la Carte, séparateurs)
+# Canal TIER des bordures (vraie RGB classable) — parallèle à _borders / border_case.
+var _borders_tier_mask: Array = []  # borderId → masque de côtés portant une bordure-TIER
+var _borders_tier_val: Array = []   # borderId → famille de tier (0..5) ; -1 si aucune
+var border_tier_case := {}          # Vector2i → masque de côtés avec bordure-tier
+var border_tier_val_case := {}      # Vector2i → famille de tier (0..5) de la cellule bordée
+var _rapport: Array = []            # messages de fiabilité (bordures ambiguës, zones ouvertes…)
 var _strings: Array = []     # sharedStrings
 var _feuilles := {}          # nom de feuille → chemin xml interne
 
 # ─── Chargement ───────────────────────────────────────────────
 func charger(chemin: String) -> bool:
 	ok = false
+	_rapport.clear()
 	var zip := ZIPReader.new()
 	if zip.open(chemin) != OK:
 		push_warning("[HoloXlsxMap] impossible d'ouvrir : %s" % chemin)
@@ -109,6 +154,7 @@ func charger(chemin: String) -> bool:
 	_lire_sureleve(zip)
 	zip.close()
 	_regrouper_batiments()
+	_detecter_zones()
 	ok = true
 	return true
 
@@ -118,12 +164,16 @@ func _lire_styles(zip: ZIPReader) -> void:
 	_xf_fill.clear()
 	_xf_border.clear()
 	_borders.clear()
+	_borders_tier_mask.clear()
+	_borders_tier_val.clear()
 	var p := _parser(zip, "xl/styles.xml")
 	if p == null:
 		return
 	var dans_fills := false
 	var dans_cellxfs := false
 	var dans_borders := false
+	var cote := ""       # côté de bordure courant (left/right/top/bottom) ou ""
+	var cote_style := "" # style du côté courant (pour ne lire la couleur que sur un mur)
 	while p.read() == OK:
 		var t := p.get_node_type()
 		if t == XMLParser.NODE_ELEMENT:
@@ -141,10 +191,33 @@ func _lire_styles(zip: ZIPReader) -> void:
 				"border":
 					if dans_borders:
 						_borders.append(0)
+						_borders_tier_mask.append(0)
+						_borders_tier_val.append(-1)
 				"left", "right", "top", "bottom":
-					if dans_borders and not _borders.is_empty() \
-							and _est_mur_style(p.get_named_attribute_value_safe("style")):
-						_borders[_borders.size() - 1] |= _bit_cote(n)
+					if dans_borders and not _borders.is_empty():
+						cote = n
+						cote_style = p.get_named_attribute_value_safe("style")
+						if _est_mur_style(cote_style):
+							_borders[_borders.size() - 1] |= _bit_cote(n)
+						if p.is_empty():   # <left/> auto-fermé : pas de <color> à suivre
+							cote = ""
+							cote_style = ""
+				"color":
+					# Couleur d'un côté de bordure : ne compte comme TIER que si le côté
+					# est un mur (medium/thick) ET la couleur une VRAIE RGB (pas thème /
+					# indexé, jugés non fiables) classable dans une famille de tier.
+					if dans_borders and cote != "" and not _borders_tier_mask.is_empty() \
+							and _est_mur_style(cote_style) \
+							and not p.has_attribute("theme") and not p.has_attribute("indexed"):
+						var col: Variant = _rgb(p.get_named_attribute_value_safe("rgb"))
+						if col != null:
+							var ti := _classer_tier(col as Color)
+							if ti >= 0:
+								_borders_tier_mask[-1] |= _bit_cote(cote)
+								_borders_tier_val[-1] = ti
+							else:
+								_rapport.append("bordure RGB hors palette de tier (%s) — non lue comme lieu"
+										% p.get_named_attribute_value_safe("rgb"))
 				"xf":
 					if dans_cellxfs:
 						var fid := -1
@@ -160,6 +233,9 @@ func _lire_styles(zip: ZIPReader) -> void:
 				"fills": dans_fills = false
 				"cellXfs": dans_cellxfs = false
 				"borders": dans_borders = false
+				"left", "right", "top", "bottom":
+					cote = ""
+					cote_style = ""
 
 # Bordure de SÉPARATION volontaire (≠ fin quadrillage décoratif « thin »/« hair »).
 func _est_mur_style(st: String) -> bool:
@@ -266,16 +342,20 @@ func _lire_carte(zip: ZIPReader) -> void:
 	type_case.clear()
 	texte_case.clear()
 	border_case.clear()
+	border_tier_case.clear()
+	border_tier_val_case.clear()
 	var chemin := _chemin_feuille("Carte")
 	if chemin == "":
 		return
-	_lire_grille(zip, chemin, type_case, texte_case, border_case)
+	_lire_grille(zip, chemin, type_case, texte_case, border_case,
+			border_tier_case, border_tier_val_case)
 
 # Parse une feuille-grille : remplit type[Vector2i]→Cell et texte[Vector2i]→String.
 # Coordonnées de données 0-based : B2 → (0,0), BI61 → (59,59) (ligne 1 / colonne A
 # = en-têtes de coordonnées, ignorées).
 func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_texte: Dictionary,
-		dico_border: Dictionary = {}) -> void:
+		dico_border: Dictionary = {}, dico_border_tier: Dictionary = {},
+		dico_border_tier_val: Dictionary = {}) -> void:
 	var p := _parser(zip, chemin)
 	if p == null:
 		return
@@ -306,6 +386,9 @@ func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_te
 						var bid: int = int(_xf_border[s]) if s >= 0 and s < _xf_border.size() else 0
 						if bid > 0 and bid < _borders.size() and int(_borders[bid]) != 0:
 							dico_border[Vector2i(gx, gy)] = int(_borders[bid])
+						if bid > 0 and bid < _borders_tier_mask.size() and int(_borders_tier_mask[bid]) != 0:
+							dico_border_tier[Vector2i(gx, gy)] = int(_borders_tier_mask[bid])
+							dico_border_tier_val[Vector2i(gx, gy)] = int(_borders_tier_val[bid])
 				"v":
 					lire_v = true
 		elif t == XMLParser.NODE_TEXT and lire_v:
@@ -565,9 +648,125 @@ func _finaliser_bloc(cells: Array, honorer_forme: bool = true) -> Dictionary:
 		"source_eau": false,
 	}
 
+# ─── Détection de zones : régions FERMÉES par une bordure de tier ──────────────
+# Balaye toute la grille : chaque région bornée par des bordures-TIER et ENTIÈREMENT
+# ceinturée (boucle fermée) = une zone-lieu. La région « extérieure » (le reste de la
+# carte), non ceinturée, est ignorée. L'IDENTITÉ du lieu (id de biome) est lue par
+# l'appelant dans une case de la zone (cf. Village + `texte_case`) — pas ici.
+# Chaque entrée de `zones` : {cells:Array[Vector2i], bbox:Rect2i, tier_bordure:int}.
+func _detecter_zones() -> void:
+	zones.clear()
+	if border_tier_case.is_empty():
+		return   # aucune bordure de tier → aucun lieu (cas courant tant que rien n'est peint)
+	var vus := {}
+	for gy in grille:
+		for gx in grille:
+			var c := Vector2i(gx, gy)
+			if vus.has(c):
+				continue
+			var cells := _flood_zone_libre(c, vus)
+			if cells.size() <= _ZONE_CAP and _zone_fermee(cells):
+				zones.append({
+					"cells": cells,
+					"bbox": _bbox(cells),
+					"tier_bordure": _tier_perimetre(cells),
+				})
+
+# Flood-fill 4-connexe d'une région bornée par les bordures-TIER, depuis `depart`.
+# Marque toutes ses cases dans `vus` (partagé) → on ne reparcourt pas la région.
+# Borné à la grille ; pas de plafond ici (le tri fermée/taille est fait par l'appelant).
+func _flood_zone_libre(depart: Vector2i, vus: Dictionary) -> Array:
+	var cells: Array = []
+	var pile: Array = [depart]
+	while not pile.is_empty():
+		var c: Vector2i = pile.pop_back()
+		if vus.has(c) or c.x < 0 or c.y < 0 or c.x >= grille or c.y >= grille:
+			continue
+		vus[c] = true
+		cells.append(c)
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if not _mur_tier(c, d):
+				pile.append(c + d)
+	return cells
+
+# Bordure-TIER entre `a` et `a+d` ? (mêmes bits que _mur, sur border_tier_case.)
+func _mur_tier(a: Vector2i, d: Vector2i) -> bool:
+	var wa: int = border_tier_case.get(a, 0)
+	var wb: int = border_tier_case.get(a + d, 0)
+	if d.x == 1:
+		return (wa & 2) != 0 or (wb & 1) != 0
+	if d.x == -1:
+		return (wa & 1) != 0 or (wb & 2) != 0
+	if d.y == 1:
+		return (wa & 8) != 0 or (wb & 4) != 0
+	return (wa & 4) != 0 or (wb & 8) != 0
+
+# La zone est-elle ENTIÈREMENT ceinturée d'une bordure-tier ? (chaque arête vers
+# l'extérieur — voisin hors zone ou bord de grille — porte une bordure-tier.)
+func _zone_fermee(cells: Array) -> bool:
+	if cells.is_empty() or cells.size() > _ZONE_CAP:
+		return false
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	for c: Vector2i in cells:
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if not setd.has(c + d) and not _mur_tier(c, d):
+				return false
+	return true
+
+func _bbox(cells: Array) -> Rect2i:
+	if cells.is_empty():
+		return Rect2i()
+	var minx := 1 << 30; var miny := 1 << 30; var maxx := -(1 << 30); var maxy := -(1 << 30)
+	for c: Vector2i in cells:
+		minx = mini(minx, c.x); miny = mini(miny, c.y)
+		maxx = maxi(maxx, c.x); maxy = maxi(maxy, c.y)
+	return Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1)
+
+# Famille de tier dominante sur le périmètre de la zone, ou -1 si non délimitée.
+func _tier_perimetre(cells: Array) -> int:
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var comptes := {}
+	for c: Vector2i in cells:
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if setd.has(c + d):
+				continue
+			var ti := _tier_sur_arete(c, d)
+			if ti >= 0:
+				comptes[ti] = int(comptes.get(ti, 0)) + 1
+	var best := -1
+	var bn := 0
+	for ti: int in comptes:
+		if int(comptes[ti]) > bn:
+			bn = int(comptes[ti])
+			best = ti
+	return best
+
+# Famille de tier de la bordure-tier sur l'arête (a → a+d), ou -1.
+func _tier_sur_arete(a: Vector2i, d: Vector2i) -> int:
+	if not _mur_tier(a, d):
+		return -1
+	if border_tier_val_case.has(a):
+		return int(border_tier_val_case[a])
+	if border_tier_val_case.has(a + d):
+		return int(border_tier_val_case[a + d])
+	return -1
+
+# Rapport de fiabilité du canal lieux (bordures ambiguës, zones non fermées…), pour
+# diagnostic / log. Vide = tout est cohérent.
+func rapport() -> Array:
+	return _rapport
+
 # ─── Helpers ──────────────────────────────────────────────────
 # Texte « 12g » / « 6 » / « 18P » / « P » → Vector3(hauteur_m, Forme, reconnu?0/1).
 func _parse_hauteur_forme(txt: String) -> Vector3:
+	# Un id de lieu (ex. « biome_foret ») tapé dans une case n'est PAS un code de
+	# hauteur/forme : il contient « _ » → ignoré ici (lu comme identité de lieu ailleurs).
+	if txt.contains("_"):
+		return Vector3(0, Forme.BOITE, 0)
 	var s := txt.strip_edges().to_upper()
 	if s == "":
 		return Vector3(0, Forme.BOITE, 0)
@@ -661,6 +860,22 @@ func _dist2(a: Color, b: Color) -> float:
 	var db := a.b - b.b
 	return dr * dr + dg * dg + db * db
 
+# Couleur de bordure (vraie RGB) → famille de tier 0..5, ou -1 si trop loin de toute
+# famille (couleur hors palette → ambiguë, jamais devinée). Robuste à une variation
+# de teinte de l'auteur grâce au seuil _SEUIL_TIER.
+func _classer_tier(c: Color) -> int:
+	var meilleur := -1
+	var dmin := 1.0e9
+	for tier_lvl: int in _FAMILLES_TIER:
+		# Accepte la couleur « à peindre » (palette de bordure) OU la couleur EXACTE du
+		# rendu en jeu (UIColors.tier_color) : l'auteur peut légitimement utiliser l'une
+		# ou l'autre (elles diffèrent surtout sur le rouge Unique). On garde la + proche.
+		var d := minf(_dist2(c, _FAMILLES_TIER[tier_lvl]), _dist2(c, UIColors.tier_color(tier_lvl)))
+		if d < dmin:
+			dmin = d
+			meilleur = tier_lvl
+	return meilleur if dmin <= _SEUIL_TIER else -1
+
 # Ouvre une entrée du zip dans un XMLParser, ou null si absente.
 func _parser(zip: ZIPReader, chemin: String) -> XMLParser:
 	if not zip.file_exists(chemin):
@@ -676,8 +891,8 @@ func _parser(zip: ZIPReader, chemin: String) -> XMLParser:
 # Résumé texte (debug / test headless).
 func resume() -> String:
 	return ("grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d sport=%d " + \
-		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d parking=%d tours=%d ponts=%d routes_élevées=%d") % [
+		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d parking=%d tours=%d ponts=%d routes_élevées=%d zones=%d") % [
 		grille, taille_case_m, hauteur_defaut_m,
 		batiments.size(), routes.size(), eaux.size(), parcs.size(), terrains.size(),
 		cimetieres.size(), usines.size(), casses.size(), supermarches.size(), collines.size(),
-		parkings.size(), tours_orphelines.size(), ponts.size(), routes_elevees.size()]
+		parkings.size(), tours_orphelines.size(), ponts.size(), routes_elevees.size(), zones.size()]
