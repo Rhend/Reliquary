@@ -1,9 +1,10 @@
 # Godot 4 generated files
 .godot/
 
-# Export / build
-export/
-build/
+# Export / build (artefacts à la RACINE uniquement — ancrés pour ne pas
+# avaler un dossier source nommé build/, ex. scenes/holomap3d/build/)
+/export/
+/build/
 *.import
 
 # Captures de l'outil dev ScreenshotTool
