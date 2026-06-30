@@ -388,10 +388,19 @@ static func batiments(h) -> void:
 			else:
 				# Par défaut : chaque case = une maison à 80 %, avec une SILHOUETTE variée
 				# (toit plat / toit en pointe / étages / retrait au sommet) piochée de
-				# façon déterministe → la rangée de maisons n'est plus monotone.
+				# façon déterministe → la rangée de maisons n'est plus monotone. EXCEPTION :
+				# un bâtiment portant des SPOTS (toit_plat) → boîte plate forcée (override
+				# du pool de variété : pas de chapeau ni de biseau, cf. chantier verticalité).
+				var plat: bool = b.get("toit_plat", false)
 				for cell: Vector2i in cells:
-					var r: Array = h._maison_variee(cell, haut, bcol, s, sf)
-					n += r[0]; nf += r[1]
+					if plat:
+						var ctr: Vector3 = h._world(cell.x, cell.y, 0.0)
+						var sz: float = h.taille_cellule * 0.8
+						n += HoloMesh3D.box(s, ctr, sz, haut, sz, bcol)
+						nf += HoloMesh3D.box_faces(sf, ctr, sz * h.FACE_INSET, haut, sz * h.FACE_INSET)
+					else:
+						var r: Array = h._maison_variee(cell, haut, bcol, s, sf)
+						n += r[0]; nf += r[1]
 		else:
 			var bb: Rect2i = b["bbox"]
 			var sx: float = float(bb.size.x) * h.taille_cellule * h.FACE_INSET

@@ -863,3 +863,104 @@ static func decor(h) -> void:
 					h.taille_cellule * 0.22, ht * 0.5, tc)
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Decor", h._mat_ambiance)
 	h._ajouter_mesh(HoloMesh3D.commit(sl, nl), "DecorLieu", h._mat_lieu_decor)
+
+# ─── Prison : enceinte fortifiée + miradors aux angles + cour creuse + champ de force ──
+# Apparence cyberpunk fermée (DA holo wireframe). Volume bas-moyen, emprise large et
+# fermée. Soumise au gradient centre→périphérie comme les autres apparences. Inerte par
+# défaut (un ID dans une case en fait un lieu via le système standard).
+static func prisons(h) -> void:
+	if h._excel.prisons.is_empty():
+		return
+	var s := HoloMesh3D.st()        # structure sombre (enceinte, miradors)
+	var sg := HoloMesh3D.st()       # accents néon (rail de crête, projecteurs)
+	var champ := HoloMesh3D.st()    # champ de force (mesh à part : matériau clignotant)
+	var n := 0
+	var ng := 0
+	var nc := 0
+	for b in h._excel.prisons:
+		var bb: Rect2i = b["bbox"]
+		var centre: Vector3 = h._centre_bbox(bb)
+		var col: Color = h._moduler(Color(0.40, 0.43, 0.49, 0.95), centre)   # béton froid
+		var neon: Color = h._moduler(Color(0.45, 0.85, 1.0), centre)          # néon de sécurité (cyan)
+		var champ_col: Color = h._moduler(Color(0.55, 0.95, 1.0), centre)
+		var mur_h: float = maxf(h.unite_maison * 2.2, h._hauteur_monde(float(b["hauteur_m"])) * 0.55)
+		# Enceinte : murs périmétriques épais (côtés frontière) + créneaux + rail néon.
+		var rc := _enceinte_prison(h, b["cells"], mur_h, col, neon, s, sg)
+		n += rc[0]; ng += rc[1]
+		# Portail d'entrée face aux routes.
+		ng += h._portes_vers_routes(b["cells"], mur_h * 0.7, neon, sg)
+		# Miradors aux 4 coins de la bbox (postes de garde surélevés).
+		var corners := [bb.position, bb.position + Vector2i(bb.size.x - 1, 0),
+				bb.position + Vector2i(0, bb.size.y - 1), bb.position + Vector2i(bb.size.x - 1, bb.size.y - 1)]
+		for cc: Vector2i in corners:
+			var rm := _mirador(h, h._world(cc.x, cc.y, 0.0), mur_h, col, neon, s, sg)
+			n += rm[0]; ng += rm[1]
+		# Champ de force au sommet : grille d'énergie au-dessus de la COUR (intérieur creux).
+		nc += _champ_force(h, b["cells"], mur_h * 1.04, champ_col, champ)
+	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Prisons")
+	h._ajouter_mesh(HoloMesh3D.commit(sg, ng), "PrisonsNeon", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(champ, nc), "PrisonsChampForce", h._mat_balise)
+
+# Mur d'enceinte : sur chaque côté frontière, paroi (bas + crête + montants aux bouts) +
+# créneaux (merlons) sur la crête + rail néon. Renvoie [arêtes sombres, arêtes néon].
+static func _enceinte_prison(h, cells: Array, mur_h: float, col: Color, neon: Color, s: SurfaceTool, sg: SurfaceTool) -> Array:
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var n := 0
+	var ng := 0
+	var up := Vector3(0, mur_h, 0)
+	var cren := Vector3(0, mur_h * 0.16, 0)   # hauteur des merlons
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for c: Vector2i in cells:
+		for d: Vector2i in dirs:
+			if setd.has(c + d):
+				continue
+			var seg: Array = h._cote_cellule(c, d)
+			var a0: Vector3 = h._world(seg[0].x, seg[0].y, 0.0)
+			var b0: Vector3 = h._world(seg[1].x, seg[1].y, 0.0)
+			n += HoloMesh3D.line(s, a0, b0, col)            # base
+			n += HoloMesh3D.line(s, a0 + up, b0 + up, col)  # crête
+			n += HoloMesh3D.line(s, a0, a0 + up, col)       # montant A
+			n += HoloMesh3D.line(s, b0, b0 + up, col)       # montant B
+			# Créneaux : 3 merlons dressés sur la crête.
+			for t: float in [0.2, 0.5, 0.8]:
+				var p := (a0 + up).lerp(b0 + up, t)
+				n += HoloMesh3D.line(s, p, p + cren, col)
+			ng += HoloMesh3D.line(sg, a0 + up, b0 + up, neon)  # rail néon de crête
+	return [n, ng]
+
+# Mirador : poste de garde sur pilotis (4 montants) + cabine (caisse) + projecteur néon.
+static func _mirador(h, base: Vector3, mur_h: float, col: Color, neon: Color, s: SurfaceTool, sg: SurfaceTool) -> Array:
+	var n := 0
+	var ng := 0
+	var hh := mur_h * 1.35
+	var w: float = h.taille_cellule * 0.34
+	var corners := [Vector3(-w, 0, -w), Vector3(w, 0, -w), Vector3(w, 0, w), Vector3(-w, 0, w)]
+	for off: Vector3 in corners:
+		n += HoloMesh3D.line(s, base + off, base + off + Vector3(0, hh, 0), col)   # pilotis
+	# Cabine (caisse) au sommet + projecteur néon (œil de garde).
+	n += HoloMesh3D.box(s, base + Vector3(0, hh, 0), w * 2.4, h.unite_maison * 0.9, w * 2.4, col)
+	ng += HoloMesh3D.diamond(sg, base + Vector3(0, hh + h.unite_maison * 0.5, 0),
+			h.taille_cellule * 0.1, h.taille_cellule * 0.14, neon)
+	return [n, ng]
+
+# Champ de force : grille d'énergie tendue au-dessus de la cour (toutes les cases du
+# bloc), à hauteur `y`. Une tuile en X par case + cadre extérieur. Renvoie le nb d'arêtes.
+static func _champ_force(h, cells: Array, y: float, col: Color, s: SurfaceTool) -> int:
+	var setd := {}
+	for c: Vector2i in cells:
+		setd[c] = true
+	var n := 0
+	var hw: float = h.taille_cellule * 0.5
+	for c: Vector2i in cells:
+		var ctr: Vector3 = h._world(c.x, c.y, y)
+		n += HoloMesh3D.line(s, ctr + Vector3(-hw, 0, -hw), ctr + Vector3(hw, 0, hw), col)
+		n += HoloMesh3D.line(s, ctr + Vector3(-hw, 0, hw), ctr + Vector3(hw, 0, -hw), col)
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if setd.has(c + d):
+				continue
+			var seg: Array = h._cote_cellule(c, d)
+			n += HoloMesh3D.line(s, h._world(seg[0].x, seg[0].y, y),
+					h._world(seg[1].x, seg[1].y, y), col)
+	return n

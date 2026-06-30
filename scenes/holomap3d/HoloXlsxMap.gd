@@ -6,12 +6,20 @@
 #   • « Paramètres » : taille de case (m), hauteur par défaut (m), taille de grille.
 #   • « Carte »      : couleur de FOND de chaque case → APPARENCE (bâtiment / route /
 #                      eau / parc / vide) ; texte de la case → hauteur (m) + forme.
-#   • « Surélevé »   : même grille, ouvrages en hauteur (VIDE dans ce fichier — le
-#                      code de lecture est prêt mais ne produit rien tant que c'est vide).
+#   • « Surélevé »   : même grille, ouvrages en hauteur — une COULEUR par famille (pont,
+#                      autoroute, passerelle, héliport, spots, téléphérique, antennes,
+#                      enseignes) ; altitude = chiffre tapé dans la cellule. Vide pour une
+#                      famille = elle ne produit rien (le code de lecture reste prêt).
 #
 # L'APPARENCE est lue par FAMILLE DE COULEUR (nearest-match sur le RGB de remplissage
 # réellement présent dans styles.xml) : la teinte exacte peut varier, l'auteur peut
-# la changer.
+# la changer. La classification est restreinte PAR FEUILLE (cf. _SURELEVE_ONLY /
+# _CARTE_ONLY) : un ouvrage surélevé ne peut pas « voler » une case bâtie sur la Carte.
+#
+# VALIDATION CROISÉE Surélevé ↔ Carte : passerelle/héliport/spots/antennes dialoguent
+# avec le bâti du sol (présence, emprise, sommet de toit) ; toute contrainte non satisfaite
+# → une CROIX ROUGE (croix_rouges) à l'endroit/altitude fautifs (feedback universel, cf.
+# _valider_verticalite). Altitude TOUJOURS saisie par l'auteur, jamais déduite.
 #
 # Les BORDURES (medium/thick) sont NEUTRES : elles délimitent/regroupent les cases en
 # blocs (mur de flood-fill, cf. `border_case` / `_mur`), notamment pour séparer deux
@@ -32,10 +40,22 @@ class_name HoloXlsxMap
 extends RefCounted
 
 enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC, PONT, SPORT,
-	CIMETIERE, USINE, CASSE, SUPERMARCHE, COLLINE, PARKING }
+	CIMETIERE, USINE, CASSE, SUPERMARCHE, COLLINE, PARKING,
+	# Calque Surélevé (verticalité) — une couleur par type d'ouvrage en hauteur.
+	PASSERELLE, HELIPORT, SPOTS, TELEPHERIQUE, ANTENNE, ENSEIGNE,
+	# Carte — apparence de zone fermée.
+	PRISON }
 enum Forme { BOITE, PYRAMIDE, CYLINDRE, DOME, GRADINS }
 
 const ALTITUDE_PONT_DEFAUT := 3.0   # m, si aucune altitude tapée (faible : décolle le tablier)
+# Altitude par défaut d'un héliport/passerelle/etc. si l'auteur n'a tapé aucun chiffre.
+const ALTITUDE_SURELEVE_DEFAUT := 6.0
+# CROIX ROUGE de contrainte violée (réservée au feedback ; l'auteur ne la peint jamais).
+const COULEUR_CROIX := Color8(0xE0, 0x20, 0x20)
+# Tolérances de validation croisée Surélevé ↔ Carte.
+const HELIPORT_MIN_COTE := 4          # héliport carré minimum 4×4
+const ALT_TOLERANCE_FRAC := 0.18      # écart relatif toléré altitude ↔ sommet de bâtiment
+const PASSERELLE_ALT_MAX_FRAC := 1.20 # passerelle cohérente si ≤ 1.20× la hauteur du bâti relié
 
 # Centroïdes de famille (repères d'auteur ; on classe au plus proche). Le gris
 # acier (PONT) n'apparaît que sur le calque Surélevé (jamais sur la Carte).
@@ -52,11 +72,28 @@ const _FAMILLES := {
 	Cell.SUPERMARCHE: Color8(0xE8, 0xA2, 0x3D),   # ambre → hypermarché (distinct du sable sport)
 	Cell.COLLINE:     Color8(0xC8, 0xA8, 0x6A),   # ocre/sable terne → relief de bordure (colline/désert)
 	Cell.PARKING:     Color8(0xB5, 0xB5, 0xB8),   # gris clair neutre → aire de stationnement (au sol)
+	Cell.PRISON:      Color8(0x5A, 0x5E, 0x66),   # gris béton froid → prison (Carte, zone fermée)
+	# ── Calque Surélevé (n'apparaissent QUE sur la feuille « Surélevé ») ──
+	Cell.PASSERELLE:   Color8(0x7F, 0xD8, 0xA0),  # vert clair → passerelle piéton
+	Cell.HELIPORT:     Color8(0xF2, 0xD4, 0x3D),  # jaune → héliport (sur toit)
+	Cell.SPOTS:        Color8(0xBF, 0xF0, 0xFF),  # blanc-cyan → spots lumineux (toit plat forcé)
+	Cell.TELEPHERIQUE: Color8(0xE8, 0x84, 0x3D),  # orange → téléphérique (câble + nacelle)
+	Cell.ANTENNE:      Color8(0xB8, 0x9C, 0xE8),  # violet clair → antennes / relais télécom
+	Cell.ENSEIGNE:     Color8(0xF5, 0x8F, 0xD4),  # rose clair → enseignes holographiques
 }
 # Familles BÂTIES : regroupées en blocs (flood-fill) qui consomment leur texte
 # (hauteur/forme) via _finaliser_bloc. Une case de ces familles ne doit JAMAIS
 # devenir une « tour orpheline » (sinon double rendu : bloc + bâtiment générique).
-const _FAMILLE_BATIE := [Cell.BATIMENT, Cell.USINE, Cell.CIMETIERE, Cell.CASSE, Cell.SUPERMARCHE]
+const _FAMILLE_BATIE := [Cell.BATIMENT, Cell.USINE, Cell.CIMETIERE, Cell.CASSE, Cell.SUPERMARCHE, Cell.PRISON]
+# Familles qui n'existent QUE sur le calque « Surélevé » (ouvrages en hauteur). Sur la
+# « Carte », elles sont EXCLUES de la classification : une case bâtie peinte dans un gris/
+# une teinte proche ne doit pas y basculer (sinon elle devient un trou qui scinde le bloc).
+const _SURELEVE_ONLY := [Cell.PONT, Cell.PASSERELLE, Cell.HELIPORT, Cell.SPOTS,
+	Cell.TELEPHERIQUE, Cell.ANTENNE, Cell.ENSEIGNE]
+# Familles propres à la « Carte » (sol + décor + prison), EXCLUES sur le calque
+# « Surélevé » (où seules les familles d'ouvrages + la route magenta sont valides).
+const _CARTE_ONLY := [Cell.BATIMENT, Cell.EAU, Cell.PARC, Cell.SPORT, Cell.CIMETIERE,
+	Cell.USINE, Cell.CASSE, Cell.SUPERMARCHE, Cell.COLLINE, Cell.PARKING, Cell.PRISON]
 
 # Familles « non-carte » → VIDE (fonds neutres du gabarit).
 const _NEUTRES := [
@@ -95,6 +132,18 @@ var parkings: Array = []    # aire de stationnement au sol : Array[Vector2i] (ca
 var tours_orphelines: Array = []   # codes forme/hauteur posés sur une case NON-bâtiment (cf. 9c sur l'eau)
 var ponts: Array = []       # calque « Surélevé » : {cells, bbox, altitude_m, piliers}
 var routes_elevees: Array = []   # calque « Surélevé » : cases ROUTE magenta (autoroutes surélevées)
+# ── Calque « Surélevé » — éléments de verticalité (chantier verticalité) ──
+var prisons: Array = []           # Carte : zone fermée (enceinte + miradors + cour) — {cells, bbox, hauteur_m, forme}
+var passerelles: Array = []       # {cells, bbox, altitude_m, portes:Array[Vector2i]} — passerelle piéton
+var heliports: Array = []         # {cells, bbox, altitude_m} — plateforme carrée ≥ 4×4 sur toit
+var spots: Array = []             # Array[Vector2i] — spots lumineux (forcent le toit plat dessous)
+var telepheriques: Array = []     # {cells, bbox, altitude_m} — STATIONS (appariées 2 à 2 au rendu)
+var antennes: Array = []          # Array[Vector2i] — mâts / paraboles / voyants sur toit
+var enseignes: Array = []         # {cells, bbox, altitude_m} — panneaux holographiques suspendus
+# Feedback universel : une CROIX ROUGE par contrainte violée → {cell:Vector2i, altitude_m:float, raison:String}.
+var croix_rouges: Array = []
+# Index bâti : Vector2i → {hauteur_m, bbox, ref} (toute famille au volume) — lookup de validation.
+var _bati_index := {}
 
 # Lieux détectés : une zone (bloc d'apparence délimité par bordure neutre) dont une
 # cellule porte un ID de lieu. Chaque entrée : {id:String, cells:Array[Vector2i],
@@ -129,6 +178,9 @@ func charger(chemin: String) -> bool:
 	zip.close()
 	_regrouper_batiments()
 	_detecter_zones()
+	# Validation croisée Surélevé ↔ Carte : connexions, contraintes d'altitude/toit, et
+	# CROIX ROUGES de feedback. Doit tourner APRÈS _regrouper_batiments (besoin du bâti).
+	_valider_verticalite()
 	ok = true
 	return true
 
@@ -290,13 +342,13 @@ func _lire_carte(zip: ZIPReader) -> void:
 	var chemin := _chemin_feuille("Carte")
 	if chemin == "":
 		return
-	_lire_grille(zip, chemin, type_case, texte_case, border_case)
+	_lire_grille(zip, chemin, type_case, texte_case, border_case, _SURELEVE_ONLY)
 
 # Parse une feuille-grille : remplit type[Vector2i]→Cell et texte[Vector2i]→String.
 # Coordonnées de données 0-based : B2 → (0,0), BI61 → (59,59) (ligne 1 / colonne A
 # = en-têtes de coordonnées, ignorées).
 func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_texte: Dictionary,
-		dico_border: Dictionary = {}) -> void:
+		dico_border: Dictionary = {}, exclure: Array = []) -> void:
 	var p := _parser(zip, chemin)
 	if p == null:
 		return
@@ -323,7 +375,7 @@ func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_te
 					var gx := col - 2
 					var gy := ligne - 2
 					if gx >= 0 and gy >= 0 and gx < grille and gy < grille:
-						dico_type[Vector2i(gx, gy)] = _classer(fill)
+						dico_type[Vector2i(gx, gy)] = _classer(fill, exclure)
 						var bid: int = int(_xf_border[s]) if s >= 0 and s < _xf_border.size() else 0
 						if bid > 0 and bid < _borders.size() and int(_borders[bid]) != 0:
 							dico_border[Vector2i(gx, gy)] = int(_borders[bid])
@@ -347,17 +399,28 @@ func _lire_grille(zip: ZIPReader, chemin: String, dico_type: Dictionary, dico_te
 func _lire_sureleve(zip: ZIPReader) -> void:
 	ponts.clear()
 	routes_elevees.clear()
+	passerelles.clear()
+	heliports.clear()
+	spots.clear()
+	telepheriques.clear()
+	antennes.clear()
+	enseignes.clear()
 	var chemin := _chemin_feuille("Surélevé")
 	if chemin == "":
 		return
 	var dico_type := {}
 	var dico_texte := {}
 	var dico_border := {}
-	_lire_grille(zip, chemin, dico_type, dico_texte, dico_border)
+	_lire_grille(zip, chemin, dico_type, dico_texte, dico_border, _CARTE_ONLY)
 	# Routes magenta surélevées (autoroutes) — distinctes des ponts.
 	for cell: Vector2i in dico_type:
 		if dico_type[cell] == Cell.ROUTE:
 			routes_elevees.append(cell)
+	# Spots / antennes : per-CASE (chaque case porte un élément ponctuel sur le toit).
+	for cell: Vector2i in dico_type:
+		match dico_type[cell]:
+			Cell.SPOTS: spots.append(cell)
+			Cell.ANTENNE: antennes.append(cell)
 	# Ponts (gris acier) regroupés par adjacence 4-connexe (séparés par les bordures).
 	var vus := {}
 	for cell: Vector2i in dico_type:
@@ -365,8 +428,35 @@ func _lire_sureleve(zip: ZIPReader) -> void:
 			continue
 		var bloc := _flood_type(cell, dico_type, Cell.PONT, vus, dico_border)
 		ponts.append(_finaliser_pont(bloc, dico_texte))
+	# Familles à EMPRISE (regroupées en blocs 4-connexes, séparées par les bordures) :
+	# chaque bloc porte son altitude (chiffre tapé dans une case, max du bloc).
+	passerelles = _blocs_sureleve(Cell.PASSERELLE, dico_type, dico_texte, dico_border)
+	heliports = _blocs_sureleve(Cell.HELIPORT, dico_type, dico_texte, dico_border)
+	telepheriques = _blocs_sureleve(Cell.TELEPHERIQUE, dico_type, dico_texte, dico_border)
+	enseignes = _blocs_sureleve(Cell.ENSEIGNE, dico_type, dico_texte, dico_border)
 	# Piliers : affinés depuis « Ouvrages d'art » (optionnel ; sinon sans piliers).
 	_appliquer_ouvrages(zip)
+
+# Regroupe une famille du calque Surélevé en blocs 4-connexes (séparés par les bordures
+# medium/thick) → un bloc = une emprise, avec son altitude (chiffre tapé, max du bloc ;
+# défaut ALTITUDE_SURELEVE_DEFAUT). Renvoie [{cells, bbox, altitude_m}].
+func _blocs_sureleve(t: int, dico_type: Dictionary, dico_texte: Dictionary, dico_border: Dictionary) -> Array:
+	var out: Array = []
+	var vus := {}
+	for cell: Vector2i in dico_type:
+		if dico_type[cell] != t or vus.has(cell):
+			continue
+		var bloc := _flood_type(cell, dico_type, t, vus, dico_border)
+		var alt := 0.0
+		for c: Vector2i in bloc:
+			if dico_texte.has(c):
+				var hf := _parse_hauteur_forme(dico_texte[c])
+				if hf.x > alt:
+					alt = hf.x
+		if alt <= 0.0:
+			alt = ALTITUDE_SURELEVE_DEFAUT
+		out.append({"cells": bloc, "bbox": _bbox(bloc), "altitude_m": alt})
+	return out
 
 # Flood-fill 4-connexe d'un bloc de type `t` dans `dico`, SANS franchir un mur
 # (bordure medium/thick). Marque dans `vus`.
@@ -506,6 +596,7 @@ func _regrouper_batiments() -> void:
 	usines = _blocs_famille(Cell.USINE)
 	casses = _blocs_famille(Cell.CASSE)
 	supermarches = _blocs_famille(Cell.SUPERMARCHE)
+	prisons = _blocs_famille(Cell.PRISON)
 	# Codes posés sur une case NON-bâtiment (ex. « 9c » sur l'eau) : tour isolée.
 	# Le canal apparence reste celui du fond (l'eau garde son shimmer) ; le code
 	# ajoute un volume paramétrique compact à cette case (cf. chantier : le
@@ -653,7 +744,7 @@ func hauteur_m_zone(cells: Array) -> float:
 	for c: Vector2i in cells:
 		setd[c] = true
 	var hmax := 0.0
-	for liste: Array in [batiments, usines, cimetieres, casses, supermarches]:
+	for liste: Array in [batiments, usines, cimetieres, casses, supermarches, prisons]:
 		for b: Dictionary in liste:
 			var hb := float(b.get("hauteur_m", 0.0))
 			if hb <= hmax:
@@ -667,6 +758,138 @@ func hauteur_m_zone(cells: Array) -> float:
 		if ht > hmax and setd.has(t["cell"]):
 			hmax = ht
 	return hmax
+
+# ─── Validation croisée Surélevé ↔ Carte + CROIX ROUGES ───────
+# Construit l'index bâti (cellule → bloc bâti recouvrant) puis applique, pour chaque
+# élément surélevé qui dialogue avec le sol, sa CONTRAINTE. Toute contrainte non
+# satisfaite → une croix rouge à l'endroit/altitude fautifs (feedback universel).
+func _valider_verticalite() -> void:
+	croix_rouges.clear()
+	_construire_index_bati()
+	_valider_passerelles()
+	_valider_heliports()
+	_valider_spots()
+	_valider_antennes()
+
+# Index bâti : chaque cellule recouverte par un bloc au volume (bâtiment, usine,
+# cimetière, casse, supermarché, prison, tour orpheline) → ref du bloc + sa hauteur_m.
+# La hauteur la plus haute gagne si plusieurs blocs se chevauchent (cas limite).
+func _construire_index_bati() -> void:
+	_bati_index.clear()
+	for liste: Array in [batiments, usines, cimetieres, casses, supermarches, prisons]:
+		for b: Dictionary in liste:
+			var hb := float(b.get("hauteur_m", 0.0))
+			for c: Vector2i in b["cells"]:
+				var pr: Dictionary = _bati_index.get(c, {})
+				if pr.is_empty() or hb > float(pr.get("hauteur_m", 0.0)):
+					_bati_index[c] = {"hauteur_m": hb, "bbox": b["bbox"], "ref": b}
+	for t: Dictionary in tours_orphelines:
+		var c: Vector2i = t["cell"]
+		var hb := float(t.get("hauteur_m", 0.0))
+		var pr: Dictionary = _bati_index.get(c, {})
+		if pr.is_empty() or hb > float(pr.get("hauteur_m", 0.0)):
+			_bati_index[c] = {"hauteur_m": hb, "bbox": Rect2i(c, Vector2i(1, 1)), "ref": t}
+
+# Bloc bâti recouvrant `cell` (ou {} s'il n'y a aucun bâtiment dessous).
+func bati_sous(cell: Vector2i) -> Dictionary:
+	return _bati_index.get(cell, {})
+
+# Hauteur (m) du bâti le plus haut sous l'emprise `cells` (0 si aucun).
+func _hauteur_bati_sous(cells: Array) -> float:
+	var h := 0.0
+	for c: Vector2i in cells:
+		var b: Dictionary = _bati_index.get(c, {})
+		h = maxf(h, float(b.get("hauteur_m", 0.0)))
+	return h
+
+func _croix(cell: Vector2i, altitude_m: float, raison: String) -> void:
+	croix_rouges.append({"cell": cell, "altitude_m": altitude_m, "raison": raison})
+
+# Passerelle : se RACCORDE aux bâtiments touchés (case adjacente/superposée), perce UNE
+# porte par bâtiment, et son altitude doit être COHÉRENTE avec la hauteur des bâtis reliés
+# (≤ PASSERELLE_ALT_MAX_FRAC × la plus haute). Incohérent → croix rouge à l'altitude saisie.
+func _valider_passerelles() -> void:
+	var dirs := [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for pa: Dictionary in passerelles:
+		var setd := {}
+		for c: Vector2i in pa["cells"]:
+			setd[c] = true
+		var portes := {}            # bbox-bâti (clé) → cellule de contact (1 porte/bâtiment)
+		var h_relie := 0.0          # hauteur du plus haut bâtiment relié
+		var h_min_relie := 1.0e9    # hauteur du plus bas bâtiment relié
+		for c: Vector2i in pa["cells"]:
+			for d: Vector2i in dirs:
+				var nc := c + d
+				if setd.has(nc):
+					continue   # voisin = encore la passerelle (pas un bâti)
+				var b: Dictionary = _bati_index.get(nc, {})
+				if b.is_empty():
+					continue
+				var key := str(b["bbox"])
+				if not portes.has(key):
+					portes[key] = nc   # 1re cellule de contact → porte
+				var hb := float(b["hauteur_m"])
+				h_relie = maxf(h_relie, hb)
+				h_min_relie = minf(h_min_relie, hb)
+		pa["portes"] = portes.values()
+		# Cohérence d'altitude : seulement si la passerelle relie au moins un bâtiment.
+		if not portes.is_empty():
+			var alt: float = pa["altitude_m"]
+			if alt > h_relie * PASSERELLE_ALT_MAX_FRAC:
+				_croix(_centre_cell(pa["bbox"]), alt,
+						"passerelle à %.0f m incohérente avec un bâti de %.0f m" % [alt, h_relie])
+
+# Héliport : carré ≥ 4×4 (a) avec un bâtiment dessous, (b) toit assez large, (c) altitude =
+# sommet du bâtiment. Toute contrainte échouée → croix rouge à l'altitude saisie.
+func _valider_heliports() -> void:
+	for hp: Dictionary in heliports:
+		var bb: Rect2i = hp["bbox"]
+		var alt: float = hp["altitude_m"]
+		var centre := _centre_cell(bb)
+		# (b) carré plein ≥ 4×4 (l'emprise remplit sa bbox et est carrée).
+		var carre := bb.size.x == bb.size.y and bb.size.x >= HELIPORT_MIN_COTE \
+				and (hp["cells"] as Array).size() == bb.size.x * bb.size.y
+		if not carre:
+			_croix(centre, alt, "héliport non carré ou < %d×%d" % [HELIPORT_MIN_COTE, HELIPORT_MIN_COTE])
+			continue
+		# (a) un bâtiment doit couvrir TOUTE l'emprise (toit assez large pour l'accueillir).
+		var b0: Dictionary = _bati_index.get(bb.position, {})
+		var meme_bati := not b0.is_empty()
+		for c: Vector2i in hp["cells"]:
+			var b: Dictionary = _bati_index.get(c, {})
+			if b.is_empty() or str(b["bbox"]) != str(b0.get("bbox", Rect2i())):
+				meme_bati = false
+				break
+		if not meme_bati:
+			_croix(centre, alt, "héliport sans bâtiment porteur (ou toit trop petit)")
+			continue
+		# (c) altitude saisie = sommet du bâtiment (à ALT_TOLERANCE_FRAC près).
+		var sommet := float(b0["hauteur_m"])
+		if not _alt_proche(alt, sommet):
+			_croix(centre, alt, "héliport à %.0f m ≠ sommet du bâti (%.0f m)" % [alt, sommet])
+
+# Spots : FORCENT le toit plat du bâtiment dessous (flag toit_plat). Sans bâtiment → croix.
+func _valider_spots() -> void:
+	for c: Vector2i in spots:
+		var b: Dictionary = _bati_index.get(c, {})
+		if b.is_empty():
+			_croix(c, ALTITUDE_SURELEVE_DEFAUT, "spots lumineux sans bâtiment dessous")
+		else:
+			(b["ref"] as Dictionary)["toit_plat"] = true
+
+# Antennes / relais : sur le toit d'un bâtiment. Sans bâtiment dessous → croix.
+func _valider_antennes() -> void:
+	for c: Vector2i in antennes:
+		if _bati_index.get(c, {}).is_empty():
+			_croix(c, ALTITUDE_SURELEVE_DEFAUT, "antenne / relais sans bâtiment dessous")
+
+# Altitude `a` proche (à ALT_TOLERANCE_FRAC près) du sommet `cible` (≥ 1 m de référence).
+func _alt_proche(a: float, cible: float) -> bool:
+	return absf(a - cible) <= maxf(1.0, cible) * ALT_TOLERANCE_FRAC
+
+# Centre (cellule entière) d'une bbox → repère de pose d'une croix rouge.
+func _centre_cell(bb: Rect2i) -> Vector2i:
+	return bb.position + Vector2i(bb.size.x / 2, bb.size.y / 2)
 
 # ─── Helpers ──────────────────────────────────────────────────
 # Texte « 12g » / « 6 » / « 18P » / « P » → Vector3(hauteur_m, Forme, reconnu?0/1).
@@ -742,7 +965,7 @@ func _ref_vers_rc(ref: String) -> Vector2i:
 	return Vector2i(c, l)
 
 # fillId → Cell par famille de couleur la plus proche (robuste aux variations de teinte).
-func _classer(fill_id: int) -> int:
+func _classer(fill_id: int, exclure: Array = []) -> int:
 	if fill_id < 0 or fill_id >= _fills.size():
 		return Cell.VIDE
 	var col: Variant = _fills[fill_id]
@@ -752,6 +975,8 @@ func _classer(fill_id: int) -> int:
 	var meilleur := Cell.VIDE
 	var dmin := 1.0e9
 	for cell_type: int in _FAMILLES:
+		if cell_type in exclure:
+			continue   # famille hors-calque (ex. ouvrage surélevé sur la feuille Carte)
 		var d := _dist2(c, _FAMILLES[cell_type])
 		if d < dmin:
 			dmin = d
@@ -784,8 +1009,12 @@ func _parser(zip: ZIPReader, chemin: String) -> XMLParser:
 # Résumé texte (debug / test headless).
 func resume() -> String:
 	return ("grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d sport=%d " + \
-		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d parking=%d tours=%d ponts=%d routes_élevées=%d zones=%d") % [
+		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d parking=%d prison=%d tours=%d " + \
+		"ponts=%d routes_élevées=%d passerelles=%d héliports=%d spots=%d téléphériques=%d antennes=%d " + \
+		"enseignes=%d croix=%d zones=%d") % [
 		grille, taille_case_m, hauteur_defaut_m,
 		batiments.size(), routes.size(), eaux.size(), parcs.size(), terrains.size(),
 		cimetieres.size(), usines.size(), casses.size(), supermarches.size(), collines.size(),
-		parkings.size(), tours_orphelines.size(), ponts.size(), routes_elevees.size(), zones.size()]
+		parkings.size(), prisons.size(), tours_orphelines.size(), ponts.size(), routes_elevees.size(),
+		passerelles.size(), heliports.size(), spots.size(), telepheriques.size(), antennes.size(),
+		enseignes.size(), croix_rouges.size(), zones.size()]

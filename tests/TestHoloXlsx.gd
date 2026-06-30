@@ -115,6 +115,9 @@ func _ready() -> void:
 					centre).size(), 16)
 	hmap.free()
 
+	# ── Chantier VERTICALITÉ : nouvelles familles + validation croisée + croix rouges ──
+	_test_verticalite()
+
 	print("\n════════════════════════════════")
 	print("RÉSULTAT : %d échec(s)" % _fail.size())
 	for f in _fail:
@@ -123,6 +126,120 @@ func _ready() -> void:
 		print("  ✓ lecteur Excel conforme")
 	print("════════════════════════════════\n")
 	get_tree().quit(0 if _fail.is_empty() else 1)
+
+# ── Chantier verticalité : familles surélevées, exclusion par feuille, validation ──
+func _test_verticalite() -> void:
+	print("\n  — verticalité (familles surélevées + validation croisée) —")
+	# Classification des nouvelles familles (centroïdes, toutes familles confondues).
+	_eq("classe 5A5E66 → prison", _classe(Color8(0x5A, 0x5E, 0x66)), HoloXlsxMap.Cell.PRISON)
+	_eq("classe 7FD8A0 → passerelle", _classe(Color8(0x7F, 0xD8, 0xA0)), HoloXlsxMap.Cell.PASSERELLE)
+	_eq("classe F2D43D → héliport", _classe(Color8(0xF2, 0xD4, 0x3D)), HoloXlsxMap.Cell.HELIPORT)
+	_eq("classe BFF0FF → spots", _classe(Color8(0xBF, 0xF0, 0xFF)), HoloXlsxMap.Cell.SPOTS)
+	_eq("classe E8843D → téléphérique", _classe(Color8(0xE8, 0x84, 0x3D)), HoloXlsxMap.Cell.TELEPHERIQUE)
+	_eq("classe B89CE8 → antenne", _classe(Color8(0xB8, 0x9C, 0xE8)), HoloXlsxMap.Cell.ANTENNE)
+	_eq("classe F58FD4 → enseigne", _classe(Color8(0xF5, 0x8F, 0xD4)), HoloXlsxMap.Cell.ENSEIGNE)
+	# Exclusion PAR FEUILLE : une couleur surélevé-only (vert passerelle) ne doit PAS
+	# être classée sur la CARTE (sinon une case bâtie proche deviendrait un trou).
+	var mc := HoloXlsxMap.new()
+	mc._fills = [Color8(0x7F, 0xD8, 0xA0)]
+	_ok("vert passerelle EXCLU sur Carte (≠ PASSERELLE)",
+			mc._classer(0, HoloXlsxMap._SURELEVE_ONLY) != HoloXlsxMap.Cell.PASSERELLE)
+	# Et inversement : une couleur Carte-only (ocre colline) exclue sur le Surélevé.
+	var ms := HoloXlsxMap.new()
+	ms._fills = [Color8(0xC8, 0xA8, 0x6A)]
+	_ok("ocre colline EXCLU sur Surélevé (≠ COLLINE)",
+			ms._classer(0, HoloXlsxMap._CARTE_ONLY) != HoloXlsxMap.Cell.COLLINE)
+
+	# Regroupement d'une famille surélevée : 2 blocs séparés, altitude = chiffre tapé.
+	var mb := HoloXlsxMap.new()
+	mb.grille = 30
+	var dt := {}; var dx := {}
+	for c: Vector2i in _carre(2, 2, 4): dt[c] = HoloXlsxMap.Cell.HELIPORT
+	dt[Vector2i(2, 2)] = HoloXlsxMap.Cell.HELIPORT
+	dx[Vector2i(3, 3)] = "30"   # altitude tapée
+	dt[Vector2i(20, 20)] = HoloXlsxMap.Cell.HELIPORT   # 2e bloc isolé (1×1, sans altitude)
+	var blocs := mb._blocs_sureleve(HoloXlsxMap.Cell.HELIPORT, dt, dx, {})
+	_eq("2 blocs héliport séparés", blocs.size(), 2)
+	_ok("altitude lue (30 m) sur le grand bloc",
+			_a_bloc_alt(blocs, 16, 30.0))   # 4×4 = 16 cases, alt 30
+	_ok("altitude défaut sur le bloc sans chiffre",
+			_a_bloc_alt(blocs, 1, HoloXlsxMap.ALTITUDE_SURELEVE_DEFAUT))
+
+	# Validation HÉLIPORT — bâtiment 5×5 à 30 m, toit assez large.
+	_eq("héliport valide (4×4 sur toit, alt=sommet) → 0 croix",
+			_croix_heliport(Rect2i(2, 2, 4, 4), 30.0, 30.0), 0)
+	_eq("héliport trop petit (3×3) → 1 croix",
+			_croix_heliport(Rect2i(2, 2, 3, 3), 30.0, 30.0), 1)
+	_eq("héliport mauvaise altitude (≠ sommet) → 1 croix",
+			_croix_heliport(Rect2i(2, 2, 4, 4), 12.0, 30.0), 1)
+	_eq("héliport hors du toit (déborde) → 1 croix",
+			_croix_heliport(Rect2i(4, 4, 4, 4), 30.0, 30.0), 1)
+
+	# Validation SPOTS : sur le toit → force le toit plat ; hors bâtiment → croix.
+	var msp := _bati_5x5(30.0)
+	msp.spots = [Vector2i(3, 3)]
+	msp._valider_verticalite()
+	_eq("spots sur toit → 0 croix", msp.croix_rouges.size(), 0)
+	_ok("spots forcent le toit plat du bâti dessous",
+			bool((msp.batiments[0] as Dictionary).get("toit_plat", false)))
+	var msp2 := _bati_5x5(30.0)
+	msp2.spots = [Vector2i(40, 40)]   # hors de toute emprise bâtie
+	msp2._valider_verticalite()
+	_eq("spots sans bâtiment dessous → 1 croix", msp2.croix_rouges.size(), 1)
+
+	# Validation ANTENNE : sans bâtiment → croix.
+	var man := _bati_5x5(30.0)
+	man.antennes = [Vector2i(40, 40)]
+	man._valider_verticalite()
+	_eq("antenne sans bâtiment → 1 croix", man.croix_rouges.size(), 1)
+
+	# Validation PASSERELLE : altitude cohérente vs incohérente avec le bâti relié.
+	var mp := _bati_5x5(30.0)   # bâti de 30 m en (2,2)-(6,6)
+	mp.passerelles = [{"cells": [Vector2i(7, 4), Vector2i(8, 4)], "bbox": Rect2i(7, 4, 2, 1), "altitude_m": 25.0}]
+	mp._valider_verticalite()
+	_eq("passerelle 25 m vs bâti 30 m → cohérente (0 croix)", mp.croix_rouges.size(), 0)
+	_ok("passerelle perce 1 porte dans le bâti touché",
+			(mp.passerelles[0] as Dictionary).get("portes", []).size() == 1)
+	var mp2 := _bati_5x5(10.0)   # bâti de 10 m
+	mp2.passerelles = [{"cells": [Vector2i(7, 4)], "bbox": Rect2i(7, 4, 1, 1), "altitude_m": 30.0}]
+	mp2._valider_verticalite()
+	_eq("passerelle 30 m vs bâti 10 m → incohérente (1 croix)", mp2.croix_rouges.size(), 1)
+
+	# bati_sous : lookup d'index.
+	var mi := _bati_5x5(30.0)
+	mi._valider_verticalite()
+	_ok("bati_sous(case du toit) → bloc trouvé", not mi.bati_sous(Vector2i(4, 4)).is_empty())
+	_ok("bati_sous(case vide) → vide", mi.bati_sous(Vector2i(40, 40)).is_empty())
+
+# Carré n×n de Vector2i à partir de (x0,y0).
+func _carre(x0: int, y0: int, n: int) -> Array:
+	var out: Array = []
+	for x in range(x0, x0 + n):
+		for y in range(y0, y0 + n):
+			out.append(Vector2i(x, y))
+	return out
+
+# Map synthétique : un bâtiment BOÎTE 5×5 en (2,2)-(6,6) à `h` mètres.
+func _bati_5x5(h: float) -> HoloXlsxMap:
+	var m := HoloXlsxMap.new()
+	m.grille = 60
+	m.batiments = [{"cells": _carre(2, 2, 5), "bbox": Rect2i(2, 2, 5, 5),
+			"hauteur_m": h, "forme": HoloXlsxMap.Forme.BOITE}]
+	return m
+
+# Compte les croix rouges produites par un héliport `bb` à `alt`, sur un bâti de `som` m.
+func _croix_heliport(bb: Rect2i, alt: float, som: float) -> int:
+	var m := _bati_5x5(som)
+	m.heliports = [{"cells": _carre(bb.position.x, bb.position.y, bb.size.x), "bbox": bb, "altitude_m": alt}]
+	m._valider_verticalite()
+	return m.croix_rouges.size()
+
+# Un bloc de `n` cases à l'altitude `alt` existe-t-il dans `blocs` ?
+func _a_bloc_alt(blocs: Array, n: int, alt: float) -> bool:
+	for b in blocs:
+		if (b["cells"] as Array).size() == n and is_equal_approx(b["altitude_m"], alt):
+			return true
+	return false
 
 # Classe une couleur de fond isolée → Cell (teste les centroïdes de famille sans fichier).
 func _classe(col: Color) -> int:

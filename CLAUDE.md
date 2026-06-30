@@ -144,3 +144,45 @@ biome secondaire révélé. Le joueur démarre SANS équipement.
 Biomes secondaires (révélés au Légendaire du parent) : Collines, Ville Fantôme, Cimetière.
 Ambiances visuelles : presets dans `BiomeBackground.PRESETS` (+ `accent_for_biome()`
 utilisé par le séparateur VS).
+
+## Carte holographique (HoloMap3D)
+
+Carte 3D data-driven lue d'un gabarit Excel (`Carte Holo/carte_holomap.xlsx`) par
+`scenes/holomap3d/HoloXlsxMap.gd` (ZIPReader + XMLParser, zéro dépendance). `HoloMap3D.gd`
+orchestre ; rendu découpé en modules `build/holo_*.gd` — pattern `static func famille(h)`
+avec `h` = le nœud HoloMap3D passé **NON typé** (sinon cycle preload↔class_name) ; **toute
+locale issue de `h.*` doit être typée explicitement**. Modules : `holo_geo` (helpers purs),
+`holo_env` (ambiance), `holo_ville` (voirie/bâti/ponts/autoroutes), `holo_decor` (décor +
+prison), `holo_sureleve` (ouvrages surélevés + croix rouge).
+
+**Apparence = couleur de FOND** (nearest-match d'un centroïde de `_FAMILLES`). **Hauteur /
+forme / altitude / ID = texte de la cellule.** Bordures medium/thick = séparateurs neutres
+(regroupement en blocs 4-connexes). Un ID alphabétique dans une case → la zone devient un
+LIEU explorable (tier/nom/lore/découverte viennent de l'entité visée par l'ID).
+
+Feuille **Carte** : bâtiment `3A4253`, route `D6248F`, eau `17C3C3`, parc `5E7349`,
+sport `D2B48C`, cimetière `6B7A8F`, usine `8B5E3C`, casse `B0560F`, supermarché `E8A23D`,
+colline `C8A86A`, parking `B5B5B8`, **prison `5A5E66`** (enceinte + miradors + cour +
+champ de force).
+
+Feuille **Surélevé** (ouvrages en hauteur, altitude = chiffre tapé dans la cellule) :
+pont `9FB2C4`, autoroute `D6248F`, **passerelle `7FD8A0`**, **héliport `F2D43D`**,
+**spots `BFF0FF`**, **téléphérique `E8843D`**, **antennes `B89CE8`**, **enseignes `F58FD4`**.
+
+**Règles verticalité :**
+- Altitude **TOUJOURS saisie par l'auteur**, jamais déduite.
+- **Classification PAR FEUILLE** (`_SURELEVE_ONLY` / `_CARTE_ONLY` passés à `_classer`) :
+  une couleur surélevé-only ne peut pas être classée sur la Carte (sinon une case bâtie
+  peinte dans une teinte proche deviendrait un trou qui scinde le bloc). Toujours raisonner
+  par feuille en ajoutant une couleur.
+- **Validation croisée Surélevé ↔ Carte** (`HoloXlsxMap._valider_verticalite`, index bâti
+  `bati_sous()`) : héliport (carré ≥ 4×4, bâti dessous, toit assez large, altitude = sommet),
+  passerelle (altitude cohérente + porte percée par bâtiment relié), spots / antennes (bâti
+  dessous). Les spots **forcent le toit plat** du bâti (`toit_plat`, honoré dans `holo_ville.batiments`).
+- **CROIX ROUGE `E02020`** (réservée au feedback, l'auteur ne la peint jamais) : posée
+  à chaque contrainte violée (endroit + altitude fautifs), plutôt qu'une correction
+  silencieuse. C'est la convention universelle de signalement.
+
+⚠ Le `.xlsx` peut être re-sauvegardé par Excel/OneDrive en arrière-plan (octets qui
+changent en cours de session) → `git checkout --` le fichier avant de comparer des
+compteurs de classification. Test du lecteur + validation : `tests/TestHoloXlsx.tscn`.

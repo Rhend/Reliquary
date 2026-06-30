@@ -42,6 +42,7 @@ const Geo := preload("res://scenes/holomap3d/build/holo_geo.gd")
 const Decor := preload("res://scenes/holomap3d/build/holo_decor.gd")
 const Env := preload("res://scenes/holomap3d/build/holo_env.gd")
 const Ville := preload("res://scenes/holomap3d/build/holo_ville.gd")
+const Sureleve := preload("res://scenes/holomap3d/build/holo_sureleve.gd")
 const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
 const BEAM_SHADER := preload("res://scenes/holomap3d/holo_beam.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
@@ -235,6 +236,8 @@ var _mat_glow_chaud: ShaderMaterial    # nappes de lumière chaude (ambiance sup
 var _mat_beam: ShaderMaterial          # faisceaux de spires corpo (shaft vertical)
 var _mat_trafic_aerien: ShaderMaterial # trafic aérien (VTOL, plus rapide/brillant)
 var _discos: Array[Node3D] = []        # boules à facettes (sommets de pyramides) — tournent
+var _projecteurs: Array[Node3D] = []   # projecteurs (spots) — balaient un arc vers l'intérieur
+var _proj_t := 0.0                      # temps cumulé pour le balayage des projecteurs
 var _balise_t := 0.0                   # phase de clignotement des balises
 var _distance_cible := 15.0
 var _intro_en_cours := false
@@ -479,6 +482,23 @@ func _charger_excel() -> void:
 	brume_fin = 2.0e6
 	couleur_fond = Color(0.012, 0.022, 0.045)   # bleu nuit très sombre (≠ noir total) → atmosphère
 	print("[HoloMap3D] ", _excel.resume())
+	# Détail des CROIX ROUGES (contraintes de verticalité violées) → diagnostic auteur :
+	# cellule en référence Excel A1 + altitude saisie + raison de l'échec.
+	for cx: Dictionary in _excel.croix_rouges:
+		var cell: Vector2i = cx["cell"]
+		print("[HoloMap3D] ✗ croix %s (cellule (%d,%d)) alt=%.0f m : %s" % [
+			_ref_excel(cell), cell.x, cell.y, cx["altitude_m"], cx["raison"]])
+
+# Cellule de données (gx,gy, 0-based) → référence Excel A1 (les données commencent en B2 :
+# colonne A et ligne 1 sont les en-têtes de coordonnées → décalage de +2).
+func _ref_excel(cell: Vector2i) -> String:
+	var col := cell.x + 2
+	var lettre := ""
+	while col > 0:
+		col -= 1
+		lettre = char(65 + col % 26) + lettre
+		col /= 26
+	return "%s%d" % [lettre, cell.y + 2]
 
 # Rendu de la carte Excel : décor d'apparence (eau/parc/route) + bâtiments lus,
 # le tout dans la DA holo existante (socle, sol, motes, radar, intro, post-process).
@@ -493,6 +513,7 @@ func _build_all_excel() -> void:
 	_lieu_sol.clear()
 	_lieu_arbres.clear()
 	_discos.clear()
+	_projecteurs.clear()
 	# L'eau est gérée par le shader animé (Ville.eau). On NE peuple PAS _eau
 	# → Decor.decor n'ajoute pas de vaguelettes statiques par-dessus le courant.
 	for c: Vector2i in _excel.parcs:
@@ -523,8 +544,17 @@ func _build_all_excel() -> void:
 	Decor.usines(self)          # usine désaffectée (hall bas + dents de scie + cheminée)
 	Decor.casses(self)          # casse auto (enclos + épaves empilées)
 	Decor.supermarches(self)    # hypermarché (volume bas + enseignes néon)
+	Decor.prisons(self)         # prison : enceinte + miradors + cour + champ de force
 	Ville.ponts(self)             # ouvrages du calque Surélevé (au-dessus de l'eau/route)
 	Ville.routes_elevees(self)    # autoroutes surélevées (magenta) — vide pour l'instant
+	# Calque Surélevé — verticalité (chantier) : chaque famille à son altitude saisie.
+	Sureleve.passerelles(self)    # passerelles piéton (+ porte percée par bâtiment relié)
+	Sureleve.heliports(self)      # héliports (plateforme carrée ≥ 4×4 sur toit)
+	Sureleve.spots(self)          # spots lumineux (toit forcé plat dessous)
+	Sureleve.antennes(self)       # antennes / relais télécom sur toit
+	Sureleve.telepheriques(self)  # téléphériques (câble + nacelle entre 2 stations)
+	Sureleve.enseignes(self)      # enseignes holographiques suspendues
+	Sureleve.croix_rouges(self)   # feedback universel : croix rouge par contrainte violée
 	if motes_actif:
 		Env.motes(self)
 	if radar_actif:
@@ -977,6 +1007,16 @@ func _process(dt: float) -> void:
 	for d in _discos:
 		if is_instance_valid(d):
 			d.rotation.y += dt * 0.9
+	# Projecteurs (spots) : balayage en arc autour de leur direction de visée (vers le
+	# centre du bâtiment porteur) → le pinceau de lumière ratisse la cour, va-et-vient.
+	_proj_t += dt
+	for p in _projecteurs:
+		if not is_instance_valid(p):
+			continue
+		var base_yaw: float = p.get_meta("base_yaw", 0.0)
+		var amp: float = p.get_meta("amp", 0.6)
+		var phase: float = p.get_meta("phase", 0.0)
+		p.rotation.y = base_yaw + amp * sin(_proj_t * 0.9 + phase)
 	# Balises rouges de sommet : clignotement (allumées ~40 % du temps).
 	if _mat_balise != null:
 		_balise_t += dt
