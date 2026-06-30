@@ -756,9 +756,22 @@ func _etages_bloc(bb: Rect2i, ncells: int, h: float, col: Color, s: SurfaceTool)
 	var floors := maxi(1, int(round(h / maxf(unite_maison, 0.001))))
 	if floors < 3:
 		return 0
-	var sx := float(bb.size.x) * taille_cellule
-	var sz := float(bb.size.y) * taille_cellule
-	return HoloMesh3D.etages(s, _centre_bbox(bb), sx, h, sz, col, clampi(floors - 1, 1, 6))
+	# UNE seule bande néon, sur le dernier tronçon (couronne du sommet) plutôt qu'une
+	# tous les ~3 m : souligne la cime sans zébrer toute la façade. Couleur survoltée
+	# (value + saturation) → la bande ressort plus vif que les arêtes du volume.
+	var vif := col
+	vif.v = minf(1.0, vif.v * 1.5)
+	vif.s = minf(1.0, vif.s * 1.15)
+	var c := _centre_bbox(bb)
+	var hx := float(bb.size.x) * taille_cellule * 0.5
+	var hz := float(bb.size.y) * taille_cellule * 0.5
+	var y := h * float(floors - 1) / float(floors)   # bas du tronçon supérieur
+	var p0 := c + Vector3(-hx, y, -hz)
+	var p1 := c + Vector3( hx, y, -hz)
+	var p2 := c + Vector3( hx, y,  hz)
+	var p3 := c + Vector3(-hx, y,  hz)
+	return HoloMesh3D.line(s, p0, p1, vif) + HoloMesh3D.line(s, p1, p2, vif) \
+			+ HoloMesh3D.line(s, p2, p3, vif) + HoloMesh3D.line(s, p3, p0, vif)
 
 # Côté `d` de la case `c` → [coin a, coin b] en coordonnées de grille (demi-entiers).
 func _cote_cellule(c: Vector2i, d: Vector2i) -> Array:

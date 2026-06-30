@@ -79,24 +79,6 @@ static func box(s: SurfaceTool, c: Vector3, sx: float, sy: float, sz: float, col
 	line(s, b2, b2 + up, col); line(s, b3, b3 + up, col)
 	return 12
 
-# Boucles horizontales d'étages (subdivision interne légère) : `count` anneaux
-# répartis entre la base et le sommet (exclus). Lecture « immeuble à étages ».
-static func etages(s: SurfaceTool, c: Vector3, sx: float, sy: float, sz: float, col: Color, count: int) -> int:
-	if count <= 0:
-		return 0
-	var hx := sx * 0.5
-	var hz := sz * 0.5
-	var n := 0
-	for k in range(1, count + 1):
-		var y := sy * float(k) / float(count + 1)
-		var p0 := c + Vector3(-hx, y, -hz)
-		var p1 := c + Vector3( hx, y, -hz)
-		var p2 := c + Vector3( hx, y,  hz)
-		var p3 := c + Vector3(-hx, y,  hz)
-		n += line(s, p0, p1, col) + line(s, p1, p2, col) \
-				+ line(s, p2, p3, col) + line(s, p3, p0, col)
-	return n
-
 # Boucle de cercle dans le plan XZ (anneau au sol), centrée en `c`.
 static func circle(s: SurfaceTool, c: Vector3, r: float, col: Color, seg: int = 32) -> int:
 	var prev := c + Vector3(r, 0, 0)
