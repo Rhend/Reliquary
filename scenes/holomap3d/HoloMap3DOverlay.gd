@@ -59,14 +59,9 @@ func _ready() -> void:
 	_vp.transparent_bg = false
 	_vp.physics_object_picking = true   # picking 3D des pins
 	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	# Anti-aliasing : les fines lignes wireframe (1px) crawlent ET floutent au loin.
-	# On SUPERSAMPLE le rendu 3D (scaling_3d_scale > 1 → rendu à plus haute résolution
-	# puis downscale) → lignes NETTES même à longue distance ; MSAA lisse les arêtes.
-	# PAS de FXAA (qui floute toute l'image) : le supersampling le remplace, en + net.
-	_vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-	_vp.scaling_3d_scale = 1.5   # 1.5× = supersampling (monter à 2.0 = + net, + coûteux)
-	_vp.msaa_3d = Viewport.MSAA_4X
-	_vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
+	# Anti-aliasing : configuré par HoloMap3D lui-même sur son viewport porteur
+	# (supersampling 1.5× + MSAA 4×, cf. HoloMap3D._setup_viewport_aa) → même
+	# qualité que la scène lancée seule ou capturée par le ScreenshotTool.
 	cont.add_child(_vp)
 
 	_map = HoloMap3D.new()

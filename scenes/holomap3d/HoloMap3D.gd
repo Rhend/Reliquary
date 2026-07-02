@@ -253,6 +253,7 @@ var _lieu_arbres := {}   # Vector2i → Color : cellules CHOISIES pour un arbre 
 
 func _ready() -> void:
 	get_viewport().physics_object_picking = true
+	_setup_viewport_aa()
 	_charger_excel()
 	_setup_environment()
 	_setup_camera()
@@ -265,6 +266,16 @@ func _ready() -> void:
 	_build_all()
 
 # ─── Setup ────────────────────────────────────────────────────
+# Finesse : le wireframe 1 px crènele/crawle sans anti-aliasing. La carte configure
+# ELLE-MÊME son viewport porteur → même qualité sur TOUS les chemins (overlay en jeu,
+# scène lancée seule, ScreenshotTool). Supersampling 1.5× (lignes nettes — remplace le
+# FXAA qui flouterait) + MSAA 4× (arêtes lissées).
+func _setup_viewport_aa() -> void:
+	var vp := get_viewport()
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = 1.5
+	vp.msaa_3d = Viewport.MSAA_4X
+
 func _setup_environment() -> void:
 	var we := WorldEnvironment.new()
 	var env := Environment.new()

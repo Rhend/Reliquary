@@ -76,9 +76,17 @@ void fragment() {
 	vec2 cell = floor(g);
 	vec2 f = fract(g);
 	float lit = step(1.0 - fenetre_densite, h21(cell));
-	float win = step(0.25, f.x) * step(f.x, 0.78) * step(0.3, f.y) * step(f.y, 0.82);
+	// Rectangle de fenetre ADOUCI (AA analytique via fwidth) : bords nets de pres,
+	// fondus sur ~1 px de loin -> plus de crenelage ni de fourmillement de grille.
+	vec2 aa = clamp(fwidth(g), vec2(0.02), vec2(0.45));
+	vec2 rect = smoothstep(vec2(0.25, 0.30) - aa, vec2(0.25, 0.30) + aa, f)
+			* (1.0 - smoothstep(vec2(0.78, 0.82) - aa, vec2(0.78, 0.82) + aa, f));
+	float win = rect.x * rect.y;
 	float tw = 0.55 + 0.45 * sin(TIME * 1.3 + h21(cell) * 53.0);
-	float w = lit * win * tw;
+	// Tres loin (cellule sous-pixel), la grille moirerait : fondu vers la lueur
+	// MOYENNE equivalente (des facades calmes, pas des points qui petillent).
+	float sub = smoothstep(0.35, 0.9, max(aa.x, aa.y));
+	float w = mix(lit * win * tw, fenetre_densite * 0.15, sub);
 
 	vec3 windows = fenetre_color.rgb * w * fenetre_emission;
 

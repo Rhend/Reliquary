@@ -70,5 +70,9 @@ void fragment() {
 	// 5. Vignette : coins assombris -> focus central.
 	col *= 1.0 - vignette_force * edge * edge;
 
+	// 6. Tramage leger (~+-1/255, anime) : casse le BANDING 8-bit des degrades
+	// sombres (halo d'horizon, vignette) sans grain visible.
+	col += (h11(dot(uv, vec2(419.17, 863.61)) + fract(TIME * 0.7) * 17.0) - 0.5) * (2.0 / 255.0);
+
 	COLOR = vec4(col, 1.0);
 }

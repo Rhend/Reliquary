@@ -24,6 +24,10 @@ float flicker(float t) {
 	return (a * 0.5 + b * 0.3 + c * 0.2);
 }
 
+float h11(float x) {
+	return fract(sin(x * 12.9898) * 43758.5453);
+}
+
 void fragment() {
 	vec2 uv = UV;
 
@@ -39,6 +43,10 @@ void fragment() {
 
 	// Flicker global doux (non epileptogene).
 	col *= 1.0 - flicker_amplitude * flicker(TIME);
+
+	// Tramage leger (~+-1/255, anime) : casse le BANDING 8-bit des degrades
+	// sombres (halo d'horizon, fond bleu nuit) sans grain visible.
+	col += (h11(dot(uv, vec2(419.17, 863.61)) + fract(TIME * 0.7) * 17.0) - 0.5) * (2.0 / 255.0);
 
 	COLOR = vec4(col, src.a);
 }
