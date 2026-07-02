@@ -1054,35 +1054,66 @@ static func decor(h) -> void:
 				c + Vector3(hw, 0, -0.05 * h.taille_cellule), ce)
 		n += HoloMesh3D.line(s, c + Vector3(-hw, 0, 0.18 * h.taille_cellule),
 				c + Vector3(hw, 0, 0.18 * h.taille_cellule), ce)
-	# Parc : petits « arbres » (croix verticale + houppier diamant) un peu épars.
+	# Parc : arbres holo VARIÉS (arbre-scan à anneaux, houppier diamant, cyprès),
+	# hauteur et position légèrement chahutées → bosquets organiques au lieu d'une
+	# grille de croix identiques. ~1 arbre sur 8 est « bio-lum » : couleur néon
+	# vive (cyan/magenta) + anneau de rétro-éclairage au sol, sur _mat_neon →
+	# halo + respiration (la végétation modifiée du parc cyberpunk).
 	# Les arbres SOUS un lieu sans bâtiment passent à la couleur de palier du lieu
-	# et dans un mesh à part (matériau qui glow) : la parcelle EST le lieu, elle
-	# se lit comme tel. Même densité/taille que le parc normal — seule la couleur
-	# (et le glow) change.
+	# et dans un mesh à part (matériau qui glow) : la parcelle EST le lieu.
 	var sl := HoloMesh3D.st()
 	var nl := 0
+	var sn := HoloMesh3D.st()
+	var nn := 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = h.seed_val ^ 0x515A11
 	for k in h._parc:
 		var cell := k as Vector2i
 		var c: Vector3 = h._world(cell.x, cell.y, 0.0)
-		var ht: float = h.unite_maison * 1.2
+		var ht: float = h.unite_maison * lerpf(0.9, 1.5, rng.randf())
 		if h._lieu_arbres.has(cell):
 			# Cellule choisie d'un parc-lieu : arbre coloré (glow).
 			var lc := Color(h._lieu_arbres[cell] as Color, 0.9)
-			nl += HoloMesh3D.line(sl, c, c + Vector3(0, ht, 0), lc)
-			nl += HoloMesh3D.diamond(sl, c + Vector3(0, ht + ht * 0.4, 0),
-					h.taille_cellule * 0.22, ht * 0.5, lc)
+			nl += _arbre_parc(h, sl, c, ht, lc, rng.randf())
 		elif h._lieu_sol.has(cell):
 			continue   # reste du sol du lieu : laissé vide (peu d'arbres voulus)
-		elif rng.randf() <= 0.55:
-			# Parc ordinaire : arbres verts épars (ternis vers la périphérie).
-			var tc: Color = h._moduler(cp, c)
-			n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), tc)
-			n += HoloMesh3D.diamond(s, c + Vector3(0, ht + ht * 0.4, 0),
-					h.taille_cellule * 0.22, ht * 0.5, tc)
+		elif rng.randf() <= 0.70:
+			var jit: Vector3 = Vector3(rng.randf() - 0.5, 0.0, rng.randf() - 0.5) \
+					* (h.taille_cellule * 0.35)
+			var pos := c + jit
+			if rng.randf() < 0.12:
+				# Arbre bio-lum : néon vif + anneau de rétro-éclairage au sol.
+				var vif := Color(0.35, 0.95, 1.0, 0.9) if rng.randf() < 0.6 \
+						else Color(0.95, 0.45, 1.0, 0.9)
+				nn += _arbre_parc(h, sn, pos, ht, vif, rng.randf())
+				nn += HoloMesh3D.circle(sn, pos + Vector3(0, 0.015, 0),
+						h.taille_cellule * 0.26, Color(vif, 0.5), 16)
+			else:
+				# Arbre ordinaire : vert terni vers la périphérie.
+				var tc: Color = h._moduler(cp, c)
+				n += _arbre_parc(h, s, pos, ht, tc, rng.randf())
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Decor", h._mat_ambiance)
 	h._ajouter_mesh(HoloMesh3D.commit(sl, nl), "DecorLieu", h._mat_lieu_decor)
+	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "DecorNeon", h._mat_neon)
+
+# Arbre holo de parc, silhouette choisie par `hv` :
+#   < 0.45 → arbre-scan : tronc + 3 anneaux de canopée horizontaux (tranches topo) ;
+#   < 0.80 → houppier diamant (l'ancien look, gardé pour la variété) ;
+#   sinon  → cyprès effilé (flamme verticale).
+static func _arbre_parc(h, s: SurfaceTool, c: Vector3, ht: float, col: Color, hv: float) -> int:
+	var n := 0
+	var cr: float = h.taille_cellule
+	if hv < 0.45:
+		n += HoloMesh3D.line(s, c, c + Vector3(0, ht * 1.05, 0), col)
+		for lvl: Array in [[0.55, 0.24], [0.78, 0.18], [0.98, 0.10]]:
+			n += HoloMesh3D.circle(s, c + Vector3(0, ht * (lvl[0] as float), 0),
+					cr * (lvl[1] as float), col, 10)
+	elif hv < 0.80:
+		n += HoloMesh3D.line(s, c, c + Vector3(0, ht, 0), col)
+		n += HoloMesh3D.diamond(s, c + Vector3(0, ht + ht * 0.4, 0), cr * 0.22, ht * 0.5, col)
+	else:
+		n += HoloMesh3D.pyramid(s, c, cr * 0.13, cr * 0.13, ht * 1.6, col)
+	return n
 
 # ─── Prison : enceinte fortifiée + miradors aux angles + cour creuse + champ de force ──
 # Apparence cyberpunk fermée (DA holo wireframe). Volume bas-moyen, emprise large et

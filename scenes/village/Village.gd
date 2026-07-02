@@ -142,6 +142,7 @@ var _link_diffuse_end : Dictionary = {}   # owner_id → Vector2 (extrémité du
 var _spark_traveling  : Dictionary = {}   # owner_id → bool (étincelle en cours de montée : anti double-clic)
 var _birth            : BirthSequence = BirthSequence.new(self)  # phase d'éclosion (extraite)
 var _settings_overlay     : Control = null     # overlay paramètres, null si fermé
+var _holo_overlay         : Control = null     # carte holo 3D, null si fermée (coupe pan/zoom du hub)
 var _backdrop             : VillageBackdrop    # fond d'ambiance (halo + poussières)
 
 # ─── DEBUG : prévisualisation des paliers du Village ──────────
@@ -608,6 +609,13 @@ func _owner_of_room(panel_id: String) -> String:
 # toujours. Inactif avant l'éclosion (pas de hub), et tant qu'un panneau ou les
 # Paramètres sont ouverts (la dimension UI prime).
 func _input(event: InputEvent) -> void:
+	# Carte holo ouverte : la 3D possède la souris (molette = zoom carte, glisser =
+	# orbite). Sans ce garde, _input (reçu AVANT l'UI) zoomait le hub DERRIÈRE la
+	# carte et CONSOMMAIT la molette → zoom carte saccadé + zoom village modifié
+	# à la fermeture.
+	if is_instance_valid(_holo_overlay):
+		_panning = false
+		return
 	# Les boutons sont TOUJOURS traités (sinon un relâché ignoré pendant
 	# l'ouverture d'un panneau laisserait _panning bloqué à true → pan fantôme).
 	if event is InputEventMouseButton:
@@ -1009,6 +1017,7 @@ func open_expedition_map() -> void:
 		else:
 			_open_panel("adventure")
 	)
+	_holo_overlay = holo
 	add_child(holo)
 
 # Construit les lieux d'expédition depuis les ZONES de la feuille « Carte ». Un LIEU =

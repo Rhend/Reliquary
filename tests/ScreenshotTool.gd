@@ -178,6 +178,29 @@ func _shoot_holo_lieux() -> void:
 		await RenderingServer.frame_post_draw
 		vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_%s.png" % nom)
 		print("Screenshot -> res://tests/_shot_holo_%s.png" % nom)
+	# Parc : pas un bloc _excel avec bbox → on cadre la zone de parc la plus dense.
+	if not holo._parc.is_empty():
+		var best := Vector2i.ZERO
+		var bestn := -1
+		for k in holo._parc:
+			var cell := k as Vector2i
+			var cnt := 0
+			for dx in range(-2, 3):
+				for dy in range(-2, 3):
+					if holo._parc.has(cell + Vector2i(dx, dy)):
+						cnt += 1
+			if cnt > bestn:
+				bestn = cnt
+				best = cell
+		var pc: Vector3 = holo._world(best.x, best.y, 0.0)
+		holo._rig.position = Vector3(pc.x, 0.1, pc.z)
+		holo._set_yaw(deg_to_rad(30.0))
+		holo.plongee_deg = 35.0
+		holo._distance_cible = holo.taille_cellule * 9.0
+		await get_tree().create_timer(1.0).timeout
+		await RenderingServer.frame_post_draw
+		vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_parc.png")
+		print("Screenshot -> res://tests/_shot_holo_parc.png")
 
 # ── Preview d'un terrain de baseball (modèle synthétique injecté) ──
 func _shoot_holo_baseball() -> void:

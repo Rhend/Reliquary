@@ -1169,16 +1169,21 @@ func _maj_tooltip() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+		# Zoom MULTIPLICATIF (pas ∝ distance) : même ressenti de près comme de loin
+		# (un pas fixe de 1.2 était énorme à 5.6 et poussif à 30). L'événement est
+		# CONSOMMÉ → il ne remonte pas au viewport parent (hub du Village derrière).
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_distance_cible = clampf(_distance_cible - 1.2, distance_min, distance_max)
+			_distance_cible = clampf(_distance_cible * 0.88, distance_min, distance_max)
 			if not zoom_amorti:
 				distance = _distance_cible
 				_appliquer_camera()
+			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_distance_cible = clampf(_distance_cible + 1.2, distance_min, distance_max)
+			_distance_cible = clampf(_distance_cible / 0.88, distance_min, distance_max)
 			if not zoom_amorti:
 				distance = _distance_cible
 				_appliquer_camera()
+			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			_dragging = mb.pressed and mode_rotation == 0
 	elif event is InputEventMouseMotion and _dragging:

@@ -94,18 +94,18 @@ static func anneau_ell(s: SurfaceTool, c: Vector3, ax: float, az: float, k: floa
 		prev = cur
 	return n
 
-# Butte basse : base hexagonale + arêtes vers un sommet (légèrement décalé) → dune.
+# Butte topographique : anneaux de niveau concentriques qui grimpent vers un
+# sommet décalé (jx/jz) → lecture « courbes de niveau » d'une carte holo.
+# (L'ancienne version — base hexagonale + arêtes vers l'apex — dessinait des
+# tentes que l'œil lisait comme une forêt de sapins, cf. retour playtest.)
 static func butte(s: SurfaceTool, c: Vector3, r: float, h: float, col: Color, jx: float, jz: float) -> int:
-	var seg := 6
-	var apex := c + Vector3(jx, h, jz)
-	var prev := c + Vector3(r, 0, 0)
 	var n := 0
-	for i in range(1, seg + 1):
-		var a := TAU * float(i) / float(seg)
-		var cur := c + Vector3(cos(a) * r, 0, sin(a) * r)
-		n += HoloMesh3D.line(s, prev, cur, col)   # contour au sol
-		n += HoloMesh3D.line(s, cur, apex, col)   # arête vers le sommet
-		prev = cur
+	var niveaux := 3
+	for i in niveaux:
+		var t := float(i) / float(niveaux)      # 0, 1/3, 2/3 de la hauteur
+		var cc := c + Vector3(jx * t, h * t, jz * t)
+		var rr := r * (1.0 - 0.70 * t)
+		n += HoloMesh3D.ellipse(s, cc, rr, rr * 0.82, col, 12)
 	return n
 
 # Rectangle plat (plan XZ) centré en `c`, demi-côtés hx / hz.
