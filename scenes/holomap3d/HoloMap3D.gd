@@ -288,6 +288,13 @@ func _setup_environment() -> void:
 	env.glow_bloom = 0.18
 	env.glow_hdr_threshold = 1.02   # décor sous le seuil (pas de bloom), lieux au-dessus
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+	# Bloom RESSERRÉ : le poids du flou porte sur les petits rayons (niveaux 1-3)
+	# au lieu des nappes larges par défaut (niveaux 3 + 5) → le néon gaine finement
+	# les lignes, moins de brouillard lumineux autour des zones denses.
+	env.set_glow_level(0, 1.0)    # niveau 1 : rayon le plus fin (liseré)
+	env.set_glow_level(1, 0.8)    # niveau 2
+	env.set_glow_level(2, 0.45)   # niveau 3 : réduit (défaut 1.0)
+	env.set_glow_level(4, 0.0)    # niveau 5 : nappe large coupée (défaut 1.0)
 	we.environment = env
 	add_child(we)
 
