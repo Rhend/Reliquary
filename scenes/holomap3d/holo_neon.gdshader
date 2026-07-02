@@ -63,16 +63,25 @@ void fragment() {
 	float phase = h21(cell) * 6.2831;
 	float inten = 1.0 + respiration_amp * sin(TIME * respiration_freq + phase);
 
-	// 3. Gresillement : fenetres de ~0.6 s tirees par cellule ; pendant une
-	// fenetre "en panne", jitter haute frequence (le tube crachote puis repart).
-	float periph = smoothstep(0.35, 0.95, dxz / max(rich_rmax, 0.001));
-	float proba = clamp(flicker_base + flicker_periph * periph, 0.0, 0.9);
+	// 3. Gresillement : evenement RARE. Fenetres de 4 s par cellule ; si la
+	// cellule tire une panne, elle ne dure que 0.25-0.6 s en DEBUT de fenetre
+	// (le reste de la fenetre, le tube brille normalement). proba = chance de
+	// panne par fenetre de 4 s -> 0.2 = un decrochage toutes les ~20 s.
+	// Cellule de flicker LARGE (3 u) : un element entier decroche d'un bloc,
+	// pas un patchwork de segments qui scintillent.
+	float periph = smoothstep(0.70, 1.00, dxz / max(rich_rmax, 0.001));
+	float proba = clamp(flicker_base + flicker_periph * periph, 0.0, 0.6);
 	if (proba > 0.001) {
-		float slot = floor(TIME * 1.6);
-		float roll = h21(cell + vec2(slot * 0.613, slot * 0.171));
+		vec2 cellf = floor(w_pos.xz / 3.0);
+		float slot = floor(TIME * 0.25);
+		float roll = h21(cellf + vec2(slot * 0.613, slot * 0.171));
 		if (roll < proba) {
-			float j = h11(floor(TIME * 34.0) + h21(cell) * 97.0);
-			inten *= mix(0.10, 0.55, step(0.5, j));   // crachote entre 10 % et 55 %
+			float tin = fract(TIME * 0.25) * 4.0;              // secondes ecoulees dans la fenetre
+			float dur = 0.25 + 0.35 * h11(roll * 51.0);        // panne de 0.25 a 0.6 s
+			if (tin < dur) {
+				float j = h11(floor(TIME * 34.0) + h21(cellf) * 97.0);
+				inten *= mix(0.10, 0.55, step(0.5, j));        // crachote entre 10 % et 55 %
+			}
 		}
 	}
 

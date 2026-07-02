@@ -362,11 +362,12 @@ func _setup_materials() -> void:
 	# Accents néon (crêtes de toit, marquages, couronnes) : cœur blanc surchauffé
 	# + halo coloré par le bloom + respiration lente. Le grésillement n'apparaît
 	# qu'en périphérie (les néons de la périphérie pauvre décrochent, cf. holo_neon).
+	# proba flicker = chance de panne COURTE (0.25-0.6 s) par fenêtre de 4 s.
 	var rmax := maxf(0.001, _cgrid() * taille_cellule)
 	_mat_neon = _make_mat(NEON_SHADER, {
 		"emission_strength": 3.6, "alpha_mult": 1.0,
 		"coeur_blanc": 0.30, "respiration_amp": 0.10, "respiration_freq": 1.5,
-		"flicker_base": 0.0, "flicker_periph": 0.30, "rich_rmax": rmax,
+		"flicker_base": 0.0, "flicker_periph": 0.15, "rich_rmax": rmax,
 	})
 
 	# Enseignes holographiques : néon franc — plus blanc au cœur, et grésillement
@@ -374,7 +375,7 @@ func _setup_materials() -> void:
 	_mat_enseigne = _make_mat(NEON_SHADER, {
 		"emission_strength": 4.2, "alpha_mult": 1.0,
 		"coeur_blanc": 0.40, "respiration_amp": 0.12, "respiration_freq": 1.8,
-		"flicker_base": 0.16, "flicker_periph": 0.30, "rich_rmax": rmax,
+		"flicker_base": 0.20, "flicker_periph": 0.20, "rich_rmax": rmax,
 	})
 
 	# Décor d'un lieu SANS bâtiment (parc-lieu) : tier-coloré + glow marqué pour
