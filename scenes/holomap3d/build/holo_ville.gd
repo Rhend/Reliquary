@@ -459,8 +459,8 @@ static func spires(h) -> void:
 			picked.append(t)
 			if picked.size() >= h.spires_max:
 				break
-	var smast := HoloMesh3D.st()    # mâts + têtes (lignes néon, monde absolu)
-	var nmast := 0
+	# Faisceaux SEULS — les mâts d'antenne à haubans ont été retirés (accents
+	# « antenne » illisibles / moches, cf. retour playtest).
 	for t in picked:
 		var c: Vector3 = t["c"]
 		var haut: float = t["h"]
@@ -469,16 +469,6 @@ static func spires(h) -> void:
 		# Faisceau LARGE et HAUT : plus la tour est haute, plus le shaft monte loin.
 		_beam(h, top, lerpf(2.6, 4.2, clampf(haut / (h.hauteur_tour_ref * 2.0), 0.0, 1.0)) * haut,
 				h.taille_cellule * 0.7, Color(acc.r, acc.g, acc.b, 0.6))
-		# Mât d'antenne : segment fin + 2 haubans + tête lumineuse (nœud de données).
-		var mh := haut * 0.42
-		var tip := top + Vector3(0, mh, 0)
-		var lc := Color(acc.r, acc.g, acc.b, 0.95)
-		nmast += HoloMesh3D.line(smast, top, tip, lc)
-		var hub: float = h.taille_cellule * 0.22
-		nmast += HoloMesh3D.line(smast, tip, top + Vector3(hub, mh * 0.45, 0.0), lc)
-		nmast += HoloMesh3D.line(smast, tip, top + Vector3(-hub, mh * 0.45, 0.0), lc)
-		nmast += HoloMesh3D.diamond(smast, tip, h.taille_cellule * 0.06, h.taille_cellule * 0.10, lc)
-	h._ajouter_mesh(HoloMesh3D.commit(smast, nmast), "SpiresMats", h._mat_neon)
 
 # Faisceau vertical (billboard cylindrique) : une instance dédiée par spire — le
 # shader holo_beam lit la base via MODEL_MATRIX, d'où une instance positionnée.

@@ -238,6 +238,7 @@ var _mat_glow_chaud: ShaderMaterial    # nappes de lumière chaude (ambiance sup
 var _mat_beam: ShaderMaterial          # faisceaux de spires corpo (shaft vertical)
 var _mat_trafic_aerien: ShaderMaterial # trafic aérien (VTOL, plus rapide/brillant)
 var _discos: Array[Node3D] = []        # boules à facettes (sommets de pyramides) — tournent
+var _capstones: Array[Node3D] = []     # capstones de pyramide — lévitent en tournant lentement
 var _projecteurs: Array[Node3D] = []   # projecteurs (spots) — balaient un arc vers l'intérieur
 var _proj_t := 0.0                      # temps cumulé pour le balayage des projecteurs
 var _balise_t := 0.0                   # phase de clignotement des balises
@@ -533,6 +534,7 @@ func _build_all_excel() -> void:
 	_lieu_sol.clear()
 	_lieu_arbres.clear()
 	_discos.clear()
+	_capstones.clear()
 	_projecteurs.clear()
 	# L'eau est gérée par le shader animé (Ville.eau). On NE peuple PAS _eau
 	# → Decor.decor n'ajoute pas de vaguelettes statiques par-dessus le courant.
@@ -791,6 +793,29 @@ func _etages_bloc(bb: Rect2i, ncells: int, h: float, col: Color, s: SurfaceTool)
 	return HoloMesh3D.line(s, p0, p1, vif) + HoloMesh3D.line(s, p1, p2, vif) \
 			+ HoloMesh3D.line(s, p2, p3, vif) + HoloMesh3D.line(s, p3, p0, vif)
 
+# Capstone de pyramide : nœud DÉDIÉ (arêtes + faces centrées sur son axe) qui
+# TOURNE lentement sur lui-même (cf. _process) → la lévitation prend vie.
+func _capstone_pyramide(base: Vector3, sx: float, sz: float, ch: float, col: Color) -> void:
+	var node := Node3D.new()
+	node.name = "Capstone"
+	node.position = base
+	var s := HoloMesh3D.st()
+	var n := HoloMesh3D.pyramid(s, Vector3.ZERO, sx, sz, ch, col)
+	var mi := MeshInstance3D.new()
+	mi.name = "CapstoneAretes"
+	mi.mesh = HoloMesh3D.commit(s, n)
+	mi.material_override = _mat_decor
+	node.add_child(mi)
+	var sf := HoloMesh3D.st_tri()
+	HoloMesh3D.pyramid_faces(sf, Vector3.ZERO, sx * FACE_INSET, sz * FACE_INSET, ch * FACE_INSET)
+	var mif := MeshInstance3D.new()
+	mif.name = "CapstoneFaces"
+	mif.mesh = sf.commit()
+	mif.material_override = _mat_faces
+	node.add_child(mif)
+	_monde.add_child(node)
+	_capstones.append(node)
+
 # Variante SURVOLTÉE d'une couleur (value + saturation poussées) : accents qui
 # ressortent plus vif que les arêtes du volume (bandes de cime, couronnes, hélices).
 func _couleur_vive(col: Color) -> Color:
@@ -845,10 +870,7 @@ func _bati_forme(centre: Vector3, sx: float, sz: float, h: float, forme: int, co
 			var gap := h * 0.06
 			var cw := sx * kc * 1.3     # capstone légèrement plus large que le col (surplomb)
 			var cz := sz * kc * 1.3
-			var cbase := centre + Vector3(0, hc + gap, 0)
-			var ch := h - hc - gap
-			n += HoloMesh3D.pyramid(s, cbase, cw, cz, ch, vif)
-			nf += HoloMesh3D.pyramid_faces(sf, cbase, cw * FACE_INSET, cz * FACE_INSET, ch * FACE_INSET)
+			_capstone_pyramide(centre + Vector3(0, hc + gap, 0), cw, cz, h - hc - gap, vif)
 		HoloXlsxMap.Forme.CYLINDRE:
 			# Tour « DATACORE » : fût + anneaux d'étage + DOUBLE HÉLICE néon qui
 			# grimpe + couronne technique et mât → le cylindre lisse prend vie.
@@ -860,11 +882,9 @@ func _bati_forme(centre: Vector3, sx: float, sz: float, h: float, forme: int, co
 				n += HoloMesh3D.ellipse(s, centre + Vector3(0, h * f, 0), rx, rz, col, 28)
 			for ph: float in [0.0, PI]:          # double hélice (données qui montent)
 				n += Geo.helice(s, centre, rx * 1.02, rz * 1.02, h, 2.25, ph, vif, 64)
+			# Couronne technique au sommet (pas de mât : les accents « antenne » sont bannis).
 			var top := centre + Vector3(0, h, 0)
 			n += HoloMesh3D.ellipse(s, top + Vector3(0, unite_maison * 0.12, 0), rx * 0.55, rz * 0.55, vif, 20)
-			var mat_h := unite_maison * 0.9
-			n += HoloMesh3D.line(s, top, top + Vector3(0, mat_h, 0), vif)
-			n += HoloMesh3D.diamond(s, top + Vector3(0, mat_h, 0), taille_cellule * 0.06, taille_cellule * 0.10, vif)
 		HoloXlsxMap.Forme.DOME:
 			# Dôme GÉODÉSIQUE : treillis triangulé + faces d'occlusion (volume
 			# sombre habillé, plus une cage transparente) + OCULUS vif au sommet.
@@ -902,10 +922,7 @@ func _bati_forme(centre: Vector3, sx: float, sz: float, h: float, forme: int, co
 				phz = bz * 0.5
 				y0 += th
 			var toit := Vector3(centre.x, centre.y + y0, centre.z)
-			n += Geo.rect_plat(s, toit, phx, phz, vif)   # couronne (liseré de cime)
-			var fh := h * 0.22
-			n += HoloMesh3D.line(s, toit, toit + Vector3(0, fh, 0), vif)
-			n += HoloMesh3D.diamond(s, toit + Vector3(0, fh, 0), taille_cellule * 0.05, taille_cellule * 0.09, vif)
+			n += Geo.rect_plat(s, toit, phx, phz, vif)   # couronne (liseré de cime, sans flèche)
 		_:
 			n += HoloMesh3D.box(s, centre, sx, h, sz, col)
 			nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, h * FACE_INSET, sz * FACE_INSET)
@@ -1103,6 +1120,10 @@ func _process(dt: float) -> void:
 	for d in _discos:
 		if is_instance_valid(d):
 			d.rotation.y += dt * 0.9
+	# Capstones de pyramide : rotation LENTE sur leur axe → profondeur de la lévitation.
+	for cs in _capstones:
+		if is_instance_valid(cs):
+			cs.rotation.y += dt * 0.3
 	# Projecteurs (spots) : balayage en arc autour de leur direction de visée (vers le
 	# centre du bâtiment porteur) → le pinceau de lumière ratisse la cour, va-et-vient.
 	_proj_t += dt
