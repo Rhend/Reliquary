@@ -85,7 +85,7 @@ static func skyline_lointain(h) -> void:
 			nc = Color(nc.r, nc.g, nc.b, 0.85)
 			nn += HoloMesh3D.line(sn, tete, tete + Vector3(0.0, h.taille_cellule * 0.25, 0.0), nc)
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "SkylineLointain", h._mat_horizon)
-	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "SkylineEnseignes", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "SkylineEnseignes", h._mat_enseigne)
 
 # ─── Poussières de données (montée animée par shader) ─────────
 static func motes(h) -> void:

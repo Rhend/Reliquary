@@ -28,6 +28,7 @@ extends Node3D
 signal lieu_selectionne(id: String)
 
 const LINE_SHADER := preload("res://scenes/holomap3d/holo_line.gdshader")
+const NEON_SHADER := preload("res://scenes/holomap3d/holo_neon.gdshader")
 const POST_SHADER := preload("res://scenes/holomap3d/holo_post.gdshader")
 const ROUTE_SHADER := preload("res://scenes/holomap3d/holo_route.gdshader")
 const FACE_SHADER := preload("res://scenes/holomap3d/holo_face.gdshader")
@@ -225,7 +226,8 @@ var _hovered: HoloLocation3D
 var _radar: Node3D
 var _mat_motes: ShaderMaterial
 var _mat_trafic: ShaderMaterial
-var _mat_neon: ShaderMaterial          # accents néon (enseignes, nœuds d'intersection)
+var _mat_neon: ShaderMaterial          # accents néon (crêtes, marquages, couronnes) — respire
+var _mat_enseigne: ShaderMaterial      # enseignes holographiques — respire + grésille
 var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc tier-coloré)
 var _mat_lac: ShaderMaterial           # nappe d'eau pleine (lac satellite, hors carré)
 var _mat_eau: ShaderMaterial           # eau qui s'écoule (carte Excel, shader animé)
@@ -357,8 +359,23 @@ func _setup_materials() -> void:
 		"vitesse": vitesse_voitures * 1.9, "emission": 2.9,
 	})
 
-	# Accents néon (enseignes holographiques, nœuds d'intersection) — glow.
-	_mat_neon = _make_mat(LINE_SHADER, {"emission_strength": 2.0, "alpha_mult": 1.0})
+	# Accents néon (crêtes de toit, marquages, couronnes) : cœur blanc surchauffé
+	# + halo coloré par le bloom + respiration lente. Le grésillement n'apparaît
+	# qu'en périphérie (les néons de la périphérie pauvre décrochent, cf. holo_neon).
+	var rmax := maxf(0.001, _cgrid() * taille_cellule)
+	_mat_neon = _make_mat(NEON_SHADER, {
+		"emission_strength": 3.6, "alpha_mult": 1.0,
+		"coeur_blanc": 0.30, "respiration_amp": 0.10, "respiration_freq": 1.5,
+		"flicker_base": 0.0, "flicker_periph": 0.30, "rich_rmax": rmax,
+	})
+
+	# Enseignes holographiques : néon franc — plus blanc au cœur, et grésillement
+	# possible PARTOUT (une enseigne qui crachote = juice cyberpunk assumé).
+	_mat_enseigne = _make_mat(NEON_SHADER, {
+		"emission_strength": 4.2, "alpha_mult": 1.0,
+		"coeur_blanc": 0.40, "respiration_amp": 0.12, "respiration_freq": 1.8,
+		"flicker_base": 0.16, "flicker_periph": 0.30, "rich_rmax": rmax,
+	})
 
 	# Décor d'un lieu SANS bâtiment (parc-lieu) : tier-coloré + glow marqué pour
 	# que la zone ressorte comme un lieu (pas un simple décor vert).
@@ -403,12 +420,12 @@ func _setup_materials() -> void:
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_lieu_decor, _mat_glow_chaud]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_lieu_decor, _mat_glow_chaud]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_lieu_decor, _mat_glow_chaud]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()

@@ -909,7 +909,7 @@ static func supermarches(h) -> void:
 		ngl += _ambiance_supermarche(h, bb, haut, ambre, sgl)   # lueur intérieure + débord au sol
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Supermarches")
 	h._ajouter_faces(HoloMesh3D.commit(sf, nf), "SupermarchesFaces")
-	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "SupermarchesEnseignes", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "SupermarchesEnseignes", h._mat_enseigne)
 	h._ajouter_mesh(HoloMesh3D.commit(sc, ncy), "SupermarchesAccents", h._mat_neon)
 	h._ajouter_mesh(HoloMesh3D.commit(sgl, ngl), "SupermarchesAmbiance", h._mat_glow_chaud)
 

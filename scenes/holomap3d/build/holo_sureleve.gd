@@ -323,4 +323,4 @@ static func enseignes(h) -> void:
 		for k in range(1, 4):
 			var y := up * (float(k) / 4.0)
 			n += HoloMesh3D.line(s, b0 + y, b1 + y, COL_ENSEIGNE)
-	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Enseignes", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Enseignes", h._mat_enseigne)
