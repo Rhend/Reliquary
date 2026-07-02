@@ -779,9 +779,7 @@ func _etages_bloc(bb: Rect2i, ncells: int, h: float, col: Color, s: SurfaceTool)
 	# UNE seule bande néon, sur le dernier tronçon (couronne du sommet) plutôt qu'une
 	# tous les ~3 m : souligne la cime sans zébrer toute la façade. Couleur survoltée
 	# (value + saturation) → la bande ressort plus vif que les arêtes du volume.
-	var vif := col
-	vif.v = minf(1.0, vif.v * 1.5)
-	vif.s = minf(1.0, vif.s * 1.15)
+	var vif := _couleur_vive(col)
 	var c := _centre_bbox(bb)
 	var hx := float(bb.size.x) * taille_cellule * 0.5
 	var hz := float(bb.size.y) * taille_cellule * 0.5
@@ -792,6 +790,14 @@ func _etages_bloc(bb: Rect2i, ncells: int, h: float, col: Color, s: SurfaceTool)
 	var p3 := c + Vector3(-hx, y,  hz)
 	return HoloMesh3D.line(s, p0, p1, vif) + HoloMesh3D.line(s, p1, p2, vif) \
 			+ HoloMesh3D.line(s, p2, p3, vif) + HoloMesh3D.line(s, p3, p0, vif)
+
+# Variante SURVOLTÉE d'une couleur (value + saturation poussées) : accents qui
+# ressortent plus vif que les arêtes du volume (bandes de cime, couronnes, hélices).
+func _couleur_vive(col: Color) -> Color:
+	var v := col
+	v.v = minf(1.0, v.v * 1.5)
+	v.s = minf(1.0, v.s * 1.15)
+	return v
 
 # Côté `d` de la case `c` → [coin a, coin b] en coordonnées de grille (demi-entiers).
 func _cote_cellule(c: Vector2i, d: Vector2i) -> Array:
@@ -823,26 +829,83 @@ func _bati_forme(centre: Vector3, sx: float, sz: float, h: float, forme: int, co
 		s: SurfaceTool, sf: SurfaceTool) -> Array:
 	var n := 0
 	var nf := 0
+	var vif := _couleur_vive(col)
 	match forme:
 		HoloXlsxMap.Forme.PYRAMIDE:
-			n += HoloMesh3D.pyramid(s, centre, sx, sz, h, col)
-			nf += HoloMesh3D.pyramid_faces(sf, centre, sx * FACE_INSET, sz * FACE_INSET, h * FACE_INSET)
+			# MÉGASTRUCTURE corpo : corps en tronc de pyramide strié d'anneaux de
+			# section + CAPSTONE DÉTACHÉ qui lévite au-dessus du col (interstice
+			# lumineux) → silhouette occulte, plus une simple tente noire.
+			var hc := h * 0.72          # hauteur du corps (tronqué au col)
+			var kc := 0.30              # largeur du col (fraction de la base)
+			n += HoloMesh3D.frustum(s, centre, sx, sz, hc, kc, col)
+			nf += HoloMesh3D.frustum_faces(sf, centre, sx * FACE_INSET, sz * FACE_INSET, hc, kc)
+			for f: float in [0.30, 0.60]:   # strates lumineuses sur la pente
+				var kf := lerpf(1.0, kc, f)
+				n += Geo.rect_plat(s, centre + Vector3(0, hc * f, 0), sx * 0.5 * kf, sz * 0.5 * kf, vif)
+			var gap := h * 0.06
+			var cw := sx * kc * 1.3     # capstone légèrement plus large que le col (surplomb)
+			var cz := sz * kc * 1.3
+			var cbase := centre + Vector3(0, hc + gap, 0)
+			var ch := h - hc - gap
+			n += HoloMesh3D.pyramid(s, cbase, cw, cz, ch, vif)
+			nf += HoloMesh3D.pyramid_faces(sf, cbase, cw * FACE_INSET, cz * FACE_INSET, ch * FACE_INSET)
 		HoloXlsxMap.Forme.CYLINDRE:
-			n += HoloMesh3D.cylinder(s, centre, sx * 0.5, sz * 0.5, h, col)
-			nf += HoloMesh3D.cylinder_faces(sf, centre, sx * 0.5 * FACE_INSET, sz * 0.5 * FACE_INSET, h * FACE_INSET)
+			# Tour « DATACORE » : fût + anneaux d'étage + DOUBLE HÉLICE néon qui
+			# grimpe + couronne technique et mât → le cylindre lisse prend vie.
+			var rx := sx * 0.5
+			var rz := sz * 0.5
+			n += HoloMesh3D.cylinder(s, centre, rx, rz, h, col, 28, 6)
+			nf += HoloMesh3D.cylinder_faces(sf, centre, rx * FACE_INSET, rz * FACE_INSET, h * FACE_INSET)
+			for f: float in [0.25, 0.5, 0.75]:   # anneaux d'étage
+				n += HoloMesh3D.ellipse(s, centre + Vector3(0, h * f, 0), rx, rz, col, 28)
+			for ph: float in [0.0, PI]:          # double hélice (données qui montent)
+				n += Geo.helice(s, centre, rx * 1.02, rz * 1.02, h, 2.25, ph, vif, 64)
+			var top := centre + Vector3(0, h, 0)
+			n += HoloMesh3D.ellipse(s, top + Vector3(0, unite_maison * 0.12, 0), rx * 0.55, rz * 0.55, vif, 20)
+			var mat_h := unite_maison * 0.9
+			n += HoloMesh3D.line(s, top, top + Vector3(0, mat_h, 0), vif)
+			n += HoloMesh3D.diamond(s, top + Vector3(0, mat_h, 0), taille_cellule * 0.06, taille_cellule * 0.10, vif)
 		HoloXlsxMap.Forme.DOME:
+			# Dôme GÉODÉSIQUE : treillis triangulé + faces d'occlusion (volume
+			# sombre habillé, plus une cage transparente) + OCULUS vif au sommet.
 			n += HoloMesh3D.dome(s, centre, sx * 0.5, sz * 0.5, h, col)
+			nf += HoloMesh3D.dome_faces(sf, centre, sx * 0.5 * FACE_INSET, sz * 0.5 * FACE_INSET, h * FACE_INSET)
+			n += HoloMesh3D.ellipse(s, centre + Vector3(0, h * 0.93, 0), sx * 0.5 * 0.37, sz * 0.5 * 0.37, vif, 20)
 		HoloXlsxMap.Forme.GRADINS:
-			var paliers := clampi(roundi(h / maxf(0.05, unite_maison * 0.8)), 2, 5)
+			# Tour à REDENTS (Art déco) : socle massif puis étages plus courts,
+			# retraits doux reliés par des ÉPAULEMENTS aux coins, couronne vive +
+			# flèche → un vrai gratte-ciel étagé, plus un empilement de boîtes.
+			var paliers := clampi(roundi(h / maxf(0.05, unite_maison * 0.8)), 3, 5)
+			var poids: Array[float] = []
+			var somme := 0.0
 			for k in paliers:
-				var t0 := h * float(k) / float(paliers)
-				var t1 := h * float(k + 1) / float(paliers)
-				var shrink := lerpf(1.0, 0.34, float(k) / float(paliers))
+				var w := lerpf(2.0, 0.75, float(k) / float(paliers - 1))
+				poids.append(w)
+				somme += w
+			var y0 := 0.0
+			var phx := 0.0
+			var phz := 0.0
+			for k in paliers:
+				var th := h * poids[k] / somme
+				var shrink := lerpf(1.0, 0.42, pow(float(k) / float(paliers - 1), 1.25))
 				var bx := sx * shrink
 				var bz := sz * shrink
-				var base := Vector3(centre.x, centre.y + t0, centre.z)
-				n += HoloMesh3D.box(s, base, bx, t1 - t0, bz, col)
-				nf += HoloMesh3D.box_faces(sf, base, bx * FACE_INSET, (t1 - t0), bz * FACE_INSET)
+				var base := Vector3(centre.x, centre.y + y0, centre.z)
+				n += HoloMesh3D.box(s, base, bx, th, bz, col)
+				nf += HoloMesh3D.box_faces(sf, base, bx * FACE_INSET, th, bz * FACE_INSET)
+				if k > 0:
+					for sxs: float in [-1.0, 1.0]:   # épaulements de coin (lient les retraits)
+						for szs: float in [-1.0, 1.0]:
+							n += HoloMesh3D.line(s, base + Vector3(sxs * phx, 0, szs * phz),
+									base + Vector3(sxs * bx * 0.5, 0, szs * bz * 0.5), col)
+				phx = bx * 0.5
+				phz = bz * 0.5
+				y0 += th
+			var toit := Vector3(centre.x, centre.y + y0, centre.z)
+			n += Geo.rect_plat(s, toit, phx, phz, vif)   # couronne (liseré de cime)
+			var fh := h * 0.22
+			n += HoloMesh3D.line(s, toit, toit + Vector3(0, fh, 0), vif)
+			n += HoloMesh3D.diamond(s, toit + Vector3(0, fh, 0), taille_cellule * 0.05, taille_cellule * 0.09, vif)
 		_:
 			n += HoloMesh3D.box(s, centre, sx, h, sz, col)
 			nf += HoloMesh3D.box_faces(sf, centre, sx * FACE_INSET, h * FACE_INSET, sz * FACE_INSET)

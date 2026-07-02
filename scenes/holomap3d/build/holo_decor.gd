@@ -65,18 +65,41 @@ static func cimetieres(h) -> void:
 				var dd := Vector2(float(cell.x) - gcx, float(cell.y) - gcy).length_squared()
 				if dd < best:
 					best = dd; cell_chapelle = cell
+		# Rangées le long du grand axe du bloc → allées de mémorial lisibles.
+		var range_x := bb.size.x >= bb.size.y
 		for cell: Vector2i in cells:
 			var c: Vector3 = h._world(cell.x, cell.y, 0.0)
 			n += Geo.carre_plat(s, c, h.taille_cellule * 0.30, col_socle)
 			if cell == cell_chapelle:
 				continue   # la chapelle occupe cette case (pas de stèle)
-			# Stèle = dalle fine verticale + barre de tête (mémoriel holographique).
-			var w: float = h.taille_cellule * 0.18
-			var d: float = h.taille_cellule * 0.05
-			var hs: float = h.unite_maison * 1.05 * fy
-			ng += HoloMesh3D.box(sg, c, w, hs, d, col_stele)
-			ng += HoloMesh3D.line(sg, c + Vector3(-w * 0.6, hs * 0.78, 0),
-					c + Vector3(w * 0.6, hs * 0.78, 0), col_stele)
+			# DEUX petites stèles par case, alignées en rangée, silhouette VARIÉE
+			# (hash) : dalle à barre de tête ou obélisque effilé → un vrai champ de
+			# tombes irrégulier, plus un gros bloc unique par case.
+			var off: Vector3 = (Vector3(1, 0, 0) if range_x else Vector3(0, 0, 1)) * (h.taille_cellule * 0.20)
+			var k := 0
+			for pc: Vector3 in [c - off, c + off]:
+				k += 1
+				var hv: float = h._hash01(cell, 23 + k)
+				var hs: float = h.unite_maison * lerpf(0.50, 0.80, hv) * fy
+				if hv < 0.72:
+					var w: float = h.taille_cellule * 0.11
+					var d: float = h.taille_cellule * 0.04
+					if range_x:
+						ng += HoloMesh3D.box(sg, pc, w, hs, d, col_stele)
+						ng += HoloMesh3D.line(sg, pc + Vector3(-w * 0.7, hs * 0.8, 0),
+								pc + Vector3(w * 0.7, hs * 0.8, 0), col_stele)
+					else:
+						ng += HoloMesh3D.box(sg, pc, d, hs, w, col_stele)
+						ng += HoloMesh3D.line(sg, pc + Vector3(0, hs * 0.8, -w * 0.7),
+								pc + Vector3(0, hs * 0.8, w * 0.7), col_stele)
+				else:
+					ng += HoloMesh3D.pyramid(sg, pc, h.taille_cellule * 0.09,
+							h.taille_cellule * 0.09, hs * 1.35, col_stele)
+			# Cyprès : ~1 case sur 5, arbre-flamme sombre au coin (verticalité feutrée).
+			if h._hash01(cell, 29) < 0.20:
+				var pt := c + Vector3(h.taille_cellule * 0.30, 0, h.taille_cellule * 0.30)
+				n += HoloMesh3D.pyramid(s, pt, h.taille_cellule * 0.14, h.taille_cellule * 0.14,
+						h.unite_maison * 1.5 * fy, h._moduler(Color(0.22, 0.50, 0.30), centre))
 		if cell_chapelle.x > -9000:
 			ng += _chapelle(h, h._world(cell_chapelle.x, cell_chapelle.y, 0.0), col_stele, sg, fy)
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "CimetiereSocles", h._mat_ambiance)
@@ -365,6 +388,7 @@ static func usines(h) -> void:
 	var s := HoloMesh3D.st()       # coque corrodée (sombre, peu de glow)
 	var sf := HoloMesh3D.st_tri()
 	var sn := HoloMesh3D.st()       # accents NÉON (verrières, conduits, cheminée)
+	var sb := HoloMesh3D.st()       # balises rouges de cheminée (clignotent, _mat_balise)
 	var su := SurfaceTool.new()    # fumée (billboards de volutes, shader holo_fumee)
 	su.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var rng := RandomNumberGenerator.new()
@@ -372,6 +396,7 @@ static func usines(h) -> void:
 	var n := 0
 	var nf := 0
 	var nn := 0
+	var nb := 0
 	var nfu := 0
 	var ch_h: float = h.unite_maison * 2.4   # hauteur de cheminée (cf. _cheminee_neon)
 	for b in h._excel.usines:
@@ -387,6 +412,9 @@ static func usines(h) -> void:
 		nn += h._portes_vers_routes(b["cells"], minf(h.unite_maison * 0.75, haut * 0.85), neon, sn)  # entrées face aux routes
 		nn += _toit_sheds_neon(h, bb, haut, neon, sn)       # verrières en dents de scie (glow)
 		nn += _conduits_facade(h, bb, haut, neon, sn)        # tuyauterie ceinturant le hall
+		nn += _rack_tuyaux(h, bb, haut, neon, sn)            # rack de conduits au-dessus du toit
+		var rs: Array = _silos(h, bb, haut, col, neon, s, sf, sn)   # cuves qui percent le toit
+		n += rs[0]; nf += rs[1]; nn += rs[2]
 		# 3 cheminées réparties sur le grand axe du hall, chacune avec son panache.
 		var x0 := float(bb.position.x); var x1 := float(bb.position.x + bb.size.x - 1)
 		var y0 := float(bb.position.y); var y1 := float(bb.position.y + bb.size.y - 1)
@@ -395,11 +423,13 @@ static func usines(h) -> void:
 			var gx := lerpf(x0, x1, f) if span_x else lerpf(x0, x1, 0.28)
 			var gy := lerpf(y0, y1, 0.28) if span_x else lerpf(y0, y1, f)
 			var cbase: Vector3 = h._world(gx, gy, haut)
-			nn += _cheminee_neon(h, cbase, neon, sn)
+			var rc: Array = _cheminee_neon(h, cbase, neon, sn, sb)
+			nn += rc[0]; nb += rc[1]
 			nfu += _semer_fumee(h, su, cbase + Vector3(0, ch_h + h.unite_maison * 0.12, 0), rng)
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Usines")
 	h._ajouter_faces(HoloMesh3D.commit(sf, nf), "UsinesFaces")
 	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "UsinesNeon", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(sb, nb), "UsinesBalises", h._mat_balise)
 	if nfu > 0:
 		var miu := MeshInstance3D.new()
 		miu.name = "UsinesFumee"
@@ -486,15 +516,71 @@ static func _conduits_facade(h, bb: Rect2i, haut: float, col: Color, s: SurfaceT
 				+ HoloMesh3D.line(s, c2, c3, col) + HoloMesh3D.line(s, c3, c0, col)
 	return n
 
-# Cheminée ÉMISSIVE posée en `base` (sur le toit) : fût lumineux + 2 anneaux + balise.
-static func _cheminee_neon(h, base: Vector3, col: Color, s: SurfaceTool) -> int:
+# Cheminée ÉMISSIVE posée en `base` (sur le toit) : fût lumineux + 2 anneaux. La
+# balise rouge du sommet part dans `sb` (matériau des balises → elle CLIGNOTE au
+# même rythme que les balises de tour). Renvoie [nb néon, nb balise].
+static func _cheminee_neon(h, base: Vector3, col: Color, s: SurfaceTool, sb: SurfaceTool) -> Array:
 	var w: float = h.taille_cellule * 0.16
 	var ch: float = h.unite_maison * 2.4
 	var n := HoloMesh3D.box(s, base, w, ch, w, col)
 	for rf: float in [0.55, 0.8]:
 		n += HoloMesh3D.circle(s, base + Vector3(0, ch * rf, 0), w * 0.95, col, 10)
-	n += HoloMesh3D.diamond(s, base + Vector3(0, ch + w, 0), w * 0.7, w * 0.9, Color(1.0, 0.32, 0.20))
+	var nb := HoloMesh3D.diamond(sb, base + Vector3(0, ch + w, 0), w * 0.7, w * 0.9, Color(1.0, 0.32, 0.20))
+	return [n, nb]
+
+# Rack de tuyauterie AU-DESSUS du toit : 2 conduits parallèles sur potelets, le
+# long du grand axe (même ligne que les cheminées, au-dessus des crêtes de sheds)
+# → colonne vertébrale industrielle qui relie les cheminées.
+static func _rack_tuyaux(h, bb: Rect2i, haut: float, col: Color, s: SurfaceTool) -> int:
+	var x0 := float(bb.position.x); var x1 := float(bb.position.x + bb.size.x - 1)
+	var y0 := float(bb.position.y); var y1 := float(bb.position.y + bb.size.y - 1)
+	var span_x := bb.size.x >= bb.size.y
+	var ry: float = haut + h.unite_maison * 0.75   # au-dessus des crêtes (0.6)
+	var ecart := 0.09                               # demi-écart des 2 conduits (cellules)
+	var lat := 0.28                                 # même ligne latérale que les cheminées
+	var a0: Vector3; var a1: Vector3; var b0: Vector3; var b1: Vector3
+	if span_x:
+		var gy := lerpf(y0, y1, lat)
+		a0 = h._world(lerpf(x0, x1, 0.06), gy - ecart, ry); a1 = h._world(lerpf(x0, x1, 0.94), gy - ecart, ry)
+		b0 = h._world(lerpf(x0, x1, 0.06), gy + ecart, ry); b1 = h._world(lerpf(x0, x1, 0.94), gy + ecart, ry)
+	else:
+		var gx := lerpf(x0, x1, lat)
+		a0 = h._world(gx - ecart, lerpf(y0, y1, 0.06), ry); a1 = h._world(gx - ecart, lerpf(y0, y1, 0.94), ry)
+		b0 = h._world(gx + ecart, lerpf(y0, y1, 0.06), ry); b1 = h._world(gx + ecart, lerpf(y0, y1, 0.94), ry)
+	var n := HoloMesh3D.line(s, a0, a1, col) + HoloMesh3D.line(s, b0, b1, col)
+	var nbp := clampi(maxi(bb.size.x, bb.size.y), 3, 8)
+	for k in nbp + 1:                              # potelets + traverses régulières
+		var t := float(k) / float(nbp)
+		var pa := a0.lerp(a1, t)
+		var pb := b0.lerp(b1, t)
+		n += HoloMesh3D.line(s, Vector3(pa.x, haut, pa.z), pa, col)
+		n += HoloMesh3D.line(s, Vector3(pb.x, haut, pb.z), pb, col)
+		n += HoloMesh3D.line(s, pa, pb, col)
 	return n
+
+# Cuves de stockage (silos) : 2 cylindres côté opposé aux cheminées, qui PERCENT
+# le toit (la partie basse est occluse par le hall) — coiffe + cerclages néon.
+# Renvoie [nb arêtes coque, nb faces, nb néon].
+static func _silos(h, bb: Rect2i, haut: float, col: Color, neon: Color,
+		s: SurfaceTool, sf: SurfaceTool, sn: SurfaceTool) -> Array:
+	var x0 := float(bb.position.x); var x1 := float(bb.position.x + bb.size.x - 1)
+	var y0 := float(bb.position.y); var y1 := float(bb.position.y + bb.size.y - 1)
+	var span_x := bb.size.x >= bb.size.y
+	var r: float = h.taille_cellule * 0.26
+	var sh: float = haut + h.unite_maison * 1.05   # dépasse nettement du toit
+	var n := 0
+	var nf := 0
+	var nn := 0
+	for f: float in [0.34, 0.56]:
+		var gx := lerpf(x0, x1, f) if span_x else lerpf(x0, x1, 0.74)
+		var gy := lerpf(y0, y1, 0.74) if span_x else lerpf(y0, y1, f)
+		var c: Vector3 = h._world(gx, gy, 0.0)
+		n += HoloMesh3D.cylinder(s, c, r, r, sh, col, 14, 5)
+		nf += HoloMesh3D.cylinder_faces(sf, c, r * 0.96, r * 0.96, sh, 14)
+		for rf: float in [0.62, 0.82]:             # cerclages (au-dessus du toit)
+			nn += HoloMesh3D.ellipse(sn, c + Vector3(0, sh * rf, 0), r * 1.03, r * 1.03, neon, 14)
+		nn += HoloMesh3D.ellipse(sn, c + Vector3(0, sh, 0), r * 0.55, r * 0.55, neon, 12)   # coiffe
+	return [n, nf, nn]
 
 # ─── Casse auto : enclos grillagé + épaves de voitures + piles de carcasses + grue ──
 # Lecture « casse de bagnoles » : clôture basse (rail néon de sécurité), vraies épaves
@@ -532,20 +618,38 @@ static func casses(h) -> void:
 				var dd := Vector2(float(cell.x) - gcx, float(cell.y) - gcy).length_squared()
 				if dd < best:
 					best = dd; cell_grue = cell
-		# Remplissage : grue / pile de carcasses écrasées / épave / vide (allées).
+		# Remplissage ORGANISÉ (comme une vraie casse) : MURS de carcasses empilées
+		# adossés à la clôture (cases frontière), épaves éparses + piles de pneus
+		# dans les allées intérieures, grue au centre.
+		var setd := {}
+		for cell: Vector2i in cells:
+			setd[cell] = true
+		var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 		for cell: Vector2i in cells:
 			var c: Vector3 = h._world(cell.x, cell.y, 0.0)
 			if cell == cell_grue:
 				var rg := _grue_casse(h, c, col, neon, s, sg)
 				n += rg[0]; ng += rg[1]
 				continue
+			var frontiere := false
+			for d: Vector2i in dirs:
+				if not setd.has(cell + d):
+					frontiere = true
+					break
 			var roll := rng.randf()
-			if roll < 0.42:
-				var rp := _pile_carcasses(h, c, col, neon, rng, s, sg)
-				n += rp[0]; ng += rp[1]
-			elif roll < 0.78:
-				var re := _epave_voiture(h, c, col, neon, rng, s, sg)
-				n += re[0]; ng += re[1]
+			if frontiere:
+				if roll < 0.72:      # mur de carcasses le long de la clôture
+					var rp := _pile_carcasses(h, c, col, neon, rng, s, sg)
+					n += rp[0]; ng += rp[1]
+				elif roll < 0.88:
+					var re := _epave_voiture(h, c, col, neon, rng, s, sg)
+					n += re[0]; ng += re[1]
+			else:
+				if roll < 0.45:
+					var re := _epave_voiture(h, c, col, neon, rng, s, sg)
+					n += re[0]; ng += re[1]
+				elif roll < 0.64:    # stock de pneus dans les allées
+					n += _pile_pneus(h, c, col, rng, s)
 			# sinon : case laissée vide (allée de circulation entre les tas)
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Casses")
 	h._ajouter_mesh(HoloMesh3D.commit(sg, ng), "CassesNeon", h._mat_neon)
@@ -596,24 +700,22 @@ static func _pile_carcasses(h, c: Vector3, col: Color, neon: Color, rng: RandomN
 		y += hh + h.unite_maison * 0.015
 	return [n, ng]
 
-# Épave de voiture : MÊME silhouette futuriste que les voitures du trafic (coque en
-# goutte d'eau effilée + bulle de cockpit facettée), posée au sol, orientée le long de
-# X ou Y au hasard. Phare néon à l'avant. Renvoie [arêtes, glow].
-static func _epave_voiture(h, c: Vector3, col: Color, neon: Color, rng: RandomNumberGenerator, s: SurfaceTool, sg: SurfaceTool) -> Array:
-	var n := 0
-	var ng := 0
-	var tang := Vector3(0, 0, 1) if rng.randf() < 0.5 else Vector3(1, 0, 0)
+# Carrosserie futuriste (coque en goutte d'eau effilée + bulle de cockpit facettée)
+# centrée en `c`, orientée selon `tang`. Silhouette PARTAGÉE : épave posée au sol
+# et carcasse suspendue à la grue. Renvoie le nb d'arêtes.
+static func _carrosserie(h, c: Vector3, tang: Vector3, col: Color, s: SurfaceTool) -> int:
 	var perp := Vector3(-tang.z, 0.0, tang.x)
 	var hl: float = h.taille_cellule * 0.22    # demi-longueur
 	var hw: float = h.taille_cellule * 0.10    # demi-largeur (au maître-bau)
 	var ht: float = h.taille_cellule * 0.085   # hauteur de la bulle
 	var up := Vector3(0, ht, 0)
-	# Empreinte au sol en goutte d'eau (identique au trafic : nez / maître-bau / poupe).
+	# Empreinte en goutte d'eau (identique au trafic : nez / maître-bau / poupe).
 	var nez := c + tang * hl
 	var ml := c + tang * (hl * 0.18) - perp * hw
 	var mr := c + tang * (hl * 0.18) + perp * hw
 	var pl := c - tang * hl - perp * (hw * 0.45)
 	var pr := c - tang * hl + perp * (hw * 0.45)
+	var n := 0
 	n += HoloMesh3D.line(s, nez, mr, col)
 	n += HoloMesh3D.line(s, mr, pr, col)
 	n += HoloMesh3D.line(s, pr, pl, col)
@@ -626,10 +728,29 @@ static func _epave_voiture(h, c: Vector3, col: Color, neon: Color, rng: RandomNu
 	n += HoloMesh3D.line(s, apex, ml, col)
 	n += HoloMesh3D.line(s, apex, mr, col)
 	n += HoloMesh3D.line(s, apex, poupe, col)
-	# Phare néon à l'avant (petite balise → « c'est une voiture »).
-	ng += HoloMesh3D.diamond(sg, nez + Vector3(0, ht * 0.25, 0),
+	return n
+
+# Épave de voiture posée au sol, orientée le long de X ou Y au hasard, phare néon
+# à l'avant (petite balise → « c'est une voiture »). Renvoie [arêtes, glow].
+static func _epave_voiture(h, c: Vector3, col: Color, neon: Color, rng: RandomNumberGenerator, s: SurfaceTool, sg: SurfaceTool) -> Array:
+	var tang := Vector3(0, 0, 1) if rng.randf() < 0.5 else Vector3(1, 0, 0)
+	var n := _carrosserie(h, c, tang, col, s)
+	var ng := HoloMesh3D.diamond(sg, c + tang * (h.taille_cellule * 0.22) + Vector3(0, h.taille_cellule * 0.02, 0),
 			h.taille_cellule * 0.04, h.taille_cellule * 0.045, neon)
 	return [n, ng]
+
+# Pile de pneus : 2 à 4 anneaux empilés, léger désaxage → stock de pneus d'allée.
+static func _pile_pneus(h, c: Vector3, col: Color, rng: RandomNumberGenerator, s: SurfaceTool) -> int:
+	var n := 0
+	var r: float = h.taille_cellule * 0.10
+	var nb := 2 + rng.randi() % 3
+	var eh: float = h.unite_maison * 0.09
+	var y := eh * 0.5
+	for _k in nb:
+		var p := c + Vector3((rng.randf() - 0.5) * r * 0.5, y, (rng.randf() - 0.5) * r * 0.5)
+		n += HoloMesh3D.circle(s, p, r, col, 10)
+		y += eh
+	return n
 
 # Grue à électro-aimant : mât treillis + flèche + contrepoids + câble et aimant (glow).
 # Icône immédiate de casse auto. Renvoie [arêtes, glow].
@@ -652,6 +773,8 @@ static func _grue_casse(h, base: Vector3, col: Color, neon: Color, s: SurfaceToo
 	var hook := tip + Vector3(0, -mh * 0.5, 0)
 	ng += HoloMesh3D.line(sg, tip, hook, neon)                 # câble
 	ng += HoloMesh3D.box(sg, hook, h.taille_cellule * 0.20, h.taille_cellule * 0.10, h.taille_cellule * 0.20, neon)  # aimant
+	# Carcasse SUSPENDUE à l'aimant (elle pend dans le vide) → grue en plein travail.
+	n += _carrosserie(h, hook + Vector3(0, -h.taille_cellule * 0.16, 0), Vector3(0, 0, 1), col, s)
 	return [n, ng]
 
 # ─── Supermarché / hypermarché : volume bas + DÉBAUCHE d'enseignes lumineuses ──
@@ -889,12 +1012,28 @@ static func prisons(h) -> void:
 		n += rc[0]; ng += rc[1]
 		# Portail d'entrée face aux routes.
 		ng += h._portes_vers_routes(b["cells"], mur_h * 0.7, neon, sg)
-		# Miradors aux 4 coins de la bbox (postes de garde surélevés).
+		# Miradors aux 4 coins de la bbox (postes de garde surélevés) + FAISCEAU de
+		# recherche qui plonge dans la cour et BALAIE en va-et-vient (rail
+		# d'animation des projecteurs, cf. HoloMap3D._process).
 		var corners := [bb.position, bb.position + Vector2i(bb.size.x - 1, 0),
 				bb.position + Vector2i(0, bb.size.y - 1), bb.position + Vector2i(bb.size.x - 1, bb.size.y - 1)]
+		var idx := 0
 		for cc: Vector2i in corners:
 			var rm := _mirador(h, h._world(cc.x, cc.y, 0.0), mur_h, col, neon, s, sg)
 			n += rm[0]; ng += rm[1]
+			var tete: Vector3 = h._world(cc.x, cc.y, mur_h * 1.35 + h.unite_maison * 0.9)
+			var aimx: float = centre.x - tete.x
+			var aimz: float = centre.z - tete.z
+			var dist := sqrt(aimx * aimx + aimz * aimz)
+			if dist < 0.001:
+				continue
+			var node := _searchlight_mirador(h, tete, dist * 0.42, neon)
+			node.set_meta("base_yaw", atan2(-aimz, aimx))   # +X local vise la cour
+			node.set_meta("amp", deg_to_rad(26.0))
+			node.set_meta("phase", float(idx) * 1.4)        # désynchronise les 4 coins
+			h._monde.add_child(node)
+			h._projecteurs.append(node)
+			idx += 1
 		# Champ de force au sommet : grille d'énergie au-dessus de la COUR (intérieur creux).
 		nc += _champ_force(h, b["cells"], mur_h * 1.04, champ_col, champ)
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Prisons")
@@ -944,6 +1083,29 @@ static func _mirador(h, base: Vector3, mur_h: float, col: Color, neon: Color, s:
 	ng += HoloMesh3D.diamond(sg, base + Vector3(0, hh + h.unite_maison * 0.5, 0),
 			h.taille_cellule * 0.1, h.taille_cellule * 0.14, neon)
 	return [n, ng]
+
+# Faisceau de mirador : cône de lumière qui plonge de la cabine vers la cour +
+# nappe elliptique au sol. Node orientable (+X local = visée), la rotation.y est
+# animée par HoloMap3D._process comme les autres projecteurs.
+static func _searchlight_mirador(h, tete: Vector3, reach: float, col: Color) -> Node3D:
+	var node := Node3D.new()
+	node.name = "ProjecteurMirador"
+	node.position = tete
+	var s := HoloMesh3D.st()
+	var n := 0
+	var poolc := Vector3(reach, -tete.y, 0)   # y monde = 0 → local -tete.y
+	var pr: float = h.taille_cellule * 0.42
+	n += HoloMesh3D.circle(s, poolc, pr, col, 16)
+	n += HoloMesh3D.line(s, Vector3.ZERO, poolc, col)      # axe du faisceau
+	for a: float in [0.0, 90.0, 180.0, 270.0]:              # cône (4 génératrices)
+		var rad := deg_to_rad(a)
+		n += HoloMesh3D.line(s, Vector3.ZERO, poolc + Vector3(cos(rad) * pr, 0, sin(rad) * pr), col)
+	var mi := MeshInstance3D.new()
+	mi.name = "FaisceauMesh"
+	mi.mesh = HoloMesh3D.commit(s, n)
+	mi.material_override = h._mat_neon
+	node.add_child(mi)
+	return node
 
 # Champ de force : grille d'énergie tendue au-dessus de la cour (toutes les cases du
 # bloc), à hauteur `y`. Une tuile en X par case + cadre extérieur. Renvoie le nb d'arêtes.

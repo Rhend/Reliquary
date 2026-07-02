@@ -33,6 +33,7 @@ func _ready() -> void:
 		"holo":      await _shoot_holo()
 		"holo_overlay": await _shoot_holo_overlay()
 		"holo_baseball": await _shoot_holo_baseball()
+		"holo_lieux": await _shoot_holo_lieux()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -145,6 +146,38 @@ func _shoot_holo() -> void:
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_voies.png")
 	print("Screenshot -> res://tests/_shot_holo_voies.png")
+
+# ── Gros plans des LIEUX SPÉCIAUX (cimetière / casse / prison / usine) ──
+# Cadre automatiquement la caméra sur le premier bloc de chaque famille lue du
+# gabarit → PNG par famille, pour juger le design de près sans chercher à la main.
+func _shoot_holo_lieux() -> void:
+	var vp3d := SubViewport.new()
+	vp3d.size = Vector2i(1280, 720)
+	vp3d.own_world_3d = true
+	vp3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp3d)
+	var holo: HoloMap3D = (load("res://scenes/holomap3d/holo_map_3d.tscn") as PackedScene).instantiate()
+	vp3d.add_child(holo)
+	await get_tree().create_timer(2.2).timeout   # intro terminée
+	holo.distance_min = 0.8
+	var familles := {
+		"cimetiere": holo._excel.cimetieres, "casse": holo._excel.casses,
+		"prison": holo._excel.prisons, "usine": holo._excel.usines,
+	}
+	for nom: String in familles:
+		var liste: Array = familles[nom]
+		if liste.is_empty():
+			continue
+		var bb: Rect2i = liste[0]["bbox"]
+		var c: Vector3 = holo._centre_bbox(bb)
+		holo._rig.position = Vector3(c.x, 0.15, c.z)
+		holo._set_yaw(deg_to_rad(30.0))
+		holo.plongee_deg = 40.0
+		holo._distance_cible = maxf(2.0, float(maxi(bb.size.x, bb.size.y)) * holo.taille_cellule * 2.2)
+		await get_tree().create_timer(1.0).timeout
+		await RenderingServer.frame_post_draw
+		vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_%s.png" % nom)
+		print("Screenshot -> res://tests/_shot_holo_%s.png" % nom)
 
 # ── Preview d'un terrain de baseball (modèle synthétique injecté) ──
 func _shoot_holo_baseball() -> void:

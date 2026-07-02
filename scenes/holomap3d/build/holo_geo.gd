@@ -108,6 +108,29 @@ static func butte(s: SurfaceTool, c: Vector3, r: float, h: float, col: Color, jx
 		prev = cur
 	return n
 
+# Rectangle plat (plan XZ) centré en `c`, demi-côtés hx / hz.
+static func rect_plat(s: SurfaceTool, c: Vector3, hx: float, hz: float, col: Color) -> int:
+	var a := c + Vector3(-hx, 0, -hz)
+	var b := c + Vector3(hx, 0, -hz)
+	var d := c + Vector3(hx, 0, hz)
+	var e := c + Vector3(-hx, 0, hz)
+	return HoloMesh3D.line(s, a, b, col) + HoloMesh3D.line(s, b, d, col) \
+			+ HoloMesh3D.line(s, d, e, col) + HoloMesh3D.line(s, e, a, col)
+
+# Hélice autour d'un cylindre elliptique (base au sol centrée `c`) : `tours`
+# révolutions de la base au sommet `h`, départ angulaire `phase`.
+static func helice(s: SurfaceTool, c: Vector3, rx: float, rz: float, h: float,
+		tours: float, phase: float, col: Color, seg: int) -> int:
+	var n := 0
+	var prev := c + Vector3(cos(phase) * rx, 0, sin(phase) * rz)
+	for i in range(1, seg + 1):
+		var t := float(i) / float(seg)
+		var a := phase + t * TAU * tours
+		var cur := c + Vector3(cos(a) * rx, h * t, sin(a) * rz)
+		n += HoloMesh3D.line(s, prev, cur, col)
+		prev = cur
+	return n
+
 # Petit carré plat (plan XZ) centré en `c`, demi-côté `r`.
 static func carre_plat(s: SurfaceTool, c: Vector3, r: float, col: Color) -> int:
 	var a := c + Vector3(-r, 0, -r)

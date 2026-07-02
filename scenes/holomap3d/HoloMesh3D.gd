@@ -222,24 +222,55 @@ static func pyramid_faces(s: SurfaceTool, c: Vector3, sx: float, sz: float, h: f
 		n += _tri(s, p0, p1, apex, nrm)
 	return n
 
-# Dôme wireframe (demi-ellipsoïde) : `anneaux` cercles de latitude + `meridiens`
-# arcs verticaux + cercle de base. Base au sol centrée `c`, demi-axes rx/rz, hauteur h.
-static func dome(s: SurfaceTool, c: Vector3, rx: float, rz: float, h: float, col: Color, anneaux: int = 3, meridiens: int = 10) -> int:
-	var n := 0
-	n += ellipse(s, c, rx, rz, col, 28)
-	for k in range(1, anneaux + 1):
+# Points des anneaux de latitude d'un demi-ellipsoïde (base au sol centrée `c`) :
+# Array d'anneaux, chaque anneau = Array de `seg` Vector3 alignés en angle.
+static func _dome_pts(c: Vector3, rx: float, rz: float, h: float, anneaux: int, seg: int) -> Array:
+	var pts: Array = []
+	for k in range(0, anneaux + 1):
 		var t := float(k) / float(anneaux + 1)
 		var f := sqrt(maxf(0.0, 1.0 - t * t))
-		n += ellipse(s, c + Vector3(0, h * t, 0), rx * f, rz * f, col, 24)
-	for m in maxi(0, meridiens):
-		var ang := TAU * float(m) / float(meridiens)
-		var dir := Vector3(cos(ang) * rx, 0, sin(ang) * rz)
-		var prev := c + dir
-		var pas := 6
-		for i in range(1, pas + 1):
-			var t := float(i) / float(pas)
-			var f := sqrt(maxf(0.0, 1.0 - t * t))
-			var cur := c + dir * f + Vector3(0, h * t, 0)
-			n += line(s, prev, cur, col)
-			prev = cur
+		var ring: Array = []
+		for i in seg:
+			var a := TAU * float(i) / float(seg)
+			ring.append(c + Vector3(cos(a) * rx * f, h * t, sin(a) * rz * f))
+		pts.append(ring)
+	return pts
+
+# Dôme GÉODÉSIQUE wireframe (demi-ellipsoïde triangulé) : anneaux de latitude
+# reliés par méridiens segmentés + DIAGONALES → treillis de triangles (structure
+# architecturale, plus une cage à oiseaux). Base au sol centrée `c`, hauteur h.
+static func dome(s: SurfaceTool, c: Vector3, rx: float, rz: float, h: float, col: Color, anneaux: int = 3, seg: int = 14) -> int:
+	var pts := _dome_pts(c, rx, rz, h, anneaux, seg)
+	var apex := c + Vector3(0, h, 0)
+	var n := 0
+	for k in pts.size():
+		var ring: Array = pts[k]
+		for i in seg:
+			n += line(s, ring[i], ring[(i + 1) % seg], col)        # anneau de latitude
+			if k + 1 < pts.size():
+				var up: Array = pts[k + 1]
+				n += line(s, ring[i], up[i], col)                   # méridien
+				n += line(s, ring[i], up[(i + 1) % seg], col)       # diagonale (triangulation)
+			else:
+				n += line(s, ring[i], apex, col)                    # éventail vers l'apex
+	return n
+
+# Faces pleines du dôme (mêmes anneaux que `dome`) pour l'occlusion holo :
+# le dôme devient un volume sombre habillé du treillis, cohérent avec les boîtes.
+static func dome_faces(sf: SurfaceTool, c: Vector3, rx: float, rz: float, h: float, anneaux: int = 3, seg: int = 14) -> int:
+	var pts := _dome_pts(c, rx, rz, h, anneaux, seg)
+	var apex := c + Vector3(0, h, 0)
+	var n := 0
+	for k in pts.size():
+		var ring: Array = pts[k]
+		for i in seg:
+			var p0: Vector3 = ring[i]
+			var p1: Vector3 = ring[(i + 1) % seg]
+			if k + 1 < pts.size():
+				var up: Array = pts[k + 1]
+				var q0: Vector3 = up[i]
+				var q1: Vector3 = up[(i + 1) % seg]
+				n += _quad(sf, p0, p1, q1, q0, (p1 - p0).cross(q0 - p0).normalized())
+			else:
+				n += _tri(sf, p0, p1, apex, (p1 - p0).cross(apex - p0).normalized())
 	return n
