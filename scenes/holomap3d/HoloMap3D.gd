@@ -153,7 +153,9 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # ─── Effets / Juice ───────────────────────────────────────────
 @export_group("Effets")
 @export var intro_actif := true               # matérialisation : la ville monte du sol à l'ouverture
-@export var socle_actif := true               # anneau-socle « table tactique »
+# Anneau-socle « table tactique » : DÉSACTIVÉ — son rayon (1.10× la demi-grille)
+# coupe les coins de la carte carrée (√2 ≈ 1.41) et empiète sur le bâti des angles.
+@export var socle_actif := false
 @export var radar_actif := true               # balayage radar lent au sol
 @export var radar_vitesse := 22.0             # °/s du balayage
 @export var couleur_socle := Color(0.30, 0.85, 1.00)  # cyan holographique (cadre/HUD au sol)
