@@ -5,20 +5,30 @@
 #   • suivent les voies (décalées à DROITE du sens de marche → conduite à droite),
 #   • TOURNENT aux intersections (tout droit / gauche / droite, jamais de demi-tour),
 #   • ne SE CROISENT JAMAIS, garanti par un système de RÉSERVATION de cases :
-#       - case d'intersection (deux routes se croisent) = VERROU PLEIN : une seule
-#         voiture à la fois → aucun croisement possible ;
+#       - CARREFOUR (composante connexe de cases d'intersection) = UN SEUL verrou
+#         pour tout le blob : une voiture à la fois dans le carrefour → aucun
+#         croisement NI interblocage interne (deux voitures face à face dans un
+#         carrefour 2×2 se bloquaient mutuellement pour toujours) ;
 #       - case de tronçon droit = créneau PAR SENS → les sens opposés coexistent
 #         (décalés de part et d'autre), mais deux voitures du même sens gardent
 #         l'écart d'une case (file indienne, pas de chevauchement).
 #
 # Chaque voiture détient en permanence la réservation de la case qu'elle occupe ;
 # elle n'avance dans la suivante que si le créneau requis est libre, sinon attend.
+# ANTI-BOUCHON : une voiture bloquée trop longtemps HORS feu rouge (gridlock en
+# anneau autour d'un îlot : chacun attend le suivant) finit par faire DEMI-TOUR
+# (le conducteur renonce et quitte le bouchon) → les anneaux se dissolvent seuls.
 # Rendu par ImmediateMesh régénéré chaque frame (petits segments émissifs).
 # ============================================================
 class_name HoloTraffic
 extends Node3D
 
 const DIRS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+# Attente RÉELLE (créneau occupé, pas un feu rouge) au-delà de laquelle le
+# conducteur renonce et fait demi-tour. ≥ une période de feux (9 s) : une file
+# qui avance normalement remet ce compteur à zéro à chaque mouvement — seul un
+# vrai gridlock (aucun mouvement sur un cycle complet) déclenche le demi-tour.
+const ATTENTE_DEMI_TOUR := 9.0
 
 var _road := {}          # Vector2i → true
 var _road_list: Array = []
@@ -143,14 +153,30 @@ func _lane_pt(cell: Vector2i, dir: Vector2i) -> Vector3:
 	return _world(cell.x, cell.y) + _perp(dir)
 
 # ─── Réservation ──────────────────────────────────────────────
+# Carrefour = UN verrou pour tout le blob (pas un par case) : une voiture qui
+# traverse un carrefour multi-cases le tient de bout en bout → deux voitures ne
+# peuvent plus s'interbloquer À L'INTÉRIEUR (chacune tenant une case et voulant
+# celle de l'autre — l'ancien verrou par case gelait les carrefours 2×2 à vie).
 func _slot_key(cell: Vector2i, dir: Vector2i) -> String:
 	if _inter.get(cell, false):
-		return "%d_%d" % [cell.x, cell.y]                       # verrou plein
+		return "J%d" % int(_jid.get(cell, -1))                  # verrou de carrefour entier
 	return "%d_%d_%d_%d" % [cell.x, cell.y, dir.x, dir.y]       # créneau par sens
 
 func _libre(cell: Vector2i, dir: Vector2i, id: int) -> bool:
 	var k := _slot_key(cell, dir)
 	return not _occ.has(k) or _occ[k] == id
+
+# La case est-elle vide de toute AUTRE voiture, tous sens confondus ? Le pivot
+# d'un demi-tour balaie le CENTRE de la case : on ne se retourne pas à travers
+# une voiture arrêtée dans un autre créneau de la même case (frôlage quasi nul).
+func _seul_dans_case(cell: Vector2i, id: int) -> bool:
+	if _inter.get(cell, false):
+		return true   # carrefour : le verrou unique garantit déjà l'exclusivité
+	for d: Vector2i in DIRS:
+		var k := "%d_%d_%d_%d" % [cell.x, cell.y, d.x, d.y]
+		if _occ.has(k) and _occ[k] != id:
+			return false
+	return true
 
 # ─── Spawn ────────────────────────────────────────────────────
 func _spawn(n: int) -> void:
@@ -176,13 +202,19 @@ func _spawn(n: int) -> void:
 				"from": p, "ctrl": p, "to": p,
 				"t": 1.0, "len": 1.0, "key": k, "prev_key": "",
 				"speed": _cell * _rng.randf_range(1.1, 1.7),
+				"wait": 0.0,   # attente hors feu (anti-gridlock, cf. ATTENTE_DEMI_TOUR)
+				# Couleur FIXE par voiture (semée d'après le sens initial) : elle ne
+				# change plus en plein virage — le véhicule reste le même objet à l'œil.
+				"col": _col_av if (dir.x + dir.y > 0) else _col_ret,
 			})
 			break
 
 # ─── Choix du prochain mouvement ──────────────────────────────
 # Tout droit sur un tronçon ; aux intersections, on choisit un mouvement RÉSERVABLE
-# (pas de demi-tour), pour éviter de bloquer le carrefour.
-func _choisir(cell: Vector2i, dir: Vector2i, id: int) -> Vector2i:
+# (pas de demi-tour), pour éviter de bloquer le carrefour. `renonce` (attente trop
+# longue hors feu) autorise le demi-tour en DERNIER recours : le conducteur quitte
+# le bouchon → un gridlock en anneau se dissout au lieu de durer éternellement.
+func _choisir(cell: Vector2i, dir: Vector2i, id: int, renonce := false) -> Vector2i:
 	var opts: Array = []
 	for d: Vector2i in DIRS:
 		if d == -dir:
@@ -190,9 +222,18 @@ func _choisir(cell: Vector2i, dir: Vector2i, id: int) -> Vector2i:
 		if _road.has(cell + d):
 			opts.append(d)
 	if opts.is_empty():
-		return -dir if _road.has(cell - dir) else Vector2i.ZERO   # cul-de-sac : demi-tour
+		# Cul-de-sac : demi-tour — seulement si la case est à nous seuls (le pivot
+		# passe par son centre), sinon on attend que le voisin de case dégage.
+		if _road.has(cell - dir) and _seul_dans_case(cell, id):
+			return -dir
+		return Vector2i.ZERO
 	if not _inter.get(cell, false):
-		return dir if opts.has(dir) else opts[0]                  # tronçon : tout droit / virage forcé
+		var davant: Vector2i = dir if opts.has(dir) else opts[0]  # tronçon : tout droit / virage forcé
+		if renonce and not _libre(cell + davant, davant, id) \
+				and _road.has(cell - dir) and _libre(cell - dir, -dir, id) \
+				and _seul_dans_case(cell, id):
+			return -dir   # bloqué trop longtemps → demi-tour (voie opposée libre)
+		return davant
 	# Intersection : tout droit en priorité, sinon un virage réservable.
 	if opts.has(dir) and _libre(cell + dir, dir, id):
 		return dir
@@ -200,6 +241,8 @@ func _choisir(cell: Vector2i, dir: Vector2i, id: int) -> Vector2i:
 	for d: Vector2i in opts:
 		if _libre(cell + d, d, id):
 			return d
+	if renonce and _road.has(cell - dir) and _libre(cell - dir, -dir, id):
+		return -dir   # coincé DANS le carrefour → ressort par où il est entré
 	return Vector2i.ZERO   # tout bloqué → attendre
 
 # ─── Boucle ───────────────────────────────────────────────────
@@ -223,19 +266,25 @@ func _avancer(id: int, dt: float) -> void:
 	car["prev_key"] = ""
 	var arrived: Vector2i = car["tgt"]
 	var adir: Vector2i = car["tdir"]
-	var ndir := _choisir(arrived, adir, id)
+	var ndir := _choisir(arrived, adir, id, float(car["wait"]) > ATTENTE_DEMI_TOUR)
 	if ndir == Vector2i.ZERO:
+		car["wait"] = float(car["wait"]) + dt   # bloqué par l'occupation → gridlock possible
 		return   # attend (ne tient plus que sa case courante)
 	var ncell: Vector2i = arrived + ndir
 	if _feu_rouge(arrived, ncell, ndir):
-		return   # feu rouge → attend à la ligne d'arrêt
+		return   # feu rouge → attend à la ligne d'arrêt (compteur SUSPENDU, pas remis à 0 :
+		         # seul un vrai mouvement l'efface — un carrefour saturé finit par lasser)
 	if not _libre(ncell, ndir, id):
+		car["wait"] = float(car["wait"]) + dt
 		return   # case suivante occupée → attend (file / cède le passage)
+	car["wait"] = 0.0
 	# Engage le mouvement : réserve la suivante en GARDANT la courante.
 	var nkey := _slot_key(ncell, ndir)
 	_occ[nkey] = id
-	car["prev_key"] = car["key"]
-	car["key"] = nkey
+	if nkey != car["key"]:
+		car["prev_key"] = car["key"]
+		car["key"] = nkey
+	# (même clé = traversée interne d'un carrefour à verrou unique : rien à libérer)
 	var depart: Vector3 = car["to"]
 	var arrivee := _lane_pt(ncell, ndir)
 	car["from"] = depart
@@ -298,8 +347,7 @@ func _dessiner() -> void:
 		tang = tang.normalized()
 		var perp := Vector3(-tang.z, 0.0, tang.x)   # côté (gauche/droite) dans le plan
 		var up := Vector3(0, ht, 0)
-		var tdir: Vector2i = car["tdir"]
-		var col := _col_av if (tdir.x + tdir.y > 0) else _col_ret
+		var col: Color = car["col"]   # couleur fixe par voiture (pas de saut en virage)
 		# Empreinte au sol en goutte d'eau : nez (pointe avant), maître-bau (galbe,
 		# légèrement avancé), poupe (resserrée). Arête de proue effilée.
 		var nez := p + tang * hl
