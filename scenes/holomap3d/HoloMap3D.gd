@@ -587,6 +587,9 @@ func _build_all_excel() -> void:
 	Decor.supermarches(self)    # hypermarché (volume bas + enseignes néon)
 	Decor.prisons(self)         # prison : enceinte + miradors + cour + champ de force
 	Decor.commissariats(self)   # commissariat : poste compact + gyrophares + antenne
+	Decor.grands_parcs(self)    # grand parc urbain structuré (émeraude — ≠ parc-arbres)
+	Decor.universites(self)     # campus universitaire (bordeaux : corps + ailes + amphi)
+	Decor.musees(self)          # musée (prune : colonnade + verrière + hologrammes)
 	Ville.ponts(self)             # ouvrages du calque Surélevé (au-dessus de l'eau/route)
 	Ville.routes_elevees(self)    # autoroutes surélevées (magenta) — vide pour l'instant
 	# Calque Surélevé — verticalité (chantier) : chaque famille à son altitude saisie.

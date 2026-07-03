@@ -65,6 +65,29 @@ func _ready() -> void:
 	_eq("classe D2B48C → sport", _classe(Color8(0xD2, 0xB4, 0x8C)), HoloXlsxMap.Cell.SPORT)
 	_eq("classe B5B5B8 = parking", _classe(Color8(0xB5, 0xB5, 0xB8)), HoloXlsxMap.Cell.PARKING)
 	_eq("classe 3A4253 = batiment (pas parking)", _classe(Color8(0x3A, 0x42, 0x53)), HoloXlsxMap.Cell.BATIMENT)
+	# Nouvelles apparences institutionnelles (Carte) : grand parc urbain / université / musée.
+	_eq("classe 3FA06B → grand parc urbain", _classe(Color8(0x3F, 0xA0, 0x6B)), HoloXlsxMap.Cell.GRAND_PARC)
+	_eq("classe 9E3B5A → université", _classe(Color8(0x9E, 0x3B, 0x5A)), HoloXlsxMap.Cell.UNIVERSITE)
+	_eq("classe 6B4A8E → musée", _classe(Color8(0x6B, 0x4A, 0x8E)), HoloXlsxMap.Cell.MUSEE)
+	# Distinctions critiques : les deux verts restent DEUX apparences ; prune ≠ béton.
+	_eq("classe 5E7349 reste parc-arbres (≠ grand parc)", _classe(Color8(0x5E, 0x73, 0x49)), HoloXlsxMap.Cell.PARC)
+	_eq("classe 5A5E66 reste prison (≠ musée)", _classe(Color8(0x5A, 0x5E, 0x66)), HoloXlsxMap.Cell.PRISON)
+	# Chiffre = hauteur seule ; lettre de forme IGNORÉE (silhouette dédiée) ; pas de
+	# tour orpheline en double sur ces familles (elles consomment leur texte).
+	var mu := HoloXlsxMap.new()
+	mu.type_case = {Vector2i(2, 2): HoloXlsxMap.Cell.UNIVERSITE, Vector2i(3, 2): HoloXlsxMap.Cell.UNIVERSITE,
+			Vector2i(5, 2): HoloXlsxMap.Cell.GRAND_PARC, Vector2i(7, 2): HoloXlsxMap.Cell.MUSEE}
+	mu.texte_case = {Vector2i(2, 2): "18P", Vector2i(5, 2): "6", Vector2i(7, 2): "9G"}
+	mu._regrouper_batiments()
+	_eq("université : 1 bloc (2 cases fusionnées)", mu.universites.size(), 1)
+	_ok("université : hauteur tapée honorée (18 m)",
+			mu.universites.size() == 1 and is_equal_approx(float(mu.universites[0]["hauteur_m"]), 18.0))
+	_eq("université : lettre de forme ignorée (BOITE)",
+			int(mu.universites[0]["forme"]) if mu.universites.size() == 1 else -1, int(HoloXlsxMap.Forme.BOITE))
+	_eq("grand parc : 1 bloc", mu.grands_parcs.size(), 1)
+	_eq("musée : lettre G ignorée (BOITE)",
+			int(mu.musees[0]["forme"]) if mu.musees.size() == 1 else -1, int(HoloXlsxMap.Forme.BOITE))
+	_eq("aucune tour orpheline en double sur ces familles", mu.tours_orphelines.size(), 0)
 	# Commissariat (bleu nuit soutenu) : distinct du bâtiment générique ET de la prison.
 	_eq("classe 2B5A9E → commissariat", _classe(Color8(0x2B, 0x5A, 0x9E)), HoloXlsxMap.Cell.COMMISSARIAT)
 	_eq("classe 3A4253 ≠ commissariat (reste bâtiment)",

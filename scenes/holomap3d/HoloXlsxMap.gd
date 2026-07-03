@@ -46,7 +46,13 @@ enum Cell { VIDE, BATIMENT, ROUTE, EAU, PARC, PONT, SPORT,
 	# Carte — apparence de zone fermée.
 	PRISON,
 	# Carte — commissariat de police (poste institutionnel compact).
-	COMMISSARIAT }
+	COMMISSARIAT,
+	# Carte — grand parc urbain STRUCTURÉ (Central Park cyberpunk ; ≠ PARC = grappe d'arbres).
+	GRAND_PARC,
+	# Carte — campus universitaire (bâtiments académiques + amphi + esplanade).
+	UNIVERSITE,
+	# Carte — musée (façade monumentale, verrière, hologrammes d'exposition).
+	MUSEE }
 enum Forme { BOITE, PYRAMIDE, CYLINDRE, DOME, GRADINS }
 
 const ALTITUDE_PONT_DEFAUT := 3.0   # m, si aucune altitude tapée (faible : décolle le tablier)
@@ -76,6 +82,9 @@ const _FAMILLES := {
 	Cell.PARKING:     Color8(0xB5, 0xB5, 0xB8),   # gris clair neutre → aire de stationnement (au sol)
 	Cell.PRISON:      Color8(0x5A, 0x5E, 0x66),   # gris béton froid → prison (Carte, zone fermée)
 	Cell.COMMISSARIAT: Color8(0x2B, 0x5A, 0x9E), # bleu nuit soutenu → commissariat de police (Carte)
+	Cell.GRAND_PARC:  Color8(0x3F, 0xA0, 0x6B),   # vert émeraude VIF → grand parc urbain (≠ olive PARC)
+	Cell.UNIVERSITE:  Color8(0x9E, 0x3B, 0x5A),   # bordeaux/framboise → campus universitaire
+	Cell.MUSEE:       Color8(0x6B, 0x4A, 0x8E),   # violet-prune → musée (≠ gris béton PRISON)
 	# ── Calque Surélevé (n'apparaissent QUE sur la feuille « Surélevé ») ──
 	Cell.PASSERELLE:   Color8(0x7F, 0xD8, 0xA0),  # vert clair → passerelle piéton
 	Cell.HELIPORT:     Color8(0xF2, 0xD4, 0x3D),  # jaune → héliport (sur toit)
@@ -88,7 +97,10 @@ const _FAMILLES := {
 # (hauteur/forme) via _finaliser_bloc. Une case de ces familles ne doit JAMAIS
 # devenir une « tour orpheline » (sinon double rendu : bloc + bâtiment générique).
 const _FAMILLE_BATIE := [Cell.BATIMENT, Cell.USINE, Cell.CIMETIERE, Cell.CASSE, Cell.SUPERMARCHE,
-	Cell.PRISON, Cell.COMMISSARIAT]
+	Cell.PRISON, Cell.COMMISSARIAT, Cell.UNIVERSITE, Cell.MUSEE,
+	# GRAND_PARC est plat mais consomme aussi son texte via _blocs_famille (chiffre =
+	# hauteur seule) → exclu des tours orphelines comme les autres.
+	Cell.GRAND_PARC]
 # Familles qui n'existent QUE sur le calque « Surélevé » (ouvrages en hauteur). Sur la
 # « Carte », elles sont EXCLUES de la classification : une case bâtie peinte dans un gris/
 # une teinte proche ne doit pas y basculer (sinon elle devient un trou qui scinde le bloc).
@@ -98,7 +110,7 @@ const _SURELEVE_ONLY := [Cell.PONT, Cell.PASSERELLE, Cell.HELIPORT, Cell.SPOTS,
 # « Surélevé » (où seules les familles d'ouvrages + la route magenta sont valides).
 const _CARTE_ONLY := [Cell.BATIMENT, Cell.EAU, Cell.PARC, Cell.SPORT, Cell.CIMETIERE,
 	Cell.USINE, Cell.CASSE, Cell.SUPERMARCHE, Cell.COLLINE, Cell.PARKING, Cell.PRISON,
-	Cell.COMMISSARIAT]
+	Cell.COMMISSARIAT, Cell.GRAND_PARC, Cell.UNIVERSITE, Cell.MUSEE]
 
 # Familles « non-carte » → VIDE (fonds neutres du gabarit).
 const _NEUTRES := [
@@ -140,6 +152,9 @@ var routes_elevees: Array = []   # calque « Surélevé » : cases ROUTE magenta
 # ── Calque « Surélevé » — éléments de verticalité (chantier verticalité) ──
 var prisons: Array = []           # Carte : zone fermée (enceinte + miradors + cour) — {cells, bbox, hauteur_m, forme}
 var commissariats: Array = []     # Carte : poste de police compact — {cells, bbox, hauteur_m, forme}
+var grands_parcs: Array = []      # Carte : grand parc urbain structuré (plat) — {cells, bbox, hauteur_m, forme}
+var universites: Array = []       # Carte : campus universitaire — {cells, bbox, hauteur_m, forme}
+var musees: Array = []            # Carte : musée / institution culturelle — {cells, bbox, hauteur_m, forme}
 var passerelles: Array = []       # {cells, bbox, altitude_m, portes:Array[Vector2i]} — passerelle piéton
 var heliports: Array = []         # {cells, bbox, altitude_m} — plateforme carrée ≥ 4×4 sur toit
 var spots: Array = []             # Array[Vector2i] — spots lumineux (forcent le toit plat dessous)
@@ -215,7 +230,8 @@ const _CHAMPS_SNAPSHOT: Array[String] = [
 	"grille", "taille_case_m", "hauteur_defaut_m", "type_case", "texte_case",
 	"batiments", "routes", "eaux", "parcs", "terrains", "cimetieres", "usines",
 	"casses", "supermarches", "collines", "parkings", "tours_orphelines", "ponts",
-	"routes_elevees", "prisons", "commissariats", "passerelles", "heliports",
+	"routes_elevees", "prisons", "commissariats", "grands_parcs", "universites",
+	"musees", "passerelles", "heliports",
 	"spots", "telepheriques", "antennes", "enseignes", "croix_rouges", "zones",
 	"border_case", "_rapport",
 ]
@@ -670,6 +686,9 @@ func _regrouper_batiments() -> void:
 	supermarches = _blocs_famille(Cell.SUPERMARCHE)
 	prisons = _blocs_famille(Cell.PRISON)
 	commissariats = _blocs_famille(Cell.COMMISSARIAT)
+	grands_parcs = _blocs_famille(Cell.GRAND_PARC)
+	universites = _blocs_famille(Cell.UNIVERSITE)
+	musees = _blocs_famille(Cell.MUSEE)
 	# Codes posés sur une case NON-bâtiment (ex. « 9c » sur l'eau) : tour isolée.
 	# Le canal apparence reste celui du fond (l'eau garde son shimmer) ; le code
 	# ajoute un volume paramétrique compact à cette case (cf. chantier : le
@@ -817,7 +836,9 @@ func hauteur_m_zone(cells: Array) -> float:
 	for c: Vector2i in cells:
 		setd[c] = true
 	var hmax := 0.0
-	for liste: Array in [batiments, usines, cimetieres, casses, supermarches, prisons, commissariats]:
+	# (grands_parcs = plat : jamais compté — le pin d'un parc-lieu flotte près du sol.)
+	for liste: Array in [batiments, usines, cimetieres, casses, supermarches, prisons, commissariats,
+			universites, musees]:
 		for b: Dictionary in liste:
 			var hb := float(b.get("hauteur_m", 0.0))
 			if hb <= hmax:
@@ -849,7 +870,8 @@ func _valider_verticalite() -> void:
 # La hauteur la plus haute gagne si plusieurs blocs se chevauchent (cas limite).
 func _construire_index_bati() -> void:
 	_bati_index.clear()
-	for liste: Array in [batiments, usines, cimetieres, casses, supermarches, prisons, commissariats]:
+	for liste: Array in [batiments, usines, cimetieres, casses, supermarches, prisons, commissariats,
+			universites, musees]:
 		for b: Dictionary in liste:
 			var hb := float(b.get("hauteur_m", 0.0))
 			for c: Vector2i in b["cells"]:
@@ -1082,12 +1104,14 @@ func _parser(zip: ZIPReader, chemin: String) -> XMLParser:
 # Résumé texte (debug / test headless).
 func resume() -> String:
 	return ("grille=%d case=%.0fm h_defaut=%.0fm | bâtiments=%d routes=%d eau=%d parc=%d sport=%d " + \
-		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d parking=%d prison=%d commissariat=%d tours=%d " + \
+		"cimetière=%d usine=%d casse=%d supermarché=%d colline=%d parking=%d prison=%d commissariat=%d " + \
+		"grand_parc=%d université=%d musée=%d tours=%d " + \
 		"ponts=%d routes_élevées=%d passerelles=%d héliports=%d spots=%d téléphériques=%d antennes=%d " + \
 		"enseignes=%d croix=%d zones=%d") % [
 		grille, taille_case_m, hauteur_defaut_m,
 		batiments.size(), routes.size(), eaux.size(), parcs.size(), terrains.size(),
 		cimetieres.size(), usines.size(), casses.size(), supermarches.size(), collines.size(),
-		parkings.size(), prisons.size(), commissariats.size(), tours_orphelines.size(), ponts.size(),
+		parkings.size(), prisons.size(), commissariats.size(),
+		grands_parcs.size(), universites.size(), musees.size(), tours_orphelines.size(), ponts.size(),
 		routes_elevees.size(), passerelles.size(), heliports.size(), spots.size(), telepheriques.size(),
 		antennes.size(), enseignes.size(), croix_rouges.size(), zones.size()]

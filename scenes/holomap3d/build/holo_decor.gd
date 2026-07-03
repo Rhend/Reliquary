@@ -1722,6 +1722,443 @@ static func _antenne_commissariat(h, bb: Rect2i, haut: float, col: Color, neon: 
 			h.taille_cellule * 0.05, h.taille_cellule * 0.07, gyro)
 	return [n, nn, nbal]
 
+# ═══ Repère de parcelle ORIENTÉ ROUTE (grand parc / université / musée) ═══
+# (u = latéral 0..1, v = profondeur 0..1 avec v=0 CÔTÉ ROUTE d'entrée) →
+# coordonnées de GRILLE continues. `d` = direction bloc→route (cf. _cote_entree).
+static func _uv_grille(bb: Rect2i, d: Vector2i, u: float, v: float) -> Vector2:
+	var x0 := float(bb.position.x) - 0.5
+	var x1 := float(bb.position.x + bb.size.x - 1) + 0.5
+	var y0 := float(bb.position.y) - 0.5
+	var y1 := float(bb.position.y + bb.size.y - 1) + 0.5
+	if d == Vector2i(0, 1):
+		return Vector2(lerpf(x0, x1, u), lerpf(y1, y0, v))
+	if d == Vector2i(0, -1):
+		return Vector2(lerpf(x1, x0, u), lerpf(y0, y1, v))
+	if d == Vector2i(1, 0):
+		return Vector2(lerpf(x1, x0, v), lerpf(y0, y1, u))
+	return Vector2(lerpf(x0, x1, v), lerpf(y1, y0, u))
+
+# Taille MONDE (sx, sz) d'un rectangle du repère (du = fraction latérale,
+# dv = fraction de profondeur), selon l'axe de `d` (boîtes alignées grille).
+static func _uv_taille(h, bb: Rect2i, d: Vector2i, du: float, dv: float) -> Vector2:
+	var lat: float = float(bb.size.x if d.y != 0 else bb.size.y) * h.taille_cellule
+	var prof: float = float(bb.size.y if d.y != 0 else bb.size.x) * h.taille_cellule
+	if d.y != 0:
+		return Vector2(du * lat, dv * prof)
+	return Vector2(dv * prof, du * lat)
+
+# Boîte (arêtes + faces d'occlusion) posée dans le repère orienté : centre (u,v),
+# emprise (du × dv) en fractions de parcelle, hauteur monde. Renvoie [arêtes, faces].
+static func _boite_uv(h, bb: Rect2i, d: Vector2i, u: float, v: float, du: float, dv: float,
+		haut: float, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
+	var g := _uv_grille(bb, d, u, v)
+	var t := _uv_taille(h, bb, d, du, dv)
+	var c: Vector3 = h._world(g.x, g.y, 0.0)
+	var n := HoloMesh3D.box(s, c, t.x, haut, t.y, col)
+	var nf := HoloMesh3D.box_faces(sf, c, t.x * 0.96, haut, t.y * 0.96)
+	return [n, nf]
+
+# Bandeau : double rail horizontal ceinturant une boîte du repère orienté.
+static func _bandeau_uv(h, bb: Rect2i, d: Vector2i, u: float, v: float, du: float, dv: float,
+		yb: float, yh: float, col: Color, s: SurfaceTool) -> int:
+	var g := _uv_grille(bb, d, u, v)
+	var t := _uv_taille(h, bb, d, du, dv)
+	var c: Vector3 = h._world(g.x, g.y, 0.0)
+	var hx := t.x * 0.5
+	var hz := t.y * 0.5
+	var n := 0
+	for yy: float in [yb, yh]:
+		var p0 := c + Vector3(-hx, yy, -hz); var p1 := c + Vector3(hx, yy, -hz)
+		var p2 := c + Vector3(hx, yy, hz);   var p3 := c + Vector3(-hx, yy, hz)
+		n += HoloMesh3D.line(s, p0, p1, col) + HoloMesh3D.line(s, p1, p2, col) \
+				+ HoloMesh3D.line(s, p2, p3, col) + HoloMesh3D.line(s, p3, p0, col)
+	return n
+
+# Colonnade : `nb`+1 montants verticaux réguliers le long de la ligne v, entre u0 et u1.
+static func _colonnade_uv(h, bb: Rect2i, d: Vector2i, u0: float, u1: float, v: float,
+		haut: float, nb: int, col: Color, s: SurfaceTool) -> int:
+	var n := 0
+	for k in range(nb + 1):
+		var g := _uv_grille(bb, d, lerpf(u0, u1, float(k) / float(nb)), v)
+		var p: Vector3 = h._world(g.x, g.y, 0.0)
+		n += HoloMesh3D.line(s, p + Vector3(0, 0.02, 0), p + Vector3(0, haut, 0), col)
+	return n
+
+# Dallage d'esplanade : fines lignes croisées sur le rectangle u∈[u0,u1] × v∈[v0,v1].
+static func _esplanade_uv(h, bb: Rect2i, d: Vector2i, u0: float, u1: float, v0: float, v1: float,
+		col: Color, s: SurfaceTool) -> int:
+	var n := 0
+	var nu := 5
+	var nv := 3
+	for k in range(nu + 1):
+		var a := _uv_grille(bb, d, lerpf(u0, u1, float(k) / float(nu)), v0)
+		var bq := _uv_grille(bb, d, lerpf(u0, u1, float(k) / float(nu)), v1)
+		n += HoloMesh3D.line(s, h._world(a.x, a.y, 0.018), h._world(bq.x, bq.y, 0.018), col)
+	for k in range(nv + 1):
+		var a := _uv_grille(bb, d, u0, lerpf(v0, v1, float(k) / float(nv)))
+		var bq := _uv_grille(bb, d, u1, lerpf(v0, v1, float(k) / float(nv)))
+		n += HoloMesh3D.line(s, h._world(a.x, a.y, 0.018), h._world(bq.x, bq.y, 0.018), col)
+	return n
+
+# Disque plat (éventail de triangles, plan XZ) — nappe d'eau de bassin (couleur
+# vertex blanche : c'est le shader d'eau qui colore/anime).
+static func _disque_plat(s: SurfaceTool, c: Vector3, rx: float, rz: float, seg: int) -> int:
+	var n := 0
+	for i in seg:
+		var a0 := TAU * float(i) / float(seg)
+		var a1 := TAU * float(i + 1) / float(seg)
+		var p0 := c + Vector3(cos(a0) * rx, 0, sin(a0) * rz)
+		var p1 := c + Vector3(cos(a1) * rx, 0, sin(a1) * rz)
+		for v: Vector3 in [c, p0, p1]:
+			s.set_color(Color.WHITE)
+			s.add_vertex(v)
+		n += 1
+	return n
+
+# ─── Grand parc urbain (émeraude 3FA06B) : Central Park cyberpunk ──────────
+# ≠ PARC (grappe d'arbres, olive) : grand espace vert STRUCTURÉ et AMÉNAGÉ —
+# pelouse émeraude vivante (même shader que les parcs, teinte dédiée), promenade
+# périmétrique + allées en croix, bassin central animé, kiosques-dômes, arbres,
+# lampadaires néon. PLAT (aucun volume bâti) : un lieu posé dessus reste « sans
+# bâtiment ». Gradient de richesse sur les structures (h._moduler) ; la pelouse
+# partage l'uniforme de son shader, comme les parcs-arbres.
+static func grands_parcs(h) -> void:
+	if h._excel.grands_parcs.is_empty():
+		return
+	var mat_pelouse := ShaderMaterial.new()
+	mat_pelouse.shader = (h._mat_parc as ShaderMaterial).shader
+	mat_pelouse.set_shader_parameter("parc_color", Color(0.16, 0.68, 0.34))  # émeraude vive saturée
+	mat_pelouse.set_shader_parameter("emission", 0.88)   # sous le seuil de bloom (1.02)
+	mat_pelouse.set_shader_parameter("fog_debut", h.brume_debut)
+	mat_pelouse.set_shader_parameter("fog_fin", h.brume_fin)
+	h._mats_reveal.append(mat_pelouse)   # participe à la matérialisation d'intro
+	var sg := HoloMesh3D.st_tri()
+	var ng := 0                          # pelouse
+	var s := HoloMesh3D.st()
+	var n := 0                           # structures (kiosques, mâts, arbres)
+	var sc := HoloMesh3D.st()
+	var nc := 0                          # allées (trait net SANS bloom)
+	var sn := HoloMesh3D.st()
+	var nn := 0                          # néons (têtes de lampadaires, margelles)
+	var se := HoloMesh3D.st_tri()
+	var ne := 0                          # bassins (nappe d'eau animée)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = h.seed_val ^ 0x6A9D01
+	var hw: float = h.taille_cellule * 0.5
+	for b in h._excel.grands_parcs:
+		var bb: Rect2i = b["bbox"]
+		var cells: Array = b["cells"]
+		var centre: Vector3 = h._centre_bbox(bb)
+		var blanc: Color = h._moduler(Color(0.92, 0.88, 0.72, 0.9), centre)  # allées / kiosques
+		var vert: Color = h._moduler(Color(0.36, 0.85, 0.55, 0.9), centre)   # végétation émeraude
+		var ambre: Color = h._moduler(Color(1.0, 0.72, 0.30), centre)        # lampadaires
+		var cyan: Color = h._moduler(Color(0.40, 0.95, 1.0), centre)         # margelle du bassin
+		# 1) Pelouse pleine (une tuile par case — le shader anime touffes + pulse).
+		for c: Vector2i in cells:
+			var cw: Vector3 = h._world(c.x, c.y, 0.012)
+			var p0 := cw + Vector3(-hw, 0, -hw)
+			var p1 := cw + Vector3(hw, 0, -hw)
+			var p2 := cw + Vector3(hw, 0, hw)
+			var p3 := cw + Vector3(-hw, 0, hw)
+			for v: Vector3 in [p0, p1, p2, p0, p2, p3]:
+				sg.set_color(Color.WHITE)
+				sg.add_vertex(v)
+			ng += 2
+		# 2) Promenade périmétrique + allées en croix (pointillés chauds).
+		var x0 := float(bb.position.x)
+		var x1 := float(bb.position.x + bb.size.x - 1)
+		var y0 := float(bb.position.y)
+		var y1 := float(bb.position.y + bb.size.y - 1)
+		var da: float = h.taille_cellule * 0.42
+		var ga: float = h.taille_cellule * 0.22
+		var coins := [Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x0, y1), Vector2(x0, y0)]
+		for i in 4:
+			var ca := coins[i] as Vector2
+			var cb := coins[i + 1] as Vector2
+			nc += Geo.dashes(sc, h._world(ca.x, ca.y, 0.02), h._world(cb.x, cb.y, 0.02), blanc, da, ga)
+		var cx := (x0 + x1) * 0.5
+		var cyg := (y0 + y1) * 0.5
+		# 3) Bassin central (parcelle ≥ 3×3) : nappe d'eau animée + margelle cyan.
+		var rmin: float = minf(float(bb.size.x), float(bb.size.y))
+		var brx := 0.0
+		var brz := 0.0
+		if rmin >= 3.0:
+			brx = float(bb.size.x) * h.taille_cellule * 0.17
+			brz = float(bb.size.y) * h.taille_cellule * 0.17
+			ne += _disque_plat(se, centre + Vector3(0, 0.018, 0), brx, brz, 22)
+			nn += HoloMesh3D.ellipse(sn, centre + Vector3(0, 0.035, 0), brx * 1.06, brz * 1.06, cyan, 26)
+		# Allées traversantes en croix — COUPÉES au bord du bassin (pas de dalles sur l'eau).
+		var mx: float = (brx * 1.12) / h.taille_cellule   # marge en cases (margelle comprise)
+		var mz: float = (brz * 1.12) / h.taille_cellule
+		if brx > 0.0:
+			nc += Geo.dashes(sc, h._world(x0, cyg, 0.02), h._world(cx - mx, cyg, 0.02), blanc, da, ga)
+			nc += Geo.dashes(sc, h._world(cx + mx, cyg, 0.02), h._world(x1, cyg, 0.02), blanc, da, ga)
+			nc += Geo.dashes(sc, h._world(cx, y0, 0.02), h._world(cx, cyg - mz, 0.02), blanc, da, ga)
+			nc += Geo.dashes(sc, h._world(cx, cyg + mz, 0.02), h._world(cx, y1, 0.02), blanc, da, ga)
+		else:
+			nc += Geo.dashes(sc, h._world(x0, cyg, 0.02), h._world(x1, cyg, 0.02), blanc, da, ga)
+			nc += Geo.dashes(sc, h._world(cx, y0, 0.02), h._world(cx, y1, 0.02), blanc, da, ga)
+		# 4) Kiosques-dômes aux quarts opposés (parcelle ≥ 4×4) + anneau lumineux.
+		if rmin >= 4.0:
+			for q: Vector2 in [Vector2(0.27, 0.27), Vector2(0.73, 0.73)]:
+				var kg := Vector2(lerpf(x0, x1, q.x), lerpf(y0, y1, q.y))
+				n += _kiosque_parc(h, kg, blanc, s)
+				nn += HoloMesh3D.circle(sn, h._world(kg.x, kg.y, h.unite_maison * 0.62),
+						h.taille_cellule * 0.26, cyan, 14)
+		# 5) Arbres : cellules intérieures (la couronne reste promenade), hors bassin.
+		for c: Vector2i in cells:
+			if c.x <= bb.position.x or c.y <= bb.position.y \
+					or c.x >= bb.position.x + bb.size.x - 1 or c.y >= bb.position.y + bb.size.y - 1:
+				continue
+			var cw: Vector3 = h._world(c.x, c.y, 0.0)
+			if rmin >= 3.0 and absf(cw.x - centre.x) < brx + h.taille_cellule * 0.6 \
+					and absf(cw.z - centre.z) < brz + h.taille_cellule * 0.6:
+				continue   # bassin + margelle : pas d'arbre dans l'eau
+			if rng.randf() > 0.60:
+				continue
+			var jit: Vector3 = Vector3(rng.randf() - 0.5, 0.0, rng.randf() - 0.5) * (h.taille_cellule * 0.3)
+			n += _arbre_parc(h, s, cw + jit, h.unite_maison * rng.randf_range(0.9, 1.6),
+					Color(vert, 0.9), rng.randf())
+		# 6) Lampadaires néon : coins + milieux de côtés de la promenade.
+		for lp: Vector2 in [Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x0, y1),
+				Vector2(cx, y0), Vector2(cx, y1), Vector2(x0, cyg), Vector2(x1, cyg)]:
+			var base: Vector3 = h._world(lp.x, lp.y, 0.0)
+			var mh: float = h.unite_maison * 0.75
+			n += HoloMesh3D.line(s, base, base + Vector3(0, mh, 0), blanc)
+			nn += HoloMesh3D.diamond(sn, base + Vector3(0, mh + h.taille_cellule * 0.03, 0),
+					h.taille_cellule * 0.035, h.taille_cellule * 0.05, ambre)
+	h._ajouter_mesh(HoloMesh3D.commit(sg, ng), "GrandsParcsPelouse", mat_pelouse)
+	h._ajouter_mesh(HoloMesh3D.commit(se, ne), "GrandsParcsBassins", h._mat_eau)
+	h._ajouter_mesh(HoloMesh3D.commit(sc, nc), "GrandsParcsAllees", h._mat_contour)
+	h._ajouter_mesh(HoloMesh3D.commit(s, n), "GrandsParcs")
+	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "GrandsParcsNeon", h._mat_neon)
+
+# Kiosque de parc : 4 potelets + couronne circulaire + dôme (pavillon holo).
+static func _kiosque_parc(h, g: Vector2, col: Color, s: SurfaceTool) -> int:
+	var ray: float = h.taille_cellule * 0.30
+	var hpot: float = h.unite_maison * 0.55
+	var base: Vector3 = h._world(g.x, g.y, 0.0)
+	var n := 0
+	for q: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+		var p := base + Vector3(q.x * ray * 0.75, 0, q.y * ray * 0.75)
+		n += HoloMesh3D.line(s, p, p + Vector3(0, hpot, 0), col)
+	n += HoloMesh3D.circle(s, base + Vector3(0, hpot, 0), ray, col, 12)
+	n += HoloMesh3D.dome(s, base + Vector3(0, hpot, 0), ray, ray, h.unite_maison * 0.4, col, 2, 10)
+	return n
+
+# ─── Université (bordeaux 9E3B5A) : campus académique ──────────────────────
+# Corps principal en fond de parcelle + deux ailes latérales basses + AMPHI-DÔME
+# sur tambour, esplanade dallée côté route avec tapis d'accès et PANNEAUX
+# D'AFFICHAGE lumineux (framboise, grésillent comme des enseignes). Bandeau
+# framboise en couronne + colonnade sur la façade → registre institutionnel
+# étudiant. Orienté vers la route (_cote_entree). Chiffre tapé = hauteur seule.
+static func universites(h) -> void:
+	if h._excel.universites.is_empty():
+		return
+	var s := HoloMesh3D.st()
+	var n := 0                           # structure
+	var sf := HoloMesh3D.st_tri()
+	var nf := 0                          # faces d'occlusion
+	var sn := HoloMesh3D.st()
+	var nn := 0                          # accents framboise (néon)
+	var se := HoloMesh3D.st()
+	var nse := 0                         # panneaux d'affichage (matériau enseigne)
+	var sc := HoloMesh3D.st()
+	var ncc := 0                         # dallage d'esplanade (net, sans bloom)
+	for b in h._excel.universites:
+		var bb: Rect2i = b["bbox"]
+		var cells: Array = b["cells"]
+		var centre: Vector3 = h._centre_bbox(bb)
+		var col: Color = h._moduler(Color(0.40, 0.36, 0.48, 0.88), centre)   # béton académique
+		var fram: Color = h._moduler(Color(0.95, 0.36, 0.55), centre)        # framboise (glow)
+		var cyan: Color = h._moduler(Color(0.32, 0.95, 1.0), centre)
+		var blanc: Color = h._moduler(Color(0.80, 0.78, 0.88, 0.8), centre)
+		var haut: float = h._hauteur_monde(b["hauteur_m"])
+		var ent := _cote_entree(h, cells)
+		var d: Vector2i = ent["dir"]
+		# CORPS principal (fond de parcelle) : hall académique pleine largeur.
+		var r0: Array = _boite_uv(h, bb, d, 0.5, 0.76, 0.92, 0.44, haut, col, s, sf)
+		n += r0[0]
+		nf += r0[1]
+		# Bandeau framboise en couronne + colonnade sur la façade avant du corps.
+		nn += _bandeau_uv(h, bb, d, 0.5, 0.76, 0.92, 0.44, haut * 0.88, haut * 0.96, fram, sn)
+		n += _colonnade_uv(h, bb, d, 0.10, 0.90, 0.54, haut * 0.80, 7, blanc, s)
+		# AILES latérales basses (reliées au corps, encadrent l'esplanade).
+		for uw: Vector2 in [Vector2(0.09, 0.18), Vector2(0.91, 0.18)]:
+			var ra: Array = _boite_uv(h, bb, d, uw.x, 0.34, uw.y, 0.52, haut * 0.55, col, s, sf)
+			n += ra[0]
+			nf += ra[1]
+		# AMPHI : dôme sur tambour entre l'aile gauche et le corps (landmark du campus).
+		var gd := _uv_grille(bb, d, 0.24, 0.52)
+		var ray: float = minf(float(bb.size.x), float(bb.size.y)) * h.taille_cellule * 0.16
+		var pied: Vector3 = h._world(gd.x, gd.y, 0.0)
+		var tamb: float = haut * 0.30
+		n += HoloMesh3D.cylinder(s, pied, ray, ray, tamb, col, 16, 6)
+		nf += HoloMesh3D.cylinder_faces(sf, pied, ray * 0.96, ray * 0.96, tamb, 16)
+		var dc := pied + Vector3(0, tamb, 0)
+		n += HoloMesh3D.dome(s, dc, ray, ray, ray * 0.75, col, 3, 14)
+		nf += HoloMesh3D.dome_faces(sf, dc, ray * 0.96, ray * 0.96, ray * 0.73, 3, 14)
+		nn += HoloMesh3D.circle(sn, dc, ray * 1.02, fram, 20)   # anneau framboise du tambour
+		# ESPLANADE : dallage fin + tapis d'accès central vers la route.
+		ncc += _esplanade_uv(h, bb, d, 0.10, 0.90, 0.02, 0.30, blanc, sc)
+		for uu: float in [0.47, 0.53]:
+			var a := _uv_grille(bb, d, uu, 0.30)
+			var bpt := _uv_grille(bb, d, uu, 0.0)
+			ncc += HoloMesh3D.line(sc, h._world(a.x, a.y, 0.022), h._world(bpt.x, bpt.y, 0.022), blanc)
+		# PANNEAUX D'AFFICHAGE lumineux plantés sur l'esplanade (vie étudiante).
+		for up: float in [0.22, 0.78]:
+			nse += _panneau_campus(h, bb, d, up, 0.12, fram, cyan, se)
+	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Universites")
+	h._ajouter_faces(HoloMesh3D.commit(sf, nf), "UniversitesFaces")
+	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "UniversitesNeon", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(se, nse), "UniversitesPanneaux", h._mat_enseigne)
+	h._ajouter_mesh(HoloMesh3D.commit(sc, ncc), "UniversitesEsplanade", h._mat_contour)
+
+# Panneau d'affichage de campus : totem sur pied (cadre lumineux face à la route
+# + barres « annonces » cyan). Renvoie le nb d'arêtes.
+static func _panneau_campus(h, bb: Rect2i, d: Vector2i, u: float, v: float,
+		col: Color, col2: Color, s: SurfaceTool) -> int:
+	var g := _uv_grille(bb, d, u, v)
+	var base: Vector3 = h._world(g.x, g.y, 0.0)
+	var bw: float = h.taille_cellule * 0.34
+	var yb: float = h.unite_maison * 0.25
+	var yh: float = yb + h.unite_maison * 0.85
+	var lat := Vector3(float(d.y), 0.0, float(-d.x)) * (bw * 0.5)   # face à la route
+	var n := HoloMesh3D.line(s, base, base + Vector3(0, yb, 0), col)   # pied
+	var q0 := base - lat + Vector3(0, yb, 0)
+	var q1 := base + lat + Vector3(0, yb, 0)
+	var q2 := base + lat + Vector3(0, yh, 0)
+	var q3 := base - lat + Vector3(0, yh, 0)
+	n += HoloMesh3D.line(s, q0, q1, col) + HoloMesh3D.line(s, q1, q2, col) \
+			+ HoloMesh3D.line(s, q2, q3, col) + HoloMesh3D.line(s, q3, q0, col)
+	for m in 3:   # barres « annonces »
+		var t := float(m + 1) / 4.0
+		var pl := q0.lerp(q3, t)
+		var pr := q1.lerp(q2, t)
+		n += HoloMesh3D.line(s, pl.lerp(pr, 0.08), pr.lerp(pl, 0.08), col2)
+	return n
+
+# ─── Musée (violet-prune 6B4A8E) : institution culturelle ──────────────────
+# Corps massif + VERRIÈRE en berceau sur le toit, façade MONUMENTALE côté route :
+# perron étagé, colonnade + entablement + FRONTON, uplights chauds au pied des
+# colonnes, parvis baigné d'une nappe de lumière et HOLOGRAMMES D'EXPOSITION
+# flottants (anneau / losange sur mât, matériau enseigne → respiration/
+# grésillement). Registre prestige/culture. Chiffre tapé = hauteur seule.
+static func musees(h) -> void:
+	if h._excel.musees.is_empty():
+		return
+	var s := HoloMesh3D.st()
+	var n := 0
+	var sf := HoloMesh3D.st_tri()
+	var nf := 0
+	var sn := HoloMesh3D.st()
+	var nn := 0                          # néon prune + uplights chauds
+	var se := HoloMesh3D.st()
+	var nse := 0                         # hologrammes d'exposition (enseigne)
+	var sgl := HoloMesh3D.st_tri()
+	var ngl := 0                         # nappe chaude du parvis
+	for b in h._excel.musees:
+		var bb: Rect2i = b["bbox"]
+		var cells: Array = b["cells"]
+		var centre: Vector3 = h._centre_bbox(bb)
+		var col: Color = h._moduler(Color(0.52, 0.48, 0.62, 0.9), centre)   # pierre claire
+		var prune: Color = h._moduler(Color(0.74, 0.52, 0.98), centre)
+		var chaud: Color = h._moduler(Color(1.0, 0.85, 0.55), centre)
+		var haut: float = h._hauteur_monde(b["hauteur_m"])
+		var ent := _cote_entree(h, cells)
+		var d: Vector2i = ent["dir"]
+		# CORPS massif (les 2/3 arrière de la parcelle).
+		var r0: Array = _boite_uv(h, bb, d, 0.5, 0.64, 0.94, 0.62, haut, col, s, sf)
+		n += r0[0]
+		nf += r0[1]
+		# VERRIÈRE en berceau sur le toit + faîtière prune lumineuse.
+		var rv: Array = _verriere_uv(h, bb, d, 0.30, 0.70, 0.40, 0.90, haut, col, prune, s, sn)
+		n += rv[0]
+		nn += rv[1]
+		# FAÇADE MONUMENTALE : colonnade + entablement + fronton + emblème prune.
+		var uc0 := 0.16
+		var uc1 := 0.84
+		var vf := 0.335
+		n += _colonnade_uv(h, bb, d, uc0, uc1, vf, haut * 0.78, 7, col, s)
+		var ea := _uv_grille(bb, d, uc0, vf)
+		var eb := _uv_grille(bb, d, uc1, vf)
+		var pa: Vector3 = h._world(ea.x, ea.y, haut * 0.78)
+		var pb: Vector3 = h._world(eb.x, eb.y, haut * 0.78)
+		n += HoloMesh3D.line(s, pa, pb, col)   # entablement
+		var apex := (pa + pb) * 0.5 + Vector3(0, haut * 0.16, 0)
+		n += HoloMesh3D.line(s, pa, apex, col) + HoloMesh3D.line(s, apex, pb, col)   # fronton
+		nn += HoloMesh3D.diamond(sn, (pa + pb) * 0.5 + Vector3(0, haut * 0.86, 0),
+				h.taille_cellule * 0.05, h.taille_cellule * 0.07, prune)   # emblème
+		# UPLIGHTS : courtes verticales chaudes au pied de chaque colonne.
+		for k in range(8):
+			var g := _uv_grille(bb, d, lerpf(uc0, uc1, float(k) / 7.0), vf)
+			var p: Vector3 = h._world(g.x, g.y, 0.0)
+			nn += HoloMesh3D.line(sn, p + Vector3(0, 0.015, 0), p + Vector3(0, haut * 0.14, 0), chaud)
+		# PERRON : trois marches étagées qui descendent vers la route.
+		for k in 3:
+			var vm := vf - 0.055 * float(k + 1)
+			var ma := _uv_grille(bb, d, 0.26, vm)
+			var mb := _uv_grille(bb, d, 0.74, vm)
+			var yy := 0.02 + 0.016 * float(2 - k)
+			n += HoloMesh3D.line(s, h._world(ma.x, ma.y, yy), h._world(mb.x, mb.y, yy), col)
+		# PARVIS : nappe de lumière chaude + hologrammes d'exposition flottants.
+		var g0 := _uv_grille(bb, d, 0.08, 0.0)
+		var g1 := _uv_grille(bb, d, 0.92, 0.30)
+		ngl += _quad_plat(h, sgl, minf(g0.x, g1.x), minf(g0.y, g1.y),
+				maxf(g0.x, g1.x), maxf(g0.y, g1.y), 0.014, Color(chaud.r, chaud.g, chaud.b, 0.10))
+		nse += _hologramme_expo(h, bb, d, 0.16, 0.12, prune, true, se)
+		nse += _hologramme_expo(h, bb, d, 0.84, 0.12, prune, false, se)
+	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Musees")
+	h._ajouter_faces(HoloMesh3D.commit(sf, nf), "MuseesFaces")
+	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "MuseesNeon", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(se, nse), "MuseesHolos", h._mat_enseigne)
+	h._ajouter_mesh(HoloMesh3D.commit(sgl, ngl), "MuseesAmbiance", h._mat_glow_chaud)
+
+# Verrière en berceau : arches transversales régulières sur le toit (u0..u1 en
+# largeur, v0..v1 en profondeur) + rails latéraux + FAÎTIÈRE lumineuse.
+# Renvoie [arêtes structure, arêtes néon].
+static func _verriere_uv(h, bb: Rect2i, d: Vector2i, u0: float, u1: float, v0: float, v1: float,
+		haut: float, col: Color, neon: Color, s: SurfaceTool, sn: SurfaceTool) -> Array:
+	var n := 0
+	var hv: float = h.unite_maison * 0.55   # flèche de la voûte
+	var arcs := 5
+	var seg := 8
+	for a in range(arcs + 1):
+		var v := lerpf(v0, v1, float(a) / float(arcs))
+		var prev := Vector3.ZERO
+		for k in range(seg + 1):
+			var t := float(k) / float(seg)
+			var g := _uv_grille(bb, d, lerpf(u0, u1, t), v)
+			var p: Vector3 = h._world(g.x, g.y, haut + sin(PI * t) * hv)
+			if k > 0:
+				n += HoloMesh3D.line(s, prev, p, col)
+			prev = p
+	for uu: float in [u0, u1]:   # rails latéraux au niveau du toit
+		var ga := _uv_grille(bb, d, uu, v0)
+		var gb := _uv_grille(bb, d, uu, v1)
+		n += HoloMesh3D.line(s, h._world(ga.x, ga.y, haut), h._world(gb.x, gb.y, haut), col)
+	var fa := _uv_grille(bb, d, (u0 + u1) * 0.5, v0)
+	var fb := _uv_grille(bb, d, (u0 + u1) * 0.5, v1)
+	var nn := HoloMesh3D.line(sn, h._world(fa.x, fa.y, haut + hv), h._world(fb.x, fb.y, haut + hv), neon)
+	return [n, nn]
+
+# Hologramme d'exposition : mât fin + « œuvre » flottante (anneau double OU
+# losange) projetée au-dessus du parvis. Renvoie le nb d'arêtes.
+static func _hologramme_expo(h, bb: Rect2i, d: Vector2i, u: float, v: float,
+		col: Color, anneau: bool, s: SurfaceTool) -> int:
+	var g := _uv_grille(bb, d, u, v)
+	var base: Vector3 = h._world(g.x, g.y, 0.0)
+	var hm: float = h.unite_maison * 0.9
+	var n := HoloMesh3D.line(s, base, base + Vector3(0, hm * 0.55, 0), Color(col, 0.55))
+	var c := base + Vector3(0, hm, 0)
+	if anneau:
+		n += HoloMesh3D.circle(s, c, h.taille_cellule * 0.16, col, 16)
+		n += HoloMesh3D.circle(s, c + Vector3(0, h.taille_cellule * 0.05, 0),
+				h.taille_cellule * 0.10, col, 12)
+	else:
+		n += HoloMesh3D.diamond(s, c, h.taille_cellule * 0.11, h.taille_cellule * 0.20, col)
+	return n
+
 # Gyrophares de toit aux angles de la façade d'entrée + voitures de patrouille
 # stationnées le long de cette façade (carrosserie sombre + rampe lumineuse bleue
 # clignotante sur le toit). Renvoie [arêtes structure, arêtes balise].

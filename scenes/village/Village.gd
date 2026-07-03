@@ -1117,7 +1117,9 @@ func _zone_sans_batiment(xlsx: HoloXlsxMap, cells: Array) -> bool:
 	for c: Vector2i in cells:
 		var ct: int = xlsx.type_case.get(c, HoloXlsxMap.Cell.VIDE)
 		if ct in [HoloXlsxMap.Cell.BATIMENT, HoloXlsxMap.Cell.USINE,
-				HoloXlsxMap.Cell.CIMETIERE, HoloXlsxMap.Cell.CASSE, HoloXlsxMap.Cell.SUPERMARCHE]:
+				HoloXlsxMap.Cell.CIMETIERE, HoloXlsxMap.Cell.CASSE, HoloXlsxMap.Cell.SUPERMARCHE,
+				HoloXlsxMap.Cell.UNIVERSITE, HoloXlsxMap.Cell.MUSEE]:
+			# (GRAND_PARC volontairement absent : parc = lieu SANS bâtiment, décor-support.)
 			return false
 	return true
 

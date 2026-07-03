@@ -163,7 +163,10 @@ LIEU explorable (tier/nom/lore/découverte viennent de l'entité visée par l'ID
 Feuille **Carte** : bâtiment `3A4253`, route `D6248F`, eau `17C3C3`, parc `5E7349`,
 sport `D2B48C`, cimetière `6B7A8F`, usine `8B5E3C`, casse `B0560F`, supermarché `E8A23D`,
 colline `C8A86A`, parking `B5B5B8`, **prison `5A5E66`** (enceinte + miradors + cour +
-champ de force).
+champ de force), commissariat `2B5A9E`, **grand parc urbain `3FA06B`** (émeraude vif,
+≠ parc-arbres olive : pelouse animée + allées + bassin + kiosques), **université
+`9E3B5A`** (campus : corps + ailes + amphi-dôme + esplanade + panneaux), **musée
+`6B4A8E`** (colonnade + fronton + verrière + hologrammes d'exposition).
 
 Feuille **Surélevé** (ouvrages en hauteur, altitude = chiffre tapé dans la cellule) :
 pont `9FB2C4`, autoroute `D6248F`, **passerelle `7FD8A0`**, **héliport `F2D43D`**,

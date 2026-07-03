@@ -32,6 +32,7 @@ func _ready() -> void:
 		"welcome":   await _shoot_welcome()
 		"holo":      await _shoot_holo()
 		"holo_spot": await _shoot_holo_spot()
+		"holo_apparences": await _shoot_holo_apparences()
 		"holo_overlay": await _shoot_holo_overlay()
 		"holo_baseball": await _shoot_holo_baseball()
 		"holo_lieux": await _shoot_holo_lieux()
@@ -235,6 +236,62 @@ func _shoot_holo_lieux() -> void:
 		await RenderingServer.frame_post_draw
 		vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_parc.png")
 		print("Screenshot -> res://tests/_shot_holo_parc.png")
+
+# ── Preview des apparences GRAND PARC / UNIVERSITÉ / MUSÉE (modèle synthétique) ──
+# Trois parcelles côte à côte + une route au sud (oriente les entrées) → un PNG
+# d'ensemble + un gros plan par apparence, pour juger les motifs sans toucher au gabarit.
+func _shoot_holo_apparences() -> void:
+	var vp3d := SubViewport.new()
+	vp3d.size = Vector2i(1280, 720)
+	vp3d.own_world_3d = true
+	vp3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp3d)
+	var m := HoloXlsxMap.new()
+	m.ok = true
+	m.grille = 26
+	m.taille_case_m = 10.0
+	m.hauteur_defaut_m = 3.0
+	for gx in range(1, 25):   # route horizontale au sud des parcelles
+		m.type_case[Vector2i(gx, 15)] = HoloXlsxMap.Cell.ROUTE
+	# Les parcelles TOUCHENT la route (y=15) → _cote_entree oriente les façades vers elle.
+	_peindre_rect(m, Rect2i(2, 9, 8, 6), HoloXlsxMap.Cell.GRAND_PARC)
+	_peindre_rect(m, Rect2i(11, 10, 6, 5), HoloXlsxMap.Cell.UNIVERSITE)
+	m.texte_case[Vector2i(11, 10)] = "12"
+	_peindre_rect(m, Rect2i(18, 11, 5, 4), HoloXlsxMap.Cell.MUSEE)
+	m.texte_case[Vector2i(18, 11)] = "9"
+	m._regrouper_batiments()
+	var holo := HoloMap3D.new()
+	holo._excel = m
+	holo.distance_min = 0.8
+	vp3d.add_child(holo)
+	await get_tree().create_timer(2.2).timeout   # intro terminée
+	holo._set_yaw(deg_to_rad(18.0))
+	holo.plongee_deg = 42.0
+	holo._distance_cible = 6.4
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_apparences.png")
+	print("Screenshot -> res://tests/_shot_holo_apparences.png")
+	var cadrages := {
+		"grand_parc": Vector2(5.5, 11.5), "universite": Vector2(13.5, 12.0), "musee": Vector2(20.0, 12.5),
+	}
+	for nom: String in cadrages:
+		var gp: Vector2 = cadrages[nom]
+		var c: Vector3 = holo._world(gp.x, gp.y, 0.0)
+		holo._rig.position = Vector3(c.x, 0.12, c.z)
+		holo._set_yaw(deg_to_rad(24.0))
+		holo.plongee_deg = 40.0
+		holo._distance_cible = 3.4
+		await get_tree().create_timer(1.0).timeout
+		await RenderingServer.frame_post_draw
+		vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_%s.png" % nom)
+		print("Screenshot -> res://tests/_shot_holo_%s.png" % nom)
+
+# Peint un rectangle de cases d'une apparence dans un modèle synthétique.
+func _peindre_rect(m: HoloXlsxMap, r: Rect2i, t: int) -> void:
+	for gx in range(r.position.x, r.position.x + r.size.x):
+		for gy in range(r.position.y, r.position.y + r.size.y):
+			m.type_case[Vector2i(gx, gy)] = t
 
 # ── Preview d'un terrain de baseball (modèle synthétique injecté) ──
 func _shoot_holo_baseball() -> void:
