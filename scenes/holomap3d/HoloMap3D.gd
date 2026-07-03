@@ -240,6 +240,9 @@ var _proj_t := 0.0                      # temps cumulé pour le balayage des pro
 var _balise_t := 0.0                   # phase de clignotement des balises
 var _distance_cible := 15.0
 var _intro_en_cours := false
+var _intro_tw: Tween                           # tween d'intro courant (tué si rejoué)
+var _dist_init := 15.0                         # état caméra d'origine (restauré par rejouer_intro)
+var _plongee_init := 55.0
 var _mats_reveal: Array[ShaderMaterial] = []   # matériaux supportant le reveal d'intro
 var _foc := 0.0                                # intensité courante du focus de survol
 var _focus_tw: Tween
@@ -307,6 +310,8 @@ func _setup_camera() -> void:
 	_cam.far = 300.0
 	_rig.add_child(_cam)
 	_distance_cible = distance
+	_dist_init = distance          # mémorise l'état d'origine (déjà ajusté par _charger_excel)
+	_plongee_init = plongee_deg
 	_appliquer_camera()
 
 # Crée un ShaderMaterial et applique les paramètres en bloc (clé→valeur).
@@ -1066,12 +1071,15 @@ func _bati_forme(centre: Vector3, sx: float, sz: float, h: float, forme: int, co
 # la géométrie est masquée (discard shader) → la ville se dessine. La caméra
 # s'approche de loin en parallèle.
 func _jouer_intro() -> void:
+	if is_instance_valid(_intro_tw):
+		_intro_tw.kill()   # intro rejouée (overlay persistant) : l'ancienne ne doit pas finir en retard
 	_intro_en_cours = true
 	var max_r := _cgrid() * taille_cellule * 1.6 + 2.0
 	_set_reveal(0.0)
 	var d0 := _distance_cible * 1.7
 	distance = d0
 	var tw := create_tween().set_parallel(true)
+	_intro_tw = tw
 	tw.tween_method(_set_reveal, 0.0, max_r, 1.15) \
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	tw.tween_method(_set_distance, d0, _distance_cible, 1.1) \
@@ -1334,3 +1342,22 @@ func _set_yaw(v: float) -> void:
 func peupler_lieux(nouvelle_liste: Array[HoloLieuData]) -> void:
 	lieux = nouvelle_liste
 	_build_all()
+
+# Rafraîchit UNIQUEMENT les lieux (découvertes / tiers survenus depuis) sans
+# rebâtir le décor — contrairement à peupler_lieux qui refait _build_all (coûteux).
+# C'est le chemin de la réouverture d'une carte préchargée.
+func rafraichir_lieux(nouvelle_liste: Array[HoloLieuData]) -> void:
+	lieux = nouvelle_liste
+	_construire_lieux(nouvelle_liste)
+
+# Réouverture d'une carte déjà construite (overlay persistant) : remet la caméra
+# à son état d'origine et rejoue la matérialisation, sans toucher à la géométrie.
+func rejouer_intro() -> void:
+	_yaw = 0.0
+	plongee_deg = _plongee_init
+	_distance_cible = _dist_init
+	distance = _dist_init
+	if is_instance_valid(_rig):
+		_rig.position = Vector3.ZERO   # centre d'orbite ramené au centre (balade ZQSD oubliée)
+	_appliquer_camera()
+	_jouer_intro()

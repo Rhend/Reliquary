@@ -143,6 +143,8 @@ var _spark_traveling  : Dictionary = {}   # owner_id → bool (étincelle en cou
 var _birth            : BirthSequence = BirthSequence.new(self)  # phase d'éclosion (extraite)
 var _settings_overlay     : Control = null     # overlay paramètres, null si fermé
 var _holo_overlay         : Control = null     # carte holo 3D, null si fermée (coupe pan/zoom du hub)
+var _holo_cache           : HoloMap3DOverlay = null   # overlay PERSISTANT préchargé (veille ↔ réveil)
+var _holo_xlsx            : HoloXlsxMap = null        # gabarit Excel parsé UNE fois (lieux + décor)
 var _backdrop             : VillageBackdrop    # fond d'ambiance (halo + poussières)
 
 # ─── DEBUG : prévisualisation des paliers du Village ──────────
@@ -176,6 +178,11 @@ func _ready() -> void:
 	# à chaque démarrage tant que le joueur n'a pas coché « ne plus voir ».
 	if not GameSettings.welcome_dismissed:
 		add_child(WelcomeOverlay.new())
+
+	# Préchargement de la carte holo (différé d'une frame : le Village s'affiche
+	# d'abord). Le build 3D + la compilation des shaders GL se paient MAINTENANT,
+	# pas au premier clic « Carte » → ouverture instantanée ensuite.
+	_precharger_holomap.call_deferred()
 
 # Échap ouvre/ferme le panneau Paramètres (les popups modaux — FileDialog —
 # consomment Échap avant nous, donc pas de conflit).
@@ -1003,16 +1010,45 @@ func start_selected_expedition() -> void:
 # y sont posés en pins/zones cliquables (lus de la feuille « Lieux »). Un clic
 # sélectionne le biome dans le panneau (rail existant adv_selected_biome_id).
 func open_expedition_map() -> void:
+	if not is_instance_valid(_holo_cache):
+		# Préchargement pas encore passé (clic très précoce) : build à l'instant,
+		# visible — l'intro se joue dans le _ready de l'overlay, rien à réveiller.
+		_holo_cache = _creer_holo_overlay(false)
+		add_child(_holo_cache)
+		_holo_overlay = _holo_cache
+		return
+	# Carte PRÉCHARGÉE : rafraîchit lieux + titres (découvertes / langue survenues
+	# depuis) puis réveille — pas de build 3D ni de compilation de shaders.
+	_holo_cache.definir_titres(Translations.T("adv.map_title"), Translations.T("adv.map_hint"))
+	_holo_cache.peupler_lieux(_lieux_depuis_zones())
+	_holo_cache.reveiller()
+	_holo_overlay = _holo_cache
+
+# Précharge la carte holo en VEILLE : construite cachée dès l'arrivée au Village
+# (géométrie + shaders prêts), elle ne sera plus que réveillée par open_expedition_map.
+func _precharger_holomap() -> void:
+	if is_instance_valid(_holo_cache):
+		return
+	_holo_cache = _creer_holo_overlay(true)
+	add_child(_holo_cache)
+
+# Construit l'overlay persistant de la carte holo (en veille pour le préchargement,
+# éveillé pour une ouverture immédiate). Signaux branchés UNE fois pour toutes.
+func _creer_holo_overlay(en_veille: bool) -> HoloMap3DOverlay:
 	var holo := HoloMap3DOverlay.new()
 	holo.titre      = Translations.T("adv.map_title")
 	holo.sous_titre = Translations.T("adv.map_hint")
 	holo.chemin_xlsx = HoloMap3D.CHEMIN_GABARIT_DEFAUT   # carte lue depuis le gabarit
 	holo.lieux      = _lieux_depuis_zones()              # lieux découverts (zones bordées de la Carte)
+	holo.excel_preinjecte = _holo_xlsx                   # modèle déjà parsé par _lieux_depuis_zones
 	holo.z_index    = 400
+	holo.persistant = true
+	holo.demarrer_en_veille = en_veille
+	holo.ferme.connect(func() -> void: _holo_overlay = null)   # veille ≠ free → rouvrir pan/zoom du hub
 	holo.lieu_selectionne.connect(func(biome_id: String) -> void:
 		adv_selected_biome_id = biome_id
 		if is_instance_valid(holo):
-			holo.queue_free()
+			holo.fermer()
 		# La carte s'ouvre depuis le panneau Expéditions OU directement depuis le hub
 		# (hex « Carte »). Si le panneau est déjà actif → simple rafraîchissement ;
 		# sinon on l'OUVRE (sans quoi un clic depuis le hub sélectionnait le biome
@@ -1022,8 +1058,7 @@ func open_expedition_map() -> void:
 		else:
 			_open_panel("adventure")
 	)
-	_holo_overlay = holo
-	add_child(holo)
+	return holo
 
 # Construit les lieux d'expédition depuis les ZONES de la feuille « Carte ». Un LIEU =
 # une zone (bloc d'apparence) dont une cellule porte un ID (déjà détecté → zone["id"]).
@@ -1032,9 +1067,16 @@ func open_expedition_map() -> void:
 # (règle « non découvert = absent », appliquée au statut de lieu, pas au décor-support).
 func _lieux_depuis_zones() -> Array[HoloLieuData]:
 	var out: Array[HoloLieuData] = []
-	var xlsx := HoloXlsxMap.new()
-	if not xlsx.charger(HoloMap3D.CHEMIN_GABARIT_DEFAUT):
-		return out
+	# Gabarit parsé UNE seule fois par session : le modèle est réutilisé à chaque
+	# (ré)ouverture et pré-injecté dans la carte 3D (plus de double lecture du .xlsx).
+	if _holo_xlsx == null:
+		var charge := HoloXlsxMap.new()
+		if not charge.charger(HoloMap3D.CHEMIN_GABARIT_DEFAUT):
+			return out
+		_holo_xlsx = charge
+		for msg: String in _holo_xlsx.rapport():
+			push_warning("[HoloMap/Lieux] " + str(msg))
+	var xlsx := _holo_xlsx
 	for zone: Dictionary in xlsx.zones:
 		var eid: String = zone["id"]
 		var e := GameData.get_entity(eid)
@@ -1058,8 +1100,6 @@ func _lieux_depuis_zones() -> Array[HoloLieuData]:
 		l.sans_batiment   = _zone_sans_batiment(xlsx, cells)
 		l.decouvert       = true
 		out.append(l)
-	for msg: String in xlsx.rapport():
-		push_warning("[HoloMap/Lieux] " + str(msg))
 	return out
 
 # Array non typé de Vector2i → Array[Vector2i] (pour HoloLieuData.cells).
