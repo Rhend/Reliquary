@@ -31,6 +31,7 @@ func _ready() -> void:
 	match mode:
 		"welcome":   await _shoot_welcome()
 		"holo":      await _shoot_holo()
+		"holo_spot": await _shoot_holo_spot()
 		"holo_overlay": await _shoot_holo_overlay()
 		"holo_baseball": await _shoot_holo_baseball()
 		"holo_lieux": await _shoot_holo_lieux()
@@ -146,6 +147,39 @@ func _shoot_holo() -> void:
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_voies.png")
 	print("Screenshot -> res://tests/_shot_holo_voies.png")
+
+# ── Gros plan sur un POINT MONDE arbitraire (debug playtest localisé) ──
+# SHOT_X / SHOT_Z = coordonnées monde du point à cadrer (défaut 0,0) ;
+# SHOT_DIST = distance caméra (défaut 2.0). Produit une vue top-down (plan de
+# voirie lisible) + une vue 3/4 → juger marquage/feux/voitures à un endroit précis.
+func _shoot_holo_spot() -> void:
+	var vp3d := SubViewport.new()
+	vp3d.size = Vector2i(1280, 720)
+	vp3d.own_world_3d = true
+	vp3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp3d)
+	var holo: HoloMap3D = (load("res://scenes/holomap3d/holo_map_3d.tscn") as PackedScene).instantiate()
+	vp3d.add_child(holo)
+	await get_tree().create_timer(2.2).timeout   # intro terminée
+	var px := float(OS.get_environment("SHOT_X"))   # "" → 0.0
+	var pz := float(OS.get_environment("SHOT_Z"))
+	var dist_env := OS.get_environment("SHOT_DIST")
+	var dist := 2.0 if dist_env == "" else float(dist_env)
+	holo.distance_min = 0.5
+	holo._rig.position = Vector3(px, 0.05, pz)
+	holo._set_yaw(0.0)
+	holo.plongee_deg = 80.0
+	holo._distance_cible = dist
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_spot_top.png")
+	print("Screenshot -> res://tests/_shot_holo_spot_top.png")
+	holo._set_yaw(deg_to_rad(30.0))
+	holo.plongee_deg = 38.0
+	await get_tree().create_timer(1.0).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_spot_34.png")
+	print("Screenshot -> res://tests/_shot_holo_spot_34.png")
 
 # ── Gros plans des LIEUX SPÉCIAUX (cimetière / casse / prison / usine) ──
 # Cadre automatiquement la caméra sur le premier bloc de chaque famille lue du

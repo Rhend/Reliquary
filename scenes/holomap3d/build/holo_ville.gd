@@ -249,6 +249,12 @@ static func _marquage_voirie(h, s: SurfaceTool) -> int:
 				var sy := signf(vn.y - p.y)
 				if sy != 0.0 and R.has(vc + Vector2i(0, int(sy))):
 					_seg_ajouter(seg_v, p.x, p.y, vn.y)
+	# MÉDIANE TRAVERSANTE aux intersections en T : la route qui CONTINUE TOUT DROIT
+	# garde sa médiane à travers le carrefour — seule la branche s'ouvre (comme en
+	# voirie réelle). Sans ça, la délimitation des voies « sautait » sur toute la
+	# zone ouverte à chaque T (retour playtest, voies 2 de large). Les vrais
+	# croisements (+, bras des 4 côtés) restent entièrement ouverts.
+	n += _medianes_traversantes(h, R, ouvert, pont_cut, node, seg_h, seg_v, s, col_med)
 	for ky in seg_h:
 		for iv: Vector2 in _seg_fusion(seg_h[ky]):
 			n += Geo.dashes(s, h._world(iv.x, float(ky), 0.045), h._world(iv.y, float(ky), 0.045),
@@ -257,6 +263,64 @@ static func _marquage_voirie(h, s: SurfaceTool) -> int:
 		for iv: Vector2 in _seg_fusion(seg_v[kx]):
 			n += Geo.dashes(s, h._world(float(kx), iv.x, 0.045), h._world(float(kx), iv.y, 0.045),
 					col_med, h.taille_cellule * 0.5, h.taille_cellule * 0.35)
+	return n
+
+# Pour chaque CARREFOUR (blob 4-connexe de cases « ouvertes »), détermine si un
+# corridor le TRAVERSE de part en part (bras substantiels des deux côtés d'UN axe,
+# sans l'être sur les deux côtés de l'autre = intersection en T) → prolonge la
+# médiane de la route traversante d'un bras à l'autre. Les intervalles rejoignent
+# les pools seg_h/seg_v : la fusion garantit une ligne pointillée CONTINUE (phase
+# des pointillés comprise) avec les tronçons déjà tracés de chaque côté.
+static func _medianes_traversantes(h, R: Dictionary, ouvert: Dictionary, pont_cut: Dictionary,
+		node: Dictionary, seg_h: Dictionary, seg_v: Dictionary, s: SurfaceTool, col_med: Color) -> int:
+	var n := 0
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	var vus := {}
+	for c0: Vector2i in ouvert:
+		if vus.has(c0):
+			continue
+		# Blob du carrefour (cases ouvertes 4-connexes).
+		var blob: Array = []
+		var stack: Array = [c0]
+		while not stack.is_empty():
+			var x: Vector2i = stack.pop_back()
+			if vus.has(x) or not ouvert.has(x):
+				continue
+			vus[x] = true
+			blob.append(x)
+			for d: Vector2i in dirs:
+				if ouvert.has(x + d):
+					stack.append(x + d)
+		# Bras substantiels (≥ 2 cases de route non ouvertes, hors franchissement de
+		# pont) : première case adjacente retenue par côté → son nœud de médiane.
+		var bras := {}   # dir → cellule d'entrée du bras
+		for x: Vector2i in blob:
+			for d: Vector2i in dirs:
+				var v: Vector2i = x + d
+				if bras.has(d) or not R.has(v) or ouvert.has(v) or pont_cut.has(v):
+					continue
+				if R.has(v + d) and not ouvert.has(v + d):
+					bras[d] = v
+		var a_g: bool = bras.has(Vector2i(-1, 0))
+		var a_d: bool = bras.has(Vector2i(1, 0))
+		var a_h: bool = bras.has(Vector2i(0, -1))
+		var a_b: bool = bras.has(Vector2i(0, 1))
+		if a_g and a_d and not (a_h and a_b):
+			var na: Vector2 = node[bras[Vector2i(-1, 0)]]
+			var nb: Vector2 = node[bras[Vector2i(1, 0)]]
+			if absf(na.y - nb.y) < 0.005:
+				_seg_ajouter(seg_h, na.y, na.x, nb.x)
+			else:   # largeurs différentes de part et d'autre : raccord direct
+				n += Geo.dashes(s, h._world(na.x, na.y, 0.045), h._world(nb.x, nb.y, 0.045),
+						col_med, h.taille_cellule * 0.5, h.taille_cellule * 0.35)
+		if a_h and a_b and not (a_g and a_d):
+			var na: Vector2 = node[bras[Vector2i(0, -1)]]
+			var nb: Vector2 = node[bras[Vector2i(0, 1)]]
+			if absf(na.x - nb.x) < 0.005:
+				_seg_ajouter(seg_v, na.x, na.y, nb.y)
+			else:
+				n += Geo.dashes(s, h._world(na.x, na.y, 0.045), h._world(nb.x, nb.y, 0.045),
+						col_med, h.taille_cellule * 0.5, h.taille_cellule * 0.35)
 	return n
 
 # Ajoute un intervalle [a,b] au pool de segments de la ligne `ligne` (clé snappée).
