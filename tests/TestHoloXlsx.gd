@@ -65,6 +65,12 @@ func _ready() -> void:
 	_eq("classe D2B48C → sport", _classe(Color8(0xD2, 0xB4, 0x8C)), HoloXlsxMap.Cell.SPORT)
 	_eq("classe B5B5B8 = parking", _classe(Color8(0xB5, 0xB5, 0xB8)), HoloXlsxMap.Cell.PARKING)
 	_eq("classe 3A4253 = batiment (pas parking)", _classe(Color8(0x3A, 0x42, 0x53)), HoloXlsxMap.Cell.BATIMENT)
+	# Commissariat (bleu nuit soutenu) : distinct du bâtiment générique ET de la prison.
+	_eq("classe 2B5A9E → commissariat", _classe(Color8(0x2B, 0x5A, 0x9E)), HoloXlsxMap.Cell.COMMISSARIAT)
+	_eq("classe 3A4253 ≠ commissariat (reste bâtiment)",
+			_classe(Color8(0x3A, 0x42, 0x53)), HoloXlsxMap.Cell.BATIMENT)
+	_eq("classe 5A5E66 ≠ commissariat (reste prison)",
+			_classe(Color8(0x5A, 0x5E, 0x66)), HoloXlsxMap.Cell.PRISON)
 	# Bloc ceinturé (rendu : groupe entouré d'une bordure épaisse = bâtiment plein).
 	var me := HoloXlsxMap.new()
 	me.border_case = {Vector2i(0, 0): 15}   # 15 = murs sur les 4 côtés

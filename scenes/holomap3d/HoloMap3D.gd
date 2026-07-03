@@ -45,7 +45,6 @@ const Env := preload("res://scenes/holomap3d/build/holo_env.gd")
 const Ville := preload("res://scenes/holomap3d/build/holo_ville.gd")
 const Sureleve := preload("res://scenes/holomap3d/build/holo_sureleve.gd")
 const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
-const BEAM_SHADER := preload("res://scenes/holomap3d/holo_beam.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
 const TAILLE_MONDE_CIBLE := 13.0   # largeur monde visée pour la grille Excel (cadrage caméra)
 const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit de carte par défaut
@@ -171,11 +170,6 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 @export var vitesse_voitures := 0.08          # tours/seconde
 @export var couleur_voiture_aller := Color(0.55, 0.90, 1.00)   # cyan (phares)
 @export var couleur_voiture_retour := Color(1.00, 0.55, 0.25)  # ambre (feux arrière)
-# Spires corpo : les plus hautes tours projettent un FAISCEAU de lumière vertical
-# (+ mât d'antenne à tête pulsante) → verticalité dramatique, signal de pouvoir.
-@export var spires_actif := true
-@export var spires_max := 8                    # nb max de faisceaux (spires héros distinctes)
-@export_range(0.0, 5.0) var beam_emission := 2.4
 # Trafic AÉRIEN : couloirs de véhicules volants à plusieurs altitudes au-dessus de
 # la ville (VTOL) → la mégalopole vit en 3D, pas seulement au sol.
 @export var trafic_aerien_actif := true
@@ -237,7 +231,7 @@ var _mat_horizon: ShaderMaterial       # halo d'horizon / brume (sans atténuati
 var _mat_balise: ShaderMaterial        # balises rouges clignotantes (sommets de tours)
 var _mat_fumee: ShaderMaterial         # fumée d'usine (vert ocre, montée animée)
 var _mat_glow_chaud: ShaderMaterial    # nappes de lumière chaude (ambiance supermarché)
-var _mat_beam: ShaderMaterial          # faisceaux de spires corpo (shaft vertical)
+var _mat_contour: ShaderMaterial       # contours de surfaces (routes/eau/parcs) : net, SANS bloom
 var _mat_trafic_aerien: ShaderMaterial # trafic aérien (VTOL, plus rapide/brillant)
 var _discos: Array[Node3D] = []        # boules à facettes (sommets de pyramides) — tournent
 var _capstones: Array[Node3D] = []     # capstones de pyramide — lévitent en tournant lentement
@@ -390,7 +384,9 @@ func _setup_materials() -> void:
 
 	# Sol de parc : nappe verte VIVANTE (herbe holo — touffes + brins qui frémissent),
 	# même esprit de surface que l'eau (motif animé en coords monde, continu).
-	_mat_parc = _make_mat(PARC_SHADER, {"parc_color": couleur_parc})
+	# Gain plafonné SOUS le seuil de bloom (1.02) : les taches pulsantes restent
+	# animées mais la nappe n'irradie plus (retour playtest : bordures sans glow).
+	_mat_parc = _make_mat(PARC_SHADER, {"parc_color": couleur_parc, "emission": 0.72})
 
 	# Halo d'horizon / brume d'ambiance : émission douce, brume repoussée très loin
 	# (l'horizon est volontairement distant et doit rester visible).
@@ -409,10 +405,9 @@ func _setup_materials() -> void:
 	# Lumière chaude (ambiance supermarché) : nappes additives ambrées, glow doux.
 	_mat_glow_chaud = _make_mat(LINE_SHADER, {"emission_strength": 1.1, "alpha_mult": 1.0})
 
-	# Faisceaux de spires corpo : shaft de lumière vertical (billboard cylindrique).
-	_mat_beam = _make_mat(BEAM_SHADER, {
-		"emission": beam_emission, "fog_debut": brume_debut, "fog_fin": brume_fin,
-	})
+	# Contours de surfaces (routes / eau / parcs) : trait net juste SOUS le seuil de
+	# glow (1.02) → la forme se lit sans irradier (retour playtest : plus de halo).
+	_mat_contour = _make_mat(LINE_SHADER, {"emission_strength": 1.0, "alpha_mult": 1.0})
 
 	# Sol : émission faible (la luminosité réelle vient des vertex colors — nappe
 	# très sombre + maillage discret) → matérialise le terrain sans écraser la ville.
@@ -421,12 +416,12 @@ func _setup_materials() -> void:
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_lieu_decor, _mat_glow_chaud]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_lieu_decor, _mat_glow_chaud]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -566,7 +561,8 @@ func _build_all_excel() -> void:
 		Env.sol_disc(self, Vector2(_cgrid(), _cgrid()), _cgrid() * 1.28 + 2.0)
 	Ville.routes(self)
 	Ville.trottoirs(self)       # bordures de voirie (trottoirs)
-	Ville.eclairage(self)       # lampadaires (points lumineux chauds)
+	# (L'éclairage public des voiries — mâts + têtes-losanges lumineuses — a été
+	# RETIRÉ sur retour playtest : les losanges se lisaient comme des panneaux.)
 	Ville.eau(self)             # eau qui s'écoule (shader animé)
 	Ville.bordure_eau(self)     # liseré cyan vif → l'eau se détache de la carte
 	if decor_actif:
@@ -576,8 +572,8 @@ func _build_all_excel() -> void:
 	Decor.terrains(self)        # terrains de sport (baseball)
 	Decor.parkings(self)        # aires de stationnement (marquages au sol + lampadaires)
 	Ville.batiments(self)
-	if spires_actif:
-		Ville.spires(self)          # faisceaux corpo + mâts d'antenne (verticalité)
+	# (Les « spires corpo » — faisceaux verticaux au sommet des tours/formes — ont
+	# été RETIRÉES sur retour playtest : elles revenaient de tous les landmarks.)
 	if trafic_aerien_actif:
 		Ville.trafic_aerien(self)   # couloirs de VTOL au-dessus de la ville
 	Decor.cimetieres(self)      # mémorial numérique (champ de stèles)
@@ -585,6 +581,7 @@ func _build_all_excel() -> void:
 	Decor.casses(self)          # casse auto (enclos + épaves empilées)
 	Decor.supermarches(self)    # hypermarché (volume bas + enseignes néon)
 	Decor.prisons(self)         # prison : enceinte + miradors + cour + champ de force
+	Decor.commissariats(self)   # commissariat : poste compact + gyrophares + antenne
 	Ville.ponts(self)             # ouvrages du calque Surélevé (au-dessus de l'eau/route)
 	Ville.routes_elevees(self)    # autoroutes surélevées (magenta) — vide pour l'instant
 	# Calque Surélevé — verticalité (chantier) : chaque famille à son altitude saisie.
@@ -740,9 +737,11 @@ func _hash01(cell: Vector2i, salt: int) -> float:
 	var hraw := ((cell.x + 1) * 73856093) ^ ((cell.y + 1) * 19349663) ^ (salt * 83492791)
 	return float(hraw & 0xFFFF) / 65535.0
 
-# Bâtiment générique d'UNE case : silhouette piochée dans un POOL non-cubique (selon
-# la case + la hauteur) → toit en pointe, tour fuselée (biseautée), chapeau biseauté,
-# ou redents (gratte-ciel étagé). Aucun toit cubique, aucun accessoire. [arêtes, faces].
+# Bâtiment générique d'UNE case : silhouette piochée dans un POOL varié (selon la
+# case + la hauteur) → toit à DEUX PANS, toit MONOPENTE, tour fuselée, toit en
+# pointe, DOUBLE REDENT (gratte-ciel étagé), chapeau biseauté ou TOIT-TERRASSE à
+# édicule technique. Jamais de cube nu → la rangée de maisons ne se répète plus.
+# Renvoie [arêtes, faces].
 func _maison_variee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
 	var centre := _world(cell.x, cell.y, 0.0)
 	var sz := taille_cellule * 0.8
@@ -751,34 +750,52 @@ func _maison_variee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: Su
 	var v := _hash01(cell, 7)
 	var n := 0
 	var nf := 0
-	# Les redents (gratte-ciel étagé) ne valent que pour les volumes assez hauts ;
-	# sinon on retombe sur le chapeau biseauté → jamais de toit cubique.
-	var redents := v >= 0.78 and floors >= 3
-	if v < 0.33:
-		# Toit en POINTE : corps droit + toiture pyramidale.
-		var body := h * lerpf(0.60, 0.78, _hash01(cell, 11))
+	if v < 0.17:
+		# Toit à DEUX PANS : corps droit + faîtage (orienté X ou Z selon la case).
+		var body := h * 0.78
+		n += HoloMesh3D.box(s, centre, sz, body, sz, col)
+		nf += HoloMesh3D.box_faces(sf, centre, ins, body, ins)
+		var r := _toit_deux_pans(centre, sz, body, maxf(h - body, unite_maison * 0.45),
+				_hash01(cell, 11) < 0.5, col, s, sf)
+		n += r[0]; nf += r[1]
+	elif v < 0.34:
+		# Toit MONOPENTE (shed) : corps droit + pan incliné vers un des 4 côtés.
+		var body := h * 0.74
+		n += HoloMesh3D.box(s, centre, sz, body, sz, col)
+		nf += HoloMesh3D.box_faces(sf, centre, ins, body, ins)
+		var r := _toit_monopente(centre, sz, body, maxf(h - body, unite_maison * 0.5),
+				int(_hash01(cell, 11) * 3.999), col, s, sf)
+		n += r[0]; nf += r[1]
+	elif v < 0.50:
+		# Tour FUSELÉE : tronc de pyramide sur toute la hauteur (parois biseautées).
+		var k := lerpf(0.55, 0.78, _hash01(cell, 13))
+		n += HoloMesh3D.frustum(s, centre, sz, sz, h, k, col)
+		nf += HoloMesh3D.frustum_faces(sf, centre, ins, ins, h, k)
+	elif v < 0.64:
+		# Toit en POINTE : corps droit + toiture pyramidale élancée.
+		var body := h * lerpf(0.62, 0.78, _hash01(cell, 11))
 		n += HoloMesh3D.box(s, centre, sz, body, sz, col)
 		nf += HoloMesh3D.box_faces(sf, centre, ins, body, ins)
 		var top := centre + Vector3(0, body, 0)
 		var rh := (h - body) + unite_maison * 0.5
 		n += HoloMesh3D.pyramid(s, top, sz, sz, rh, col)
 		nf += HoloMesh3D.pyramid_faces(sf, top, ins, ins, rh)
-	elif v < 0.58:
-		# Tour FUSELÉE : tronc de pyramide sur toute la hauteur (parois biseautées).
-		var k := lerpf(0.55, 0.78, _hash01(cell, 13))
-		n += HoloMesh3D.frustum(s, centre, sz, sz, h, k, col)
-		nf += HoloMesh3D.frustum_faces(sf, centre, ins, ins, h, k)
-	elif redents:
-		# REDENTS : corps + volume plus petit empilé (gratte-ciel étagé).
+	elif v < 0.82 and floors >= 3:
+		# DOUBLE REDENT : corps + deux volumes dégressifs empilés (gratte-ciel étagé).
 		n += HoloMesh3D.box(s, centre, sz, h, sz, col)
 		nf += HoloMesh3D.box_faces(sf, centre, ins, h, ins)
-		var sz2 := sz * lerpf(0.55, 0.72, _hash01(cell, 17))
-		var h2 := h * lerpf(0.20, 0.34, _hash01(cell, 19))
+		var sz2 := sz * lerpf(0.60, 0.74, _hash01(cell, 17))
+		var h2 := h * lerpf(0.16, 0.24, _hash01(cell, 19))
 		var top := centre + Vector3(0, h, 0)
 		n += HoloMesh3D.box(s, top, sz2, h2, sz2, col)
 		nf += HoloMesh3D.box_faces(sf, top, sz2 * FACE_INSET, h2, sz2 * FACE_INSET)
-	else:
-		# Chapeau BISEAUTÉ : corps droit + couronne en tronc de pyramide rentré.
+		var sz3 := sz2 * 0.62
+		var h3 := h2 * 0.7
+		var top2 := top + Vector3(0, h2, 0)
+		n += HoloMesh3D.box(s, top2, sz3, h3, sz3, col)
+		nf += HoloMesh3D.box_faces(sf, top2, sz3 * FACE_INSET, h3, sz3 * FACE_INSET)
+	elif v < 0.82:
+		# Chapeau BISEAUTÉ (volumes bas) : corps droit + couronne rentrée.
 		var body := h * 0.80
 		n += HoloMesh3D.box(s, centre, sz, body, sz, col)
 		nf += HoloMesh3D.box_faces(sf, centre, ins, body, ins)
@@ -786,6 +803,104 @@ func _maison_variee(cell: Vector2i, h: float, col: Color, s: SurfaceTool, sf: Su
 		var hc := h - body
 		n += HoloMesh3D.frustum(s, top, sz, sz, hc, 0.45, col)
 		nf += HoloMesh3D.frustum_faces(sf, top, ins, ins, hc, 0.45)
+	else:
+		# TOIT-TERRASSE : corps plein + acrotère (couronne sur potelets) + édicule
+		# technique décalé sur la dalle.
+		var body := h * 0.94
+		n += HoloMesh3D.box(s, centre, sz, body, sz, col)
+		nf += HoloMesh3D.box_faces(sf, centre, ins, body, ins)
+		var top := centre + Vector3(0, body, 0)
+		var hw := sz * 0.5
+		var acro := top + Vector3(0, h - body, 0)
+		var coins := [Vector3(-hw, 0, -hw), Vector3(hw, 0, -hw), Vector3(hw, 0, hw), Vector3(-hw, 0, hw)]
+		for i in 4:
+			var oa: Vector3 = coins[i]
+			var ob: Vector3 = coins[(i + 1) % 4]
+			n += HoloMesh3D.line(s, acro + oa, acro + ob, col)   # couronne d'acrotère
+			n += HoloMesh3D.line(s, top + oa, acro + oa, col)    # potelet d'angle
+		var ew := sz * lerpf(0.30, 0.42, _hash01(cell, 17))
+		var eh := unite_maison * lerpf(0.35, 0.55, _hash01(cell, 19))
+		var off := Vector3((_hash01(cell, 21) - 0.5) * (sz - ew) * 0.8, 0,
+				(_hash01(cell, 23) - 0.5) * (sz - ew) * 0.8)
+		n += HoloMesh3D.box(s, top + off, ew, eh, ew, col)
+		nf += HoloMesh3D.box_faces(sf, top + off, ew * FACE_INSET, eh, ew * FACE_INSET)
+	return [n, nf]
+
+# Toit à DEUX PANS posé au sommet du corps (yb = centre.y + body) : faîtage + pignons
+# + faces des pans légèrement rétractées (les arêtes restent lisibles). `le_x` =
+# faîtage le long de X (sinon Z). Renvoie [arêtes, faces].
+func _toit_deux_pans(centre: Vector3, sz: float, body: float, rh: float, le_x: bool,
+		col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
+	var hw := sz * 0.5
+	var yb := centre.y + body
+	var A := Vector3(centre.x - hw, yb, centre.z - hw)
+	var B := Vector3(centre.x + hw, yb, centre.z - hw)
+	var C := Vector3(centre.x + hw, yb, centre.z + hw)
+	var D := Vector3(centre.x - hw, yb, centre.z + hw)
+	var R0: Vector3
+	var R1: Vector3
+	if le_x:
+		R0 = Vector3(centre.x - hw, yb + rh, centre.z)
+		R1 = Vector3(centre.x + hw, yb + rh, centre.z)
+	else:
+		R0 = Vector3(centre.x, yb + rh, centre.z - hw)
+		R1 = Vector3(centre.x, yb + rh, centre.z + hw)
+	var n := HoloMesh3D.line(s, R0, R1, col)   # faîtage
+	if le_x:
+		n += HoloMesh3D.line(s, A, R0, col) + HoloMesh3D.line(s, D, R0, col)   # pignon -X
+		n += HoloMesh3D.line(s, B, R1, col) + HoloMesh3D.line(s, C, R1, col)   # pignon +X
+	else:
+		n += HoloMesh3D.line(s, A, R0, col) + HoloMesh3D.line(s, B, R0, col)   # pignon -Z
+		n += HoloMesh3D.line(s, C, R1, col) + HoloMesh3D.line(s, D, R1, col)   # pignon +Z
+	# Faces d'occlusion : deux pans + deux pignons, rétractés vers le centre du toit.
+	var g := (A + B + C + D + R0 + R1) / 6.0
+	var Af := A.lerp(g, 0.06); var Bf := B.lerp(g, 0.06)
+	var Cf := C.lerp(g, 0.06); var Df := D.lerp(g, 0.06)
+	var R0f := R0.lerp(g, 0.06); var R1f := R1.lerp(g, 0.06)
+	var nf := 0
+	if le_x:
+		nf += HoloMesh3D._quad(sf, Af, Bf, R1f, R0f, Vector3(0, 0.7, -0.7))
+		nf += HoloMesh3D._quad(sf, Cf, Df, R0f, R1f, Vector3(0, 0.7, 0.7))
+		nf += HoloMesh3D._tri(sf, Af, Df, R0f, Vector3(-1, 0, 0))
+		nf += HoloMesh3D._tri(sf, Bf, Cf, R1f, Vector3(1, 0, 0))
+	else:
+		nf += HoloMesh3D._quad(sf, Af, Df, R1f, R0f, Vector3(-0.7, 0.7, 0))
+		nf += HoloMesh3D._quad(sf, Bf, Cf, R1f, R0f, Vector3(0.7, 0.7, 0))
+		nf += HoloMesh3D._tri(sf, Af, Bf, R0f, Vector3(0, 0, -1))
+		nf += HoloMesh3D._tri(sf, Cf, Df, R1f, Vector3(0, 0, 1))
+	return [n, nf]
+
+# Toit MONOPENTE (shed) posé au sommet du corps : les deux coins du côté `cote`
+# (0=-Z, 1=+Z, 2=-X, 3=+X) sont rehaussés de `rh` → pan incliné d'un seul tenant.
+# Renvoie [arêtes, faces].
+func _toit_monopente(centre: Vector3, sz: float, body: float, rh: float, cote: int,
+		col: Color, s: SurfaceTool, sf: SurfaceTool) -> Array:
+	var hw := sz * 0.5
+	var yb := centre.y + body
+	var pts: Array[Vector3] = [
+		Vector3(centre.x - hw, yb, centre.z - hw), Vector3(centre.x + hw, yb, centre.z - hw),
+		Vector3(centre.x + hw, yb, centre.z + hw), Vector3(centre.x - hw, yb, centre.z + hw)]
+	var paires := [[0, 1], [2, 3], [0, 3], [1, 2]]
+	var haut_idx: Array = paires[clampi(cote, 0, 3)]
+	var top: Array[Vector3] = []
+	for i in 4:
+		top.append(pts[i] + (Vector3(0, rh, 0) if i in haut_idx else Vector3.ZERO))
+	var n := 0
+	for i: int in haut_idx:
+		n += HoloMesh3D.line(s, pts[i], top[i], col)             # rehausse du côté haut
+	for i in 4:
+		n += HoloMesh3D.line(s, top[i], top[(i + 1) % 4], col)   # contour du pan incliné
+	# Faces d'occlusion : pan incliné (rétracté) + mur de rehausse.
+	var g := (top[0] + top[1] + top[2] + top[3]) / 4.0
+	var tf: Array[Vector3] = []
+	for i in 4:
+		tf.append(top[i].lerp(g, 0.06))
+	var nf := HoloMesh3D._quad(sf, tf[0], tf[1], tf[2], tf[3], Vector3(0, 1, 0))
+	var i0: int = haut_idx[0]
+	var i1: int = haut_idx[1]
+	var mid := (pts[i0] + pts[i1]) * 0.5
+	var nrm := Vector3(mid.x - centre.x, 0, mid.z - centre.z).normalized()
+	nf += HoloMesh3D._quad(sf, pts[i0], pts[i1], top[i1], top[i0], nrm)
 	return [n, nf]
 
 # Étages (lignes de planchers) sur un BLOC plein rectangulaire et assez haut → casse la
@@ -1191,6 +1306,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_yaw -= rel.x * 0.01
 		plongee_deg = clampf(plongee_deg + rel.y * 0.3, plongee_min, plongee_max)
 		_appliquer_camera()
+	elif event is InputEventKey and (event as InputEventKey).pressed \
+			and (event as InputEventKey).keycode == KEY_ESCAPE \
+			and get_tree().current_scene == self:
+		# Scène lancée SEULE (préviz de la carte, holo_map_3d.tscn) : Échap quitte
+		# l'application — sinon aucune sortie clavier n'existe. Embarquée dans le
+		# Village, `current_scene` est le Village → ce cas ne s'applique pas (c'est
+		# HoloMap3DOverlay qui gère Échap : fermeture de la carte, pas du jeu).
+		get_tree().quit()
 	elif event is InputEventKey and (event as InputEventKey).pressed and mode_rotation == 1:
 		var k := (event as InputEventKey).keycode
 		if k == KEY_LEFT:

@@ -2,7 +2,7 @@
 # holo_ville — Tissu URBAIN extrait de HoloMap3D (refactor).
 #
 # La ville construite : voirie (routes, marquage, trottoirs, éclairage, trafic),
-# bâtiments + spires, eau, ponts/routes surélevées, trafic aérien. Même pattern
+# bâtiments, eau, ponts/routes surélevées, trafic aérien. Même pattern
 # que holo_decor/holo_env : `static func famille(h)` où `h` = le noeud HoloMap3D
 # (NON typé → pas de cycle class_name). Les helpers de base partagés (_world,
 # _moduler, _bati_boite, _centre_bbox, _hauteur_monde, _accent_hauteur,
@@ -113,10 +113,6 @@ static func _routes_bandes(h) -> Array:
 				i = j + 1
 	return bandes
 
-# Point monde d'une bande à (along, across) en coords de grille (selon l'axe).
-static func _pt_bande(h, horiz: bool, av: float, wv: float, y: float) -> Vector3:
-	return h._world(av, wv, y) if horiz else h._world(wv, av, y)
-
 # Longueur du segment de route traversant `c` selon l'axe de `dir`.
 static func _run_len(R: Dictionary, c: Vector2i, dir: Vector2i) -> int:
 	var n := 1
@@ -197,7 +193,20 @@ static func _marquage_voirie(h, s: SurfaceTool) -> int:
 			node[c] = Vector2((float(lo) + float(hi)) * 0.5, float(c.y))
 			larg[c] = hi - lo + 1
 	# UNE seule médiane pointillée au centre du corridor (épuré, suit les angles).
+	# VIRAGES (|_ ) : un bloc « intersection directionnelle » NON ouvert (< 3 bras)
+	# est un COIN, pas un carrefour. Relier en direct les nœuds autour du coin
+	# dessinait un TRIANGLE (l'apex du corridor entrant rejoignait en diagonale les
+	# deux rangées du coin). À la place, chaque médiane rejoint P = croisement des
+	# deux axes par un bras DROIT → un vrai L. Les segments axiaux sont accumulés
+	# par LIGNE puis fusionnés (intervalles) avant le tracé : pas de double dash,
+	# et la phase des pointillés est continue le long du corridor.
+	var coin := {}
+	for c: Vector2i in _routes_intersections(h, true):
+		if not ouvert.has(c):
+			coin[c] = true
 	var col_med := Color(0.95, 0.55, 0.82)
+	var seg_h := {}   # y (médiane horizontale) → intervalles Vector2(x0, x1)
+	var seg_v := {}   # x (médiane verticale)   → intervalles Vector2(y0, y1)
 	var n := 0
 	var vus := {}
 	for c: Vector2i in h._excel.routes:
@@ -209,15 +218,67 @@ static func _marquage_voirie(h, s: SurfaceTool) -> int:
 				continue
 			var na: Vector2 = node[c]
 			var nb: Vector2 = node[nc]
-			if na.distance_to(nb) < 0.01:
-				continue
-			var key := "%.1f,%.1f,%.1f,%.1f" % [minf(na.x, nb.x), minf(na.y, nb.y), maxf(na.x, nb.x), maxf(na.y, nb.y)]
-			if vus.has(key):
-				continue
-			vus[key] = true
-			n += Geo.dashes(s, h._world(na.x, na.y, 0.045), h._world(nb.x, nb.y, 0.045), col_med,
-					h.taille_cellule * 0.5, h.taille_cellule * 0.35)
+			if int(axis[c]) == int(axis[nc]):
+				if coin.has(c) and coin.has(nc):
+					continue   # intérieur d'un coin : couvert par les bras du L
+				if na.distance_to(nb) < 0.01:
+					continue
+				if absf(na.y - nb.y) < 0.005:
+					_seg_ajouter(seg_h, na.y, na.x, nb.x)
+				elif absf(na.x - nb.x) < 0.005:
+					_seg_ajouter(seg_v, na.x, na.y, nb.y)
+				else:
+					# Décrochement de largeur : petit raccord diagonal direct.
+					var key := "%.1f,%.1f,%.1f,%.1f" % [minf(na.x, nb.x), minf(na.y, nb.y), maxf(na.x, nb.x), maxf(na.y, nb.y)]
+					if vus.has(key):
+						continue
+					vus[key] = true
+					n += Geo.dashes(s, h._world(na.x, na.y, 0.045), h._world(nb.x, nb.y, 0.045), col_med,
+							h.taille_cellule * 0.5, h.taille_cellule * 0.35)
+			else:
+				# VIRAGE : bras droits vers P, chacun UNIQUEMENT du côté où son
+				# corridor continue (pas de moignon dans l'angle mort du coin).
+				var hc: Vector2i = c if int(axis[c]) == 0 else nc
+				var vc: Vector2i = nc if int(axis[c]) == 0 else c
+				var hn: Vector2 = node[hc]
+				var vn: Vector2 = node[vc]
+				var p := Vector2(vn.x, hn.y)
+				var sx := signf(hn.x - p.x)
+				if sx != 0.0 and R.has(hc + Vector2i(int(sx), 0)):
+					_seg_ajouter(seg_h, p.y, p.x, hn.x)
+				var sy := signf(vn.y - p.y)
+				if sy != 0.0 and R.has(vc + Vector2i(0, int(sy))):
+					_seg_ajouter(seg_v, p.x, p.y, vn.y)
+	for ky in seg_h:
+		for iv: Vector2 in _seg_fusion(seg_h[ky]):
+			n += Geo.dashes(s, h._world(iv.x, float(ky), 0.045), h._world(iv.y, float(ky), 0.045),
+					col_med, h.taille_cellule * 0.5, h.taille_cellule * 0.35)
+	for kx in seg_v:
+		for iv: Vector2 in _seg_fusion(seg_v[kx]):
+			n += Geo.dashes(s, h._world(float(kx), iv.x, 0.045), h._world(float(kx), iv.y, 0.045),
+					col_med, h.taille_cellule * 0.5, h.taille_cellule * 0.35)
 	return n
+
+# Ajoute un intervalle [a,b] au pool de segments de la ligne `ligne` (clé snappée).
+static func _seg_ajouter(pool: Dictionary, ligne: float, a: float, b: float) -> void:
+	var k := snappedf(ligne, 0.001)
+	if not pool.has(k):
+		pool[k] = []
+	(pool[k] as Array).append(Vector2(minf(a, b), maxf(a, b)))
+
+# Fusionne les intervalles qui se chevauchent ou se touchent (et jette les vides)
+# → un seul trait pointillé continu par tronçon de médiane.
+static func _seg_fusion(brut: Array) -> Array:
+	brut.sort_custom(func(u, v): return u.x < v.x)
+	var out: Array = []
+	for iv: Vector2 in brut:
+		if iv.y - iv.x < 0.01:
+			continue
+		if out.is_empty() or iv.x > (out[-1] as Vector2).y + 0.01:
+			out.append(iv)
+		else:
+			out[-1] = Vector2((out[-1] as Vector2).x, maxf((out[-1] as Vector2).y, iv.y))
+	return out
 
 # Cases d'INTERSECTION = couvertes par une bande horizontale ET une bande verticale.
 # Pour le TRAFIC (verrou plein, sécurité) : toutes les bandes. Pour le MARQUAGE
@@ -253,7 +314,7 @@ static func trottoirs(h) -> void:
 		routes_set[c] = true
 	var s := HoloMesh3D.st()
 	var n := 0
-	var col := Color(1.0, 0.45, 0.78)   # contour néon vif (définit la forme de la route)
+	var col := Color(1.0, 0.45, 0.78)   # contour rose vif (définit la forme de la route)
 	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for cell: Vector2i in h._excel.routes:
 		for d: Vector2i in dirs:
@@ -262,39 +323,7 @@ static func trottoirs(h) -> void:
 			var seg: Array = h._cote_cellule(cell, d)
 			n += HoloMesh3D.line(s, h._world(seg[0].x, seg[0].y, 0.03),
 					h._world(seg[1].x, seg[1].y, 0.03), col)
-	h._ajouter_mesh(HoloMesh3D.commit(s, n), "ContourRoutesExcel", h._mat_neon)
-
-# Éclairage public : petits lampadaires (mât sombre + tête chaude qui glow) posés
-# le long des axes de voirie, à intervalle régulier, décalés sur le trottoir.
-static func eclairage(h) -> void:
-	var mats := HoloMesh3D.st()       # mâts (sombres)
-	var nm := 0
-	var tetes := HoloMesh3D.st()      # têtes lumineuses (glow chaud)
-	var nt := 0
-	var col_mat := Color(0.35, 0.38, 0.42)
-	var col_tete := Color(1.0, 0.82, 0.50)
-	var ht: float = h.unite_maison * 1.4      # hauteur du mât
-	var pas := 4                       # un lampadaire toutes les 4 cases
-	# Sur les DEUX bords extérieurs de chaque bande (quelle que soit la largeur).
-	for b in _routes_bandes(h):
-		var horiz: bool = b["axe"] == "H"
-		var a0: int = b["x0"] if horiz else b["y0"]
-		var a1: int = b["x1"] if horiz else b["y1"]
-		var w0: int = b["y0"] if horiz else b["x0"]
-		var w1: int = b["y1"] if horiz else b["x1"]
-		if a1 - a0 < 2:
-			continue
-		var bords := [float(w0) - 0.65, float(w1) + 0.65]
-		var k := a0 + 1
-		while k < a1:
-			for wv: float in bords:
-				var base := _pt_bande(h, horiz, float(k), wv, 0.0)
-				var tete := base + Vector3(0, ht, 0)
-				nm += HoloMesh3D.line(mats, base, tete, col_mat)
-				nt += HoloMesh3D.diamond(tetes, tete, h.taille_cellule * 0.08, h.unite_maison * 0.18, col_tete)
-			k += pas
-	h._ajouter_mesh(HoloMesh3D.commit(mats, nm), "LampadairesMats", h._mat_ambiance)
-	h._ajouter_mesh(HoloMesh3D.commit(tetes, nt), "LampadairesTetes", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(s, n), "ContourRoutesExcel", h._mat_contour)
 
 # Boule à facettes (sommet de pyramide) : 3 grands cercles orthogonaux + rayons
 # lumineux distribués sur 360° (sphère de Fibonacci). Tourne (cf. _process).
@@ -343,8 +372,8 @@ static func eau(h) -> void:
 		n += 2
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "EauExcel", h._mat_eau)
 
-# Bordure d'eau : fin liseré cyan vif (glow) le long de chaque bord de plan d'eau
-# (côté d'une case eau dont le voisin n'est pas de l'eau) → la nappe se détache.
+# Bordure d'eau : fin liseré cyan vif (sans bloom) le long de chaque bord de plan
+# d'eau (côté d'une case eau dont le voisin n'est pas de l'eau) → la nappe se détache.
 static func bordure_eau(h) -> void:
 	var eaux := {}
 	for c: Vector2i in h._excel.eaux:
@@ -360,7 +389,7 @@ static func bordure_eau(h) -> void:
 			var seg: Array = h._cote_cellule(cell, d)
 			n += HoloMesh3D.line(s, h._world(seg[0].x, seg[0].y, 0.014),
 					h._world(seg[1].x, seg[1].y, 0.014), col)
-	h._ajouter_mesh(HoloMesh3D.commit(s, n), "BordureEauExcel", h._mat_neon)
+	h._ajouter_mesh(HoloMesh3D.commit(s, n), "BordureEauExcel", h._mat_contour)
 
 # Bâtiments lus : volumes creux (arêtes _mat_decor + faces sombres _mat_faces).
 # Boîte = silhouette extrudée de l'emprise exacte ; autres formes = paramétriques
@@ -427,69 +456,6 @@ static func batiments(h) -> void:
 		mif.mesh = fmesh
 		mif.material_override = h._mat_faces
 		h._monde.add_child(mif)
-
-# ─── Spires corpo : faisceaux de lumière verticaux + mâts d'antenne ───────────
-# Les plus hautes tours (vraies « corpos ») projettent un SHAFT de lumière qui
-# stabe le ciel + un mât d'antenne fuselé → verticalité dramatique, signal de
-# pouvoir au-dessus du tissu urbain. Limité aux `spires_max` plus hautes (clarté).
-static func spires(h) -> void:
-	var tours: Array = []
-	for b in h._excel.batiments:
-		var haut: float = h._hauteur_monde(b["hauteur_m"])
-		if haut >= h.hauteur_tour_ref * 0.7:
-			tours.append({"c": h._centre_bbox(b["bbox"]), "h": haut})
-	for t in h._excel.tours_orphelines:
-		var haut: float = h._hauteur_monde(t["hauteur_m"])
-		if haut >= h.hauteur_tour_ref * 0.7:
-			tours.append({"c": h._centre_bbox(t["rect"]), "h": haut})
-	if tours.is_empty():
-		return
-	tours.sort_custom(func(a, b): return a["h"] > b["h"])
-	# Espacement : on retient les plus hautes MAIS distinctes (≥ sep) → des spires
-	# HÉROS réparties sur des landmarks, pas une grappe de faisceaux au même endroit.
-	var sep: float = h.taille_cellule * 4.5
-	var picked: Array = []
-	for t in tours:
-		var ok := true
-		for p in picked:
-			if Vector2(t["c"].x - p["c"].x, t["c"].z - p["c"].z).length() < sep:
-				ok = false
-				break
-		if ok:
-			picked.append(t)
-			if picked.size() >= h.spires_max:
-				break
-	# Faisceaux SEULS — les mâts d'antenne à haubans ont été retirés (accents
-	# « antenne » illisibles / moches, cf. retour playtest).
-	for t in picked:
-		var c: Vector3 = t["c"]
-		var haut: float = t["h"]
-		var top := c + Vector3(0, haut, 0)
-		var acc: Color = h._accent_hauteur(Color(h.couleur_decor_bati, 1.0), haut, c)
-		# Faisceau LARGE et HAUT : plus la tour est haute, plus le shaft monte loin.
-		_beam(h, top, lerpf(2.6, 4.2, clampf(haut / (h.hauteur_tour_ref * 2.0), 0.0, 1.0)) * haut,
-				h.taille_cellule * 0.7, Color(acc.r, acc.g, acc.b, 0.6))
-
-# Faisceau vertical (billboard cylindrique) : une instance dédiée par spire — le
-# shader holo_beam lit la base via MODEL_MATRIX, d'où une instance positionnée.
-static func _beam(h, base: Vector3, hauteur: float, demi_l: float, col: Color) -> void:
-	var s := HoloMesh3D.st_tri()
-	var bl := Vector3.ZERO
-	var br := Vector3.ZERO
-	var tl := Vector3(0, hauteur, 0)
-	var tr := Vector3(0, hauteur, 0)
-	Geo.beam_vert(s, bl, 0.0, -1.0, demi_l, col)
-	Geo.beam_vert(s, br, 0.0, 1.0, demi_l, col)
-	Geo.beam_vert(s, tr, 1.0, 1.0, demi_l, col)
-	Geo.beam_vert(s, bl, 0.0, -1.0, demi_l, col)
-	Geo.beam_vert(s, tr, 1.0, 1.0, demi_l, col)
-	Geo.beam_vert(s, tl, 1.0, -1.0, demi_l, col)
-	var mi := MeshInstance3D.new()
-	mi.name = "Beam"
-	mi.mesh = s.commit()
-	mi.material_override = h._mat_beam
-	mi.position = base
-	h._monde.add_child(mi)
 
 # ─── Trafic aérien : couloirs de VTOL à plusieurs altitudes au-dessus de la ville ──
 # Réutilise le shader de trafic (segment translaté le long d'un trajet). Des

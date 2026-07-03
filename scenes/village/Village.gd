@@ -183,9 +183,14 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.keycode == KEY_ESCAPE:
 		get_viewport().set_input_as_handled()
-		# Priorité d'Échap : Paramètres ouverts → les fermer ; sinon un panneau
-		# ouvert → le fermer ; sinon ouvrir les Paramètres.
-		if _settings_overlay and is_instance_valid(_settings_overlay):
+		# Priorité d'Échap : carte des expéditions ouverte → la fermer (retour au
+		# hub). Géré ICI car _unhandled_key_input précède le _unhandled_input de
+		# l'overlay, qui ne voyait donc jamais Échap. Puis : Paramètres ouverts →
+		# les fermer ; sinon un panneau ouvert → le fermer ; sinon ouvrir les
+		# Paramètres.
+		if _holo_overlay != null and is_instance_valid(_holo_overlay):
+			(_holo_overlay as HoloMap3DOverlay).fermer()
+		elif _settings_overlay and is_instance_valid(_settings_overlay):
 			_toggle_settings_overlay()
 		elif _rp_root != null:
 			_close_panel()

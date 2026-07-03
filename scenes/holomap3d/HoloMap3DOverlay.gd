@@ -114,6 +114,12 @@ func _fermer() -> void:
 	ferme.emit()
 	queue_free()
 
+# API publique : fermeture demandée par l'hôte (ex. Échap capté par Village dans
+# _unhandled_key_input, phase qui précède notre _unhandled_input).
+func fermer() -> void:
+	if fermable:
+		_fermer()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if fermable and event.is_action_pressed("ui_cancel"):
 		_fermer()
