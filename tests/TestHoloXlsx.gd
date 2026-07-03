@@ -149,8 +149,11 @@ func _test_snapshot(m: HoloXlsxMap) -> void:
 	var sur_disque := "" if f == null else f.get_as_text()
 	if f != null:
 		f.close()
+	# Normalisation CRLF : ceinture en plus du `.gitattributes` (*.snapshot -text) —
+	# un checkout qui aurait converti les fins de ligne ne doit pas faire échouer
+	# la comparaison de FRAÎCHEUR (le contenu utile est identique).
 	_ok("instantané À JOUR (sinon : godot --headless --path . --script res://tools/bake_holomap.gd)",
-			sur_disque == m.exporter_snapshot())
+			sur_disque.replace("\r\n", "\n") == m.exporter_snapshot())
 	var ms := HoloXlsxMap.new()
 	_ok("charger_snapshot", ms.charger_snapshot())
 	_ok("aller-retour : resume identique", ms.resume() == m.resume())
