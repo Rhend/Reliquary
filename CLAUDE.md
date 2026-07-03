@@ -186,3 +186,12 @@ pont `9FB2C4`, autoroute `D6248F`, **passerelle `7FD8A0`**, **héliport `F2D43D`
 ⚠ Le `.xlsx` peut être re-sauvegardé par Excel/OneDrive en arrière-plan (octets qui
 changent en cours de session) → `git checkout --` le fichier avant de comparer des
 compteurs de classification. Test du lecteur + validation : `tests/TestHoloXlsx.tscn`.
+
+**Build sans .xlsx (instantané baké)** : le gabarit Excel est un outil d'AUTORING —
+il n'est JAMAIS exporté (`Carte Holo/*` exclu dans `export_presets.cfg` ; le joueur
+ne doit ni le voir ni pouvoir le modifier). Le build charge à la place
+`data/holomap/carte_holomap.snapshot` (état parsé figé, versionné, embarqué via
+`include_filter` `*.snapshot`). `HoloXlsxMap.charger()` : xlsx présent (dev) → parse
+live ; absent (build) → `charger_snapshot()`. **Après CHAQUE édition de la carte,
+re-baker** : `godot --headless --path . --script res://tools/bake_holomap.gd` —
+TestHoloXlsx (CI) échoue si l'instantané n'est plus à jour.

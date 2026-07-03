@@ -170,6 +170,15 @@ var _feuilles := {}          # nom de feuille → chemin xml interne
 func charger(chemin: String) -> bool:
 	ok = false
 	_rapport.clear()
+	# BUILD EXPORTÉ : le .xlsx d'autoring n'est JAMAIS embarqué (source protégée,
+	# cf. export_presets.cfg) → on charge l'instantané BAKÉ (tools/bake_holomap.gd).
+	# En dev, le .xlsx présent PRIME (édition à chaud du gabarit).
+	if not FileAccess.file_exists(chemin):
+		if charger_snapshot():
+			print("[HoloXlsxMap] gabarit chargé depuis l'instantané baké (%s)" % CHEMIN_SNAPSHOT_DEFAUT)
+			return true
+		push_warning("[HoloXlsxMap] ni gabarit (%s) ni instantané baké (%s)" % [chemin, CHEMIN_SNAPSHOT_DEFAUT])
+		return false
 	var zip := ZIPReader.new()
 	if zip.open(chemin) != OK:
 		push_warning("[HoloXlsxMap] impossible d'ouvrir : %s" % chemin)
@@ -187,6 +196,63 @@ func charger(chemin: String) -> bool:
 	# Validation croisée Surélevé ↔ Carte : connexions, contraintes d'altitude/toit, et
 	# CROIX ROUGES de feedback. Doit tourner APRÈS _regrouper_batiments (besoin du bâti).
 	_valider_verticalite()
+	ok = true
+	return true
+
+# ─── Instantané baké (build sans .xlsx) ───────────────────────
+# Le .xlsx est l'outil d'AUTORING (dev uniquement) : il n'est jamais exporté —
+# le joueur ne doit ni le voir ni pouvoir le modifier. L'outil
+# tools/bake_holomap.gd fige l'état PARSÉ dans un fichier texte var_to_str
+# (Vector2i/Rect2i natifs), versionné et embarqué dans le .pck. TestHoloXlsx
+# échoue si l'instantané n'est plus à jour après une édition de la carte.
+const CHEMIN_SNAPSHOT_DEFAUT := "res://data/holomap/carte_holomap.snapshot"
+const SNAPSHOT_VER := 1
+# Champs de DONNÉES sérialisés : tout l'état parsé lu par le rendu/la validation.
+# Exclus : internes de parsing (_fills, _strings, _feuilles…) et _bati_index
+# (contient des RÉFÉRENCES partagées vers les blocs → reconstruit au chargement,
+# sinon la sérialisation dupliquerait les dicts et casserait l'identité).
+const _CHAMPS_SNAPSHOT: Array[String] = [
+	"grille", "taille_case_m", "hauteur_defaut_m", "type_case", "texte_case",
+	"batiments", "routes", "eaux", "parcs", "terrains", "cimetieres", "usines",
+	"casses", "supermarches", "collines", "parkings", "tours_orphelines", "ponts",
+	"routes_elevees", "prisons", "commissariats", "passerelles", "heliports",
+	"spots", "telepheriques", "antennes", "enseignes", "croix_rouges", "zones",
+	"border_case", "_rapport",
+]
+
+# État parsé → texte sérialisé (déterministe pour un même parse).
+func exporter_snapshot() -> String:
+	var d := {"ver": SNAPSHOT_VER}
+	for ch: String in _CHAMPS_SNAPSHOT:
+		d[ch] = get(ch)
+	return var_to_str(d)
+
+func sauver_snapshot(chemin: String = CHEMIN_SNAPSHOT_DEFAUT) -> bool:
+	DirAccess.make_dir_recursive_absolute(chemin.get_base_dir())
+	var f := FileAccess.open(chemin, FileAccess.WRITE)
+	if f == null:
+		push_warning("[HoloXlsxMap] écriture de l'instantané impossible : %s" % chemin)
+		return false
+	f.store_string(exporter_snapshot())
+	f.close()
+	return true
+
+func charger_snapshot(chemin: String = CHEMIN_SNAPSHOT_DEFAUT) -> bool:
+	ok = false
+	if not FileAccess.file_exists(chemin):
+		return false
+	var f := FileAccess.open(chemin, FileAccess.READ)
+	if f == null:
+		return false
+	var d: Variant = str_to_var(f.get_as_text())
+	f.close()
+	if not (d is Dictionary) or int((d as Dictionary).get("ver", -1)) != SNAPSHOT_VER:
+		push_warning("[HoloXlsxMap] instantané illisible ou version inattendue : %s" % chemin)
+		return false
+	for ch: String in _CHAMPS_SNAPSHOT:
+		if (d as Dictionary).has(ch):
+			set(ch, (d as Dictionary)[ch])
+	_construire_index_bati()   # refs partagées recréées vers les blocs restaurés
 	ok = true
 	return true
 

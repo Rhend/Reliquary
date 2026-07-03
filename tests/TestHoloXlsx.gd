@@ -124,6 +124,9 @@ func _ready() -> void:
 	# ── Chantier VERTICALITÉ : nouvelles familles + validation croisée + croix rouges ──
 	_test_verticalite()
 
+	# ── Instantané BAKÉ (le build n'embarque pas le .xlsx) ──
+	_test_snapshot(m)
+
 	print("\n════════════════════════════════")
 	print("RÉSULTAT : %d échec(s)" % _fail.size())
 	for f in _fail:
@@ -132,6 +135,37 @@ func _ready() -> void:
 		print("  ✓ lecteur Excel conforme")
 	print("════════════════════════════════\n")
 	get_tree().quit(0 if _fail.is_empty() else 1)
+
+# ── Instantané baké : fraîcheur + aller-retour + chemin de build ──
+# Le build exporté ne contient PAS le .xlsx (source d'autoring protégée) : il
+# charge data/holomap/carte_holomap.snapshot. Trois garde-fous :
+#   1) l'instantané versionné correspond au parse ACTUEL du gabarit — sinon la
+#      carte a été éditée sans re-baker → relancer tools/bake_holomap.gd ;
+#   2) l'aller-retour restaure un état équivalent (resume + index bâti) ;
+#   3) le fallback de charger() (xlsx absent) aboutit bien au snapshot.
+func _test_snapshot(m: HoloXlsxMap) -> void:
+	print("\n  — instantané baké (build sans .xlsx) —")
+	var f := FileAccess.open(HoloXlsxMap.CHEMIN_SNAPSHOT_DEFAUT, FileAccess.READ)
+	var sur_disque := "" if f == null else f.get_as_text()
+	if f != null:
+		f.close()
+	_ok("instantané À JOUR (sinon : godot --headless --path . --script res://tools/bake_holomap.gd)",
+			sur_disque == m.exporter_snapshot())
+	var ms := HoloXlsxMap.new()
+	_ok("charger_snapshot", ms.charger_snapshot())
+	_ok("aller-retour : resume identique", ms.resume() == m.resume())
+	# Index bâti reconstruit (refs partagées) : même bloc sous une même case.
+	var idx_ok := true
+	for b: Dictionary in m.batiments:
+		var c: Vector2i = (b["cells"] as Array)[0]
+		if ms.bati_sous(c).get("hauteur_m", -1.0) != m.bati_sous(c).get("hauteur_m", -2.0):
+			idx_ok = false
+			break
+	_ok("aller-retour : index bâti reconstruit (bati_sous cohérent)", idx_ok)
+	# Chemin de BUILD : xlsx introuvable → charger() retombe sur l'instantané.
+	var mb := HoloXlsxMap.new()
+	_ok("fallback build : charger(xlsx absent) → snapshot",
+			mb.charger("res://Carte Holo/_inexistant_.xlsx") and mb.resume() == m.resume())
 
 # ── Chantier verticalité : familles surélevées, exclusion par feuille, validation ──
 func _test_verticalite() -> void:
