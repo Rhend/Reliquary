@@ -147,6 +147,9 @@ func _ready() -> void:
 	# ── Chantier VERTICALITÉ : nouvelles familles + validation croisée + croix rouges ──
 	_test_verticalite()
 
+	# ── Contraintes de TAILLE MINIMALE des apparences spécifiques (croix rouge dure) ──
+	_test_tailles_min()
+
 	# ── Instantané BAKÉ (le build n'embarque pas le .xlsx) ──
 	_test_snapshot(m)
 
@@ -276,6 +279,75 @@ func _test_verticalite() -> void:
 	mi._valider_verticalite()
 	_ok("bati_sous(case du toit) → bloc trouvé", not mi.bati_sous(Vector2i(4, 4)).is_empty())
 	_ok("bati_sous(case vide) → vide", mi.bati_sous(Vector2i(40, 40)).is_empty())
+
+# ── Tailles minimales (cf. _TAILLES_MIN) : un bloc sous sa taille min (ou une prison
+# non rectangulaire, un stade trop allongé) → croix rouge ET bloc RETIRÉ de sa
+# famille (contrainte DURE : pas de rendu simplifié à la place). ──
+func _test_tailles_min() -> void:
+	print("\n  — tailles minimales des apparences (croix rouge dure) —")
+	# Conforme : usine 4×2 (petit côté ≥ 2, grand axe ≥ 4) → rendue, 0 croix.
+	var m := _map_famille("usines", Rect2i(2, 2, 4, 2))
+	m._valider_verticalite()
+	_eq("usine 4×2 conforme → 0 croix", m.croix_rouges.size(), 0)
+	_eq("usine conforme conservée (rendue)", m.usines.size(), 1)
+	# Sous la taille min : usine 2×2 → croix + bloc retiré.
+	var m2 := _map_famille("usines", Rect2i(2, 2, 2, 2))
+	m2._valider_verticalite()
+	_eq("usine 2×2 (< 2×4) → 1 croix", m2.croix_rouges.size(), 1)
+	_eq("usine fautive RETIRÉE (non rendue)", m2.usines.size(), 0)
+	_ok("croix posée au centre de la zone", m2.croix_rouges.size() == 1
+			and m2.croix_rouges[0]["cell"] == Vector2i(3, 3))
+	# Petit côté insuffisant : usine 6×1 → croix (le 2 de « 2×4 » est le petit axe).
+	var m3 := _map_famille("usines", Rect2i(2, 2, 6, 1))
+	m3._valider_verticalite()
+	_eq("usine 6×1 (petit côté < 2) → 1 croix", m3.croix_rouges.size(), 1)
+	# Prison : 3×3 PLEINE conforme ; même bbox en L (coin manquant) → croix + retrait
+	# (régression des miradors flottants hors du bloc) ; 3×2 → croix (taille).
+	var p1 := _map_famille("prisons", Rect2i(2, 2, 3, 3))
+	p1._valider_verticalite()
+	_eq("prison 3×3 pleine → 0 croix", p1.croix_rouges.size(), 0)
+	var cl := _rect_cells(Rect2i(2, 2, 3, 3))
+	cl.erase(Vector2i(4, 4))   # coin manquant → forme en L
+	var p2 := _map_famille("prisons", Rect2i(2, 2, 3, 3), cl)
+	p2._valider_verticalite()
+	_eq("prison non rectangulaire (L) → 1 croix", p2.croix_rouges.size(), 1)
+	_eq("prison en L retirée (plus de miradors flottants)", p2.prisons.size(), 0)
+	var p3 := _map_famille("prisons", Rect2i(2, 2, 3, 2))
+	p3._valider_verticalite()
+	_eq("prison 3×2 (< 3×3) → 1 croix", p3.croix_rouges.size(), 1)
+	# Stade : 4×4 et 6×4 (ratio 3:2 exact) conformes ; 8×4 (2:1) → trop allongé.
+	for cas: Array in [[Rect2i(2, 2, 4, 4), 0], [Rect2i(2, 2, 6, 4), 0], [Rect2i(2, 2, 8, 4), 1]]:
+		var bb: Rect2i = cas[0]
+		var st := _map_famille("terrains", bb)
+		st._valider_verticalite()
+		_eq("stade %d×%d → %d croix" % [bb.size.x, bb.size.y, int(cas[1])],
+				st.croix_rouges.size(), int(cas[1]))
+	# Institutions 4×4 : musée 4×3 → croix ; 4×4 → conforme.
+	var mu1 := _map_famille("musees", Rect2i(2, 2, 4, 3))
+	mu1._valider_verticalite()
+	_eq("musée 4×3 (< 4×4) → 1 croix", mu1.croix_rouges.size(), 1)
+	var mu2 := _map_famille("musees", Rect2i(2, 2, 4, 4))
+	mu2._valider_verticalite()
+	_eq("musée 4×4 → 0 croix", mu2.croix_rouges.size(), 0)
+
+# Toutes les cases d'un Rect2i (bloc rectangulaire plein).
+func _rect_cells(r: Rect2i) -> Array:
+	var out: Array = []
+	for x in range(r.position.x, r.position.x + r.size.x):
+		for y in range(r.position.y, r.position.y + r.size.y):
+			out.append(Vector2i(x, y))
+	return out
+
+# Map synthétique : un bloc de famille `champ` couvrant `bb` (ou les `cells` fournies).
+func _map_famille(champ: String, bb: Rect2i, cells: Array = []) -> HoloXlsxMap:
+	var m := HoloXlsxMap.new()
+	m.grille = 60
+	var b := {"cells": cells if not cells.is_empty() else _rect_cells(bb), "bbox": bb}
+	if champ != "terrains":   # les terrains n'ont ni hauteur ni forme (cf. _regrouper_batiments)
+		b["hauteur_m"] = 6.0
+		b["forme"] = HoloXlsxMap.Forme.BOITE
+	m.set(champ, [b])
+	return m
 
 # Carré n×n de Vector2i à partir de (x0,y0).
 func _carre(x0: int, y0: int, n: int) -> Array:

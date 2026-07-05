@@ -185,6 +185,13 @@ pont `9FB2C4`, autoroute `D6248F`, **passerelle `7FD8A0`**, **héliport `F2D43D`
 - **CROIX ROUGE `E02020`** (réservée au feedback, l'auteur ne la peint jamais) : posée
   à chaque contrainte violée (endroit + altitude fautifs), plutôt qu'une correction
   silencieuse. C'est la convention universelle de signalement.
+- **Tailles minimales DURES (Carte)** : chaque apparence spécifique a une emprise
+  minimale (`HoloXlsxMap._TAILLES_MIN`, consignée dans la feuille « Contraintes
+  tailles » du gabarit — ex. usine 2×4, prison 3×3, stade/grand parc/université/musée
+  4×4). En dessous — ou prison NON rectangulaire, stade plus allongé que 3:2 — le bloc
+  n'est PAS rendu : `_valider_tailles_min` le retire de sa famille et pose une croix
+  rouge à la place (jamais de version simplifiée). Les autres conseils de forme
+  (usine allongée, université/musée plus larges que profonds) restent souples.
 
 ⚠ Le `.xlsx` peut être re-sauvegardé par Excel/OneDrive en arrière-plan (octets qui
 changent en cours de session) → `git checkout --` le fichier avant de comparer des

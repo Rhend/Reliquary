@@ -20,6 +20,10 @@
 # avec le bâti du sol (présence, emprise, sommet de toit) ; toute contrainte non satisfaite
 # → une CROIX ROUGE (croix_rouges) à l'endroit/altitude fautifs (feedback universel, cf.
 # _valider_verticalite). Altitude TOUJOURS saisie par l'auteur, jamais déduite.
+# TAILLES MINIMALES (croix rouge DURE) : chaque apparence spécifique de la Carte a une
+# emprise minimale (cf. _TAILLES_MIN + feuille « Contraintes tailles » du gabarit) ;
+# en dessous — ou prison non rectangulaire, stade trop allongé — le bloc N'EST PAS
+# rendu : il est retiré de sa famille et remplacé par une croix rouge.
 #
 # Les BORDURES (medium/thick) sont NEUTRES : elles délimitent/regroupent les cases en
 # blocs (mur de flood-fill, cf. `border_case` / `_mur`), notamment pour séparer deux
@@ -64,6 +68,28 @@ const COULEUR_CROIX := Color8(0xE0, 0x20, 0x20)
 const HELIPORT_MIN_COTE := 4          # héliport carré minimum 4×4
 const ALT_TOLERANCE_FRAC := 0.18      # écart relatif toléré altitude ↔ sommet de bâtiment
 const PASSERELLE_ALT_MAX_FRAC := 1.20 # passerelle cohérente si ≤ 1.20× la hauteur du bâti relié
+
+# Tailles MINIMALES (en cases) des apparences spécifiques de la Carte — les seuils
+# sous lesquels le rendu dédié n'est plus lisible (consignés dans la feuille
+# « Contraintes tailles » du gabarit). Par famille : [min petit côté, min grand côté
+# de la bbox, libellé]. Contrainte DURE : un bloc sous sa taille min est RETIRÉ de sa
+# famille (aucun rendu, pas de version simplifiée) et remplacé par une croix rouge.
+# Formes dures en plus (cf. _violation_taille) : prison = rectangle PLEIN obligatoire
+# (sinon miradors flottants hors du bloc), stade = proche du carré (ratio ≤ 3:2).
+# Les autres recommandations de forme (usine allongée, université/musée plus larges
+# que profonds) restent SOUPLES : jamais de croix.
+const _TAILLES_MIN := {
+	"usines":        [2, 4, "usine"],
+	"casses":        [2, 3, "casse auto"],
+	"supermarches":  [2, 2, "supermarché"],
+	"terrains":      [4, 4, "stade"],
+	"cimetieres":    [2, 2, "cimetière"],
+	"prisons":       [3, 3, "prison"],
+	"commissariats": [2, 2, "commissariat"],
+	"grands_parcs":  [4, 4, "grand parc"],
+	"universites":   [4, 4, "université"],
+	"musees":        [4, 4, "musée"],
+}
 
 # Centroïdes de famille (repères d'auteur ; on classe au plus proche). Le gris
 # acier (PONT) n'apparaît que sur le calque Surélevé (jamais sur la Carte).
@@ -859,11 +885,47 @@ func hauteur_m_zone(cells: Array) -> float:
 # satisfaite → une croix rouge à l'endroit/altitude fautifs (feedback universel).
 func _valider_verticalite() -> void:
 	croix_rouges.clear()
+	# Tailles minimales des apparences spécifiques : AVANT l'index bâti — un bloc
+	# fautif est retiré (plus de volume), un ouvrage posé dessus produit SA croix.
+	_valider_tailles_min()
 	_construire_index_bati()
 	_valider_passerelles()
 	_valider_heliports()
 	_valider_spots()
 	_valider_antennes()
+
+# Contraintes de TAILLE MINIMALE (croix rouge DURE, cf. _TAILLES_MIN) : chaque bloc
+# d'apparence spécifique est vérifié contre son emprise minimale (+ formes dures :
+# prison rectangulaire, stade proche du carré). Un bloc fautif est RETIRÉ de sa
+# famille — le rendu dédié ne le dessine plus — et une croix rouge le remplace au
+# centre de la zone (même convention de feedback que les ouvrages surélevés).
+func _valider_tailles_min() -> void:
+	for champ: String in _TAILLES_MIN:
+		var regle: Array = _TAILLES_MIN[champ]
+		var valides: Array = []
+		for b: Dictionary in get(champ):
+			var raison := _violation_taille(champ, b, int(regle[0]), int(regle[1]), str(regle[2]))
+			if raison == "":
+				valides.append(b)
+			else:
+				_croix(_centre_cell(b["bbox"]), float(b.get("hauteur_m", 0.0)), raison)
+		set(champ, valides)
+
+# Raison de violation du bloc `b` ("" si conforme) : taille min (toutes familles),
+# rectangle PLEIN (prison — sinon miradors flottants), ratio ≤ 3:2 (stade — au-delà,
+# les tribunes en ellipse ne se lisent plus).
+func _violation_taille(champ: String, b: Dictionary, petit: int, grand: int, nom: String) -> String:
+	var bb: Rect2i = b["bbox"]
+	var lo := mini(bb.size.x, bb.size.y)
+	var hi := maxi(bb.size.x, bb.size.y)
+	if lo < petit or hi < grand:
+		return "%s %d×%d < taille min %d×%d" % [nom, bb.size.x, bb.size.y, petit, grand]
+	if champ == "prisons" and (b["cells"] as Array).size() != bb.size.x * bb.size.y:
+		return "prison non rectangulaire (%d cases ≠ %d×%d)" \
+				% [(b["cells"] as Array).size(), bb.size.x, bb.size.y]
+	if champ == "terrains" and hi * 2 > lo * 3:
+		return "stade trop allongé (%d×%d, ratio max 3:2)" % [bb.size.x, bb.size.y]
+	return ""
 
 # Index bâti : chaque cellule recouverte par un bloc au volume (bâtiment, usine,
 # cimetière, casse, supermarché, prison, tour orpheline) → ref du bloc + sa hauteur_m.
