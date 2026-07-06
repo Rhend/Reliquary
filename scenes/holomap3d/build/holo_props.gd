@@ -12,6 +12,10 @@
 # 1er objet = cadre, suivants = texte. Les transforms de nœuds NON appliqués
 # à l'export sont composés ici (robuste aux exports sloppy).
 #
+# Exception : un objet nommé `fond` (back/plaque) n'est PAS réduit en arêtes —
+# ses TRIANGLES sont conservés tels quels et rendus en plaque sombre OPAQUE
+# (dos de billboard : le néon se lit sur un fond plein, pas sur la ville).
+#
 # Coordonnées renvoyées : locales au .glb, en MÈTRES réels
 # (cf. Carte Holo/SPECS_ASSETS.md — le placement/échelle est fait par famille,
 # ex. holo_decor._prop_sur_toit).
@@ -25,8 +29,9 @@ const QUANT := 2048.0    # soudure des sommets au ~0.5 mm (les exports dupliquen
 static var _cache: Dictionary = {}
 
 # Arêtes néon d'un prop. Retour : {"cadre": PackedVector3Array (paires de points),
-# "texte": PackedVector3Array, "aabb": AABB} — ou {} si le .glb est absent/vide
-# (l'appelant garde alors son rendu procédural de secours). Mise en cache.
+# "texte": PackedVector3Array, "fond": PackedVector3Array (triplets = TRIANGLES
+# pleins), "aabb": AABB} — ou {} si le .glb est absent/vide (l'appelant garde
+# alors son rendu procédural de secours). Mise en cache.
 static func aretes(nom: String) -> Dictionary:
 	if _cache.has(nom):
 		return _cache[nom]
@@ -42,19 +47,21 @@ static func _extraire(nom: String) -> Dictionary:
 	if ps == null:
 		return {}
 	var racine: Node = ps.instantiate()
-	var roles := {"cadre": PackedVector3Array(), "texte": PackedVector3Array()}
+	var roles := {"cadre": PackedVector3Array(), "texte": PackedVector3Array(),
+			"fond": PackedVector3Array()}
 	var compteur := [0]
 	_collecter(racine, Transform3D.IDENTITY, roles, compteur)
 	racine.free()
 	var cadre: PackedVector3Array = roles["cadre"]
 	var texte: PackedVector3Array = roles["texte"]
-	if cadre.is_empty() and texte.is_empty():
+	var fond: PackedVector3Array = roles["fond"]
+	if cadre.is_empty() and texte.is_empty() and fond.is_empty():
 		return {}
-	var pts := cadre + texte
+	var pts := cadre + texte + fond
 	var aabb := AABB(pts[0], Vector3.ZERO)
 	for p in pts:
 		aabb = aabb.expand(p)
-	return {"cadre": cadre, "texte": texte, "aabb": aabb}
+	return {"cadre": cadre, "texte": texte, "fond": fond, "aabb": aabb}
 
 static func _collecter(n: Node, xf: Transform3D, roles: Dictionary, compteur: Array) -> void:
 	var xfl := xf
@@ -68,18 +75,37 @@ static func _collecter(n: Node, xf: Transform3D, roles: Dictionary, compteur: Ar
 			var dest: PackedVector3Array = roles[role]
 			for si in m.get_surface_count():
 				if m.surface_get_primitive_type(si) == Mesh.PRIMITIVE_TRIANGLES:
-					_aretes_surface(m.surface_get_arrays(si), xfl, dest)
+					if role == "fond":
+						_triangles_surface(m.surface_get_arrays(si), xfl, dest)
+					else:
+						_aretes_surface(m.surface_get_arrays(si), xfl, dest)
 			roles[role] = dest
 	for c in n.get_children():
 		_collecter(c, xfl, roles, compteur)
 
 static func _role(nom: String, index: int) -> String:
 	var b := nom.to_lower()
+	if b.contains("fond") or b.contains("back") or b.contains("plaque"):
+		return "fond"
 	if b.contains("texte") or b.contains("text") or b.contains("lettre"):
 		return "texte"
 	if b.contains("cadre") or b.contains("frame"):
 		return "cadre"
 	return "cadre" if index == 0 else "texte"
+
+# Triangles pleins d'une surface (rôle `fond`) : sommets transformés recopiés
+# tels quels — pas d'extraction d'arêtes, ces faces sont rendues opaques.
+static func _triangles_surface(arr: Array, xf: Transform3D, dest: PackedVector3Array) -> void:
+	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var idx := PackedInt32Array()
+	if arr[Mesh.ARRAY_INDEX] != null:
+		idx = arr[Mesh.ARRAY_INDEX]
+	if idx.is_empty():
+		idx.resize(verts.size())
+		for i in verts.size():
+			idx[i] = i
+	for i in idx.size():
+		dest.append(xf * verts[idx[i]])
 
 # Arêtes dures d'une surface triangulée : soudure par position quantifiée
 # (retrouve l'adjacence réelle malgré les sommets dupliqués par normale), puis

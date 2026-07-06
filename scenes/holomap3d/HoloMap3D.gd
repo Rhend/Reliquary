@@ -230,6 +230,7 @@ var _mat_trafic: ShaderMaterial
 var _mat_neon: ShaderMaterial          # accents néon (crêtes, marquages, couronnes) — respire
 var _mat_enseigne: ShaderMaterial      # enseignes holographiques — respire + grésille
 var _mat_prop: ShaderMaterial          # props artistes (.glb) — néon doux, sans cœur blanc
+var _mat_prop_fond: ShaderMaterial     # plaque `fond` des props — sombre OPAQUE (lisibilité)
 var _env: Environment                  # environnement (glow modulé par le zoom)
 var _mats_zoom: Array = []             # couples [matériau néon, émission de base]
 var _glow_att := -1.0                  # dernière atténuation appliquée (-1 = jamais)
@@ -399,6 +400,18 @@ func _setup_materials() -> void:
 		"flicker_base": 0.20, "flicker_periph": 0.20, "rich_rmax": rmax,
 	})
 
+	# Fond opaque des props (objet `fond` du .glb) : plaque sombre PLEINE derrière
+	# le néon — le dessin se lit sur un aplat, pas sur la ville en transparence.
+	# Variante du shader de façades SANS fenêtres/bandes/pulse, opacité totale ;
+	# écrit la profondeur → occulte les lignes derrière le panneau.
+	_mat_prop_fond = _make_mat(FACE_SHADER, {
+		"face_color": couleur_faces, "opacite": 1.0,
+		"fenetre_densite": 0.0, "fenetre_emission": 0.0,
+		"etage_force": 0.0, "pulse_force": 0.0,
+		"rich_rmax": maxf(0.001, _cgrid() * taille_cellule),
+	})
+	_mat_prop_fond.render_priority = -1
+
 	# Décor d'un lieu SANS bâtiment (parc-lieu) : tier-coloré + glow marqué pour
 	# que la zone ressorte comme un lieu (pas un simple décor vert).
 	_mat_lieu_decor = _make_mat(LINE_SHADER, {"emission_strength": lieu_decor_emission, "alpha_mult": 1.0})
@@ -448,7 +461,7 @@ func _setup_materials() -> void:
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_prop, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_prop, _mat_prop_fond, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]
 
 	# Néons les plus chauds : leur émission descend avec le dézoom (cf. _process).
 	_mats_zoom = []

@@ -107,7 +107,8 @@ fx_fumee.png
 - **Pas de numéro de version** dans le nom (`_v2`, `_final`…) : on **écrase** le
   fichier au ré-export, le nom est l'identifiant stable côté moteur.
 - Variantes d'un même objet : suffixe court (`_a`, `_b`, `_hl`).
-- Dans le `.glb`, les objets internes gardent leurs noms de rôle (`cadre`, `texte`).
+- Dans le `.glb`, les objets internes gardent leurs noms de rôle
+  (`cadre`, `texte`, `fond`).
 
 ---
 
@@ -118,12 +119,13 @@ Toutes les règles 3D ci-dessus s'appliquent, plus ces précisions :
 
 | Contrainte | Valeur |
 |---|---|
-| **Dimensions** | face ≈ **10–14 m de large × 4–6 m de haut** (en mètres réels) |
+| **Dimensions** | face ≈ **10–14 m de large × 4–6 m de haut** (en mètres réels) — le moteur **redimensionne le panneau à la taille du bâtiment** : ce sont les **proportions** qui comptent, pas les mètres exacts |
 | **Pieds inclus** | béquilles / structure porteuse dans le modèle — le toit est **plat**, le panneau ne doit pas flotter |
 | **Budget** | ~**100–300 triangles** (c'est un prop simple) |
 | **Pivot** | au **point de contact avec le toit**, centré (Y = 0) |
 | **Face lisible** | face à toi en **vue de face Blender** (le moteur l'oriente vers la route) |
-| **2 objets nommés max** | `cadre` (structure → néon **ambre**) et `texte` (détail → néon **cyan**) — le moteur applique une couleur par objet |
+| **3 objets nommés max** | `cadre` (structure → néon **ambre**), `texte` (détail → néon **cyan**), et en option `fond` (plaque du panneau → **aplat sombre OPAQUE**, pas de néon : le texte se lit dessus) |
+| **Le `fond`** | un simple plan/boîte plate qui couvre la face du panneau, reculé de **~10 cm derrière** le texte et le cadre (s'ils se touchent exactement, ça scintille) |
 
 > ⚠️ Chaque arête du modèle devient **une ligne de néon**. Une face plane
 > sur-découpée = un quadrillage lumineux moche. Le « texte » de l'enseigne =

@@ -1136,9 +1136,12 @@ static func supermarches(h) -> void:
 			nn += _billboard_toit(h, bb, haut, ambre, cyan, sn, sc)
 		else:
 			var sp := HoloMesh3D.st()
-			var rp: Array = _prop_sur_toit(h, prop, b["cells"], bb, haut, ambre, cyan, sp, sp)
+			var spf := HoloMesh3D.st_tri()
+			var rp: Array = _prop_sur_toit(h, prop, b["cells"], bb, haut, ambre, cyan, sp, sp, spf)
 			h._ajouter_mesh(HoloMesh3D.commit(sp, rp[0] + rp[1]), "SupermarchesProp",
 					h._mat_prop if PROP_NEON else _mat_brut())
+			h._ajouter_mesh(HoloMesh3D.commit(spf, rp[2]), "SupermarchesPropFond",
+					h._mat_prop_fond if PROP_NEON else _mat_brut())
 		ncy += _toit_skylights(h, bb, haut, cyan, sc)           # grille de verrières (toit)
 		var rcvc: Array = _cvc_toit(h, bb, haut, col, s, sf)    # blocs techniques sur le toit
 		n += rcvc[0]; nf += rcvc[1]
@@ -1229,38 +1232,44 @@ static func _toit_skylights(h, bb: Rect2i, haut: float, col: Color, s: SurfaceTo
 const PROP_NEON := true
 
 # Matériau plat du mode brut : ALBEDO = couleur de sommet, rien d'autre
-# (en GL Compatibility, unshaded affiche l'ALBEDO tel quel).
+# (en GL Compatibility, unshaded affiche l'ALBEDO tel quel). Sans culling :
+# sert aussi aux triangles `fond`, lisibles des deux côtés.
 static func _mat_brut() -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.vertex_color_use_as_albedo = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
 
 # ─── Prop artiste posé sur un toit ────────────────────────────
-# Pose le fil-de-fer d'un prop .glb (holo_props) au centre du toit, face « texte »
-# (+Z local, cf. SPECS_ASSETS.md) tournée vers la route d'entrée. Échelle
-# UNIFORME à l'échelle du sol (1 case = 10 m) : contrairement aux hauteurs de
-# bâtiments (rail vertical exagéré ×2,5), un prop garde les proportions voulues
-# par l'artiste — au rail exagéré, le panneau devenait une tour de lumière.
-# Le prop est recentré et son pied posé sur le toit via son AABB (robuste aux
-# pivots approximatifs), et réduit uniformément s'il déborde du petit côté du
-# toit. Renvoie [arêtes cadre (ambre), arêtes texte (cyan)].
+# Fraction du PETIT côté du toit que le prop doit occuper : l'échelle est
+# PROPORTIONNELLE AU BÂTIMENT (agrandit comme réduit) — à l'échelle réelle
+# « mètres », le prop disparaissait face aux volumes exagérés de la ville.
+const PROP_EMPRISE_TOIT := 0.85
+
+# Pose un prop .glb (holo_props) au centre du toit, face « texte » (+Z local,
+# cf. SPECS_ASSETS.md) tournée vers la route d'entrée. Échelle UNIFORME (les
+# proportions de l'artiste sont gardées — pas le rail vertical exagéré ×2,5),
+# dimensionnée dynamiquement : la plus grande emprise horizontale du prop =
+# PROP_EMPRISE_TOIT × petit côté du toit. Le prop est recentré et son pied posé
+# sur le toit via son AABB (robuste aux pivots approximatifs). Les arêtes cadre
+# (ambre) / texte (cyan) partent en lignes néon ; les triangles `fond` partent
+# dans `sf` (plaque sombre opaque, matériau h._mat_prop_fond).
+# Renvoie [nb lignes cadre, nb lignes texte, nb triangles fond].
 static func _prop_sur_toit(h, prop: Dictionary, cells: Array, bb: Rect2i, haut: float,
-		ambre: Color, cyan: Color, sn: SurfaceTool, sc: SurfaceTool) -> Array:
+		ambre: Color, cyan: Color, sn: SurfaceTool, sc: SurfaceTool, sf: SurfaceTool) -> Array:
 	var aabb: AABB = prop["aabb"]
 	var sg: float = h.taille_cellule / METRES_PAR_CASE   # mètres → monde (échelle sol)
-	var sv: float = sg
 	var toit: float = float(mini(bb.size.x, bb.size.y)) * h.taille_cellule
-	var fit: float = minf(1.0, toit * 0.85 / maxf(0.001, maxf(aabb.size.x, aabb.size.z) * sg))
-	sg *= fit
-	sv *= fit
+	sg *= toit * PROP_EMPRISE_TOIT / maxf(0.001, maxf(aabb.size.x, aabb.size.z) * sg)
+	var sv: float = sg
 	var ent := _cote_entree(h, cells)
 	var dir: Vector2i = ent["dir"]
 	var ay := atan2(float(dir.x), float(dir.y))          # +Z local → vers la route
 	var base: Vector3 = h._centre_bbox(bb)
 	base.y = haut
 	var centre := aabb.get_center()
-	var n := [0, 0]
+	var n := [0, 0, 0]
 	var groupes: Array = [["cadre", ambre, sn], ["texte", cyan, sc]]
 	for gi in groupes.size():
 		var pts: PackedVector3Array = prop[groupes[gi][0]]
@@ -1270,6 +1279,13 @@ static func _prop_sur_toit(h, prop: Dictionary, cells: Array, bb: Rect2i, haut: 
 			n[gi] += HoloMesh3D.line(s,
 					_prop_pt(pts[i], centre, aabb, ay, sg, sv, base),
 					_prop_pt(pts[i + 1], centre, aabb, ay, sg, sv, base), col)
+	var fond: PackedVector3Array = prop.get("fond", PackedVector3Array())
+	var col_fond := Color(0.04, 0.05, 0.09)   # visible seulement en mode brut (vertex color)
+	for i in range(0, fond.size() - 2, 3):
+		for j in 3:
+			sf.set_color(col_fond)
+			sf.add_vertex(_prop_pt(fond[i + j], centre, aabb, ay, sg, sv, base))
+		n[2] += 1
 	return n
 
 # Point local du prop (mètres) → monde : recentrage XZ, pied calé sur le toit,
