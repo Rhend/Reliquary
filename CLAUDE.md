@@ -80,7 +80,12 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
 - **Sections repliables** : `UIHelpers.collapsible_section(titre, couleur, ouvert,
   host.panel_ui_state())` pour que l'état survive aux reconstructions.
 - Fins de combat CTB : `EventBus.ctb_victoire` / `ctb_defaite` portent le recap
-  `{victoire, nb_activations, pv_restants}` ; le résumé de cycle porte `hero_id`.
+  `{victoire, nb_activations, pv_restants, ennemis_vaincus}` (loot/XP calculés en
+  aval par l'expédition, hors moteur) ; le résumé de cycle porte `hero_id`.
+- Règles CTB actées (06/07/2026) : mort au tick DÉBUT = activation consommée ;
+  DoT figé à la pose (ATK courante = futur paramètre de .tres si besoin) ;
+  stacks_max dépassé = remplacement du plus ancien ; AUCUN tick post-victoire ;
+  statuts purgés en fin de combat ; PV persistants entre les nœuds d'expédition.
 - Évolution : TOUJOURS manuelle (action joueur via `MasterySystem.evolve_entity`).
 - L'XP s'accumule au-delà des plafonds (jamais perdue) ; plafond créature dépend du
   tier du biome + de la zone (`Balance.CREATURE_CAP_*`).

@@ -105,7 +105,9 @@ signal adventure_stopped()
 #  été supprimés avec lui ; le CTB émet ctb_victoire/ctb_defaite ci-dessous.)
 
 # Émis par CtbMoteur quand tous les ennemis sont à 0 PV.
-# recap : { victoire, nb_activations, pv_restants } — cf. CtbMoteur._recap().
+# recap : { victoire, nb_activations, pv_restants, ennemis_vaincus
+# (Array[CombattantCtbData] des tués) } — cf. CtbMoteur._recap(). Le loot et
+# l'XP sont calculés en aval par le système d'expédition, hors moteur.
 @warning_ignore("unused_signal")
 signal ctb_victoire(recap: Dictionary)
 

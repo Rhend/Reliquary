@@ -23,7 +23,12 @@
 # Fins de combat : PV Avatar à 0 → défaite (immédiate, même si des pets
 # vivent) ; tous ennemis à 0 → victoire (+ hook post-victoire vide). Les deux
 # émettent le signal local ET l'EventBus (ctb_victoire / ctb_defaite).
-# La fin de combat interrompt tout (plus aucun tick ni réarmement).
+# La fin de combat interrompt tout (plus aucun tick ni réarmement — arbitrage
+# 06/07 : aucun design ne s'appuiera sur des ticks post-victoire).
+#
+# Règles ACTÉES pour l'intégration expédition (chantiers suivants, pas encore
+# implémentées ici) : statuts PURGÉS en fin de combat (aucune persistance entre
+# les nœuds d'une expédition) ; PV PERSISTANTS entre les nœuds.
 #
 # Usage (pull-based, prêt pour une UI asynchrone) :
 #   var m := CtbMoteur.new()
@@ -254,14 +259,21 @@ func _verifier_fin() -> void:
 func _hook_post_victoire() -> void:
 	pass
 
+# Recap de fin de combat. `ennemis_vaincus` : références des DONNÉES
+# (CombattantCtbData) des combattants adverses tués — le loot et l'XP seront
+# calculés EN AVAL par le système d'expédition, hors moteur (arbitrage 06/07).
 func _recap() -> Dictionary:
 	var pv_restants := {}
+	var vaincus: Array[CombattantCtbData] = []
 	for c in combattants:
 		pv_restants[c.data.id] = c.pv
+		if not c.est_joueur() and not c.est_vivant():
+			vaincus.append(c.data)
 	return {
 		"victoire": victoire_joueur,
 		"nb_activations": nb_activations,
 		"pv_restants": pv_restants,
+		"ennemis_vaincus": vaincus,
 	}
 
 # ─── Internes ────────────────────────────────────────────────

@@ -84,6 +84,10 @@ L'ancien système de combat temps réel a été **entièrement supprimé** (« s
 
 État assumé jusqu'à l'intégration CTB : les rencontres créature d'une expédition sont **constatées mais non résolues** (`AdventureSystem._combat_non_resolu` : bestiaire + événement, ni dégâts ni XP de combat ni drops, avertissement console une fois par cycle ; bannière « Combat en refonte » au lancement d'une expédition). `_resolve_victory` / `_resolve_unique_victory` (XP, drops, régén, récompenses d'Unique) sont **conservés** pour être rappelés sur `ctb_victoire`. La bénédiction Hâte stocke toujours son modificateur (sera traduit en buff VIT CTB). Toutes les suites restantes sont vertes (94/94 scripts, ExpeditionFlow 28/28, TierCap, Drops, CTB 32/32).
 
+## Addendum 2 — Arbitrages design validés (06/07/2026)
+
+Les 6 questions ouvertes ci-dessous ont été tranchées : 1. mort au tick DÉBUT = activation consommée (conservé) ; 2. DoT figé à la pose (conservé — l'ATK courante sera, si besoin, un paramètre de `.tres`) ; 3. remplacement du stack le plus ancien (conservé) ; 4. aucun tick post-victoire (confirmé) ; 5. K = 1000 inchangé jusqu'au chantier UI ; 6. recap étendu avec `ennemis_vaincus` (références `CombattantCtbData` des tués — loot/XP calculés en aval par l'expédition, hors moteur) → **implémenté**. Nouvelles règles actées pour l'intégration (non implémentées) : statuts purgés en fin de combat, PV persistants entre les nœuds d'une expédition.
+
 ## 6. Questions ouvertes
 
 1. **Mort au tick DÉBUT** : l'activation est consommée (le mourant ne joue pas). OK, ou le Saignement doit-il laisser jouer le tour avant la mort ?

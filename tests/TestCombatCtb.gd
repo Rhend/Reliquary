@@ -284,6 +284,10 @@ func _test_victoire_signaux_et_recap() -> void:
 		var r: Dictionary = recaps[0]
 		_assert(r["victoire"] and r["nb_activations"] > 0 and r["pv_restants"].has("avatar"),
 				"recap : victoire / nb_activations / pv_restants")
+		var vaincus: Array = r["ennemis_vaincus"]
+		_assert(vaincus.size() == 2 and vaincus[0] is CombattantCtbData \
+				and vaincus[0].id == "ennemi_1" and vaincus[1].id == "ennemi_2",
+				"recap : ennemis_vaincus = données des 2 tués (références .tres)")
 
 # Garde-fou : combat sans issue (gros PV, dégâts plancher) → arrêt propre.
 func _test_garde_fou() -> void:
