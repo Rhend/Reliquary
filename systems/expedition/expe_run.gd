@@ -88,9 +88,13 @@ func demarrer() -> void:
 	assert(cfg_combat != null, "config de combat requise")
 	# PV pleins au lancement — provisoire : la gestion hors expédition n'existe pas.
 	pv_avatar = avatar_data.pv_max
-	_log("═ Expédition : %s — palier %s (×%.1f), %d étages — Avatar PV %d" % [
-			lieu_id, palier.nom_journal(), palier.multiplicateur, config.nb_etages,
-			int(roundf(pv_avatar))])
+	_log("═ Expédition : %s — palier %s (×%.1f), %d étages" % [
+			lieu_id, palier.nom_journal(), palier.multiplicateur, config.nb_etages])
+	_log("  ✦ %s — PV %d, ATK %d, DEF %d, VIT %d, crit %.0f %% ×%.2f" % [
+			avatar_data.nom_journal(), int(roundf(avatar_data.pv_max)),
+			int(roundf(avatar_data.atk)), int(roundf(avatar_data.def)),
+			int(roundf(avatar_data.vit)), avatar_data.crit_chance * 100.0,
+			avatar_data.crit_multiplier])
 	_nouvel_etage()
 
 # Choix « Continuer » (sur la Fin d'étage, hors dernier étage).

@@ -44,6 +44,7 @@ var _btn_extraire: Button
 var _btn_continuer: Button
 var _opt_palier: OptionButton
 var _spin_graine: SpinBox
+var _chk_heros: CheckBox
 var _lbl_etat: Label
 
 func _ready() -> void:
@@ -78,6 +79,13 @@ func _construire_ui() -> void:
 	btn_go.text = "⟳ Relancer l'expédition"
 	btn_go.pressed.connect(_lancer)
 	barre.add_child(btn_go)
+	_chk_heros = CheckBox.new()
+	_chk_heros.text = "Héros réel"
+	_chk_heros.button_pressed = true
+	_chk_heros.tooltip_text = "Coché : le vrai héros (stats effectives, équipement compris,\n" \
+			+ "via CtbPont.combattant_depuis_heros). Décoché : avatar factice (avatar.tres)."
+	_chk_heros.toggled.connect(func(_on: bool) -> void: _lancer())
+	barre.add_child(_chk_heros)
 	_lbl_etat = Label.new()
 	barre.add_child(_lbl_etat)
 
@@ -116,9 +124,21 @@ func _construire_ui() -> void:
 func _lancer() -> void:
 	var palier: PalierProfondeurData = PALIERS[maxi(_opt_palier.selected, 0)]
 	run = ExpeRun.new(CONFIG, palier, "lieu_factice_sandbox", int(_spin_graine.value),
-			AVATAR, POOL, CONFIG_COMBAT)
+			_avatar_choisi(), POOL, CONFIG_COMBAT)
 	run.demarrer()
 	_rafraichir()
+
+# Héros RÉEL de la partie courante (défaut) ou avatar factice (tests/calibrage).
+# Lancé seul (F6), le sandbox charge la sauvegarde pour refléter la vraie
+# partie — jamais deux fois par-dessus une partie en cours ; il n'émet aucun
+# signal de progression (rien à écrire).
+func _avatar_choisi() -> CombattantCtbData:
+	if _chk_heros == null or not _chk_heros.button_pressed:
+		return AVATAR
+	if not SaveManager.est_chargee():
+		SaveManager.load_save()
+	var heros := CtbPont.combattant_depuis_heros()
+	return heros if heros != null else AVATAR
 
 # Auto-résolution du combat en attente (outil de dev : pas d'input joueur —
 # l'UI de combat viendra avec sa DA ; le journal du moteur est replié dans
@@ -131,7 +151,7 @@ func _rafraichir() -> void:
 	_carte_view.queue_redraw()
 	_btn_extraire.visible = run.choix_ouvert
 	_btn_continuer.visible = run.choix_ouvert and run.etage < CONFIG.nb_etages
-	var pv := "PV %d/%d" % [int(roundf(run.pv_avatar)), int(roundf(AVATAR.pv_max))]
+	var pv := "PV %d/%d" % [int(roundf(run.pv_avatar)), int(roundf(run.avatar_data.pv_max))]
 	if run.est_terminee:
 		_lbl_etat.text = "  %s — %s" % [
 				"☠ DÉFAITE" if run.defaite else "✔ Expédition terminée", pv]

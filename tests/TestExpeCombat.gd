@@ -1,6 +1,7 @@
 extends Node
 # Tests du branchement combat CTB ↔ nœuds d'expédition (Rework Combat —
-# chantier 3). Pont bestiaire → CTB (stats identiques champ à champ),
+# chantiers 3-4). Pont bestiaire → CTB et pont HÉROS réel (stats effectives
+# recalculées indépendamment, avec/sans équipement, sans toucher la sauvegarde),
 # suspension de la run sur un nœud Combat, persistance des PV entre les
 # nœuds, purge des statuts en fin de combat, malus d'embuscade (attaque
 # surprise), défaite = fin d'expédition, agrégat des combats au recap,
@@ -12,6 +13,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	print("\n=== TEST COMBAT D'EXPÉDITION (CTB ↔ nœuds) ===\n")
 	_test_conversion_bestiaire()
+	_test_pont_heros()
 	_test_malus_embuscade()
 	_test_purge_statuts()
 	_test_combat_noeud()
@@ -141,6 +143,73 @@ func _test_conversion_bestiaire() -> void:
 				"%s : hp→pv_max, atk, def, vit, crit ×2, id, nom identiques" % cid)
 	_assert(CtbPont.combattant_depuis_entite("id_inexistant_xyz") == null,
 			"entité inconnue → null (erreur console)")
+
+# ─── Pont héros réel → CTB (chantier 4) ─────────────────────
+
+# Stats attendues du héros, recalculées INDÉPENDAMMENT depuis les mêmes
+# systèmes (formule de l'ancien combat_player : plats puis % additifs).
+# Le test ne charge JAMAIS la sauvegarde : l'état comparé est l'état runtime
+# courant, des deux côtés — indépendant de la machine.
+func _heros_conforme(d: CombattantCtbData) -> bool:
+	var stats: Dictionary = GameData.get_effective_stats("hero")
+	var pas: Dictionary = PassiveSystem.get_combat_bonuses()
+	var eq: Dictionary = GameData.get_equipment_bonuses()
+	var atk_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_ATK_PCT) \
+			+ ForgeSystem.get_stat_bonus("atk_pct")
+	var def_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_DEF_PCT) \
+			+ ForgeSystem.get_stat_bonus("def_pct")
+	var hp_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_HP_MAX_PCT) \
+			+ ForgeSystem.get_stat_bonus("hp_max_pct")
+	var crit_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_CRIT_PCT) \
+			+ ForgeSystem.get_stat_bonus("crit_pct")
+	var hp_att := StatStacker.final_stat(float(stats["hp"]) + float(pas.get("hp_bonus", 0.0))
+			+ float(eq.get("hp", 0.0)), [hp_pct], "hp")
+	var atk_att := StatStacker.final_stat(float(stats["atk"]) + float(pas.get("atk_bonus", 0.0))
+			+ float(eq.get("atk", 0.0)), [atk_pct], "atk")
+	var def_att := StatStacker.final_stat(float(stats["def"]) + float(pas.get("def_bonus", 0.0))
+			+ float(eq.get("def", 0.0)), [def_pct], "def")
+	var vit_att := StatStacker.final_stat(float(stats["vit"]),
+			[float(eq.get("attack_speed_pct", 0.0)) / 100.0,
+			ForgeSystem.get_stat_bonus("atb_pct")], "vit")
+	return absf(d.pv_max - hp_att) < 0.001 and absf(d.atk - atk_att) < 0.001 \
+			and absf(d.def - def_att) < 0.001 and absf(d.vit - vit_att) < 0.001 \
+			and absf(d.crit_chance - (float(stats["crit_chance"]) + crit_pct)) < 0.001 \
+			and absf(d.crit_multiplier - float(stats["crit_multiplier"])) < 0.001 \
+			and d.id == "hero"
+
+func _test_pont_heros() -> void:
+	print("\n[TEST] Pont héros réel → CTB (stats effectives, équipement compris)")
+	var equips_avant: Dictionary = (GameData.player["equipped"] as Dictionary).duplicate()
+	# SANS équipement (manipulation directe du dict — aucun signal, donc aucune
+	# écriture de sauvegarde possible).
+	for slot in GameData.player["equipped"]:
+		GameData.player["equipped"][slot] = ""
+	var d := CtbPont.combattant_depuis_heros()
+	if d == null:
+		_fail("pont héros : conversion null")
+		GameData.player["equipped"] = equips_avant
+		return
+	_assert(_heros_conforme(d), "sans équipement : identique champ à champ à l'agrégation")
+	var atk_nu := d.atk
+	var vit_nu := d.vit
+	# AVEC équipement : Lame de Pierre (atk +3) + Anneau de Forêt (attack_speed 10 %).
+	GameData.player["equipped"]["arme"] = "equipment_arme"
+	GameData.player["equipped"]["anneau"] = "equipment_anneau"
+	var d2 := CtbPont.combattant_depuis_heros()
+	_assert(d2 != null and _heros_conforme(d2),
+			"avec équipement : identique champ à champ à l'agrégation")
+	_assert(d2 != null and d2.atk > atk_nu and d2.vit > vit_nu,
+			"changer l'équipement change les stats CTB au prochain lancement (ATK, VIT)",
+			"atk %f→%f, vit %f→%f" % [atk_nu, d2.atk, vit_nu, d2.vit])
+	var nom_attendu := str(GameData.get_entity("hero").get("nom_affichage_fr", ""))
+	_assert(d.nom_affichage_fr == nom_attendu and d.id == "hero",
+			"identité : id 'hero' + nom d'affichage de l'entité")
+	# L'avatar FACTICE reste disponible et inchangé (TestExpeCarte/sandbox).
+	var factice: CombattantCtbData = load("res://data/combat_ctb/avatar.tres")
+	_assert(factice != null and factice.id == "ctb_avatar" and factice.pv_max == 100.0
+			and factice.atk == 20.0 and factice.def == 5.0 and factice.vit == 20.0,
+			"avatar factice (avatar.tres) disponible et inchangé")
+	GameData.player["equipped"] = equips_avant   # remise en état stricte
 
 # ─── Malus d'embuscade (moteur) ─────────────────────────────
 

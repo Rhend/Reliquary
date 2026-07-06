@@ -27,6 +27,35 @@
 #   noms_par_palier_*, lore_*, lore_par_palier_* — affichage/UI ;
 #   est_unique, zone_associee, biome_id — sélection amont (pools/rencontres) ;
 #   passif_debloque_id — progression de Maîtrise, hors combat CTB.
+#
+# ── Pont HÉROS (chantier 4) ─────────────────────────────────
+# L'agrégation des stats effectives du héros que consommait l'ancien moteur
+# vivait dans combat_player.start_combat() — SUPPRIMÉE avec lui (8d8f920).
+# combattant_depuis_heros() la RECONSTRUIT À L'IDENTIQUE (formule vérifiée
+# sur l'historique git) et devient la SOURCE UNIQUE de cette agrégation :
+#   stat nue (GameData.get_effective_stats("hero"), tables Balance.HERO_*)
+#   + bonus PLATS (PassiveSystem.get_combat_bonuses, GameData.get_equipment_bonuses)
+#   puis × (1 + Σ bonus %) via StatStacker (VillageBuildings CH_*_PCT +
+#   ForgeSystem *_pct, empilés ADDITIVEMENT — jamais de produit séquentiel).
+#
+# Mapping héros → CombattantCtbData (bonus de stats UNIQUEMENT) :
+#   pv_max      = (hp nue + passifs.hp_bonus + équip.hp)   × (1 + hp_pct)
+#   atk         = (atk nue + passifs.atk_bonus + équip.atk) × (1 + atk_pct)
+#   def         = (def nue + passifs.def_bonus + équip.def) × (1 + def_pct)
+#   vit         = vit nue × (1 + équip.attack_speed_pct/100 + forge atb_pct)
+#   crit_chance = crit nue + (village CH_CRIT_PCT + forge crit_pct)  [points]
+#   crit_multiplier = crit_multiplier nue
+#
+# LAISSÉ DERRIÈRE (volontairement — hors bonus de stats du héros seul) :
+#   GameData.get_mastery_combat_bonus(enemy_id) — bonus d'ATK par familiarité
+#     avec L'ENNEMI : dépend de chaque combat, impossible à figer au lancement
+#     de l'expédition (à réintroduire côté moteur si le design le confirme) ;
+#   atk_mult / def_mult — modificateurs de CYCLE de la boucle idle
+#     (AdventureSystem), étrangers à l'expédition free-roam ;
+#   ForgeSystem.combat_rules() — effets de RÈGLE (def_ignore, gauge_start,
+#     crit_mult, cond_atk_hp_above, residual…), pas des stats ;
+#   poison passif on-hit (PassiveSystem.get_passive_combat_effects) — effet
+#     non-stat, hors scope.
 # ============================================================
 class_name CtbPont
 extends RefCounted
@@ -48,5 +77,45 @@ static func combattant_depuis_entite(entity_id: String) -> CombattantCtbData:
 	d.def = float(stats.get("def", 0))
 	d.vit = float(stats.get("vit", 20))
 	d.crit_chance = float(stats.get("crit_chance", Balance.CRIT_CHANCE))
+	d.crit_multiplier = float(stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER))
+	return d
+
+# Combattant CTB transitoire du VRAI héros (jamais sauvé) : stats effectives
+# complètes, équipement compris (arbitrage 06/07/2026). Construit au LANCEMENT
+# de l'expédition — un changement d'équipement compte au prochain lancement.
+# Formule = reconstruction verbatim de l'ancien combat_player (cf. en-tête).
+static func combattant_depuis_heros() -> CombattantCtbData:
+	var entity: Dictionary = GameData.get_entity("hero")
+	var stats: Dictionary = GameData.get_effective_stats("hero")
+	if entity.is_empty() or stats.is_empty():
+		push_error("CtbPont : héros introuvable ou sans stats")
+		return null
+	var passifs: Dictionary = PassiveSystem.get_combat_bonuses()
+	var equip: Dictionary = GameData.get_equipment_bonuses()
+	var atk_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_ATK_PCT) \
+			+ ForgeSystem.get_stat_bonus("atk_pct")
+	var def_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_DEF_PCT) \
+			+ ForgeSystem.get_stat_bonus("def_pct")
+	var hp_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_HP_MAX_PCT) \
+			+ ForgeSystem.get_stat_bonus("hp_max_pct")
+	var crit_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_CRIT_PCT) \
+			+ ForgeSystem.get_stat_bonus("crit_pct")
+	var d := CombattantCtbData.new()
+	d.id = "hero"
+	d.nom_affichage_fr = str(entity.get("nom_affichage_fr", "Héros"))
+	d.nom_affichage_en = str(entity.get("nom_affichage_en", "Hero"))
+	d.pv_max = StatStacker.final_stat(
+			float(stats.get("hp", 100)) + float(passifs.get("hp_bonus", 0.0))
+			+ float(equip.get("hp", 0.0)), [hp_pct], "hp")
+	d.atk = StatStacker.final_stat(
+			float(stats.get("atk", 0)) + float(passifs.get("atk_bonus", 0.0))
+			+ float(equip.get("atk", 0.0)), [atk_pct], "atk")
+	d.def = StatStacker.final_stat(
+			float(stats.get("def", 0)) + float(passifs.get("def_bonus", 0.0))
+			+ float(equip.get("def", 0.0)), [def_pct], "def")
+	d.vit = StatStacker.final_stat(float(stats.get("vit", 20)),
+			[float(equip.get("attack_speed_pct", 0.0)) / 100.0,
+			ForgeSystem.get_stat_bonus("atb_pct")], "vit")
+	d.crit_chance = float(stats.get("crit_chance", Balance.CRIT_CHANCE)) + crit_pct
 	d.crit_multiplier = float(stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER))
 	return d

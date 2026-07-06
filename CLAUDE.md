@@ -37,7 +37,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Progression de Maîtrise (XP, plafonds, évolution manuelle) | `scripts/systems/MasterySystem.gd` |
 | Effets de passifs (bonus plats + conditionnels) | `scripts/systems/PassiveSystem.gd` |
 | Moteur combat TOUR PAR TOUR CTB (Rework ch.1 : file d'initiative `K/VIT`, DoT data-driven, N-vs-N, signaux `ctb_*` ; ch.3 : malus d'embuscade, purge des statuts en fin de combat) | `systems/combat_ctb/ctb_moteur.gd` + `ctb_combattant.gd` |
-| Pont bestiaire existant → combattant CTB (stats telles quelles via `GameData.get_effective_stats`, mapping documenté en tête de fichier) | `systems/combat_ctb/ctb_pont.gd` |
+| Pont bestiaire existant → combattant CTB (stats telles quelles via `GameData.get_effective_stats`) + pont HÉROS réel (ch.4 : source unique d'agrégation plats + % additifs, reconstruite de l'ancien combat_player — mappings et « laissé derrière » documentés en tête de fichier) | `systems/combat_ctb/ctb_pont.gd` |
 | Carte d'expédition free-roam (Rework ch.2 : génération Delaunay connexe seedable, brouillard « absent », 3 étages, Extraire/Continuer, signaux `expe_*` ; ch.3 : nœuds Combat/Attaque surprise = VRAIS combats CTB — run suspendue, PV persistants, défaite = fin immédiate ; Coffre/Bénédiction/Piège = stubs) | `systems/expedition/expe_run.gd` + `expe_carte.gd` (config + pools : `data/expedition/`) |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
@@ -58,10 +58,14 @@ combat à la construction). En revanche la boucle idle du village
 (`AdventureSystem`) reste NON branchée : ses rencontres créature sont
 constatées mais NON résolues (`_combat_non_resolu`) — ni dégâts, ni XP de
 combat, ni drops ; loot/XP des combats d'expédition également à venir
-(le recap agrège déjà `ennemis_vaincus`/`nb_combats`). L'avatar d'expédition
-est encore factice (`data/combat_ctb/avatar.tres`) — le vrai héros (stats +
-équipement + bonus additifs → CombattantCtbData, extension de CtbPont) est le
-chantier 4 (acté 06/07/2026, spec à venir). `_resolve_victory` /
+(le recap agrège déjà `ennemis_vaincus`/`nb_combats`). Le camp joueur en
+expédition = VRAI héros (ch.4 : `CtbPont.combattant_depuis_heros()`, stats
+effectives équipement compris, transitoire construit au lancement) ; le
+sandbox a une checkbox Héros réel / avatar factice (`avatar.tres`, conservé
+pour les tests) et charge la sauvegarde s'il est lancé seul
+(`SaveManager.est_chargee()`). Laissé derrière par le pont héros (documenté
+dans ctb_pont.gd) : bonus de familiarité par ennemi, modificateurs de cycle,
+effets de règle Forge, poison passif on-hit. `_resolve_victory` /
 `_resolve_unique_victory` sont conservés pour l'intégration. Règle générale :
 un système remplacé est SUPPRIMÉ, pas laissé en doublon.
 
@@ -112,7 +116,7 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
 godot --headless --path . res://tests/TestScriptsLoad.tscn      # compile tous les scripts
 godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (33)
 godot --headless --path . res://tests/TestExpeCarte.tscn        # carte d'expédition (39)
-godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔ nœuds d'expédition (40)
+godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔ nœuds d'expédition + ponts (45)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)
 
 # Boot rapide sans erreur :

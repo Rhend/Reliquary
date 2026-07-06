@@ -67,6 +67,12 @@ func _ready() -> void:
 	EventBus.equipement_evolue.connect(_on_progress)
 	EventBus.village_tier_change.connect(_on_progress)
 
+# Lecture publique : load_save() a-t-il déjà tourné ? (Un outil dev — ex.
+# SandboxExpe pour le héros réel — charge la sauvegarde s'il est lancé seul,
+# mais jamais deux fois par-dessus une partie en cours.)
+func est_chargee() -> bool:
+	return _load_attempted
+
 func _on_progress(_a = null, _b = null) -> void:
 	_save_dirty = true
 	_save_timer.start()
