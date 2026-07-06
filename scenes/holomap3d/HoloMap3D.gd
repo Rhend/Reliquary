@@ -147,7 +147,7 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # progressivement avec la distance caméra (cf. _appliquer_glow_zoom).
 @export var glow_zoom_pres := 3.0                     # distance ≤ → glow plein
 @export var glow_zoom_loin := 13.0                    # distance ≥ → atténuation max
-@export_range(0.0, 1.0) var glow_zoom_min := 0.35     # fraction restante au dézoom max
+@export_range(0.0, 1.0) var glow_zoom_min := 0.20     # fraction restante au dézoom max
 # Post-process « écran cathodique » : valeurs ACTIVES mais douces (non-épileptogène).
 @export_range(0.0, 1.0) var scanline_intensity := 0.05
 @export var scanline_count := 240.0
