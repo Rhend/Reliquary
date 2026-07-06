@@ -222,6 +222,7 @@ var _mat_motes: ShaderMaterial
 var _mat_trafic: ShaderMaterial
 var _mat_neon: ShaderMaterial          # accents néon (crêtes, marquages, couronnes) — respire
 var _mat_enseigne: ShaderMaterial      # enseignes holographiques — respire + grésille
+var _mat_prop: ShaderMaterial          # props artistes (.glb) — néon doux, sans cœur blanc
 var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc tier-coloré)
 var _mat_lac: ShaderMaterial           # nappe d'eau pleine (lac satellite, hors carré)
 var _mat_eau: ShaderMaterial           # eau qui s'écoule (carte Excel, shader animé)
@@ -377,6 +378,16 @@ func _setup_materials() -> void:
 		"flicker_base": 0.20, "flicker_periph": 0.20, "rich_rmax": rmax,
 	})
 
+	# Props artistes (.glb, cf. holo_props) : néon ADOUCI — moitié de l'émission
+	# des enseignes et AUCUN cœur blanc (au réglage enseigne, le dessin de
+	# l'artiste cramait en une masse de lumière illisible). La couleur reste
+	# celle des vertex colors ; respiration/grésillement conservés.
+	_mat_prop = _make_mat(NEON_SHADER, {
+		"emission_strength": 2.1, "alpha_mult": 1.0,
+		"coeur_blanc": 0.0, "respiration_amp": 0.12, "respiration_freq": 1.8,
+		"flicker_base": 0.20, "flicker_periph": 0.20, "rich_rmax": rmax,
+	})
+
 	# Décor d'un lieu SANS bâtiment (parc-lieu) : tier-coloré + glow marqué pour
 	# que la zone ressorte comme un lieu (pas un simple décor vert).
 	_mat_lieu_decor = _make_mat(LINE_SHADER, {"emission_strength": lieu_decor_emission, "alpha_mult": 1.0})
@@ -421,12 +432,12 @@ func _setup_materials() -> void:
 	# Brume de profondeur : poussée sur les matériaux de lignes/routes/trafic
 	# (les faces ne fadent pas → l'occlusion reste). Les lieux/faisceaux
 	# utilisent les valeurs par défaut du shader (cohérentes avec ces exports).
-	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]:
+	for m: ShaderMaterial in [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_prop, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]:
 		m.set_shader_parameter("fog_debut", brume_debut)
 		m.set_shader_parameter("fog_fin", brume_fin)
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
-	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]
+	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_prop, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()

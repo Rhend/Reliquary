@@ -1129,18 +1129,16 @@ static func supermarches(h) -> void:
 		n += r[0]; nf += r[1]
 		nn += _enseignes_marquee(h, bb, haut, ambre, sn)        # bandeau lumineux périmètre
 		# Panneau de toit : prop de l'artiste si présent, sinon procédural (secours).
+		# Le prop vit dans son propre mesh → matériau néon doux dédié (_mat_prop),
+		# ou plat en mode brut (calibrage DA).
 		var prop: Dictionary = Props.aretes("supermarche_panneau_toit")
 		if prop.is_empty():
 			nn += _billboard_toit(h, bb, haut, ambre, cyan, sn, sc)
-		elif PROP_NEON:
-			var rp: Array = _prop_sur_toit(h, prop, b["cells"], bb, haut, ambre, cyan, sn, sc)
-			nn += rp[0]
-			ncy += rp[1]
 		else:
-			# Mode BRUT : le prop dans son propre mesh à matériau plat.
-			var sbrut := HoloMesh3D.st()
-			var rb: Array = _prop_sur_toit(h, prop, b["cells"], bb, haut, ambre, cyan, sbrut, sbrut)
-			h._ajouter_mesh(HoloMesh3D.commit(sbrut, rb[0] + rb[1]), "SupermarchesPropBrut", _mat_brut())
+			var sp := HoloMesh3D.st()
+			var rp: Array = _prop_sur_toit(h, prop, b["cells"], bb, haut, ambre, cyan, sp, sp)
+			h._ajouter_mesh(HoloMesh3D.commit(sp, rp[0] + rp[1]), "SupermarchesProp",
+					h._mat_prop if PROP_NEON else _mat_brut())
 		ncy += _toit_skylights(h, bb, haut, cyan, sc)           # grille de verrières (toit)
 		var rcvc: Array = _cvc_toit(h, bb, haut, col, s, sf)    # blocs techniques sur le toit
 		n += rcvc[0]; nf += rcvc[1]
@@ -1225,11 +1223,10 @@ static func _toit_skylights(h, bb: Rect2i, haut: float, col: Color, s: SurfaceTo
 		n += HoloMesh3D.line(s, h._world(x0, gy, yy), h._world(x1, gy, yy), col)
 	return n
 
-# ⚠ Flag de CALIBRAGE DA : false = les props artistes sont dessinés BRUTS
-# (lignes plates unshaded, sans shader néon — pas de cœur blanc, pas de bloom,
-# pas de respiration/grésillement) pour juger la géométrie. Remettre true une
-# fois l'intensité des néons calibrée.
-const PROP_NEON := false
+# Flag de CALIBRAGE DA : true = les props artistes reçoivent le néon doux dédié
+# (_mat_prop : émission moitié des enseignes, sans cœur blanc) ; false = lignes
+# plates unshaded (aucun effet) pour juger la géométrie brute.
+const PROP_NEON := true
 
 # Matériau plat du mode brut : ALBEDO = couleur de sommet, rien d'autre
 # (en GL Compatibility, unshaded affiche l'ALBEDO tel quel).
