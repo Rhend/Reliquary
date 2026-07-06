@@ -51,6 +51,18 @@ Vérifié : connexité (100 graines), bornes N (100 graines), proportions types 
 
 Contrôle visuel (captures `tests/_shot_expe_init.png` / `_shot_expe_explore.png`) : état initial = 3 nœuds affichés sur 9 (Entrée + 1 voisin + Fin), exploration = révélation progressive, « ? résolu », nœuds inertes assombris, journal lisible.
 
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 6 questions ouvertes ci-dessous ont été tranchées (aucune modification de code) :
+1. Fin d'étage **non modale** confirmée : le choix se referme au départ du nœud, se rouvre au retour, sans re-résolution.
+2. Entrée des étages 2-3 **sans continuité spatiale** — conservé ; le raccord visuel est une question de DA, reportée.
+3. `elagage_aretes` : calibrage en playtest, rien à faire.
+4. Révélation du « ? » résolu sur la carte : reportée au chantier UI finale, comportement actuel conservé.
+5. **Attaque surprise : distinction mécanique actée** — combat CTB avec **malus d'initiative côté joueur** ; valeurs et forme exacte du malus à designer au chantier de branchement combat (rien d'implémenté).
+6. Recap d'expédition : rien à ajouter ; extension au chantier loot / sanction de mort.
+
+Note de baseline (règle de process) : les compteurs de ce recap se lisent contre la baseline **post-addendums du chantier 1** — 94 scripts chargés (suppression de l'ancien moteur temps réel, −13) et CTB 33 assertions (recap `ennemis_vaincus`, +1) — d'où ScriptsLoad 101/101 après les +7 scripts de ce chantier. Désormais, tout recap rappelle en une ligne la baseline si elle a bougé via un addendum entre deux chantiers.
+
 ## 6. Questions ouvertes
 
 1. **Fin d'étage non modale** (décision de ce chantier) : le joueur peut repartir explorer après avoir atteint la Fin, et revenir choisir. Confirmer, ou rendre le choix définitif à la première arrivée ?
