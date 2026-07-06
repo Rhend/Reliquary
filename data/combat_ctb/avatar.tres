@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CombattantCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CombattantCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ctb_avatar"
+nom_affichage_fr = "Avatar"
+nom_affichage_en = "Avatar"
+pv_max = 100.0
+atk = 20.0
+def = 5.0
+vit = 20.0
+crit_chance = 0.05
+crit_multiplier = 1.8

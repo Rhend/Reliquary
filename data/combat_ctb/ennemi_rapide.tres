@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CombattantCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CombattantCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ctb_ennemi_rapide"
+nom_affichage_fr = "Furtif véloce"
+nom_affichage_en = "Swift Skulker"
+pv_max = 35.0
+atk = 8.0
+def = 0.0
+vit = 40.0
+crit_chance = 0.1
+crit_multiplier = 1.5

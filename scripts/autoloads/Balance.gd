@@ -109,6 +109,12 @@ const ATTACK_GAUGE: float = 1.0
 const SIMULTANEITY_EPS: float = 0.01  # 1 centième de seconde
 
 const GAUGE_THRESHOLD: float = 100.0  # LEGACY (ancien référentiel par ticks) — plus utilisé par le resolver
+
+# ─── Combat tour par tour CTB (Rework Combat — chantier 1) ────
+# Horloge logique de la file d'initiative continue : prochaine_action = K / VIT,
+# réarmée après chaque action avec la VIT COURANTE. K est la constante globale
+# unique — exposée ici pour calibrage (aucun temps réel : compteur d'ordre pur).
+const CTB_K: float = 1000.0
 const CRIT_CHANCE:     float = 0.05   # probabilité de coup critique (fallback = base héros)
 const CRIT_MULTIPLIER: float = 1.8    # multiplicateur de dégâts en cas de critique
 const MIN_DAMAGE:      float = 1.0    # plancher de dégâts : un coup inflige toujours ≥ 1

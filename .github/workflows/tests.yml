@@ -40,6 +40,9 @@ jobs:
       - name: TestCombatResolver (résolution de combat)
         run: $GODOT --headless --path . res://tests/TestCombatResolver.tscn
 
+      - name: TestCombatCtb (moteur tour par tour CTB)
+        run: $GODOT --headless --path . res://tests/TestCombatCtb.tscn
+
       - name: TestExpeditionFlow (boucle d'expédition)
         run: $GODOT --headless --path . res://tests/TestExpeditionFlow.tscn
 

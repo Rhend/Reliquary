@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CombattantCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CombattantCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ctb_ennemi_moyen"
+nom_affichage_fr = "Rôdeur"
+nom_affichage_en = "Prowler"
+pv_max = 50.0
+atk = 10.0
+def = 2.0
+vit = 20.0
+crit_chance = 0.05
+crit_multiplier = 1.5

@@ -63,3 +63,28 @@ enum Zone {
 	PROFONDEUR = 1,
 	ABYSSE     = 2,
 }
+
+# ─── Combat tour par tour CTB (Rework Combat — chantier 1) ────
+
+# Camp d'un combattant dans la file d'initiative. À égalité d'horloge,
+# le camp JOUEUR a l'avantage (Avatar d'abord, puis pets, puis ennemis).
+enum CampCtb {
+	JOUEUR  = 0,
+	ADVERSE = 1,
+}
+
+# Types d'action d'une activation. Seul ATTAQUER est fonctionnel (chantier 1) ;
+# COMPETENCE et OBJET sont prévus par l'architecture mais sans contenu —
+# aucun bouton ne doit apparaître tant que le contenu n'existe pas.
+enum ActionCtb {
+	ATTAQUER,
+	COMPETENCE,
+	OBJET,
+}
+
+# Timing du tick d'un statut DoT, relatif à l'ACTIVATION de la cible :
+# Saignement tique au DÉBUT ; Poison et Brûlure tiquent à la FIN.
+enum TimingStatut {
+	DEBUT_ACTIVATION = 0,
+	FIN_ACTIVATION   = 1,
+}

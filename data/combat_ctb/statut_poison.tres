@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StatutCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/StatutCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "statut_poison"
+nom_affichage_fr = "Poison"
+nom_affichage_en = "Poison"
+timing = 1
+degats_pct_atk = 0.05
+stacks_max = 3
+duree_activations = 2

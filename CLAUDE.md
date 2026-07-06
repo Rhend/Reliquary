@@ -38,6 +38,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Effets de passifs (bonus plats + conditionnels) | `scripts/systems/PassiveSystem.gd` |
 | Résolution de combat instantanée VIT-based (statique, pure) | `systems/combat/combat_resolver.gd` |
 | Playback cosmétique des CombatStep | `systems/combat/combat_player.gd` |
+| Moteur combat TOUR PAR TOUR CTB (Rework ch.1 : file d'initiative `K/VIT`, DoT data-driven, N-vs-N, signaux `ctb_*`) | `systems/combat_ctb/ctb_moteur.gd` + `ctb_combattant.gd` |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
@@ -86,6 +87,7 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
 # Les 3 suites (chacune quitte avec un code ≠ 0 en cas d'échec) :
 godot --headless --path . res://tests/TestScriptsLoad.tscn      # compile tous les scripts
 godot --headless --path . res://tests/TestCombatResolver.tscn   # unités combat (24)
+godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (32)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)
 
 # Boot rapide sans erreur :

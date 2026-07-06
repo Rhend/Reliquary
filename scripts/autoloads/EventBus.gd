@@ -111,6 +111,19 @@ signal combat_started(hero_id: String, enemy: Dictionary,
 @warning_ignore("unused_signal")
 signal combat_ended(result: Dictionary)
 
+# ── Combat CTB (Rework Combat — chantier 1) ─────────────────
+
+# Émis par CtbMoteur quand tous les ennemis sont à 0 PV.
+# recap : { victoire, nb_activations, pv_restants } — cf. CtbMoteur._recap().
+@warning_ignore("unused_signal")
+signal ctb_victoire(recap: Dictionary)
+
+# Émis par CtbMoteur quand les PV de l'Avatar tombent à 0. La sanction
+# (perte de ressources, compteur R-XXX) est hors scope chantier 1 :
+# seul le signal est posé.
+@warning_ignore("unused_signal")
+signal ctb_defaite(recap: Dictionary)
+
 # ── Équipement ──────────────────────────────────────────────
 
 # Émis quand un item est équipé ou déséquipé.

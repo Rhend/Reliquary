@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CombattantCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CombattantCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ctb_ennemi_lent"
+nom_affichage_fr = "Brute lente"
+nom_affichage_en = "Slow Brute"
+pv_max = 80.0
+atk = 14.0
+def = 4.0
+vit = 10.0
+crit_chance = 0.05
+crit_multiplier = 1.5
