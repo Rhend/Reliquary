@@ -149,6 +149,20 @@ func _test_crit_deterministe() -> void:
 	m.jouer(m.action_auto(c))
 	_assert(absf(m.combattants[1].pv - 60.0) < 0.001,
 			"crit 100 % : 20 × 2.0 = 40 dégâts (PV 100 → 60)", "pv=%.1f" % m.combattants[1].pv)
+	# Clamp [0;1] au JET (arbitrage 06/07) : la stat peut déborder, pas le jet.
+	var m2 := _moteur({"atk": 20.0, "vit": 40.0, "crit_chance": 5.0, "crit_multiplier": 2.0},
+			[{"def": 0.0, "pv_max": 100.0, "vit": 10.0}])
+	var c2 := m2.activer_suivant()
+	m2.jouer(m2.action_auto(c2))
+	_assert(absf(m2.combattants[1].pv - 60.0) < 0.001,
+			"crit_chance 5.0 → clampé à 100 % au jet (40 dégâts)", "pv=%.1f" % m2.combattants[1].pv)
+	var m3 := _moteur({"atk": 20.0, "vit": 40.0, "crit_chance": -0.5, "crit_multiplier": 2.0},
+			[{"def": 0.0, "pv_max": 100.0, "vit": 10.0}])
+	var c3 := m3.activer_suivant()
+	m3.jouer(m3.action_auto(c3))
+	_assert(absf(m3.combattants[1].pv - 80.0) < 0.001,
+			"crit_chance négative → clampée à 0 % au jet (20 dégâts, jamais de crit)",
+			"pv=%.1f" % m3.combattants[1].pv)
 
 # stat finale = stat nue × (1 + Σ bonus%), cumul additif.
 func _test_stats_finales_additives() -> void:

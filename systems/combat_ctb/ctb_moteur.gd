@@ -226,7 +226,9 @@ func _resoudre_attaque(att: CtbCombattant, cible) -> void:
 	if cb == null:
 		_log("    %s n'a plus de cible" % att.nom_journal())
 		return
-	var is_crit := rng.randf() < att.stat_finale("crit_chance")
+	# Clamp [0;1] au moment du JET uniquement (arbitrage 06/07) : la donnée
+	# reste non clampée (un excès de crit_chance est visible dans les stats).
+	var is_crit := rng.randf() < clampf(att.stat_finale("crit_chance"), 0.0, 1.0)
 	var brut := Balance.mitigated_damage(att.stat_finale("atk"), cb.stat_finale("def"))
 	if is_crit:
 		brut *= att.stat_finale("crit_multiplier")

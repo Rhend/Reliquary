@@ -71,6 +71,17 @@ Vérifié par assertions : héros CTB identique champ à champ à l'agrégation 
 
 Contrôle visuel (captures sandbox, `tests/_shot_expe_init.png`) : expédition lancée avec le héros réel de la sauvegarde locale — journal « ✦ Héros — PV 150, ATK 61, DEF 16, VIT 23, crit 6 % ×1.80 » (distinct du factice 100/20/5/20 : équipement et progression comptent), en-tête « PV 150/150 », checkbox « Héros réel » cochée.
 
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 5 questions ouvertes ci-dessous ont été tranchées (une seule modification de code : point 4) :
+1. Bonus de familiarité : **non réintroduit** — devenir post-pivot non designé, parké ; réintroduction éventuelle décidée avec le rework des bonus.
+2. Effets de règle Forge : chantier dédié ultérieur, rien à faire.
+3. Poison passif on-hit : rattaché au futur chantier fonctions bâtiments/passifs, via le hook `StatutCtbData`.
+4. **Clamp `crit_chance` [0;1] implémenté au niveau du moteur, AU MOMENT DU JET** (`CtbMoteur._resoudre_attaque`) — la donnée reste non clampée (un excès reste visible dans les stats). +2 assertions : `TestCombatCtb` passe de 33 à **35** (crit 5.0 → 100 % au jet ; crit négative → 0 %). Suites revalidées, tout vert.
+5. HeroPanel : dette consignée, alignement sur la source unique au chantier UI.
+
+L'écart documenté (source d'agrégation reconstruite dans CtbPont) est validé tel quel. Baseline après ce chantier + addendum : **ScriptsLoad 105, CTB 35, ExpeCarte 39, ExpeCombat 45**.
+
 ## 6. Questions ouvertes
 
 1. **Bonus de familiarité** (`get_mastery_combat_bonus`, plat d'ATK par ennemi rencontré) : le seul bonus de stats de l'ancien moteur qui ne peut pas passer un pont figé au lancement. Le réintroduire côté moteur CTB (bonus par combat) — et à quel chantier ?

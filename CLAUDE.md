@@ -99,8 +99,9 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
   DoT figé à la pose (ATK courante = futur paramètre de .tres si besoin) ;
   stacks_max dépassé = remplacement du plus ancien ; AUCUN tick post-victoire ;
   statuts purgés en fin de combat ; PV persistants entre les nœuds d'expédition ;
-  attaque surprise (« ? » d'expédition) = combat CTB avec malus d'initiative côté
-  joueur (valeurs à designer au chantier de branchement).
+  attaque surprise (« ? » d'expédition) = combat CTB avec malus d'initiative
+  ×1.5 (première horloge du camp joueur) ; crit_chance clampée [0;1] AU JET
+  seulement (la donnée peut déborder).
 - Évolution : TOUJOURS manuelle (action joueur via `MasterySystem.evolve_entity`).
 - L'XP s'accumule au-delà des plafonds (jamais perdue) ; plafond créature dépend du
   tier du biome + de la zone (`Balance.CREATURE_CAP_*`).
@@ -114,7 +115,7 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
 ```bash
 # Les 3 suites (chacune quitte avec un code ≠ 0 en cas d'échec) :
 godot --headless --path . res://tests/TestScriptsLoad.tscn      # compile tous les scripts
-godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (33)
+godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (35)
 godot --headless --path . res://tests/TestExpeCarte.tscn        # carte d'expédition (39)
 godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔ nœuds d'expédition + ponts (45)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)
