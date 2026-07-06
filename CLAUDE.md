@@ -127,6 +127,8 @@ godot --headless --path . --quit-after 30
   réellement GameData.village).
 - `CombatScene.LOG_ENABLED = false` → journal de combat désactivé volontairement
   (le code est conservé ; remettre true pour le réactiver).
+- `HoloMap3D.FLICKER_NEON = false` → grésillement des néons désactivé volontairement
+  (idée validée, application à retravailler ; le shader `holo_neon` garde le code).
 - `holo_decor.PROP_NEON` (true par défaut) → false = props artistes de la holomap
   dessinés BRUTS (lignes plates sans shader néon) pour calibrer la DA. Le néon des
   props = `_mat_prop` (émission moitié des enseignes, sans cœur blanc).

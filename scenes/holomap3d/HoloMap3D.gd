@@ -46,6 +46,9 @@ const Ville := preload("res://scenes/holomap3d/build/holo_ville.gd")
 const Sureleve := preload("res://scenes/holomap3d/build/holo_sureleve.gd")
 const FUMEE_SHADER := preload("res://scenes/holomap3d/holo_fumee.gdshader")
 const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne sont pas avalées
+# Grésillement des néons (pannes courtes, cf. holo_neon) : DÉSACTIVÉ volontairement —
+# bonne idée mais rendu actuel brouillon. Remettre true pour ré-expérimenter.
+const FLICKER_NEON := false
 const TAILLE_MONDE_CIBLE := 13.0   # largeur monde visée pour la grille Excel (cadrage caméra)
 const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit de carte par défaut
 
@@ -372,14 +375,17 @@ func _setup_materials() -> void:
 	})
 
 	# Accents néon (crêtes de toit, marquages, couronnes) : cœur blanc surchauffé
-	# + halo coloré par le bloom + respiration lente. Le grésillement n'apparaît
-	# qu'en périphérie (les néons de la périphérie pauvre décrochent, cf. holo_neon).
+	# + halo coloré par le bloom + respiration lente. Le grésillement (flicker
+	# d'amorçage, cf. holo_neon) est DÉSACTIVÉ volontairement (FLICKER_NEON) :
+	# l'idée est bonne mais le rendu actuel est brouillon — le code du shader
+	# est conservé, remettre true pour ré-expérimenter.
 	# proba flicker = chance de panne COURTE (0.25-0.6 s) par fenêtre de 4 s.
 	var rmax := maxf(0.001, _cgrid() * taille_cellule)
+	var fk := 1.0 if FLICKER_NEON else 0.0
 	_mat_neon = _make_mat(NEON_SHADER, {
 		"emission_strength": 3.6, "alpha_mult": 1.0,
 		"coeur_blanc": 0.30, "respiration_amp": 0.10, "respiration_freq": 1.5,
-		"flicker_base": 0.0, "flicker_periph": 0.15, "rich_rmax": rmax,
+		"flicker_base": 0.0, "flicker_periph": 0.15 * fk, "rich_rmax": rmax,
 	})
 
 	# Enseignes holographiques : néon franc — plus blanc au cœur, et grésillement
@@ -387,7 +393,7 @@ func _setup_materials() -> void:
 	_mat_enseigne = _make_mat(NEON_SHADER, {
 		"emission_strength": 4.2, "alpha_mult": 1.0,
 		"coeur_blanc": 0.40, "respiration_amp": 0.12, "respiration_freq": 1.8,
-		"flicker_base": 0.20, "flicker_periph": 0.20, "rich_rmax": rmax,
+		"flicker_base": 0.20 * fk, "flicker_periph": 0.20 * fk, "rich_rmax": rmax,
 	})
 
 	# Props artistes (.glb, cf. holo_props) : néon ADOUCI — moitié de l'émission
@@ -397,7 +403,7 @@ func _setup_materials() -> void:
 	_mat_prop = _make_mat(NEON_SHADER, {
 		"emission_strength": 2.1, "alpha_mult": 1.0,
 		"coeur_blanc": 0.0, "respiration_amp": 0.12, "respiration_freq": 1.8,
-		"flicker_base": 0.20, "flicker_periph": 0.20, "rich_rmax": rmax,
+		"flicker_base": 0.20 * fk, "flicker_periph": 0.20 * fk, "rich_rmax": rmax,
 	})
 
 	# Fond opaque des props (objet `fond` du .glb) : plaque sombre PLEINE derrière
