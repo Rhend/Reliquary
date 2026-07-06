@@ -36,8 +36,9 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Boucle idle (timer, rencontres, CycleStats, drops) | `scripts/systems/AdventureSystem.gd` |
 | Progression de Maîtrise (XP, plafonds, évolution manuelle) | `scripts/systems/MasterySystem.gd` |
 | Effets de passifs (bonus plats + conditionnels) | `scripts/systems/PassiveSystem.gd` |
-| Moteur combat TOUR PAR TOUR CTB (Rework ch.1 : file d'initiative `K/VIT`, DoT data-driven, N-vs-N, signaux `ctb_*`) | `systems/combat_ctb/ctb_moteur.gd` + `ctb_combattant.gd` |
-| Carte d'expédition free-roam (Rework ch.2 : génération Delaunay connexe seedable, brouillard « absent », 3 étages, Extraire/Continuer, signaux `expe_*` — nœuds = stubs) | `systems/expedition/expe_run.gd` + `expe_carte.gd` (config : `data/expedition/`) |
+| Moteur combat TOUR PAR TOUR CTB (Rework ch.1 : file d'initiative `K/VIT`, DoT data-driven, N-vs-N, signaux `ctb_*` ; ch.3 : malus d'embuscade, purge des statuts en fin de combat) | `systems/combat_ctb/ctb_moteur.gd` + `ctb_combattant.gd` |
+| Pont bestiaire existant → combattant CTB (stats telles quelles via `GameData.get_effective_stats`, mapping documenté en tête de fichier) | `systems/combat_ctb/ctb_pont.gd` |
+| Carte d'expédition free-roam (Rework ch.2 : génération Delaunay connexe seedable, brouillard « absent », 3 étages, Extraire/Continuer, signaux `expe_*` ; ch.3 : nœuds Combat/Attaque surprise = VRAIS combats CTB — run suspendue, PV persistants, défaite = fin immédiate ; Coffre/Bénédiction/Piège = stubs) | `systems/expedition/expe_run.gd` + `expe_carte.gd` (config + pools : `data/expedition/`) |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
@@ -50,12 +51,16 @@ AdventureSystem, PassiveSystem, VillageBuildings, ForgeSystem, MasteryRegistry, 
 
 ⚠ REWORK COMBAT en cours (branche ReworkCombat) : l'ancien moteur temps réel
 (CombatResolver / CombatPlayer / CombatScene) a été SUPPRIMÉ. Le moteur CTB
-(`systems/combat_ctb/`, sandbox `scenes/combat_ctb/SandboxCtb.tscn`) n'est PAS
-encore branché à l'expédition : les rencontres créature sont constatées mais
-NON résolues (`AdventureSystem._combat_non_resolu`) — ni dégâts, ni XP de
-combat, ni drops. `_resolve_victory` / `_resolve_unique_victory` sont conservés
-pour l'intégration. Règle générale : un système remplacé est SUPPRIMÉ, pas
-laissé en doublon.
+(`systems/combat_ctb/`, sandbox `scenes/combat_ctb/SandboxCtb.tscn`) est branché
+aux nœuds d'expédition free-roam depuis le chantier 3 (sandbox
+`scenes/expedition/SandboxExpe.tscn` — ExpeRun reçoit avatar + pool + config
+combat à la construction). En revanche la boucle idle du village
+(`AdventureSystem`) reste NON branchée : ses rencontres créature sont
+constatées mais NON résolues (`_combat_non_resolu`) — ni dégâts, ni XP de
+combat, ni drops ; loot/XP des combats d'expédition également à venir
+(le recap agrège déjà `ennemis_vaincus`/`nb_combats`). `_resolve_victory` /
+`_resolve_unique_victory` sont conservés pour l'intégration. Règle générale :
+un système remplacé est SUPPRIMÉ, pas laissé en doublon.
 
 Forge (Chantier 5) : l'équipement évolue par XP (MasterySystem, buffer DÉSACTIVÉ pour
 l'équipement) — PLUS d'ingrédient pour le palier (`recettes_evolution` est mort). Le
@@ -104,6 +109,7 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
 godot --headless --path . res://tests/TestScriptsLoad.tscn      # compile tous les scripts
 godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (33)
 godot --headless --path . res://tests/TestExpeCarte.tscn        # carte d'expédition (39)
+godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔ nœuds d'expédition (40)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)
 
 # Boot rapide sans erreur :

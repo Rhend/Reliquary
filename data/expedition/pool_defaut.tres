@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="PoolEnnemisData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/PoolEnnemisData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "pool_defaut"
+creature_ids = Array[String](["creature_foret_surface", "creature_marecage_surface", "creature_montagne_surface"])

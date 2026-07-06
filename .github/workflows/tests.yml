@@ -43,6 +43,9 @@ jobs:
       - name: TestExpeCarte (carte d'expédition — génération, brouillard, étages)
         run: $GODOT --headless --path . res://tests/TestExpeCarte.tscn
 
+      - name: TestExpeCombat (branchement combat CTB ↔ nœuds d'expédition)
+        run: $GODOT --headless --path . res://tests/TestExpeCombat.tscn
+
       - name: TestExpeditionFlow (boucle d'expédition)
         run: $GODOT --headless --path . res://tests/TestExpeditionFlow.tscn
 

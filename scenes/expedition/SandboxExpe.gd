@@ -1,5 +1,5 @@
 # ============================================================
-# SandboxExpe — Scène ISOLÉE de test de la carte d'expédition (chantier 2).
+# SandboxExpe — Scène ISOLÉE de test de la carte d'expédition (chantiers 2-3).
 #
 # Lançable directement (F6) : expédition complète sur un Lieu FACTICE —
 # palier de profondeur sélectionnable, graine rejouable, navigation à la
@@ -7,6 +7,12 @@
 # le plus proche dans la direction), brouillard de guerre réel (les nœuds
 # non découverts ne sont PAS dessinés), choix Extraire / Continuer sur la
 # Fin d'étage, journal des événements à droite.
+#
+# Chantier 3 : les nœuds Combat / Attaque surprise jouent de VRAIS combats
+# CTB (avatar factice vs pool du bestiaire), AUTO-RÉSOLUS à l'entrée du nœud
+# (journal complet du moteur replié dans le journal de la run) ; PV de
+# l'Avatar persistants entre les nœuds, affichés en permanence ; défaite =
+# fin d'expédition immédiate.
 #
 # Outil de DEV : pas une UI de jeu (l'UI finale viendra avec sa DA).
 # ============================================================
@@ -18,6 +24,9 @@ const PALIERS: Array[PalierProfondeurData] = [
 	preload("res://data/expedition/palier_noyau.tres"),
 ]
 const CONFIG: ExpeCarteConfigData = preload("res://data/expedition/config_carte.tres")
+const CONFIG_COMBAT: ExpeCombatConfigData = preload("res://data/expedition/config_combat.tres")
+const POOL: PoolEnnemisData = preload("res://data/expedition/pool_defaut.tres")
+const AVATAR: CombattantCtbData = preload("res://data/combat_ctb/avatar.tres")
 
 const COULEURS := {
 	Enums.TypeNoeud.ENTREE:    Color(0.55, 0.55, 0.60),
@@ -106,18 +115,28 @@ func _construire_ui() -> void:
 
 func _lancer() -> void:
 	var palier: PalierProfondeurData = PALIERS[maxi(_opt_palier.selected, 0)]
-	run = ExpeRun.new(CONFIG, palier, "lieu_factice_sandbox", int(_spin_graine.value))
+	run = ExpeRun.new(CONFIG, palier, "lieu_factice_sandbox", int(_spin_graine.value),
+			AVATAR, POOL, CONFIG_COMBAT)
 	run.demarrer()
 	_rafraichir()
+
+# Auto-résolution du combat en attente (outil de dev : pas d'input joueur —
+# l'UI de combat viendra avec sa DA ; le journal du moteur est replié dans
+# celui de la run à la fin du combat).
+func _resoudre_combat_auto() -> void:
+	if run.combat_en_cours != null:
+		run.combat_en_cours.derouler_auto()
 
 func _rafraichir() -> void:
 	_carte_view.queue_redraw()
 	_btn_extraire.visible = run.choix_ouvert
 	_btn_continuer.visible = run.choix_ouvert and run.etage < CONFIG.nb_etages
+	var pv := "PV %d/%d" % [int(roundf(run.pv_avatar)), int(roundf(AVATAR.pv_max))]
 	if run.est_terminee:
-		_lbl_etat.text = "  ✔ Expédition terminée"
+		_lbl_etat.text = "  %s — %s" % [
+				"☠ DÉFAITE" if run.defaite else "✔ Expédition terminée", pv]
 	else:
-		_lbl_etat.text = "  Étage %d/%d" % [run.etage, CONFIG.nb_etages]
+		_lbl_etat.text = "  Étage %d/%d — %s" % [run.etage, CONFIG.nb_etages, pv]
 	_journal_label.text = "\n".join(run.journal)
 	await get_tree().process_frame   # attendre la mesure du label avant de scroller en bas
 	_journal_scroll.scroll_vertical = int(_journal_scroll.get_v_scroll_bar().max_value)
@@ -174,6 +193,7 @@ func _input_carte(ev: InputEvent) -> void:
 			var nd := run.carte.noeud(v)
 			if nd.decouvert and _pos_ecran(nd.pos).distance_to(ev.position) <= 22.0:
 				run.deplacer_vers(v)
+				_resoudre_combat_auto()
 				_rafraichir()
 				return
 	if ev is InputEventKey and ev.pressed and not ev.echo:
@@ -198,4 +218,5 @@ func _deplacer_direction(dir: Vector2) -> void:
 			best = v
 	if best >= 0:
 		run.deplacer_vers(best)
+		_resoudre_combat_auto()
 		_rafraichir()

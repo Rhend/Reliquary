@@ -317,6 +317,8 @@ func _shoot_expe() -> void:
 				best_d = d
 				best = v
 		run.deplacer_vers(best)
+		if run.combat_en_cours != null:
+			run.combat_en_cours.derouler_auto()
 	sandbox._rafraichir()
 	await get_tree().create_timer(0.5).timeout
 	await _capture("res://tests/_shot_expe_explore.png")

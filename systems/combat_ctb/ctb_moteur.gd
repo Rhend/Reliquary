@@ -26,9 +26,11 @@
 # La fin de combat interrompt tout (plus aucun tick ni réarmement — arbitrage
 # 06/07 : aucun design ne s'appuiera sur des ticks post-victoire).
 #
-# Règles ACTÉES pour l'intégration expédition (chantiers suivants, pas encore
-# implémentées ici) : statuts PURGÉS en fin de combat (aucune persistance entre
-# les nœuds d'une expédition) ; PV PERSISTANTS entre les nœuds.
+# Règles d'intégration expédition (chantier 3) : statuts PURGÉS en fin de
+# combat (_purger_statuts — aucune persistance entre les nœuds) ; PV
+# PERSISTANTS entre les nœuds (ExpeRun réinjecte les PV sortants via cb.pv).
+# Attaque surprise : malus_horloge_initiale_joueur (×1.5 provisoire, .tres)
+# multiplie la PREMIÈRE horloge du camp joueur ; réarmement suivant normal.
 #
 # Usage (pull-based, prêt pour une UI asynchrone) :
 #   var m := CtbMoteur.new()
@@ -52,6 +54,9 @@ signal defaite(recap: Dictionary)
 const MAX_ACTIVATIONS := 500
 
 var k_ctb: float = Balance.CTB_K     # constante d'horloge (exposée pour calibrage)
+# Embuscade (attaque surprise) : multiplie la PREMIÈRE horloge de chaque
+# combattant du camp JOUEUR (1.0 = pas de malus). À poser AVANT demarrer().
+var malus_horloge_initiale_joueur := 1.0
 var combattants: Array[CtbCombattant] = []
 var rng := RandomNumberGenerator.new()   # seedable → tests déterministes
 var journal: PackedStringArray = []
@@ -84,8 +89,13 @@ func demarrer() -> void:
 	assert(combattants.any(func(c: CtbCombattant) -> bool: return not c.est_joueur()),
 			"camp adverse vide")
 	_demarre = true
+	if malus_horloge_initiale_joueur != 1.0:
+		_log("⚡ EMBUSCADE ! Première horloge du camp joueur ×%.1f" %
+				malus_horloge_initiale_joueur)
 	for c in combattants:
 		c.horloge = k_ctb / _vit_sure(c)
+		if c.est_joueur():
+			c.horloge *= malus_horloge_initiale_joueur
 		_log("%s rejoint le combat (%s) — PV %d, horloge initiale %.1f" % [
 				c.nom_journal(), "joueur" if c.est_joueur() else "adverse",
 				int(roundf(c.pv)), c.horloge])
@@ -240,6 +250,7 @@ func _verifier_fin() -> void:
 		# R-XXX) est hors scope chantier 1, seul le signal est posé.
 		termine = true
 		victoire_joueur = false
+		_purger_statuts()
 		var recap := _recap()
 		_log("═ DÉFAITE — l'Avatar tombe (activation %d)" % nb_activations)
 		defaite.emit(recap)
@@ -248,6 +259,7 @@ func _verifier_fin() -> void:
 	if combattants.all(func(c: CtbCombattant) -> bool: return c.est_joueur() or not c.est_vivant()):
 		termine = true
 		victoire_joueur = true
+		_purger_statuts()
 		var recap := _recap()
 		_log("═ VICTOIRE — tous les ennemis sont vaincus (activation %d)" % nb_activations)
 		_hook_post_victoire()
@@ -258,6 +270,16 @@ func _verifier_fin() -> void:
 # effet futur de fin de combat gagné) se rebranchera ici.
 func _hook_post_victoire() -> void:
 	pass
+
+# Statuts PURGÉS en fin de combat (règle actée 06/07) : aucun DoT ne persiste
+# entre deux nœuds d'expédition — les PV, eux, persistent (gérés par ExpeRun).
+func _purger_statuts() -> void:
+	var n := 0
+	for c in combattants:
+		n += c.statuts.size()
+		c.statuts.clear()
+	if n > 0:
+		_log("    ✦ Statuts purgés en fin de combat (%d stack%s)" % [n, "s" if n >= 2 else ""])
 
 # Recap de fin de combat. `ennemis_vaincus` : références des DONNÉES
 # (CombattantCtbData) des combattants adverses tués — le loot et l'XP seront

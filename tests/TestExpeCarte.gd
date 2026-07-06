@@ -55,10 +55,33 @@ func _rng(graine: int) -> RandomNumberGenerator:
 	r.seed = graine
 	return r
 
+# Avatar SURPUISSANT : les combats (réels depuis le chantier 3) se gagnent
+# toujours — cette suite teste la CARTE, pas le combat (cf. TestExpeCombat).
+func _avatar_costaud() -> CombattantCtbData:
+	var a := CombattantCtbData.new()
+	a.id = "avatar_test"
+	a.nom_affichage_fr = "Avatar de test"
+	a.pv_max = 1000000.0
+	a.atk = 1000000.0
+	a.def = 0.0
+	a.vit = 50.0
+	a.crit_chance = 0.0
+	return a
+
 func _run(graine: int) -> ExpeRun:
-	var r := ExpeRun.new(_config(), _palier(), "lieu_test", graine)
+	var r := ExpeRun.new(_config(), _palier(), "lieu_test", graine,
+			_avatar_costaud(), load("res://data/expedition/pool_defaut.tres"),
+			load("res://data/expedition/config_combat.tres"))
 	r.demarrer()
 	return r
+
+# Un pas de navigation + auto-résolution du combat éventuel (la run est
+# suspendue sur un nœud Combat / Attaque surprise tant qu'il n'est pas joué).
+func _pas(run: ExpeRun, nid: int) -> bool:
+	var ok := run.deplacer_vers(nid)
+	if run.combat_en_cours != null:
+		run.combat_en_cours.derouler_auto()
+	return ok
 
 # Plus court chemin (BFS) de la position du joueur vers `cible` — le test
 # connaît tout le graphe, le joueur avance ensuite nœud par nœud.
@@ -83,7 +106,7 @@ func _chemin_vers(run: ExpeRun, cible: int) -> Array[int]:
 
 func _marcher_vers_fin(run: ExpeRun) -> void:
 	for pas in _chemin_vers(run, run.carte.fin_id):
-		run.deplacer_vers(pas)
+		_pas(run, pas)
 
 # ─── Génération ─────────────────────────────────────────────
 
@@ -178,7 +201,7 @@ func _test_revelation_adjacence() -> void:
 	print("\n[TEST] Révélation par adjacence")
 	var run := _run(1337)
 	var premier: int = run.carte.noeud(run.carte.entree_id).voisins[0]
-	run.deplacer_vers(premier)
+	_pas(run, premier)
 	var ok := true
 	for v in run.carte.noeud(premier).voisins:
 		if not run.carte.noeud(v).decouvert:
@@ -201,7 +224,7 @@ func _test_mystere_tire_a_l_entree() -> void:
 		var nd := run.carte.noeud(cible)
 		_assert(nd.contenu_mystere == -1, "avant l'entrée : contenu_mystere = -1 (rien à révéler)")
 		for pas in _chemin_vers(run, cible):
-			run.deplacer_vers(pas)
+			_pas(run, pas)
 		_assert(nd.contenu_mystere >= 0 and nd.contenu_mystere <= 3,
 				"après l'entrée : contenu résolu (%d)" % nd.contenu_mystere)
 		return
@@ -216,11 +239,11 @@ func _test_retour_arriere_et_inertie() -> void:
 	run.noeud_resolu.connect(func(_d: Dictionary) -> void: signaux[0] += 1)
 	var entree := run.carte.entree_id
 	var premier: int = run.carte.noeud(entree).voisins[0]
-	_assert(run.deplacer_vers(premier), "déplacement vers un voisin accepté")
+	_assert(_pas(run, premier), "déplacement vers un voisin accepté")
 	var apres_premier: int = signaux[0]
-	_assert(apres_premier == 1, "1re entrée : résolution stub émise")
-	_assert(run.deplacer_vers(entree), "RETOUR EN ARRIÈRE autorisé")
-	_assert(run.deplacer_vers(premier), "re-traversée du nœud résolu autorisée (inerte)")
+	_assert(apres_premier == 1, "1re entrée : résolution émise")
+	_assert(_pas(run, entree), "RETOUR EN ARRIÈRE autorisé")
+	_assert(_pas(run, premier), "re-traversée du nœud résolu autorisée (inerte)")
 	_assert(signaux[0] == apres_premier, "aucune re-résolution à la re-traversée")
 	# Déplacement illégal : nœud non adjacent.
 	var lointain := -1
@@ -229,7 +252,7 @@ func _test_retour_arriere_et_inertie() -> void:
 			lointain = nd.id
 			break
 	if lointain >= 0:
-		_assert(not run.deplacer_vers(lointain), "déplacement non adjacent refusé")
+		_assert(not _pas(run, lointain), "déplacement non adjacent refusé")
 
 # ─── Étages & fins ──────────────────────────────────────────
 
@@ -283,9 +306,9 @@ func _test_choix_rouvert() -> void:
 	_marcher_vers_fin(run)
 	var avant: int = signaux[0]
 	var voisin: int = run.carte.noeud(run.carte.fin_id).voisins[0]
-	run.deplacer_vers(voisin)
+	_pas(run, voisin)
 	_assert(not run.choix_ouvert, "repartir explorer referme le choix")
-	run.deplacer_vers(run.carte.fin_id)
+	_pas(run, run.carte.fin_id)
 	_assert(run.choix_ouvert, "revenir sur la Fin rouvre le choix")
 	# La Fin est inerte : revenir dessus n'émet PAS de re-résolution (le retour
 	# a pu résoudre le voisin lui-même, on ne compte que la Fin).
@@ -296,7 +319,7 @@ func _test_palier_circule() -> void:
 	var run := _run(1337)
 	var payloads := []
 	run.noeud_resolu.connect(func(d: Dictionary) -> void: payloads.append(d))
-	run.deplacer_vers(run.carte.noeud(run.carte.entree_id).voisins[0])
+	_pas(run, run.carte.noeud(run.carte.entree_id).voisins[0])
 	_assert(payloads.size() == 1, "signal noeud_resolu émis")
 	if payloads.size() == 1:
 		var d: Dictionary = payloads[0]
