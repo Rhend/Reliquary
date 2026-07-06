@@ -58,7 +58,10 @@ combat à la construction). En revanche la boucle idle du village
 (`AdventureSystem`) reste NON branchée : ses rencontres créature sont
 constatées mais NON résolues (`_combat_non_resolu`) — ni dégâts, ni XP de
 combat, ni drops ; loot/XP des combats d'expédition également à venir
-(le recap agrège déjà `ennemis_vaincus`/`nb_combats`). `_resolve_victory` /
+(le recap agrège déjà `ennemis_vaincus`/`nb_combats`). L'avatar d'expédition
+est encore factice (`data/combat_ctb/avatar.tres`) — le vrai héros (stats +
+équipement + bonus additifs → CombattantCtbData, extension de CtbPont) est le
+chantier 4 (acté 06/07/2026, spec à venir). `_resolve_victory` /
 `_resolve_unique_victory` sont conservés pour l'intégration. Règle générale :
 un système remplacé est SUPPRIMÉ, pas laissé en doublon.
 

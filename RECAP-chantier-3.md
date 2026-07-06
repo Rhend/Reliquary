@@ -69,6 +69,17 @@ Vérifié par assertions : conversion bestiaire → CTB identique champ à champ
 
 Contrôle visuel (captures `tests/_shot_expe_init.png` / `_shot_expe_explore.png`, sandbox réel) : combats contre le bestiaire (Rat des Égouts, Grenouille Géante) joués et journalisés à l'entrée des nœuds, PV persistants visibles dans l'en-tête (« PV 10/100 ») et repris d'un combat à l'autre (victoire à 34 PV → combat suivant entamé à 34), « ? » → Piège résolu en stub.
 
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 5 questions ouvertes ci-dessous ont été tranchées (aucune modification de code) :
+1. Tirage dans le pool : **uniforme avec remise conservé** — une pondération par créature sera ajoutée si le design du bestiaire l'exige, pas préventivement.
+2. `pv_restants` indexé par id de données : **conservé** — à durcir uniquement quand un consommateur aura besoin des PV par instance.
+3. Malus d'embuscade ×1.5 : valeur en playtest, rien à faire.
+4. Défaite = nœud non résolu : **conservé** — aucune mécanique de fuite n'est actée ; question rouverte si ça change.
+5. **Vrai héros = Chantier 4** : pont héros réel (stats + équipement + bonus additifs → `CombattantCtbData`, extension de `CtbPont`). Spec à venir.
+
+Aucun compteur de test n'a bougé depuis la section 5 (baseline : ScriptsLoad 105, CTB 33, ExpeCarte 39, ExpeCombat 40).
+
 ## 6. Questions ouvertes
 
 1. **Tirage dans le pool** : uniforme avec remise (3 fois la même créature possible dans un combat). OK, ou prévoir une pondération par créature dans `PoolEnnemisData` (et/ou un « sans remise ») ?
