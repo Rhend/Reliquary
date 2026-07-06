@@ -138,6 +138,13 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # ─── Hologramme (glow + post-process) ─────────────────────────
 @export_group("Hologramme")
 @export var glow_intensity := 1.15
+# Atténuation du glow au DÉZOOM : de près, le néon gaine finement chaque ligne ;
+# de loin, les lignes se resserrent à l'écran et le bloom s'accumule en une masse
+# lumineuse illisible → l'intensité de glow ET l'émission des néons descendent
+# progressivement avec la distance caméra (cf. _appliquer_glow_zoom).
+@export var glow_zoom_pres := 3.0                     # distance ≤ → glow plein
+@export var glow_zoom_loin := 13.0                    # distance ≥ → atténuation max
+@export_range(0.0, 1.0) var glow_zoom_min := 0.35     # fraction restante au dézoom max
 # Post-process « écran cathodique » : valeurs ACTIVES mais douces (non-épileptogène).
 @export_range(0.0, 1.0) var scanline_intensity := 0.05
 @export var scanline_count := 240.0
@@ -223,6 +230,9 @@ var _mat_trafic: ShaderMaterial
 var _mat_neon: ShaderMaterial          # accents néon (crêtes, marquages, couronnes) — respire
 var _mat_enseigne: ShaderMaterial      # enseignes holographiques — respire + grésille
 var _mat_prop: ShaderMaterial          # props artistes (.glb) — néon doux, sans cœur blanc
+var _env: Environment                  # environnement (glow modulé par le zoom)
+var _mats_zoom: Array = []             # couples [matériau néon, émission de base]
+var _glow_att := -1.0                  # dernière atténuation appliquée (-1 = jamais)
 var _mat_lieu_decor: ShaderMaterial    # décor d'un lieu sans bâtiment (parc tier-coloré)
 var _mat_lac: ShaderMaterial           # nappe d'eau pleine (lac satellite, hors carré)
 var _mat_eau: ShaderMaterial           # eau qui s'écoule (carte Excel, shader animé)
@@ -299,6 +309,7 @@ func _setup_environment() -> void:
 	env.set_glow_level(2, 0.45)   # niveau 3 : réduit (défaut 1.0)
 	env.set_glow_level(4, 0.0)    # niveau 5 : nappe large coupée (défaut 1.0)
 	we.environment = env
+	_env = env
 	add_child(we)
 
 func _setup_camera() -> void:
@@ -438,6 +449,11 @@ func _setup_materials() -> void:
 
 	# Matériaux qui réagissent au reveal d'intro (matérialisation radiale).
 	_mats_reveal = [_mat_decor, _mat_ambiance, _mat_lac, _mat_eau, _mat_parc, _mat_sol, _mat_routes, _mat_faces, _mat_trafic, _mat_trafic_aerien, _mat_neon, _mat_enseigne, _mat_prop, _mat_lieu_decor, _mat_glow_chaud, _mat_contour]
+
+	# Néons les plus chauds : leur émission descend avec le dézoom (cf. _process).
+	_mats_zoom = []
+	for m: ShaderMaterial in [_mat_neon, _mat_enseigne, _mat_prop]:
+		_mats_zoom.append([m, float(m.get_shader_parameter("emission_strength"))])
 
 func _setup_post() -> void:
 	var layer := CanvasLayer.new()
@@ -1261,12 +1277,27 @@ func _deplacement_zqsd(dt: float) -> void:
 		return
 	_rig.position += mv.normalized() * (maxf(2.0, distance) * vitesse_balade * dt)
 
+# Glow proportionnel au zoom : plein sous glow_zoom_pres, réduit à glow_zoom_min
+# au-delà de glow_zoom_loin (transition douce). Agit sur l'intensité de glow de
+# l'environnement (bloom global) ET sur l'émission des matériaux néon chauds.
+func _appliquer_glow_zoom() -> void:
+	var att := lerpf(1.0, glow_zoom_min, smoothstep(glow_zoom_pres, glow_zoom_loin, distance))
+	if absf(att - _glow_att) < 0.005:
+		return
+	_glow_att = att
+	if _env != null:
+		_env.glow_intensity = glow_intensity * att
+	for pair in _mats_zoom:
+		var m: ShaderMaterial = pair[0]
+		m.set_shader_parameter("emission_strength", float(pair[1]) * att)
+
 func _process(dt: float) -> void:
 	if auto_rotation:
 		_yaw += deg_to_rad(vitesse_rotation) * dt
 	# Zoom amorti (hors intro) : la distance glisse vers sa cible.
 	if zoom_amorti and not _intro_en_cours:
 		distance = lerpf(distance, _distance_cible, 1.0 - exp(-12.0 * dt))
+	_appliquer_glow_zoom()
 	_appliquer_camera()
 	_deplacement_zqsd(dt)
 	if is_instance_valid(_radar):
