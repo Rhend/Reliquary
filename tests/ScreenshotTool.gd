@@ -36,6 +36,7 @@ func _ready() -> void:
 		"holo_overlay": await _shoot_holo_overlay()
 		"holo_baseball": await _shoot_holo_baseball()
 		"holo_lieux": await _shoot_holo_lieux()
+		"holo_prop": await _shoot_holo_prop()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -239,6 +240,48 @@ func _shoot_holo_lieux() -> void:
 		await RenderingServer.frame_post_draw
 		vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_parc.png")
 		print("Screenshot -> res://tests/_shot_holo_parc.png")
+
+# ── Gros plan du PROP artiste (panneau sur le toit du supermarché) ──
+# Cadre le premier supermarché du gabarit : vue 3/4 + vue frontale rapprochée,
+# pour juger l'échelle dynamique du prop et la plaque `fond` opaque.
+func _shoot_holo_prop() -> void:
+	var vp3d := SubViewport.new()
+	vp3d.size = Vector2i(1280, 720)
+	vp3d.own_world_3d = true
+	vp3d.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp3d)
+	var holo: HoloMap3D = (load("res://scenes/holomap3d/holo_map_3d.tscn") as PackedScene).instantiate()
+	vp3d.add_child(holo)
+	await get_tree().create_timer(2.2).timeout   # intro terminée
+	var liste: Array = holo._excel.supermarches
+	if liste.is_empty():
+		print("Aucun supermarché dans le gabarit — rien à capturer")
+		return
+	var bb: Rect2i = liste[0]["bbox"]
+	var c: Vector3 = holo._centre_bbox(bb)
+	holo.distance_min = 0.5
+	holo._rig.position = Vector3(c.x, 0.14, c.z)
+	holo._set_yaw(deg_to_rad(30.0))
+	holo.plongee_deg = 35.0
+	holo._distance_cible = maxf(1.8, float(maxi(bb.size.x, bb.size.y)) * holo.taille_cellule * 1.9)
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_prop_34.png")
+	print("Screenshot -> res://tests/_shot_holo_prop_34.png")
+	# Vue frontale basse et rapprochée : lisibilité du panneau (fond opaque).
+	holo._set_yaw(deg_to_rad(0.0))
+	holo.plongee_deg = 18.0
+	holo._distance_cible = maxf(1.2, float(mini(bb.size.x, bb.size.y)) * holo.taille_cellule * 1.5)
+	await get_tree().create_timer(1.0).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_prop_face.png")
+	print("Screenshot -> res://tests/_shot_holo_prop_face.png")
+	# Contre-champ : le dos du panneau (la plaque doit occulter le texte).
+	holo._set_yaw(deg_to_rad(180.0))
+	await get_tree().create_timer(1.0).timeout
+	await RenderingServer.frame_post_draw
+	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_prop_dos.png")
+	print("Screenshot -> res://tests/_shot_holo_prop_dos.png")
 
 # ── Preview des apparences GRAND PARC / UNIVERSITÉ / MUSÉE (modèle synthétique) ──
 # Trois parcelles côte à côte + une route au sud (oriente les entrées) → un PNG
