@@ -38,6 +38,7 @@ func _ready() -> void:
 		"holo_lieux": await _shoot_holo_lieux()
 		"holo_prop": await _shoot_holo_prop()
 		"holo_pins": await _shoot_holo_pins()
+		"expe":      await _shoot_expe()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -292,6 +293,33 @@ func _shoot_holo_pins() -> void:
 		await RenderingServer.frame_post_draw
 		_vp.get_texture().get_image().save_png("res://tests/_shot_holo_pins_zoom.png")
 		print("Screenshot -> res://tests/_shot_holo_pins_zoom.png")
+
+# ── Sandbox de la carte d'expédition (chantier 2) ──
+# État initial (brouillard : Entrée + voisins + Fin seulement) puis après
+# quelques déplacements programmatiques (révélation par adjacence visible).
+func _shoot_expe() -> void:
+	var sandbox: Control = (load("res://scenes/expedition/SandboxExpe.tscn") as PackedScene).instantiate()
+	_vp.add_child(sandbox)
+	await get_tree().create_timer(0.6).timeout
+	await _capture("res://tests/_shot_expe_init.png")
+	# Trois pas le long du graphe (voisin découvert le plus proche de la Fin).
+	var run: ExpeRun = sandbox.run
+	for i in 3:
+		if run.est_terminee:
+			break
+		var cur := run.carte.noeud(run.position_joueur)
+		var fin_pos := run.carte.noeud(run.carte.fin_id).pos
+		var best := -1
+		var best_d := INF
+		for v in cur.voisins:
+			var d := run.carte.noeud(v).pos.distance_to(fin_pos)
+			if d < best_d:
+				best_d = d
+				best = v
+		run.deplacer_vers(best)
+	sandbox._rafraichir()
+	await get_tree().create_timer(0.5).timeout
+	await _capture("res://tests/_shot_expe_explore.png")
 
 # ── Gros plan du PROP artiste (panneau sur le toit du supermarché) ──
 # Cadre le premier supermarché du gabarit : vue 3/4 + vue frontale rapprochée,

@@ -40,6 +40,9 @@ jobs:
       - name: TestCombatCtb (moteur tour par tour CTB)
         run: $GODOT --headless --path . res://tests/TestCombatCtb.tscn
 
+      - name: TestExpeCarte (carte d'expédition — génération, brouillard, étages)
+        run: $GODOT --headless --path . res://tests/TestExpeCarte.tscn
+
       - name: TestExpeditionFlow (boucle d'expédition)
         run: $GODOT --headless --path . res://tests/TestExpeditionFlow.tscn
 

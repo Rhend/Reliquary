@@ -117,6 +117,26 @@ signal ctb_victoire(recap: Dictionary)
 @warning_ignore("unused_signal")
 signal ctb_defaite(recap: Dictionary)
 
+# ── Carte d'expédition (Rework Combat — chantier 2) ─────────
+
+# Émis à chaque ENTRÉE du joueur sur un nœud non résolu (résolution stub au
+# chantier 2 — le branchement réel combat/loot/bénédiction/piège viendra après).
+# data : { type (Enums.TypeNoeud), contenu_mystere (Enums.ContenuMystere, -1 si
+# non applicable), lieu_id, palier_id, multiplicateur, etage, noeud_id }
+@warning_ignore("unused_signal")
+signal expe_noeud_resolu(data: Dictionary)
+
+# Émis à la PREMIÈRE arrivée sur le nœud Fin d'étage (ouvre le choix
+# Extraire / Continuer — sauf au dernier étage : fin d'expédition directe).
+# data : { etage, lieu_id, palier_id }
+@warning_ignore("unused_signal")
+signal expe_etage_termine(data: Dictionary)
+
+# Émis à la fin d'une expédition (extraction volontaire ou dernier étage
+# bouclé). recap : cf. ExpeRun._recap().
+@warning_ignore("unused_signal")
+signal expe_terminee(recap: Dictionary)
+
 # ── Équipement ──────────────────────────────────────────────
 
 # Émis quand un item est équipé ou déséquipé.

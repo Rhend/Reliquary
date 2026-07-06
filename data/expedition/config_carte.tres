@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ExpeCarteConfigData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/ExpeCarteConfigData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+noeuds_min = 8
+noeuds_max = 12
+nb_etages = 3
+poids_combat = 0.5
+poids_mystere = 0.3
+poids_coffre = 0.2
+mystere_poids_coffre = 0.25
+mystere_poids_benediction = 0.25
+mystere_poids_piege = 0.25
+mystere_poids_attaque_surprise = 0.25
+distance_min_noeuds = 1.5
+elagage_aretes = 0.5

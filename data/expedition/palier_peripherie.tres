@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="PalierProfondeurData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/PalierProfondeurData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "palier_peripherie"
+nom_affichage_fr = "Périphérie"
+nom_affichage_en = "Outskirts"
+multiplicateur = 1.0

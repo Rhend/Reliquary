@@ -81,3 +81,23 @@ enum TimingStatut {
 	DEBUT_ACTIVATION = 0,
 	FIN_ACTIVATION   = 1,
 }
+
+# ─── Carte d'expédition (Rework Combat — chantier 2) ──────────
+
+# Types de nœuds d'un étage. MYSTERE = le nœud « ? » : son contenu réel
+# (ContenuMystere) n'est déterminé et révélé qu'à l'ENTRÉE du joueur.
+enum TypeNoeud {
+	ENTREE    = 0,
+	COMBAT    = 1,
+	MYSTERE   = 2,
+	COFFRE    = 3,
+	FIN_ETAGE = 4,
+}
+
+# Contenu réel d'un nœud « ? », tiré à l'entrée (probas data-driven).
+enum ContenuMystere {
+	COFFRE           = 0,
+	BENEDICTION      = 1,
+	PIEGE            = 2,
+	ATTAQUE_SURPRISE = 3,
+}
