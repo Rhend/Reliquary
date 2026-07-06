@@ -80,6 +80,26 @@ emprise 3×3 cases    =  30 × 30 m
 
 ---
 
+## 🎯 Prop n°1 — Panneau sur le toit du supermarché
+
+Il remplacera le panneau procédural actuel (cadre ambre + barres cyan).
+Toutes les règles 3D ci-dessus s'appliquent, plus ces précisions :
+
+| Contrainte | Valeur |
+|---|---|
+| **Dimensions** | face ≈ **10–14 m de large × 4–6 m de haut** (en mètres réels) |
+| **Pieds inclus** | béquilles / structure porteuse dans le modèle — le toit est **plat**, le panneau ne doit pas flotter |
+| **Budget** | ~**100–300 triangles** (c'est un prop simple) |
+| **Pivot** | au **point de contact avec le toit**, centré (Y = 0) |
+| **Face lisible** | vers **-Z** (le moteur l'orientera vers la route) |
+| **2 objets nommés max** | `cadre` (structure → néon **ambre**) et `texte` (détail → néon **cyan**) — le moteur applique une couleur par objet |
+
+> ⚠️ Chaque arête du modèle devient **une ligne de néon**. Une face plane
+> sur-découpée = un quadrillage lumineux moche. Le « texte » de l'enseigne =
+> quelques formes géométriques simples (barres, glyphes), pas de vraie typo modélisée.
+
+---
+
 ## 🖼️ Sprites 2D (icônes, enseignes, fumée)
 
 | Règle | Valeur |
