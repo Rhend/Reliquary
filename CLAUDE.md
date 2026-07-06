@@ -153,7 +153,10 @@ orchestre ; rendu découpé en modules `build/holo_*.gd` — pattern `static fun
 avec `h` = le nœud HoloMap3D passé **NON typé** (sinon cycle preload↔class_name) ; **toute
 locale issue de `h.*` doit être typée explicitement**. Modules : `holo_geo` (helpers purs),
 `holo_env` (ambiance), `holo_ville` (voirie/bâti/ponts/autoroutes), `holo_decor` (décor +
-prison), `holo_sureleve` (ouvrages surélevés + croix rouge).
+prison), `holo_sureleve` (ouvrages surélevés + croix rouge), `holo_props` (props .glb de
+l'artiste → arêtes dures néon ; assets dans `assets/props/holomap/`, specs et nommage dans
+`Carte Holo/SPECS_ASSETS.md` ; secours procédural conservé si le .glb manque ; vérifier un
+.glb reçu : `tools/inspect_glb.gd`).
 
 **Apparence = couleur de FOND** (nearest-match d'un centroïde de `_FAMILLES`). **Hauteur /
 forme / altitude / ID = texte de la cellule.** Bordures medium/thick = séparateurs neutres
