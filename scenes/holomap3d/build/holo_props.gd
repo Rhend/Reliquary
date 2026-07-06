@@ -75,7 +75,7 @@ static func _collecter(n: Node, xf: Transform3D, roles: Dictionary, compteur: Ar
 
 static func _role(nom: String, index: int) -> String:
 	var b := nom.to_lower()
-	if b.contains("texte") or b.contains("text"):
+	if b.contains("texte") or b.contains("text") or b.contains("lettre"):
 		return "texte"
 	if b.contains("cadre") or b.contains("frame"):
 		return "cadre"
