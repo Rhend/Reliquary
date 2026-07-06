@@ -80,6 +80,36 @@ emprise 3×3 cases    =  30 × 30 m
 
 ---
 
+## 📁 Où poser les fichiers + nommage
+
+> ⚠️ JAMAIS dans `Carte Holo/` (ce dossier est exclu du jeu exporté).
+
+| Type | Dossier |
+|---|---|
+| Modèles 3D `.glb` | `assets/props/holomap/` |
+| Sprites `.png` (icônes, enseignes, fx) | `assets/sprites/holomap/` |
+| Polices `.ttf` | `assets/fonts/` |
+
+**Nommage** : `snake_case`, minuscules, **sans accents, sans espaces**, en français.
+
+```
+<famille>_<objet>[_variante].ext
+
+supermarche_panneau_toit.glb      ← le prop n°1
+usine_cheminee.glb
+icone_lieu_musee.png
+icone_lieu_musee_hl.png           ← _hl = version surbrillance
+enseigne_bar_neon.png
+fx_fumee.png
+```
+
+- **Pas de numéro de version** dans le nom (`_v2`, `_final`…) : on **écrase** le
+  fichier au ré-export, le nom est l'identifiant stable côté moteur.
+- Variantes d'un même objet : suffixe court (`_a`, `_b`, `_hl`).
+- Dans le `.glb`, les objets internes gardent leurs noms de rôle (`cadre`, `texte`).
+
+---
+
 ## 🎯 Prop n°1 — Panneau sur le toit du supermarché
 
 Il remplacera le panneau procédural actuel (cadre ambre + barres cyan).
