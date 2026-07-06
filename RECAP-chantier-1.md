@@ -78,6 +78,12 @@ Rôdeur rejoint le combat (adverse) — PV 50, horloge initiale 50.0
 ═ VICTOIRE — tous les ennemis sont vaincus (activation 5)
 ```
 
+## Addendum — Suppression de l'ancien moteur (décision joueur, post-livraison)
+
+L'ancien système de combat temps réel a été **entièrement supprimé** (« supprimer sec, jeu cassé assumé ») : `combat_resolver.gd`, `combat_player.gd` (autoload retiré), `combat_step.gd`, tout `scripts/combat/` + `scenes/combat/CombatScene.tscn` (l'écran de combat), `tests/TestCombatResolver`, les signaux `combat_started`/`combat_ended`, `Enums.Actor`, et les constantes Balance orphelines (jauge ATB, poison temps réel — les valeurs du Poison vivent désormais uniquement dans `statut_poison.tres`). `stat_stacker.gd` (partagé, utilisé par le CTB) a été déplacé dans `systems/combat_ctb/`.
+
+État assumé jusqu'à l'intégration CTB : les rencontres créature d'une expédition sont **constatées mais non résolues** (`AdventureSystem._combat_non_resolu` : bestiaire + événement, ni dégâts ni XP de combat ni drops, avertissement console une fois par cycle ; bannière « Combat en refonte » au lancement d'une expédition). `_resolve_victory` / `_resolve_unique_victory` (XP, drops, régén, récompenses d'Unique) sont **conservés** pour être rappelés sur `ctb_victoire`. La bénédiction Hâte stocke toujours son modificateur (sera traduit en buff VIT CTB). Toutes les suites restantes sont vertes (94/94 scripts, ExpeditionFlow 28/28, TierCap, Drops, CTB 32/32).
+
 ## 6. Questions ouvertes
 
 1. **Mort au tick DÉBUT** : l'activation est consommée (le mourant ne joue pas). OK, ou le Saignement doit-il laisser jouer le tour avant la mort ?

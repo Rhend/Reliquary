@@ -100,18 +100,9 @@ signal adventure_cycle_ended(result: Dictionary)
 @warning_ignore("unused_signal")
 signal adventure_stopped()
 
-# ── Combat tour par tour ────────────────────────────────────
-
-# combat_started : HP initiaux des deux combattants.
-@warning_ignore("unused_signal")
-signal combat_started(hero_id: String, enemy: Dictionary,
-		hero_hp: float, enemy_hp: float)
-
-# combat_ended   : { victory, remaining_hero_hp, enemy }
-@warning_ignore("unused_signal")
-signal combat_ended(result: Dictionary)
-
 # ── Combat CTB (Rework Combat — chantier 1) ─────────────────
+# (Les anciens signaux combat_started/combat_ended du moteur temps réel ont
+#  été supprimés avec lui ; le CTB émet ctb_victoire/ctb_defaite ci-dessous.)
 
 # Émis par CtbMoteur quand tous les ennemis sont à 0 PV.
 # recap : { victoire, nb_activations, pv_restants } — cf. CtbMoteur._recap().

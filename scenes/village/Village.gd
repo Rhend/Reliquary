@@ -996,13 +996,16 @@ func _fill_panel_content(panel_id: String) -> void:
 			elif _owner_of_room(panel_id) != "":
 				_panel_soon(Translations.panel_title(panel_id))
 
-# Lance l'aventure sur le biome sélectionné et bascule vers CombatScene.
+# Lance l'aventure sur le biome sélectionné. ⚠ L'écran de combat a été SUPPRIMÉ
+# avec l'ancien moteur (Rework Combat) : l'expédition tourne en fond SANS
+# résolution de combat ; le nouvel écran CTB arrivera avec son chantier.
 func start_selected_expedition() -> void:
 	if adv_selected_biome_id.is_empty():
 		return
 	GameData.player["active_biome_id"] = adv_selected_biome_id
 	AdventureSystem.start_adventure(adv_selected_biome_id)
-	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
+	show_banner(Translations.T("adv.combat_wip"),
+			Color(0.95, 0.60, 0.30), Color(0.18, 0.09, 0.02, 0.92), 3.0, 0.6)
 
 # ─── Carte holographique 3D des expéditions (overlay) ─────────
 # API publique appelée par le bouton « Carte » de l'AdventurePanel. Ouvre la carte

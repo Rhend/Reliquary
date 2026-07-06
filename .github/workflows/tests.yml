@@ -1,8 +1,8 @@
 # CI — lance les tests headless du projet à chaque push / pull request.
 #
-# Cinq suites :
+# Suites :
 #   • TestScriptsLoad     — smoke test : tous les scripts compilent avec les autoloads
-#   • TestCombatResolver  — unités : résolution de combat (crit, poison, bouclier…)
+#   • TestCombatCtb       — moteur de combat tour par tour CTB (Rework Combat)
 #   • TestExpeditionFlow  — boucle d'expédition : stats de cycle + résumé
 #   • TestTierCap         — garde-fou plafond dur global (T2) : XP / évolution / Hall / Village
 #   • TestDropSystem      — drops de biome : taux/quantité fréquent + rare, gating Forge
@@ -36,9 +36,6 @@ jobs:
 
       - name: TestScriptsLoad (compilation des scripts)
         run: $GODOT --headless --path . res://tests/TestScriptsLoad.tscn
-
-      - name: TestCombatResolver (résolution de combat)
-        run: $GODOT --headless --path . res://tests/TestCombatResolver.tscn
 
       - name: TestCombatCtb (moteur tour par tour CTB)
         run: $GODOT --headless --path . res://tests/TestCombatCtb.tscn

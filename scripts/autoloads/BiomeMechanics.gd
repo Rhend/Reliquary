@@ -2,8 +2,8 @@
 # BiomeMechanics.gd — Mécaniques fortes de biome (Feature 6).
 #
 # Chaque biome débloque une mécanique forte au palier Rare (tier 2).
-# Ce singleton est initialisé au lancement de chaque cycle et
-# consulté par AdventureSystem et CombatPlayer pour activer les effets.
+# Ce singleton est initialisé au lancement de chaque cycle et consulté par
+# AdventureSystem (et par l'intégration CTB à venir) pour activer les effets.
 #
 # Mécaniques :
 #   "ambush"        (Forêt Sombre)    — premier ennemi frappe avant le cycle VIT

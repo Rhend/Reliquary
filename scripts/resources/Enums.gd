@@ -23,13 +23,6 @@ class EntityType:
 	# évolution transite par le rituel d'ascension avec ce type.
 	const VILLAGE       := "village"
 
-# ─── Acteurs d'un step de combat (champ attacker de CombatStep) ──
-# Distinct d'EntityType : désigne qui frappe pendant la résolution VIT-based,
-# pas le type d'une entité du catalogue.
-class Actor:
-	const HERO  := "hero"
-	const ENEMY := "enemy"
-
 # ─── Effets de bénédiction (champ effet des BenedictionData) ──
 # Seuls effets supportés par AdventureSystem._apply_benediction_effect.
 class BlessEffect:

@@ -8,8 +8,12 @@
 #      Balance.AFFICHAGE_EVENEMENT + Balance.TRANSITION après un piège/bénédiction.
 #   3. À l'expiration, _process_encounter() tire le type de rencontre
 #      (créature / bénédiction / piège) selon la table du biome.
-#   4. Les rencontres de type créature délèguent à CombatPlayer et
-#      attendent le signal combat_ended avant de continuer.
+#   4. ⚠ REWORK COMBAT : l'ancien moteur temps réel (CombatResolver/CombatPlayer)
+#      a été SUPPRIMÉ. Le moteur CTB (systems/combat_ctb/) n'est PAS encore
+#      branché à l'expédition — une rencontre créature est constatée (bestiaire,
+#      événement) mais le combat n'est PAS résolu (cf. _combat_non_resolu).
+#      _resolve_victory / _resolve_unique_victory (XP, drops, régén) sont
+#      CONSERVÉS : l'intégration CTB les rappellera.
 #   5. UNIQUEMENT après un COMBAT GAGNÉ (Chantier 8 — D1), le héros régénère
 #      REGEN_PCT de ses PV max (bonus Maison + passifs/Forge, additifs). Aucune
 #      régén après un piège ou une bénédiction.
@@ -38,6 +42,7 @@ var combat_unique_en_cours:   bool       = false  # vrai pendant le combat contr
 var _encounter_timer:         Timer              # timer qui cadence les rencontres
 var _first_encounter_pending: bool  = false      # vrai uniquement pour la toute première rencontre du cycle
 var _is_first_combat:         bool  = true       # vrai jusqu'au premier combat du cycle (embuscade)
+var _warned_no_combat:        bool  = false      # avertissement « combat non résolu » émis une fois par cycle
 
 # Créatures disponibles ce cycle avec leurs poids pondérés.
 # Rempli une fois par cycle via _build_available_creatures().
@@ -78,8 +83,10 @@ var _bleed_remaining: int   = 0
 var _last_event_type: String = ""
 # Bénédiction XP : multiplicateur d'XP de base appliqué UNE fois sur le prochain événement.
 var _bless_xp_mult:   float = 1.0
-# Bénédiction de Hâte : modificateur de vitesse du héros en attente, consommé par
-# le PROCHAIN combat (rail de vitesse). {} = aucune. {factor, duration}.
+# Bénédiction de Hâte : modificateur de vitesse du héros en attente pour le
+# PROCHAIN combat. {} = aucune. {factor, duration}. ⚠ Plus de consommateur
+# depuis la suppression de l'ancien rail de vitesse : l'intégration CTB le
+# traduira en buff VIT temporaire du combattant.
 var _pending_hero_haste: Dictionary = {}
 # Filet anti-mort de l'expédition (Palissade T5) : disponible une fois par cycle.
 # Armé au lancement selon les bâtiments, consommé au 1er coup létal (combat OU
@@ -91,7 +98,6 @@ func _ready() -> void:
 	_encounter_timer.one_shot = true
 	_encounter_timer.timeout.connect(_on_encounter_timer)
 	add_child(_encounter_timer)
-	EventBus.combat_ended.connect(_on_combat_ended)
 	EventBus.entity_discovered.connect(_on_entity_discovered)
 	EventBus.xp_gained.connect(_on_xp_gained_tracking)
 
@@ -148,6 +154,7 @@ func start_adventure(biome_id: String) -> void:
 	_last_event_type = ""
 	_bless_xp_mult   = 1.0
 	_pending_hero_haste = {}
+	_warned_no_combat   = false
 	_lethal_shield_available = VillageBuildings.has_lethal_shield()
 
 	_pick_modifier()
@@ -162,8 +169,6 @@ func stop_adventure() -> void:
 		return
 	is_running = false
 	_encounter_timer.stop()
-	if CombatPlayer.is_playing:
-		CombatPlayer.stop()
 	PassiveSystem.decrement_cooldowns()
 	GameData.player["active_biome_id"] = ""
 	CycleData.last_cycle_summary = _build_summary(false, true)
@@ -205,7 +210,9 @@ func _process_encounter() -> void:
 
 # ─── Rencontre Créature ───────────────────────────────────────
 
-# Tire un ennemi aléatoire dans le pool du biome et lance le combat.
+# Tire un ennemi aléatoire dans le pool du biome. ⚠ Le combat n'est PAS résolu
+# (ancien moteur supprimé, CTB pas encore branché) : la rencontre est constatée
+# (bestiaire, événement UI) puis la boucle continue sans dégâts, XP ni drops.
 func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 	var enemy := _weighted_random_creature()
 	if enemy.is_empty():
@@ -218,37 +225,20 @@ func _handle_creature_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 		enemy.get("id", ""), enemy.get("name", "?"), "Créature", current_biome_id, 0.0
 	)
 	EventBus.adventure_event_resolved.emit(enc_data)
-
-	var fr := ForgeSystem.combat_rules()
-	var combat_options := {
-		# Embuscade subie, sauf si annulée par la Forge (Initiative, Anneau).
-		"ambush":         _is_first_combat and BiomeMechanics.is_ambush_active() \
-				and not bool(fr.get("ambush_negate", false)),
-		"poison":         BiomeMechanics.is_mechanic_active("poison") \
-				and not VillageBuildings.poison_immune_for_tier(int(enemy.get("tier", 0))),
-		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
-		"hero_speed_mods": _consume_hero_speed_mods(),
-		# Atténuation du venin : Jardin (village) + Filtre (Forge), cumulées.
-		"poison_stack_reduction": int(VillageBuildings.get_bonus(VillageBuildings.CH_DEBUFF_REDUCTION)) \
-				+ int(fr.get("poison_stack_reduction", 0)),
-		"ignore_lethal":  _lethal_shield_available,
-	}
 	_is_first_combat = false
-	CombatPlayer.start_combat(enemy, current_hp, get_modifier_bonuses(), combat_options)
+	_combat_non_resolu()
 
-# Vide et retourne les modificateurs de vitesse du héros en attente (rail de
-# vitesse), sous forme de liste de {factor, start, duration}. Consommé par le
-# combat. La fenêtre démarre au début du combat (start = 0).
-func _consume_hero_speed_mods() -> Array:
-	if _pending_hero_haste.is_empty():
-		return []
-	var mods: Array = [{
-		"factor":   _pending_hero_haste.get("factor", 1.0),
-		"start":    0.0,
-		"duration": _pending_hero_haste.get("duration", Balance.BLESS_HASTE_DURATION),
-	}]
-	_pending_hero_haste = {}
-	return mods
+# Trou ASSUMÉ du Rework Combat : signale une fois par cycle que les combats
+# d'expédition ne sont pas résolus tant que le moteur CTB n'est pas intégré,
+# puis replanifie la rencontre suivante (la boucle idle ne se fige pas).
+func _combat_non_resolu() -> void:
+	if not _warned_no_combat:
+		_warned_no_combat = true
+		push_warning("AdventureSystem : combat NON résolu — moteur CTB à intégrer "
+				+ "(les rencontres créature de ce cycle sont sans effet).")
+	_tick_bleed()
+	if is_running:
+		_schedule_next_encounter(Balance.TRANSITION)
 
 # ─── Rencontre Bénédiction ────────────────────────────────────
 
@@ -387,36 +377,15 @@ func _handle_trap_encounter(_hero_id: String, enc_data: Dictionary) -> void:
 #  Résultat de combat
 # ═══════════════════════════════════════════════════════════
 
-# Reçoit le résultat de combat et continue l'aventure ou l'arrête.
 # Première rencontre d'une entité (création au bestiaire) : mémorisée dans
 # les stats du cycle pour la section « Découvertes » du résumé.
 func _on_entity_discovered(entity_id: String) -> void:
 	if is_running and entity_id not in _stats.new_discoveries:
 		_stats.new_discoveries.append(entity_id)
 
-func _on_combat_ended(result: Dictionary) -> void:
-	if not is_running:
-		return
-
-	current_hp = result.get("remaining_hero_hp", 0.0)
-	# Le filet anti-mort consommé en combat (Palissade T5) ne se rearme pas du cycle.
-	if result.get("lethal_used", false):
-		_lethal_shield_available = false
-
-	if combat_unique_en_cours:
-		combat_unique_en_cours = false
-		if result.get("victory", false):
-			_resolve_unique_victory(result.get("enemy", {}))
-		else:
-			_end_adventure(false)
-		return
-
-	if result.get("victory", false):
-		_resolve_victory(result.get("enemy", {}))
-	else:
-		_end_adventure(false)
-
 # Distribue l'XP, le loot et les ingrédients après une victoire.
+# ⚠ Plus aucun appelant depuis la suppression de l'ancien moteur : l'intégration
+# du CTB (chantier suivant) rappellera cette fonction sur ctb_victoire.
 func _resolve_victory(enemy: Dictionary) -> void:
 	# XP de Maîtrise distribuée à toutes les entités actives (produite par palier)
 	_distribute_mastery_xp(enemy.get("id", ""))
@@ -446,8 +415,8 @@ func _resolve_victory(enemy: Dictionary) -> void:
 
 # Filet anti-mort de l'expédition (Palissade T5) hors combat : si disponible et
 # que les PV viennent de tomber à 0 (piège, saignement), ramène le héros à 1 PV
-# et consomme le filet. Retourne true s'il a sauvé le héros. (En combat, le même
-# garde-fou est appliqué par CombatResolver via l'option "ignore_lethal".)
+# et consomme le filet. Retourne true s'il a sauvé le héros. (L'équivalent EN
+# combat sera rebranché lors de l'intégration du moteur CTB.)
 func _survive_lethal() -> bool:
 	if _lethal_shield_available and current_hp <= 0.0:
 		current_hp = 1.0
@@ -626,7 +595,8 @@ func _build_available_creatures(biome_id: String) -> void:
 	_pool_add(surface,    Balance.POOL_WEIGHT_BASE)
 	_pool_add(profondeur, Balance.POOL_WEIGHT_BASE)
 
-# Convertit un dict créature (.tres) en fiche de combat pour CombatPlayer.
+# Convertit un dict créature (.tres) en fiche de combat (pool du cycle ; servira
+# de source à la conversion vers le moteur CTB lors de l'intégration).
 # Les stats sont lues au palier de Maîtrise courant de la créature, en
 # descendant au palier inférieur le plus proche si absent (GameData.stats_at_tier).
 func _combat_sheet(creature: Dictionary) -> Dictionary:
@@ -719,6 +689,9 @@ func _build_summary(victory: bool, interrupted: bool = false) -> Dictionary:
 # ═══════════════════════════════════════════════════════════
 
 # Déclenche le combat contre la créature Unique. Appelé par l'UI (bouton joueur).
+# ⚠ Combat NON résolu (ancien moteur supprimé, CTB pas encore branché) : la
+# rencontre est constatée puis la boucle reprend — _resolve_unique_victory est
+# conservé et sera rappelé par l'intégration CTB.
 func start_unique_combat() -> void:
 	if not is_running or combat_unique_en_cours:
 		return
@@ -726,24 +699,13 @@ func start_unique_combat() -> void:
 	var unique := biome.get("creature_unique", {}) as Dictionary
 	if unique.is_empty():
 		return
-	combat_unique_en_cours = true
 	_encounter_timer.stop()
 	var unique_dict := _combat_sheet(unique)
 	GameData.record_encounter(
 		unique_dict["id"], unique_dict["name"], "Créature", current_biome_id, 0.0
 	)
 	_is_first_combat = false
-	var fr := ForgeSystem.combat_rules()
-	CombatPlayer.start_combat(unique_dict, current_hp, get_modifier_bonuses(), {
-		"ambush":         false,
-		"poison":         BiomeMechanics.is_mechanic_active("poison") \
-				and not VillageBuildings.poison_immune_for_tier(int(unique_dict.get("tier", 0))),
-		"endurcissement": BiomeMechanics.is_mechanic_active("endurcissement"),
-		"hero_speed_mods": _consume_hero_speed_mods(),
-		"poison_stack_reduction": int(VillageBuildings.get_bonus(VillageBuildings.CH_DEBUFF_REDUCTION)) \
-				+ int(fr.get("poison_stack_reduction", 0)),
-		"ignore_lethal":  _lethal_shield_available,
-	})
+	_combat_non_resolu()
 
 # Résout la victoire contre la créature Unique : flags, ingrédient, passif, signal.
 func _resolve_unique_victory(enemy: Dictionary) -> void:

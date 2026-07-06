@@ -43,7 +43,6 @@ func _ready() -> void:
 		"hero":      await _shoot_hero_panel()
 		"forge":     await _shoot_forge()
 		"adventure": await _shoot_adventure()
-		"combat":    await _shoot_combat()
 		"tooltip":   await _shoot_tooltip()
 		"maxtier_hero":    await _shoot_maxtier_hero()
 		"maxtier_forge":   await _shoot_maxtier_forge()
@@ -449,39 +448,8 @@ func _shoot_village() -> void:
 	await get_tree().create_timer(1.0).timeout
 	_capture("res://tests/_shot_village_badges.png")
 
-# ── Capture de l'écran de combat : combat, piège, bénédiction ──
-func _shoot_combat() -> void:
-	GameData.get_entity("hero")["crit_chance"] = 1.0   # crits garantis pour la capture
-	# 100 % créatures : le tirage naturel ne pollue pas les captures forcées.
-	GameData.get_entity("biome_foret")["event_table"] = \
-			{"creature": 1.0, "benediction": 0.0, "trap": 0.0}
-	AdventureSystem.start_adventure("biome_foret")
-	var combat: Control = (load("res://scenes/combat/CombatScene.tscn") as PackedScene).instantiate()
-	_vp.add_child(combat)
-	await get_tree().create_timer(1.8).timeout
-	_capture("res://tests/_shot_combat_fight.png")
-	await get_tree().create_timer(1.2).timeout
-
-	# Fige la boucle idle pour des captures déterministes, puis force
-	# l'affichage d'un piège et d'une bénédiction (UI seulement).
-	AdventureSystem._encounter_timer.stop()
-	CombatPlayer.stop()
-	var trap := GameData.get_entity("spike_trap").duplicate()
-	trap["damage"] = 12
-	EventBus.adventure_event_resolved.emit({
-		"type": "trap", "biome_id": "biome_foret", "hero_id": "hero", "trap": trap,
-	})
-	await get_tree().create_timer(0.7).timeout
-	_capture("res://tests/_shot_combat_trap.png")
-	await get_tree().create_timer(1.2).timeout
-
-	EventBus.adventure_event_resolved.emit({
-		"type": "benediction", "biome_id": "biome_foret", "hero_id": "hero",
-		"effect": GameData.get_entity("herb_find").duplicate(),
-	})
-	await get_tree().create_timer(0.7).timeout
-	_capture("res://tests/_shot_combat_bene.png")
-	AdventureSystem.is_running = false
+# (Le mode « combat » a été retiré avec l'ancien écran de combat — Rework Combat.
+#  Un mode de capture CTB arrivera avec le chantier UI du nouveau moteur.)
 
 # ── Capture du panneau Héros (HeroDoll) ─────────────────────
 func _shoot_hero_panel() -> void:

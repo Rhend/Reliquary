@@ -8,7 +8,8 @@
 #
 #   2. Effets conditionnels (poison on-hit)
 #      → lus depuis tier_effects[tier].conditional_effects (nouveau champ)
-#      → passés à CombatResolver via get_passive_combat_effects()
+#      → exposés via get_passive_combat_effects() — consommateur : l'intégration
+#        CTB à venir (l'ancien resolver temps réel a été supprimé)
 #      → cooldowns génériques gérés par passive_cooldowns (persistants entre combats)
 #
 # Rétrocompatibilité : les passifs sans conditional_effects sont ignorés
@@ -82,7 +83,7 @@ func get_effect(effect_id: String) -> float:
 	return _active_effects.get(effect_id, 0.0)
 
 # ═══════════════════════════════════════════════════════════
-#  Effets conditionnels — fournis à CombatResolver
+#  Effets conditionnels — fournis au combat (intégration CTB à venir)
 # ═══════════════════════════════════════════════════════════
 
 # Retourne les effets conditionnels actifs pour la prochaine résolution de combat.

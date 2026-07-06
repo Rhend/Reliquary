@@ -10,8 +10,8 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 - **Communication inter-systèmes** : uniquement via `EventBus` (aucun référencement direct).
 - **Strings magiques interdits** : types d'entités → `Enums.EntityType.*`, effets de
   bénédiction → `Enums.BlessEffect.*` (effets supportés : HEAL, XP_BONUS, HASTE — la
-  Hâte pousse un modificateur de vitesse temporaire sur le héros via le rail de
-  vitesse du combat, cf. `combat_resolver` `hero_speed_mods`).
+  Hâte stocke un modificateur de vitesse en attente ; il sera traduit en buff VIT
+  temporaire par l'intégration du moteur CTB).
 - **Noms affichés** : TOUJOURS via `Translations.entity_name(entity)` (et le lore via
   `Translations.entity_lore`, les effets de passifs via `Translations.effect_desc`).
   Champs sources : `nom_affichage_fr`/`nom_affichage_en`, `lore_fr`/`lore_en`
@@ -36,8 +36,6 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Boucle idle (timer, rencontres, CycleStats, drops) | `scripts/systems/AdventureSystem.gd` |
 | Progression de Maîtrise (XP, plafonds, évolution manuelle) | `scripts/systems/MasterySystem.gd` |
 | Effets de passifs (bonus plats + conditionnels) | `scripts/systems/PassiveSystem.gd` |
-| Résolution de combat instantanée VIT-based (statique, pure) | `systems/combat/combat_resolver.gd` |
-| Playback cosmétique des CombatStep | `systems/combat/combat_player.gd` |
 | Moteur combat TOUR PAR TOUR CTB (Rework ch.1 : file d'initiative `K/VIT`, DoT data-driven, N-vs-N, signaux `ctb_*`) | `systems/combat_ctb/ctb_moteur.gd` + `ctb_combattant.gd` |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
@@ -46,8 +44,17 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Forge : palier d'équipement (XP, sans ingrédient) + arbre de nœuds + bonus (Chantier 5) | `scripts/systems/ForgeSystem.gd` |
 
 Autoloads (ordre dans project.godot) : UIColors, EventBus, AudioManager, Translations,
-GameData, CycleData, SaveManager, GameSettings, MasterySystem, CombatPlayer,
+GameData, CycleData, SaveManager, GameSettings, MasterySystem,
 AdventureSystem, PassiveSystem, VillageBuildings, ForgeSystem, MasteryRegistry, BiomeMechanics, TooltipOverlay.
+
+⚠ REWORK COMBAT en cours (branche ReworkCombat) : l'ancien moteur temps réel
+(CombatResolver / CombatPlayer / CombatScene) a été SUPPRIMÉ. Le moteur CTB
+(`systems/combat_ctb/`, sandbox `scenes/combat_ctb/SandboxCtb.tscn`) n'est PAS
+encore branché à l'expédition : les rencontres créature sont constatées mais
+NON résolues (`AdventureSystem._combat_non_resolu`) — ni dégâts, ni XP de
+combat, ni drops. `_resolve_victory` / `_resolve_unique_victory` sont conservés
+pour l'intégration. Règle générale : un système remplacé est SUPPRIMÉ, pas
+laissé en doublon.
 
 Forge (Chantier 5) : l'équipement évolue par XP (MasterySystem, buffer DÉSACTIVÉ pour
 l'équipement) — PLUS d'ingrédient pour le palier (`recettes_evolution` est mort). Le
@@ -72,7 +79,8 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
   (comportement toggle : il le fermerait).
 - **Sections repliables** : `UIHelpers.collapsible_section(titre, couleur, ouvert,
   host.panel_ui_state())` pour que l'état survive aux reconstructions.
-- `combat_ended` porte `remaining_hero_hp` ; le résumé de cycle porte `hero_id`.
+- Fins de combat CTB : `EventBus.ctb_victoire` / `ctb_defaite` portent le recap
+  `{victoire, nb_activations, pv_restants}` ; le résumé de cycle porte `hero_id`.
 - Évolution : TOUJOURS manuelle (action joueur via `MasterySystem.evolve_entity`).
 - L'XP s'accumule au-delà des plafonds (jamais perdue) ; plafond créature dépend du
   tier du biome + de la zone (`Balance.CREATURE_CAP_*`).
@@ -86,7 +94,6 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
 ```bash
 # Les 3 suites (chacune quitte avec un code ≠ 0 en cas d'échec) :
 godot --headless --path . res://tests/TestScriptsLoad.tscn      # compile tous les scripts
-godot --headless --path . res://tests/TestCombatResolver.tscn   # unités combat (24)
 godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (32)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)
 
@@ -127,8 +134,6 @@ godot --headless --path . --quit-after 30
 - `Balance.ECLOSION_CLIC_VALUE = 25` → remettre à 1 (accélère l'éclosion pour les tests).
 - `Village.DEBUG_TIER_BUTTONS = true` → boutons Tier ± en bas à gauche (modifient
   réellement GameData.village).
-- `CombatScene.LOG_ENABLED = false` → journal de combat désactivé volontairement
-  (le code est conservé ; remettre true pour le réactiver).
 - `HoloMap3D.FLICKER_NEON = false` → grésillement des néons désactivé volontairement
   (idée validée, application à retravailler ; le shader `holo_neon` garde le code).
 - `holo_decor.PROP_NEON` (true par défaut) → false = props artistes de la holomap

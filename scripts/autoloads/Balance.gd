@@ -8,7 +8,7 @@
 #
 # Classe utilitaire (class_name), PAS un autoload : les
 # constantes se résolvent directement sur le type — y compris
-# depuis les fonctions statiques (ex. CombatResolver). Même
+# depuis les fonctions statiques (ex. CtbMoteur). Même
 # convention que UIHelpers.gd.
 #
 # Usage : Balance.CRIT_CHANCE, Balance.evolve_cost(...), etc.
@@ -16,7 +16,8 @@
 # Ce qui N'EST PAS ici (volontairement) :
 #   • Tables d'événements par biome       → .tres des biomes
 #   • Configs de passifs (poison on-hit)  → .tres des passifs
-#   • Cadence/timings & animations        → AdventureSystem / CombatPlayer
+#   • Statuts DoT du combat CTB           → data/combat_ctb/*.tres
+#   • Cadence/timings & animations        → AdventureSystem
 # ============================================================
 class_name Balance
 
@@ -80,35 +81,14 @@ const BLESS_HASTE_PCT_DEFAULT: float = 30.0  # +30 % par défaut (si valeur du .
 const BLESS_HASTE_DURATION:    float = 10.0  # fenêtre active en secondes réelles de combat
 
 # ═══════════════════════════════════════════════════════════
-#  Combat — résolution (CombatResolver)
+#  Combat — résolution (moteur CTB, systems/combat_ctb/)
 # ═══════════════════════════════════════════════════════════
 
-# ─── Référentiel de vitesse : VIT = cadence d'attaques par seconde ──────────
-# Depuis la refonte ATB temps réel, la jauge d'action s'horodate en SECONDES
-# réelles : un combattant frappe toutes les (1 / aps) secondes, où aps est sa
-# cadence en attaques/seconde. Repères : 0,7 lent · 1,0 normal · 1,3 rapide.
-#
-# Les stats `vit` brutes des .tres (échelle ~20, héros = HERO_VIT = 20) ne sont
-# PAS retouchées : on les transpose vers le référentiel att/s par division.
-#   aps = vit / VIT_PER_APS   →   vit 20 = 1,0 att/s (normal),
-#                                 vit 14 ≈ 0,7 (lent), vit 26 ≈ 1,3 (rapide).
-# VIT_PER_APS = HERO_VIT préserve au mieux le comportement relatif actuel
-# (toutes les créatures sont aujourd'hui à vit = 20, donc 1,0 att/s comme le héros).
+# ─── Référentiel de vitesse (héritage d'affichage) ───────────
+# L'ancien moteur ATB temps réel a été SUPPRIMÉ (Rework Combat). VIT_PER_APS ne
+# sert plus qu'au tooltip de cadence du HeroPanel (vit brute → « frappes/s ») ;
+# à réviser quand l'UI de stats basculera sur le référentiel CTB (K / VIT).
 const VIT_PER_APS: float = 20.0   # 1 attaque/s = VIT_PER_APS points de vit bruts
-const APS_SLOW:    float = 0.7    # repère documentaire — cadence « lente »
-const APS_NORMAL:  float = 1.0    # repère documentaire — cadence « normale »
-const APS_FAST:    float = 1.3    # repère documentaire — cadence « rapide »
-const APS_MIN:     float = 0.05   # garde-fou : cadence plancher (évite 1/0)
-
-# Seuil de la jauge d'action exprimé en ATTAQUES : la jauge accumule `aps` par
-# seconde, le combattant frappe à 1 attaque accumulée puis retire ce seuil
-# (le surplus est conservé → aucune fraction de cadence perdue).
-const ATTACK_GAUGE: float = 1.0
-# Tolérance de simultanéité : si héros et ennemi atteignent leur seuil à moins
-# de ce delta (en secondes), le HÉROS frappe en premier.
-const SIMULTANEITY_EPS: float = 0.01  # 1 centième de seconde
-
-const GAUGE_THRESHOLD: float = 100.0  # LEGACY (ancien référentiel par ticks) — plus utilisé par le resolver
 
 # ─── Combat tour par tour CTB (Rework Combat — chantier 1) ────
 # Horloge logique de la file d'initiative continue : prochaine_action = K / VIT,
@@ -142,25 +122,18 @@ static func def_reduction(def_val: float) -> float:
 	return DEF_REDUCTION_CAP * def_val / (def_val + DEF_REDUCTION_HALF)
 
 # Dégâts d'un coup APRÈS atténuation par la DEF, planchés à MIN_DAMAGE.
-# Crit / endurcissement sont des multiplicateurs appliqués EN AVAL par le resolver.
+# Crit / multiplicateurs de mécaniques sont appliqués EN AVAL (CtbMoteur).
 static func mitigated_damage(atk: float, def_val: float) -> float:
 	return maxf(atk * (1.0 - def_reduction(def_val)), MIN_DAMAGE)
 
 # ─── Endurcissement de biome (Montagne) ─────────────────────
+# (Valeur de design conservée ; la mécanique sera rebranchée au moteur CTB.)
 const MONTAGNE_ENDURCISSEMENT_REDUCTION: float = 0.20  # réduction des dégâts héros (−20 %)
 
-# ─── Poison de biome (Marécage Putride) — modèle à TICKS temps réel ─────────
-# Le combat est ATB temps réel : plus de notion de « tour ». Le poison de biome
-# tourne sur une HORLOGE GLOBALE par cible (le héros). À chaque tic, on inflige
-# BIOME_POISON_DMG_PCT × ATK_source × (nombre de stacks VIVANTS à cet instant).
-# Un stack rejoint l'horloge en cours mais garde sa durée de vie propre
-# (BIOME_POISON_STACK_DURATION à partir de son application) → un stack isolé
-# produit 2 ticks (t+2, t+4). Empilement additif et parallèle, plafonné.
-# Source de vérité : « Référentiel des statistiques de combat ».
-const BIOME_POISON_DMG_PCT:       float = 0.05  # % de l'ATK source infligé / tick / stack vivant
-const BIOME_POISON_MAX_STACKS:    int   = 3     # stacks maximum
-const BIOME_POISON_TICK_INTERVAL: float = 2.0   # secondes réelles entre deux tics de l'horloge
-const BIOME_POISON_STACK_DURATION: float = 4.0  # secondes réelles : durée de vie d'un stack
+# ─── Poison de biome (Marécage Putride) ──────────────────────
+# L'ancien modèle à horloge temps réel a été supprimé avec le moteur ATB. Les
+# paramètres du Poison vivent désormais en data :
+# data/combat_ctb/statut_poison.tres (StatutCtbData — hook DoT du moteur CTB).
 
 # ═══════════════════════════════════════════════════════════
 #  Progression — Maîtrise (ex-mastery_config.json)
@@ -494,19 +467,10 @@ static func max_unlocked_zone(biome_tier: int) -> int:
 # ═══════════════════════════════════════════════════════════
 # Durées nominales en secondes (à combat_speed = 1.0).
 # Pièges/bénédictions : AFFICHAGE_EVENEMENT puis TRANSITION puis suivant.
-# Combats : depuis la refonte ATB temps réel, la durée est ÉMERGENTE — chaque
-#           CombatStep est joué à son horodatage réel (time_sec), sans borne min
-#           ni max. GameSettings.combat_speed est le seul multiplicateur global
-#           de vitesse de lecture.
+# Combats : cadence à redéfinir avec l'intégration du moteur CTB (tour par tour).
 
 const TRANSITION:          float = 1.0  # pause post-événement avant la rencontre suivante
 const AFFICHAGE_EVENEMENT: float = 1.5  # durée d'affichage fixe d'un piège ou d'une bénédiction
-# LEGACY — ne bornent plus la durée d'un combat (référentiel ATB temps réel).
-# Conservés au cas où un futur réglage de cadence les réutilise ; aucun appelant
-# actuel hors documentation.
-const COMBAT_MIN:          float = 2.0  # LEGACY (ancien plancher de durée de combat)
-const COMBAT_MAX:          float = 5.0  # LEGACY (ancien plafond de durée de combat)
-const TEMPS_TOUR_IDEAL:    float = 1.2  # LEGACY (ancienne durée cible par tour)
 
 # ═══════════════════════════════════════════════════════════
 #  Pondération du pool de créatures par zone

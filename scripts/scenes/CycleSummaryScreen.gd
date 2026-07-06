@@ -768,12 +768,13 @@ func _go_to_village() -> void:
 
 # Relance immédiatement une expédition sur le même biome — donc la même zone,
 # qui est déterminée par le palier du biome (cf. AdventureSystem._get_max_zone).
-# Réplique le flux de Village.start_selected_expedition (start_adventure puis
-# bascule vers CombatScene), seul chemin de lancement éprouvé.
+# Réplique le flux de Village.start_selected_expedition. ⚠ L'écran de combat a
+# été supprimé avec l'ancien moteur (Rework Combat) : retour au village,
+# l'expédition tourne en fond sans résolution de combat.
 func _replay_biome(biome_id: String) -> void:
 	if biome_id.is_empty() or GameData.get_entity(biome_id).is_empty():
 		_go_to_village()
 		return
 	GameData.player["active_biome_id"] = biome_id
 	AdventureSystem.start_adventure(biome_id)
-	get_tree().change_scene_to_file("res://scenes/combat/CombatScene.tscn")
+	_go_to_village()
