@@ -26,7 +26,7 @@ var col: Color = Color(0.7, 0.7, 0.7)   # couleur de palier (UIColors.tier_color
 var taille_x: float = 0.7                # emprise monde X (zone) — pour la collision
 var taille_z: float = 0.7                # emprise monde Z (zone) — pour la collision
 var hauteur: float = 1.0                 # hauteur monde du DÉCOR sous la zone (pour flotter le pin)
-var pin_float: float = 0.6               # distance du pin au-dessus du toit
+var pin_float: float = 1.2               # distance du pin au-dessus du toit
 var barriere_h: float = 0.6              # hauteur monde des piliers d'énergie
 var pilier_hw: float = 0.06              # demi-largeur d'un pilier (indépendante de la hauteur)
 var line_shader: Shader

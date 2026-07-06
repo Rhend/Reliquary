@@ -37,6 +37,7 @@ func _ready() -> void:
 		"holo_baseball": await _shoot_holo_baseball()
 		"holo_lieux": await _shoot_holo_lieux()
 		"holo_prop": await _shoot_holo_prop()
+		"holo_pins": await _shoot_holo_pins()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -240,6 +241,58 @@ func _shoot_holo_lieux() -> void:
 		await RenderingServer.frame_post_draw
 		vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_parc.png")
 		print("Screenshot -> res://tests/_shot_holo_parc.png")
+
+# ── Pins des lieux d'expédition (diamants) ──
+# Force TOUS les lieux à ID du gabarit en « découverts » (tiers variés pour la
+# palette) → vue d'ensemble + gros plan, pour juger hauteur/lisibilité des pins.
+func _shoot_holo_pins() -> void:
+	var xlsx := HoloXlsxMap.new()
+	if not xlsx.charger(HoloMap3D.CHEMIN_GABARIT_DEFAUT):
+		print("Gabarit illisible — rien à capturer")
+		return
+	var lst: Array[HoloLieuData] = []
+	for zone: Dictionary in xlsx.zones:
+		var bbox: Rect2i = zone["bbox"]
+		var l := HoloLieuData.new()
+		l.id               = String(zone["id"])
+		l.nom_affichage_fr = l.id
+		l.tier             = lst.size() % 5
+		l.lore_fr          = "capture"
+		l.cellule          = bbox.position
+		l.emprise          = Vector2i(maxi(1, bbox.size.x), maxi(1, bbox.size.y))
+		var cells: Array[Vector2i] = []
+		for c: Vector2i in zone["cells"]:
+			cells.append(c)
+		l.cells            = cells
+		l.decouvert        = true
+		lst.append(l)
+	print("Lieux forcés : ", lst.size())
+	var overlay := HoloMap3DOverlay.new()
+	overlay.titre = "Pins des lieux"
+	overlay.sous_titre = "capture"
+	overlay.chemin_xlsx = HoloMap3D.CHEMIN_GABARIT_DEFAUT
+	overlay.excel_preinjecte = xlsx
+	overlay.lieux = lst
+	overlay.fermable = false
+	_vp.add_child(overlay)
+	await get_tree().create_timer(2.6).timeout
+	await RenderingServer.frame_post_draw
+	_vp.get_texture().get_image().save_png("res://tests/_shot_holo_pins.png")
+	print("Screenshot -> res://tests/_shot_holo_pins.png")
+	# Gros plan sur le premier lieu (pin + décor sous la zone).
+	if not lst.is_empty():
+		var holo: HoloMap3D = overlay._map
+		var bb0 := Rect2i(lst[0].cellule, lst[0].emprise)
+		var c: Vector3 = holo._centre_bbox(bb0)
+		holo.distance_min = 0.8
+		holo._rig.position = Vector3(c.x, 0.3, c.z)
+		holo._set_yaw(deg_to_rad(30.0))
+		holo.plongee_deg = 30.0
+		holo._distance_cible = maxf(2.5, float(maxi(bb0.size.x, bb0.size.y)) * holo.taille_cellule * 2.4)
+		await get_tree().create_timer(1.2).timeout
+		await RenderingServer.frame_post_draw
+		_vp.get_texture().get_image().save_png("res://tests/_shot_holo_pins_zoom.png")
+		print("Screenshot -> res://tests/_shot_holo_pins_zoom.png")
 
 # ── Gros plan du PROP artiste (panneau sur le toit du supermarché) ──
 # Cadre le premier supermarché du gabarit : vue 3/4 + vue frontale rapprochée,
