@@ -153,6 +153,7 @@ func _shoot_holo() -> void:
 # SHOT_X / SHOT_Z = coordonnées monde du point à cadrer (défaut 0,0) ;
 # SHOT_DIST = distance caméra (défaut 2.0). Produit une vue top-down (plan de
 # voirie lisible) + une vue 3/4 → juger marquage/feux/voitures à un endroit précis.
+# SHOT_YAW / SHOT_PLONGEE (degrés, optionnels) remplacent l'angle de la vue 3/4.
 func _shoot_holo_spot() -> void:
 	var vp3d := SubViewport.new()
 	vp3d.size = Vector2i(1280, 720)
@@ -175,8 +176,10 @@ func _shoot_holo_spot() -> void:
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_spot_top.png")
 	print("Screenshot -> res://tests/_shot_holo_spot_top.png")
-	holo._set_yaw(deg_to_rad(30.0))
-	holo.plongee_deg = 38.0
+	var yaw_env := OS.get_environment("SHOT_YAW")
+	var plongee_env := OS.get_environment("SHOT_PLONGEE")
+	holo._set_yaw(deg_to_rad(30.0 if yaw_env == "" else float(yaw_env)))
+	holo.plongee_deg = 38.0 if plongee_env == "" else float(plongee_env)
 	await get_tree().create_timer(1.0).timeout
 	await RenderingServer.frame_post_draw
 	vp3d.get_texture().get_image().save_png("res://tests/_shot_holo_spot_34.png")

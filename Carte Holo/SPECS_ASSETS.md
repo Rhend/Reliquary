@@ -67,7 +67,7 @@ emprise 3×3 cases    =  30 × 30 m
 ```
         +Y (haut)
          │
-         │   ╱ façade = vers -Z (avant)
+         │   ╱ façade = face à toi en vue de face Blender (touche 1)
        ┌─┴─┐
        │   │
    ────●───── ← pivot ICI : au sol (Y = 0), centré
@@ -76,7 +76,8 @@ emprise 3×3 cases    =  30 × 30 m
 
 - Pivot = **au centre, posé sur le sol** (Y = 0).
 - Le modèle **monte** vers le haut.
-- La **façade** regarde **vers l'avant (-Z)**.
+- La **façade** te regarde en **vue de face Blender** (touche 1) —
+  l'export glTF la met dans le bon sens tout seul (+Z dans le jeu).
 
 ---
 
@@ -121,7 +122,7 @@ Toutes les règles 3D ci-dessus s'appliquent, plus ces précisions :
 | **Pieds inclus** | béquilles / structure porteuse dans le modèle — le toit est **plat**, le panneau ne doit pas flotter |
 | **Budget** | ~**100–300 triangles** (c'est un prop simple) |
 | **Pivot** | au **point de contact avec le toit**, centré (Y = 0) |
-| **Face lisible** | vers **-Z** (le moteur l'orientera vers la route) |
+| **Face lisible** | face à toi en **vue de face Blender** (le moteur l'oriente vers la route) |
 | **2 objets nommés max** | `cadre` (structure → néon **ambre**) et `texte` (détail → néon **cyan**) — le moteur applique une couleur par objet |
 
 > ⚠️ Chaque arête du modèle devient **une ligne de néon**. Une face plane

@@ -13,6 +13,9 @@ tests/_shot_*.png
 # Aperçu généré par tools/make_icon.gd (l'icône finale = icon.ico, versionnée)
 tools/_icon_preview.png
 
+# Rapport généré par tools/inspect_glb.gd (vérif des props .glb de l'artiste)
+tools/inspect_glb_out.txt
+
 # Claude Code — local machine settings
 .claude/settings.local.json
 

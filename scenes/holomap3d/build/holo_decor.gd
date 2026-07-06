@@ -10,6 +10,9 @@
 extends RefCounted
 
 const Geo := preload("res://scenes/holomap3d/build/holo_geo.gd")
+const Props := preload("res://scenes/holomap3d/build/holo_props.gd")
+
+const METRES_PAR_CASE := 10.0   # convention du gabarit (cf. Carte Holo/SPECS_ASSETS.md)
 
 # ─── Colline / désert : relief de bordure (apparence ocre) ────
 # Les cases ocre peintes en périphérie forment un ruban de relief inerte qui cadre la
@@ -1125,7 +1128,14 @@ static func supermarches(h) -> void:
 		var r: Array = h._bati_boite(b["cells"], haut, col, s, sf)
 		n += r[0]; nf += r[1]
 		nn += _enseignes_marquee(h, bb, haut, ambre, sn)        # bandeau lumineux périmètre
-		nn += _billboard_toit(h, bb, haut, ambre, cyan, sn, sc) # panneau géant + barres cyan
+		# Panneau de toit : prop de l'artiste si présent, sinon procédural (secours).
+		var prop: Dictionary = Props.aretes("supermarche_panneau_toit")
+		if prop.is_empty():
+			nn += _billboard_toit(h, bb, haut, ambre, cyan, sn, sc)
+		else:
+			var rp: Array = _prop_sur_toit(h, prop, b["cells"], bb, haut, ambre, cyan, sn, sc)
+			nn += rp[0]
+			ncy += rp[1]
 		ncy += _toit_skylights(h, bb, haut, cyan, sc)           # grille de verrières (toit)
 		var rcvc: Array = _cvc_toit(h, bb, haut, col, s, sf)    # blocs techniques sur le toit
 		n += rcvc[0]; nf += rcvc[1]
@@ -1210,8 +1220,53 @@ static func _toit_skylights(h, bb: Rect2i, haut: float, col: Color, s: SurfaceTo
 		n += HoloMesh3D.line(s, h._world(x0, gy, yy), h._world(x1, gy, yy), col)
 	return n
 
+# ─── Prop artiste posé sur un toit ────────────────────────────
+# Pose le fil-de-fer d'un prop .glb (holo_props) au centre du toit, face « texte »
+# (+Z local, cf. SPECS_ASSETS.md) tournée vers la route d'entrée. Échelle
+# UNIFORME à l'échelle du sol (1 case = 10 m) : contrairement aux hauteurs de
+# bâtiments (rail vertical exagéré ×2,5), un prop garde les proportions voulues
+# par l'artiste — au rail exagéré, le panneau devenait une tour de lumière.
+# Le prop est recentré et son pied posé sur le toit via son AABB (robuste aux
+# pivots approximatifs), et réduit uniformément s'il déborde du petit côté du
+# toit. Renvoie [arêtes cadre (ambre), arêtes texte (cyan)].
+static func _prop_sur_toit(h, prop: Dictionary, cells: Array, bb: Rect2i, haut: float,
+		ambre: Color, cyan: Color, sn: SurfaceTool, sc: SurfaceTool) -> Array:
+	var aabb: AABB = prop["aabb"]
+	var sg: float = h.taille_cellule / METRES_PAR_CASE   # mètres → monde (échelle sol)
+	var sv: float = sg
+	var toit: float = float(mini(bb.size.x, bb.size.y)) * h.taille_cellule
+	var fit: float = minf(1.0, toit * 0.85 / maxf(0.001, maxf(aabb.size.x, aabb.size.z) * sg))
+	sg *= fit
+	sv *= fit
+	var ent := _cote_entree(h, cells)
+	var dir: Vector2i = ent["dir"]
+	var ay := atan2(float(dir.x), float(dir.y))          # +Z local → vers la route
+	var base: Vector3 = h._centre_bbox(bb)
+	base.y = haut
+	var centre := aabb.get_center()
+	var n := [0, 0]
+	var groupes: Array = [["cadre", ambre, sn], ["texte", cyan, sc]]
+	for gi in groupes.size():
+		var pts: PackedVector3Array = prop[groupes[gi][0]]
+		var col: Color = groupes[gi][1]
+		var s: SurfaceTool = groupes[gi][2]
+		for i in range(0, pts.size(), 2):
+			n[gi] += HoloMesh3D.line(s,
+					_prop_pt(pts[i], centre, aabb, ay, sg, sv, base),
+					_prop_pt(pts[i + 1], centre, aabb, ay, sg, sv, base), col)
+	return n
+
+# Point local du prop (mètres) → monde : recentrage XZ, pied calé sur le toit,
+# rotation Y, puis échelles sol/verticale distinctes.
+static func _prop_pt(p: Vector3, centre: Vector3, aabb: AABB, ay: float,
+		sg: float, sv: float, base: Vector3) -> Vector3:
+	var l := Vector3(p.x - centre.x, p.y - aabb.position.y, p.z - centre.z)
+	l = l.rotated(Vector3.UP, ay)
+	return base + Vector3(l.x * sg, l.y * sv, l.z * sg)
+
 # Panneau publicitaire géant dressé sur le toit (plan XY, centré) : cadre ambre +
 # barres horizontales cyan (le « texte » de l'enseigne) → totem visible de loin.
+# SECOURS : utilisé seulement si le prop artiste supermarche_panneau_toit.glb est absent.
 static func _billboard_toit(h, bb: Rect2i, haut: float, col: Color, col2: Color, s: SurfaceTool, sc: SurfaceTool) -> int:
 	var c: Vector3 = h._centre_bbox(bb)
 	var bw: float = maxf(h.taille_cellule * 1.2, float(mini(bb.size.x, bb.size.y)) * h.taille_cellule * 0.55)
