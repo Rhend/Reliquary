@@ -63,3 +63,14 @@ Contrôle visuel (rendu réel, `SHOT_MODE=expe`) : ligne « Affixes : Parasitage
 3. **Excédent de coffre perdu** (cap atteint) : ou faut-il empêcher le tirage / proposer un choix ? Provisoire assumé.
 4. **Affixes et prédiction de file** : un affixe VIT modifie l'ordre — la file prédite le reflète déjà (VIT courante), rien à faire ; consigné pour mémoire.
 5. **Popup placeholder** (texte flottant) : suffisant jusqu'à la DA, ou une vraie modale d'annonce dès le prochain chantier UI ?
+
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 5 questions ouvertes ont été tranchées — **aucune modification de code** :
+1. **Scaling de la Bombe** : Σ bonus % du combattant CTB (affixes de run) **conservé**. Pas de couplage moteur/expédition pour un consommable provisoire ; rouvert seulement si le calibrage l'exige.
+2. **Cap d'inventaire** : 0 (illimité) conservé. Une valeur réelle sera décidée avec le puits d'Euren (achat de consommables).
+3. **Excédent de coffre perdu** : provisoire assumé, conservé.
+4. **Affixes et file prédite** : rien à faire — comportement correct constaté.
+5. **Popup placeholder** : suffisant jusqu'à la DA. Pas de modale avant.
+
+Baseline inchangée après addendum : **ScriptsLoad 117, CTB 63, CombatUi 21, Recompenses 48, ExpeNoeuds 24, ExpeCarte 39, ExpeCombat 45.**
