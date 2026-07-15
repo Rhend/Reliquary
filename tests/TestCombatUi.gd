@@ -19,6 +19,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	print("\n=== TEST UI COMBAT CTB ===\n")
 	await _test_ecran_complet()
+	await _test_bouton_objet()
 	_test_auto_resolution_intacte()
 	_print_report()
 	var has_failure: bool = _results.any(func(r): return not r["ok"])
@@ -206,6 +207,63 @@ func _textes_labels(n: Node) -> Array:
 	for enfant in n.get_children():
 		out.append_array(_textes_labels(enfant))
 	return out
+
+# ─── Bouton Objet (chantier 7) : n'existe que si inventaire non vide ──
+
+func _test_bouton_objet() -> void:
+	print("\n[TEST] Bouton Objet — présent si inventaire, disparaît quand il se vide")
+	var m := CtbMoteur.new()
+	m.rng.seed = 42
+	m.ajouter(_data("avatar", {"vit": 40.0, "atk": 5.0, "pv_max": 10000.0}),
+			Enums.CampCtb.JOUEUR)
+	var gob := m.ajouter(_data("gob", {"vit": 10.0, "atk": 5.0, "pv_max": 10000.0,
+			"def": 40.0}), Enums.CampCtb.ADVERSE)
+	m.demarrer()
+	var bombe := ConsommableData.new()
+	bombe.id = "bombe_test"
+	bombe.nom_affichage_fr = "Bombe de test"
+	bombe.effet = Enums.EffetConsommable.DEGATS_CIBLE
+	bombe.valeur = 50.0
+	var inv: Array = [bombe]
+	var ui := CombatCtbUi.new(m, false)
+	ui.facteur_delais = 0.0
+	ui.inventaire_fournisseur = func() -> Array: return inv
+	ui.sur_objet_utilise = func(o: ConsommableData) -> void: inv.erase(o)
+	add_child(ui)
+	await _attendre_tour_joueur(ui)
+	_assert(ui._btn_objet != null and ui._btn_objet.text == Translations.T("ctb.objet"),
+			"inventaire non vide : le bouton Objet EXISTE au tour du joueur")
+	# Utiliser la bombe : bouton Objet → bouton de l'objet (1 ennemi → direct).
+	var pv_avant := gob.pv
+	ui._btn_objet.pressed.emit()
+	await _frames(1)
+	var boutons_objets: Array = []
+	_boutons(ui._rangee_cibles, boutons_objets)
+	var presse := false
+	for b: Button in boutons_objets:
+		if b.text != Translations.T("ctb.annuler") and not presse:
+			b.pressed.emit()
+			presse = true
+	_assert(presse, "un bouton d'objet était proposé (rangée de choix)")
+	_assert(absf((pv_avant - gob.pv) - 50.0) < 0.001,
+			"Bombe jouée via l'UI : 50 dégâts (DEF 40 ignorée)",
+			"delta=%.1f" % (pv_avant - gob.pv))
+	_assert(inv.is_empty(), "sur_objet_utilise appelé : inventaire décrémenté")
+	# Au tour suivant, l'inventaire est vide → le bouton n'existe plus.
+	await _attendre_tour_joueur(ui)
+	_assert(ui._btn_objet == null, "inventaire vide : le bouton Objet a DISPARU")
+	var tous: Array = []
+	_boutons(ui, tous)
+	_assert(tous.all(func(b: Button) -> bool:
+			return b.text != Translations.T("ctb.objet")),
+			"aucun nœud bouton Objet résiduel dans l'arbre")
+	# Terminer le combat proprement (pas de boucle UI abandonnée en attente).
+	gob.pv = 1.0
+	ui._btn_attaquer.pressed.emit()
+	await _frames(8)
+	_assert(m.termine and m.victoire_joueur, "combat terminé proprement (victoire)")
+	ui.queue_free()
+	await _frames(2)
 
 # ─── Auto-résolution : le mode sans UI reste intact ──────────
 

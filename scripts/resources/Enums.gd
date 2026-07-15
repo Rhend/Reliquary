@@ -85,6 +85,12 @@ enum TimingStatut {
 	FIN_ACTIVATION   = 1,
 }
 
+# Effet typé d'un consommable de run (chantier 7 — action OBJET du CTB).
+enum EffetConsommable {
+	DEGATS_CIBLE    = 0,  # dégâts à un ennemi ciblé, IGNORE la DEF
+	SOIN_PCT_PV_MAX = 1,  # rend (valeur × pv_max finale) au porteur, clampé
+}
+
 # ─── Carte d'expédition (Rework Combat — chantier 2) ──────────
 
 # Types de nœuds d'un étage. MYSTERE = le nœud « ? » : son contenu réel

@@ -14,9 +14,11 @@
 #   1. sélection du combattant (horloge minimale)          → activer_suivant()
 #   2. ticks des statuts DÉBUT (Saignement)                  ↳ mort ici =
 #      activation consommée : pas d'action, pas de ticks FIN, pas de réarmement
-#   3. UNE action (Attaquer / Défendre / Compétence / Objet) → jouer(action)
-#      — ATTAQUER et DEFENDRE sont fonctionnels ; l'input joueur peut
-#      attendre indéfiniment entre activer_suivant() et jouer()
+#   3. UNE action (Attaquer / Défendre / Objet / Compétence) → jouer(action)
+#      — ATTAQUER, DEFENDRE et OBJET (chantier 7 : consommables de run,
+#      cf. _resoudre_objet — l'inventaire appartient à l'appelant) sont
+#      fonctionnels ; l'input joueur peut attendre indéfiniment entre
+#      activer_suivant() et jouer()
 #   4. ticks des statuts FIN (Poison, Brûlure)
 #   5. réarmement de l'horloge (VIT courante)
 #
@@ -168,8 +170,10 @@ func jouer(action: Dictionary) -> void:
 			_log("    🛡 %s se met en garde (dégâts d'attaque subis −%.0f %%)" % [
 					c.nom_journal(), config.defendre_reduction_degats * 100.0])
 			evenement.emit({"type": "defense", "combattant": c})
+		Enums.ActionCtb.OBJET:
+			_resoudre_objet(c, action)
 		_:
-			# Compétence / Objet : prévus par l'architecture, sans contenu
+			# Compétence : prévue par l'architecture, sans contenu
 			# (« non découvert = absent ») — l'activation est perdue.
 			_log("    %s tente une action non implémentée" % c.nom_journal())
 	if termine:
@@ -318,6 +322,49 @@ func _resoudre_attaque(att: CtbCombattant, cible) -> void:
 			"degats": degats, "crit": is_crit, "garde": cb.en_defense,
 			"mort": not cb.est_vivant()})
 	_verifier_fin()
+
+# ─── Résolution d'un objet (consommable de run — chantier 7) ─
+
+# action : { "type": OBJET, "objet": ConsommableData, "cible": CtbCombattant
+# (DEGATS_CIBLE ; null → première cible vivante) }. Consomme l'activation
+# (ticks FIN + réarmement par jouer(), comme toute action). L'INVENTAIRE
+# appartient à l'appelant (ExpeRun.consommer — le moteur reste agnostique).
+func _resoudre_objet(c: CtbCombattant, action: Dictionary) -> void:
+	var objet := action.get("objet") as ConsommableData
+	if objet == null:
+		_log("    %s fouille ses poches — aucun objet (activation perdue)" % c.nom_journal())
+		return
+	match objet.effet:
+		Enums.EffetConsommable.DEGATS_CIBLE:
+			var cb := action.get("cible") as CtbCombattant
+			if cb == null or not cb.est_vivant():
+				cb = _premiere_cible(c)
+			if cb == null:
+				_log("    %s n'a plus de cible pour %s" % [c.nom_journal(), objet.nom_journal()])
+				return
+			# valeur × (1 + Σ bonus % ATK du porteur) — les % de RUN (affixes)
+			# comptent ; IGNORE la DEF (provisoire, à calibrer).
+			var brut := objet.valeur * (1.0 + c.somme_bonus_pct("atk"))
+			var degats := int(roundf(maxf(brut, Balance.MIN_DAMAGE)))
+			cb.pv = maxf(cb.pv - float(degats), 0.0)
+			_log("    💥 %s utilise %s sur %s : %d dégâts (DEF ignorée — PV %d)" % [
+					c.nom_journal(), objet.nom_journal(), cb.nom_journal(),
+					degats, int(roundf(cb.pv))])
+			if not cb.est_vivant():
+				_log("    ☠ %s est vaincu" % cb.nom_journal())
+			evenement.emit({"type": "objet", "objet": objet, "utilisateur": c,
+					"cible": cb, "degats": degats, "mort": not cb.est_vivant()})
+			_verifier_fin()
+		Enums.EffetConsommable.SOIN_PCT_PV_MAX:
+			var pv_max := c.stat_finale("pv_max")
+			var rendu := objet.valeur * pv_max
+			var avant := c.pv
+			c.pv = minf(c.pv + rendu, pv_max)
+			_log("    ➕ %s utilise %s : +%d PV (PV %d / %d)" % [
+					c.nom_journal(), objet.nom_journal(), int(roundf(c.pv - avant)),
+					int(roundf(c.pv)), int(roundf(pv_max))])
+			evenement.emit({"type": "objet", "objet": objet, "utilisateur": c,
+					"cible": c, "soin": c.pv - avant})
 
 # ─── Fins de combat ──────────────────────────────────────────
 

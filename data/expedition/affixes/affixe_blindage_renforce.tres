@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AffixeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/AffixeData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "affixe_blindage_renforce"
+nom_affichage_fr = "Blindage renforcé"
+nom_affichage_en = "Reinforced Plating"
+est_positif = true
+bonus = {"def": 0.15}

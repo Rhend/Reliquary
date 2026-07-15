@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ConsommableData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/ConsommableData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "consommable_nano_soigneur"
+nom_affichage_fr = "Injection nano-soigneur"
+nom_affichage_en = "Nano-healer Injection"
+effet = 1
+valeur = 0.3

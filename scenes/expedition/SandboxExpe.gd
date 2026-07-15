@@ -57,6 +57,7 @@ var _spin_graine: SpinBox
 var _chk_heros: CheckBox
 var _chk_combat_auto: CheckBox
 var _lbl_etat: Label
+var _lbl_run: Label                  # affixes actifs + inventaire (chantier 7)
 var _combat_data: Dictionary = {}    # payload du dernier combat_demarre (embuscade…)
 var _combat_ui: CombatCtbUi = null
 
@@ -118,6 +119,12 @@ func _construire_ui() -> void:
 	_lbl_etat = Label.new()
 	barre.add_child(_lbl_etat)
 
+	# Affixes actifs + inventaire de run, visibles en permanence (chantier 7).
+	_lbl_run = Label.new()
+	_lbl_run.add_theme_font_size_override("font_size", 12)
+	_lbl_run.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0))
+	gauche.add_child(_lbl_run)
+
 	_carte_view = Control.new()
 	_carte_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_carte_view.draw.connect(_dessiner_carte)
@@ -159,8 +166,31 @@ func _lancer() -> void:
 			_avatar_choisi(), POOL, CONFIG_COMBAT)
 	run.combat_demarre.connect(func(_m: CtbMoteur, data: Dictionary) -> void:
 		_combat_data = data)
+	# Popup placeholder à l'obtention d'un contenu de nœud (affixe/coffre).
+	run.noeud_resolu.connect(_annoncer_contenu)
 	run.demarrer()
 	_rafraichir()
+
+# Annonce placeholder (texte flottant au centre de la carte) du contenu d'un
+# nœud résolu : Bénédiction (vert), Piège (rouge), Coffre (or). Le détail
+# complet reste au journal.
+func _annoncer_contenu(data: Dictionary) -> void:
+	if not data.has("contenu"):
+		return
+	var contenu: Dictionary = data["contenu"]
+	var centre := Vector2(_carte_view.size.x * 0.5, _carte_view.size.y * 0.45) \
+			+ _carte_view.position
+	if contenu.has("affixe_id"):
+		var positif := bool(contenu.get("positif", true))
+		UIHelpers.float_text(self,
+				"%s %s (%s)" % ["✨" if positif else "☒", str(contenu["affixe_id"]),
+						str(contenu.get("resume", ""))],
+				18, Color(0.3, 0.95, 0.45) if positif else Color(0.95, 0.3, 0.25),
+				centre, 60.0, true, 2.2)
+	elif contenu.has("consommable_ids"):
+		var ids: Array = contenu["consommable_ids"]
+		UIHelpers.float_text(self, "🧰 %s" % ", ".join(ids.map(func(i): return str(i))),
+				18, Color(0.95, 0.8, 0.3), centre, 60.0, true, 2.2)
 
 # Héros RÉEL de la partie courante (défaut) ou avatar factice (tests/calibrage).
 # Lancé seul (F6), le sandbox charge la sauvegarde pour refléter la vraie
@@ -189,6 +219,11 @@ func _traiter_combat() -> void:
 	# Écran d'issue enrichi (chantier 6) : XP et Euren du combat gagné.
 	_combat_ui.recompenses_fournisseur = func() -> Dictionary:
 		return run.dernier_combat_recompenses
+	# Consommables de run (chantier 7) : l'inventaire vit dans ExpeRun.
+	_combat_ui.inventaire_fournisseur = func() -> Array:
+		return run.inventaire
+	_combat_ui.sur_objet_utilise = func(objet: ConsommableData) -> void:
+		run.consommer(objet)
 	_combat_ui.fermee.connect(func(_recap: Dictionary) -> void:
 		_combat_ui.queue_free()
 		_combat_ui = null
@@ -199,7 +234,7 @@ func _rafraichir() -> void:
 	_carte_view.queue_redraw()
 	_btn_extraire.visible = run.choix_ouvert
 	_btn_continuer.visible = run.choix_ouvert and run.etage < CONFIG.nb_etages
-	var pv := "PV %d/%d" % [int(roundf(run.pv_avatar)), int(roundf(run.avatar_data.pv_max))]
+	var pv := "PV %d/%d" % [int(roundf(run.pv_avatar)), int(roundf(run.pv_max_effectif()))]
 	# En-tête héros (chantier 6, placeholder) : niveau, XP x/y, Euren de la run.
 	var heros := Translations.T("ctb.entete_heros") % [ProgressionHeros.niveau(),
 			int(roundf(ProgressionHeros.xp_totale())),
@@ -211,6 +246,22 @@ func _rafraichir() -> void:
 				"☠ DÉFAITE" if run.defaite else "✔ Expédition terminée", pv, heros, credit]
 	else:
 		_lbl_etat.text = "  Étage %d/%d — %s · %s" % [run.etage, CONFIG.nb_etages, pv, heros]
+	# Ligne de run (chantier 7) : affixes actifs (résumés) + inventaire.
+	var morceaux: PackedStringArray = []
+	if not run.affixes.is_empty():
+		var noms_affixes: PackedStringArray = []
+		for a: AffixeData in run.affixes:
+			noms_affixes.append("%s (%s)" % [a.nom_journal(), a.resume()])
+		morceaux.append("Affixes : " + ", ".join(noms_affixes))
+	if not run.inventaire.is_empty():
+		var comptes: Dictionary = {}
+		for c: ConsommableData in run.inventaire:
+			comptes[c.nom_journal()] = int(comptes.get(c.nom_journal(), 0)) + 1
+		var noms_conso: PackedStringArray = []
+		for nom: String in comptes:
+			noms_conso.append(nom if comptes[nom] == 1 else "%s ×%d" % [nom, comptes[nom]])
+		morceaux.append("Objets : " + ", ".join(noms_conso))
+	_lbl_run.text = "  " + "  ·  ".join(morceaux) if not morceaux.is_empty() else ""
 	_journal_label.text = "\n".join(run.journal)
 	await get_tree().process_frame   # attendre la mesure du label avant de scroller en bas
 	_journal_scroll.scroll_vertical = int(_journal_scroll.get_v_scroll_bar().max_value)

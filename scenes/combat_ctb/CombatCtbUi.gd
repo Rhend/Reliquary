@@ -44,13 +44,24 @@ var facteur_delais := 1.0
 # sandbox la branche sur ExpeRun.dernier_combat_recompenses). L'écran reste
 # générique : il ne connaît ni l'expédition ni l'économie.
 var recompenses_fournisseur := Callable()
+# Consommables de run (chantier 7) — même pattern : l'inventaire vit chez
+# l'appelant (ExpeRun). `inventaire_fournisseur` retourne
+# Array[ConsommableData] ; `sur_objet_utilise` est notifiée au moment où
+# l'action OBJET est validée (décrément — ExpeRun.consommer). Le bouton
+# Objet n'EXISTE que si l'inventaire est non vide (pilier « contenu absent,
+# pas grisé ») : recréé/retiré à chaque tour joueur.
+var inventaire_fournisseur := Callable()
+var sur_objet_utilise := Callable()
 
 var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
 var _file_box: HBoxContainer
 var _bandeau_tour: Label
 var _btn_attaquer: Button
 var _btn_defendre: Button
+var _btn_objet: Button = null          # créé SEULEMENT si inventaire non vide
+var _rangee_boutons: HBoxContainer
 var _rangee_cibles: HBoxContainer
+var _objet_en_attente: ConsommableData = null   # objet ciblé en attente de cible
 var _fx: Control               # couche des textes flottants (plein écran)
 var _voile: ColorRect          # fondu de transition + écran d'issue
 var _voile_contenu: VBoxContainer
@@ -143,19 +154,21 @@ func _construire() -> void:
 	_bandeau_tour = UIHelpers.label("", 14, UIColors.TEXT_HEADER)
 	_bandeau_tour.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	bas_v.add_child(_bandeau_tour)
-	var rangee := HBoxContainer.new()
-	rangee.alignment = BoxContainer.ALIGNMENT_CENTER
-	rangee.add_theme_constant_override("separation", 12)
-	bas_v.add_child(rangee)
+	_rangee_boutons = HBoxContainer.new()
+	_rangee_boutons.alignment = BoxContainer.ALIGNMENT_CENTER
+	_rangee_boutons.add_theme_constant_override("separation", 12)
+	bas_v.add_child(_rangee_boutons)
 	_btn_attaquer = Button.new()
 	_btn_attaquer.text = Translations.T("ctb.attaquer")
 	_btn_attaquer.pressed.connect(_sur_attaquer)
-	rangee.add_child(_btn_attaquer)
+	_rangee_boutons.add_child(_btn_attaquer)
 	_btn_defendre = Button.new()
 	_btn_defendre.text = Translations.T("ctb.defendre")
 	_btn_defendre.pressed.connect(func() -> void:
 		_valider_action({"type": Enums.ActionCtb.DEFENDRE}))
-	rangee.add_child(_btn_defendre)
+	_rangee_boutons.add_child(_btn_defendre)
+	# PAS de bouton Objet ici : il n'existe que si l'inventaire de run est
+	# non vide, recréé à chaque tour joueur (_montrer_actions).
 	_rangee_cibles = HBoxContainer.new()
 	_rangee_cibles.alignment = BoxContainer.ALIGNMENT_CENTER
 	_rangee_cibles.add_theme_constant_override("separation", 8)
@@ -246,6 +259,20 @@ func _boucle() -> void:
 func _montrer_actions(on: bool) -> void:
 	_btn_attaquer.visible = on
 	_btn_defendre.visible = on
+	_objet_en_attente = null
+	# Bouton Objet : n'existe que si l'inventaire de run est non vide
+	# (« contenu absent, pas grisé ») — retiré immédiatement sinon.
+	if _btn_objet != null:
+		_rangee_boutons.remove_child(_btn_objet)
+		_btn_objet.queue_free()
+		_btn_objet = null
+	if on and inventaire_fournisseur.is_valid():
+		var inv: Array = inventaire_fournisseur.call()
+		if not inv.is_empty():
+			_btn_objet = Button.new()
+			_btn_objet.text = Translations.T("ctb.objet")
+			_btn_objet.pressed.connect(_sur_objet)
+			_rangee_boutons.add_child(_btn_objet)
 	UIHelpers.clear_children_now(_rangee_cibles)
 	if not on:
 		_bandeau_tour.text = ""
@@ -254,12 +281,17 @@ func _montrer_actions(on: bool) -> void:
 func _sur_attaquer() -> void:
 	if not _btn_attaquer.visible:
 		return   # pas d'activation joueur ouverte (press programmatique hors tour)
+	_objet_en_attente = null
 	var vivants: Array[CtbCombattant] = _ennemis_vivants()
 	if vivants.size() <= 1:
 		_valider_action({"type": Enums.ActionCtb.ATTAQUER,
 				"cible": vivants[0] if vivants.size() == 1 else null})
 		return
-	# Plusieurs cibles : boutons nominatifs + cartes ennemies cliquables.
+	_montrer_choix_cibles(vivants)
+
+# Rangée de choix de cible (attaque OU objet ciblé — _objet_en_attente) :
+# boutons nominatifs + cartes ennemies cliquables + Annuler.
+func _montrer_choix_cibles(vivants: Array[CtbCombattant]) -> void:
 	UIHelpers.clear_children_now(_rangee_cibles)
 	_rangee_cibles.add_child(UIHelpers.label(
 			Translations.T("ctb.choisir_cible"), 12, UIColors.TEXT_MUTED))
@@ -271,19 +303,77 @@ func _sur_attaquer() -> void:
 	var annuler := Button.new()
 	annuler.text = Translations.T("ctb.annuler")
 	annuler.pressed.connect(func() -> void:
+		_objet_en_attente = null
 		UIHelpers.clear_children_now(_rangee_cibles)
 		_mettre_cibles_en_avant(false))
 	_rangee_cibles.add_child(annuler)
 	_mettre_cibles_en_avant(true)
 	AudioManager.play_sfx("ui_select", -10.0)
 
+# Choix d'un objet (chantier 7) : liste de l'inventaire (doublons regroupés
+# « ×n »), puis cible si l'effet en demande une.
+func _sur_objet() -> void:
+	if _btn_objet == null or not _btn_objet.visible:
+		return
+	_objet_en_attente = null
+	UIHelpers.clear_children_now(_rangee_cibles)
+	_rangee_cibles.add_child(UIHelpers.label(
+			Translations.T("ctb.choisir_objet"), 12, UIColors.TEXT_MUTED))
+	var inv: Array = inventaire_fournisseur.call()
+	var groupes: Dictionary = {}   # id → {"objet": ConsommableData, "n": int}
+	for o: ConsommableData in inv:
+		if not groupes.has(o.id):
+			groupes[o.id] = {"objet": o, "n": 0}
+		groupes[o.id]["n"] += 1
+	for id: String in groupes:
+		var grp: Dictionary = groupes[id]
+		var objet := grp["objet"] as ConsommableData
+		var b := Button.new()
+		var nom := Translations.entity_name({
+			"nom_affichage_fr": objet.nom_affichage_fr,
+			"nom_affichage_en": objet.nom_affichage_en,
+		}, objet.id)
+		b.text = nom if int(grp["n"]) == 1 else "%s ×%d" % [nom, int(grp["n"])]
+		b.pressed.connect(_sur_objet_choisi.bind(objet))
+		_rangee_cibles.add_child(b)
+	var annuler := Button.new()
+	annuler.text = Translations.T("ctb.annuler")
+	annuler.pressed.connect(func() -> void:
+		UIHelpers.clear_children_now(_rangee_cibles))
+	_rangee_cibles.add_child(annuler)
+	AudioManager.play_sfx("ui_select", -10.0)
+
+func _sur_objet_choisi(objet: ConsommableData) -> void:
+	if not _btn_attaquer.visible:
+		return
+	if not objet.cible_requise():
+		_valider_action({"type": Enums.ActionCtb.OBJET, "objet": objet})
+		return
+	var vivants: Array[CtbCombattant] = _ennemis_vivants()
+	if vivants.size() <= 1:
+		_valider_action({"type": Enums.ActionCtb.OBJET, "objet": objet,
+				"cible": vivants[0] if vivants.size() == 1 else null})
+		return
+	_objet_en_attente = objet
+	_montrer_choix_cibles(vivants)
+
 func _sur_cible_cliquee(cible: CtbCombattant) -> void:
 	if not _btn_attaquer.visible or not cible.est_vivant():
+		return
+	if _objet_en_attente != null:
+		_valider_action({"type": Enums.ActionCtb.OBJET, "objet": _objet_en_attente,
+				"cible": cible})
 		return
 	_valider_action({"type": Enums.ActionCtb.ATTAQUER, "cible": cible})
 
 func _valider_action(action: Dictionary) -> void:
 	AudioManager.play_sfx("ui_select", -8.0)
+	# Objet : l'inventaire (chez l'appelant) est décrémenté AU MOMENT où
+	# l'action est validée — le moteur reste agnostique.
+	if int(action.get("type", -1)) == Enums.ActionCtb.OBJET \
+			and sur_objet_utilise.is_valid():
+		sur_objet_utilise.call(action["objet"])
+	_objet_en_attente = null
 	_action_en_attente = action
 	_action_choisie.emit()
 
@@ -358,6 +448,16 @@ func _sur_evenement(e: Dictionary) -> void:
 		"defense":
 			_flotter(e["combattant"] as CtbCombattant,
 					Translations.T("ctb.garde_pill"), 15, UIColors.SHIELD, false)
+		"objet":
+			# Consommable (chantier 7) : dégâts (Bombe) ou soin (Nano).
+			if e.has("degats"):
+				AudioManager.play_sfx("attack", -4.0)
+				_flotter(e["cible"] as CtbCombattant, str(int(e["degats"])), 20,
+						UIColors.DMG_HEAVY_HERO, true)
+			elif e.has("soin"):
+				_flotter(e["cible"] as CtbCombattant,
+						"+%d" % int(roundf(float(e["soin"]))), 18,
+						UIColors.HEAL_COLOR, true)
 
 func _flotter(cb: CtbCombattant, texte: String, taille: int, couleur: Color,
 		punch: bool) -> void:

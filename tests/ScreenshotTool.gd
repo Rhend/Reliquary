@@ -317,6 +317,15 @@ func _shoot_expe() -> void:
 		run.deplacer_vers(best)
 		if run.combat_en_cours != null:
 			run.combat_en_cours.derouler_auto()
+	# Mise en scène chantier 7 : affixes + inventaire visibles + popup.
+	run.ajouter_affixe(load("res://data/expedition/affixes/affixe_surtension.tres"))
+	run.ajouter_affixe(load("res://data/expedition/affixes/affixe_corrosion.tres"))
+	var bombe: ConsommableData = \
+			load("res://data/expedition/consommables/consommable_bombe.tres")
+	run.inventaire.append(bombe)
+	run.inventaire.append(bombe)
+	sandbox._annoncer_contenu({"contenu": {"affixe_id": "affixe_surtension",
+			"positif": true, "resume": "+15 % ATK"}})
 	sandbox._rafraichir()
 	await get_tree().create_timer(0.5).timeout
 	await _capture("res://tests/_shot_expe_explore.png")

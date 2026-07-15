@@ -46,6 +46,9 @@ jobs:
       - name: TestRecompenses (économie de récompense — XP + Euren)
         run: $GODOT --headless --path . res://tests/TestRecompenses.tscn
 
+      - name: TestExpeNoeuds (nœuds réels — affixes + consommables)
+        run: $GODOT --headless --path . res://tests/TestExpeNoeuds.tscn
+
       - name: TestExpeCarte (carte d'expédition — génération, brouillard, étages)
         run: $GODOT --headless --path . res://tests/TestExpeCarte.tscn
 

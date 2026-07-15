@@ -37,6 +37,9 @@ func _ready() -> void:
 	_test_prevoir_ordre_seedee()
 	_test_prevoir_ordre_activation_ouverte()
 	_test_prevoir_ordre_vit_courante_et_embuscade()
+	_test_objet_bombe()
+	_test_objet_soin()
+	_test_objet_absent()
 	_print_report()
 	var has_failure: bool = _results.any(func(r): return not r["ok"])
 	get_tree().quit(1 if has_failure else 0)
@@ -504,6 +507,67 @@ func _test_prevoir_ordre_vit_courante_et_embuscade() -> void:
 			Enums.CampCtb.ADVERSE)
 	m2.demarrer()   # avatar : 33.3 × 1.5 = 50 ; ennemi : 40 → l'ennemi d'abord
 	_comparer_prediction(m2, 6, "embuscade : première horloge joueur ×1.5 dans la prédiction")
+
+# ─── Tests : action OBJET (consommables de run — chantier 7) ─
+
+func _conso(id: String, effet: Enums.EffetConsommable, valeur: float) -> ConsommableData:
+	var c := ConsommableData.new()
+	c.id = id
+	c.nom_affichage_fr = id
+	c.effet = effet
+	c.valeur = valeur
+	return c
+
+# Bombe : valeur × (1 + Σ bonus % ATK du porteur), IGNORE la DEF, consomme
+# l'activation (horloge réarmée) ; événement structuré émis.
+func _test_objet_bombe() -> void:
+	print("\n[TEST] Objet — Bombe (dégâts exacts, DEF ignorée, activation consommée)")
+	var m := _moteur({"vit": 20.0, "pv_max": 1000.0, "atk": 1.0},
+			[{"vit": 20.0, "def": 40.0, "pv_max": 1000.0, "atk": 1.0}])
+	var av := m.avatar()
+	av.ajouter_bonus_pct("atk", 0.5)   # affixe de run simulé (fraction binaire exacte)
+	var bombe := _conso("bombe_test", Enums.EffetConsommable.DEGATS_CIBLE, 50.0)
+	var events: Array = []
+	m.evenement.connect(func(e: Dictionary) -> void:
+		if e["type"] == "objet":
+			events.append(e))
+	var c := m.activer_suivant()
+	var horloge_avant := c.horloge
+	m.jouer({"type": Enums.ActionCtb.OBJET, "objet": bombe, "cible": m.combattants[1]})
+	_assert(absf(m.combattants[1].pv - 925.0) < 0.001,
+			"50 × (1 + 0.5) = 75 dégâts (Σ bonus %% ATK compte), DEF 40 IGNORÉE (PV 1000 → 925)",
+			"pv=%.1f" % m.combattants[1].pv)
+	_assert(c.horloge > horloge_avant, "l'activation est consommée (horloge réarmée)")
+	_assert(events.size() == 1 and int(events[0]["degats"]) == 75,
+			"evenement `objet` : degats=75 (pour les flottants de l'UI)")
+
+# Nano-soigneur : rend valeur × pv_max finale, clampé au max.
+func _test_objet_soin() -> void:
+	print("\n[TEST] Objet — Nano-soigneur (30 % pv_max, clamp)")
+	var m := _moteur({"vit": 40.0, "pv_max": 100.0, "atk": 1.0},
+			[{"vit": 10.0, "pv_max": 1000.0, "atk": 1.0}])
+	var av := m.avatar()
+	var nano := _conso("nano_test", Enums.EffetConsommable.SOIN_PCT_PV_MAX, 0.30)
+	av.pv = 40.0
+	var c := m.activer_suivant()
+	m.jouer({"type": Enums.ActionCtb.OBJET, "objet": nano})
+	_assert(absf(av.pv - 70.0) < 0.001, "30 %% de 100 pv_max : 40 → 70", "pv=%.1f" % av.pv)
+	av.pv = 90.0
+	c = m.activer_suivant()   # avatar again (vit 40 vs 10)
+	m.jouer({"type": Enums.ActionCtb.OBJET, "objet": nano})
+	_assert(absf(av.pv - 100.0) < 0.001, "clamp au pv_max : 90 → 100 (pas 120)",
+			"pv=%.1f" % av.pv)
+	_assert(c == av, "sanity : c'était bien l'activation de l'avatar")
+
+# OBJET sans objet fourni : activation perdue proprement (aucun dégât).
+func _test_objet_absent() -> void:
+	print("\n[TEST] Objet — action sans objet (activation perdue)")
+	var m := _moteur({"vit": 40.0, "pv_max": 100.0}, [{"vit": 10.0, "pv_max": 50.0}])
+	var c := m.activer_suivant()
+	var horloge_avant := c.horloge
+	m.jouer({"type": Enums.ActionCtb.OBJET})
+	_assert(absf(m.combattants[1].pv - 50.0) < 0.001, "aucun dégât infligé")
+	_assert(c.horloge > horloge_avant, "l'activation est consommée")
 
 # ─── Rapport ────────────────────────────────────────────────
 

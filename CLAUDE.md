@@ -40,7 +40,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | UI de combat CTB JOUABLE (Rework ch.5 : écran scindé placeholder, file d'initiative N=6, Attaquer/Défendre + choix de cible, dégâts flottants, transitions et issue de bataille — pull-based sur un moteur démarré, `facteur_delais = 0` pour les tests ; ch.6 : issue enrichie XP/Euren via `recompenses_fournisseur`) | `scenes/combat_ctb/CombatCtbUi.gd` + `CarteCombattantCtb.gd` |
 | Économie de récompense (Rework ch.6) : NIVEAU du héros (XP totale cumulée dans `GameData.player.heros_xp`, niveau DÉRIVÉ, bonus plats injectés par le pont héros AVANT les %) + Euren (`player.euren`, crédité à la SORTIE d'expédition seulement — défaite = rien). class_name statique, pas autoload ; courbe/gains/multiplicateurs dans `data/progression/*.tres` (provisoires, à calibrer) | `scripts/autoloads/ProgressionHeros.gd` |
 | Pont bestiaire existant → combattant CTB (stats telles quelles via `GameData.get_effective_stats`) + pont HÉROS réel (ch.4 : source unique d'agrégation plats + % additifs, reconstruite de l'ancien combat_player — mappings et « laissé derrière » documentés en tête de fichier) | `systems/combat_ctb/ctb_pont.gd` |
-| Carte d'expédition free-roam (Rework ch.2 : génération Delaunay connexe seedable, brouillard « absent », 3 étages, Extraire/Continuer, signaux `expe_*` ; ch.3 : nœuds Combat/Attaque surprise = VRAIS combats CTB — run suspendue, PV persistants, défaite = fin immédiate ; Coffre/Bénédiction/Piège = stubs) | `systems/expedition/expe_run.gd` + `expe_carte.gd` (config + pools : `data/expedition/`) |
+| Carte d'expédition free-roam (Rework ch.2 : génération Delaunay connexe seedable, brouillard « absent », 3 étages, Extraire/Continuer, signaux `expe_*` ; ch.3 : nœuds Combat/Attaque surprise = VRAIS combats CTB — run suspendue, PV persistants, défaite = fin immédiate ; ch.7 : TOUS les nœuds réels — Bénédiction = affixe positif de run, Piège = affixe négatif, Coffre = consommables de run (action OBJET en combat, inventaire dans ExpeRun via `consommer()`), purge systématique en fin de run, pools dans `config_noeuds.tres`) | `systems/expedition/expe_run.gd` + `expe_carte.gd` (config + pools : `data/expedition/`) |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
@@ -60,8 +60,9 @@ combat à la construction). En revanche la boucle idle du village
 (`AdventureSystem`) reste NON branchée : ses rencontres créature sont
 constatées mais NON résolues (`_combat_non_resolu`) — ni dégâts, ni XP de
 combat, ni drops. En expédition, l'XP de niveau et l'Euren sont RÉELS depuis
-le chantier 6 (XP créditée à chaque victoire, Euren à la sortie — drops
-d'équipement/matériaux et consommables non designés, à venir). Le camp joueur en
+le chantier 6 (XP créditée à chaque victoire, Euren à la sortie), et TOUS
+les nœuds sont réels depuis le chantier 7 (affixes de run, consommables —
+drops d'équipement/matériaux non designés, à venir). Le camp joueur en
 expédition = VRAI héros (ch.4 : `CtbPont.combattant_depuis_heros()`, stats
 effectives équipement compris, transitoire construit au lancement) ; le
 sandbox a une checkbox Héros réel / avatar factice (`avatar.tres`, conservé
@@ -125,9 +126,10 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
 ```bash
 # Les 3 suites (chacune quitte avec un code ≠ 0 en cas d'échec) :
 godot --headless --path . res://tests/TestScriptsLoad.tscn      # compile tous les scripts
-godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (55)
-godot --headless --path . res://tests/TestCombatUi.tscn         # écran de combat CTB jouable (14)
+godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (63)
+godot --headless --path . res://tests/TestCombatUi.tscn         # écran de combat CTB jouable (21)
 godot --headless --path . res://tests/TestRecompenses.tscn      # économie de récompense XP + Euren (48)
+godot --headless --path . res://tests/TestExpeNoeuds.tscn       # nœuds réels : affixes + consommables (24)
 godot --headless --path . res://tests/TestExpeCarte.tscn        # carte d'expédition (39)
 godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔ nœuds d'expédition + ponts (45)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)

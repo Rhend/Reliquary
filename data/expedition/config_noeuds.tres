@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ExpeNoeudsConfigData" load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/ExpeNoeudsConfigData.gd" id="1"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_surtension.tres" id="2"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_blindage_renforce.tres" id="3"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_overclock.tres" id="4"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_chassis_consolide.tres" id="5"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_corrosion.tres" id="6"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_parasitage.tres" id="7"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_servos_grippes.tres" id="8"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_fuite_energie.tres" id="9"]
+[ext_resource type="Resource" path="res://data/expedition/consommables/consommable_bombe.tres" id="10"]
+[ext_resource type="Resource" path="res://data/expedition/consommables/consommable_nano_soigneur.tres" id="11"]
+
+[resource]
+script = ExtResource("1")
+affixes_positifs = [ExtResource("2"), ExtResource("3"), ExtResource("4"), ExtResource("5")]
+affixes_negatifs = [ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9")]
+pool_consommables = [ExtResource("10"), ExtResource("11")]
+poids_nb_consommables = {1: 0.6, 2: 0.4}
+cap_inventaire = 0

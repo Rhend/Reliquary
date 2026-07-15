@@ -308,6 +308,8 @@ const STRINGS: Dictionary = {
 		"ctb.combat_titre":   "⚔  COMBAT",
 		"ctb.recompenses":    "+%d XP   ·   +%d Euren",
 		"ctb.entete_heros":   "Nv %d · XP %d/%d · Euren (run) %d",
+		"ctb.objet":          "🧪  Objet",
+		"ctb.choisir_objet":  "Choisir l'objet :",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPÉDITION TERMINÉE  —  %s",
@@ -704,6 +706,8 @@ const STRINGS: Dictionary = {
 		"ctb.combat_titre":   "⚔  BATTLE",
 		"ctb.recompenses":    "+%d XP   ·   +%d Euren",
 		"ctb.entete_heros":   "Lv %d · XP %d/%d · Euren (run) %d",
+		"ctb.objet":          "🧪  Item",
+		"ctb.choisir_objet":  "Choose an item:",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPEDITION ENDED  —  %s",

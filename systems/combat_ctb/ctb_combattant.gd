@@ -51,6 +51,14 @@ func ajouter_bonus_pct(nom: String, fraction: float) -> void:
 		bonus_pct[nom] = []
 	bonus_pct[nom].append(fraction)
 
+# Σ des bonus % actifs sur une stat (fraction signée — affixes de run…).
+# Sert au scaling des consommables (chantier 7 : Bombe × (1 + Σ atk %)).
+func somme_bonus_pct(nom: String) -> float:
+	var total := 0.0
+	for f in bonus_pct.get(nom, []):
+		total += float(f)
+	return total
+
 func est_vivant() -> bool:
 	return pv > 0.0
 
