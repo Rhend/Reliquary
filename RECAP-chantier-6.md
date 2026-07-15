@@ -68,3 +68,14 @@ Contrôle visuel (rendu réel, `SHOT_MODE=expe`) : en-tête « Étage 1/3 — PV
 3. **Persistance depuis le sandbox** : déconnectée par sécurité (outil). Le playtest actuel ne fait donc pas progresser la vraie partie — assumé jusqu'au branchement au flux principal ?
 4. **Multiplicateurs Euren** ×1…×6 linéaires et base 10 : purement provisoires ; le multiplicateur de palier de PROFONDEUR (expédition) doit-il un jour s'appliquer aux récompenses ?
 5. **Affichage des fractions** (DEF/VIT +0.5/niveau) : l'agrégation reste en float (voulu) ; la dette d'affichage HeroPanel (chantier 4, question 5) englobera l'arrondi de présentation.
+
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 5 questions ouvertes ont été tranchées — **aucune modification de code** :
+1. **Courbe d'XP** : seuil d'XP totale cumulée **confirmé**. Réglage au calibrage dans le même `.tres`.
+2. **Recalcul entre nœuds** : **statu quo** — le niveau compte au prochain lancement d'expédition. La question PV persistants vs `pv_max` croissant est consignée comme **point ouvert design** (tranchée plus tard, ne rien implémenter).
+3. **Persistance sandbox** : déconnexion **assumée** jusqu'au chantier de branchement au flux de jeu principal. La règle « un outil n'écrit jamais la sauvegarde » est la bonne.
+4. **Multiplicateurs Euren** : provisoires, calibrage plus tard. Le palier de profondeur ne s'applique **PAS** aux récompenses — il reste sans effet mécanique (acté 06/07/2026), statu quo.
+5. **Fractions** : agrégation en float conservée ; l'arrondi de présentation rejoint la dette HeroPanel (chantier UI).
+
+Baseline inchangée après addendum : **ScriptsLoad 113, CTB 55, CombatUi 14, Recompenses 48, ExpeCarte 39, ExpeCombat 45.**
