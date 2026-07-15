@@ -39,6 +39,7 @@ func _ready() -> void:
 		"holo_prop": await _shoot_holo_prop()
 		"holo_pins": await _shoot_holo_pins()
 		"expe":      await _shoot_expe()
+		"combat":    await _shoot_combat()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
@@ -322,6 +323,53 @@ func _shoot_expe() -> void:
 	sandbox._rafraichir()
 	await get_tree().create_timer(0.5).timeout
 	await _capture("res://tests/_shot_expe_explore.png")
+
+# ── Écran de combat CTB jouable (chantier 5) ──
+# 1er combat (embuscade, 3 ennemis) : annonce à l'ouverture, tour joueur
+# (boutons + file d'initiative + pill de poison posée en scène), rangée de
+# choix de cible. 2e combat (1 ennemi faible) : écran d'issue VICTOIRE.
+func _shoot_combat() -> void:
+	var poison: StatutCtbData = load("res://data/combat_ctb/statut_poison.tres")
+	var m := CtbMoteur.new()
+	m.rng.seed = 1337
+	m.malus_horloge_initiale_joueur = 1.5
+	var av := m.ajouter(load("res://data/combat_ctb/avatar.tres"), Enums.CampCtb.JOUEUR)
+	m.ajouter(load("res://data/combat_ctb/ennemi_rapide.tres"), Enums.CampCtb.ADVERSE)
+	m.ajouter(load("res://data/combat_ctb/ennemi_moyen.tres"), Enums.CampCtb.ADVERSE)
+	m.ajouter(load("res://data/combat_ctb/ennemi_lent.tres"), Enums.CampCtb.ADVERSE)
+	m.demarrer()
+	var ui := CombatCtbUi.new(m, true)
+	_vp.add_child(ui)
+	await get_tree().create_timer(0.5).timeout
+	await _capture("res://tests/_shot_ctb_embuscade.png")
+	# Attendre le premier tour JOUEUR (l'embuscade fait agir les ennemis
+	# d'abord), puis mettre en scène une pill de statut.
+	while not ui._btn_attaquer.visible:
+		await get_tree().process_frame
+	m.appliquer_statut(m.combattants[1], poison, av)
+	m.appliquer_statut(m.combattants[1], poison, av)
+	ui._rafraichir_tout()
+	await get_tree().create_timer(1.4).timeout   # laisser les flottants passer
+	await _capture("res://tests/_shot_ctb_tour_joueur.png")
+	ui._btn_attaquer.pressed.emit()   # 3 ennemis vivants → rangée de cibles
+	await get_tree().create_timer(0.2).timeout
+	await _capture("res://tests/_shot_ctb_cibles.png")
+	ui.queue_free()
+	# Issue de bataille : combat court gagné en un coup.
+	var m2 := CtbMoteur.new()
+	m2.rng.seed = 7
+	var d_faible := (load("res://data/combat_ctb/ennemi_lent.tres") as CombattantCtbData) \
+			.duplicate() as CombattantCtbData
+	d_faible.pv_max = 5.0
+	m2.ajouter(load("res://data/combat_ctb/avatar.tres"), Enums.CampCtb.JOUEUR)
+	m2.ajouter(d_faible, Enums.CampCtb.ADVERSE)
+	m2.demarrer()
+	var ui2 := CombatCtbUi.new(m2, false)
+	_vp.add_child(ui2)
+	await get_tree().create_timer(1.8).timeout   # intro passée → tour joueur
+	ui2._btn_attaquer.pressed.emit()             # 1 seul ennemi → coup direct
+	await get_tree().create_timer(1.4).timeout   # fondu d'issue terminé
+	await _capture("res://tests/_shot_ctb_issue.png")
 
 # ── Gros plan du PROP artiste (panneau sur le toit du supermarché) ──
 # Cadre le premier supermarché du gabarit : vue 3/4 + vue frontale rapprochée,

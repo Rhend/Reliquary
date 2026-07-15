@@ -66,11 +66,14 @@ enum CampCtb {
 	ADVERSE = 1,
 }
 
-# Types d'action d'une activation. Seul ATTAQUER est fonctionnel (chantier 1) ;
+# Types d'action d'une activation. ATTAQUER (chantier 1) et DEFENDRE
+# (chantier 5 : dégâts d'attaque subis réduits jusqu'à la prochaine activation
+# du défenseur, valeur dans data/combat_ctb/config_ctb.tres) sont fonctionnels ;
 # COMPETENCE et OBJET sont prévus par l'architecture mais sans contenu —
 # aucun bouton ne doit apparaître tant que le contenu n'existe pas.
 enum ActionCtb {
 	ATTAQUER,
+	DEFENDRE,
 	COMPETENCE,
 	OBJET,
 }

@@ -31,6 +31,15 @@ static func clear_children(node: Node) -> void:
 	for child in node.get_children():
 		child.queue_free()
 
+# Variante IMMÉDIATE : détache tout de suite (la libération reste différée).
+# Requise quand le conteneur est reconstruit plusieurs fois dans la même
+# frame (ex. file d'initiative CTB) — queue_free seul laisse les anciens
+# enfants comptés/affichés jusqu'à la fin de frame (doublons transitoires).
+static func clear_children_now(node: Node) -> void:
+	for child in node.get_children():
+		node.remove_child(child)
+		child.queue_free()
+
 # ═══════════════════════════════════════════════════════════
 #  Texte
 # ═══════════════════════════════════════════════════════════

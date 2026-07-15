@@ -291,6 +291,22 @@ const STRINGS: Dictionary = {
 		"combat.unique_fight":    "⚔  Affronter %s",
 		"combat.unique_refight":  "⚔  Réaffronter %s",
 
+		# ── UI de combat CTB (Rework Combat — chantier 5) ─────
+		"ctb.attaquer":       "⚔  Attaquer",
+		"ctb.defendre":       "🛡  Défendre",
+		"ctb.choisir_cible":  "Choisir la cible :",
+		"ctb.annuler":        "Annuler",
+		"ctb.a_toi":          "Au tour de %s",
+		"ctb.file_titre":     "Ordre d'action",
+		"ctb.embuscade":      "⚡ EMBUSCADE !",
+		"ctb.embuscade_sub":  "L'ennemi frappe le premier — initiative retardée",
+		"ctb.victoire":       "VICTOIRE",
+		"ctb.defaite":        "DÉFAITE",
+		"ctb.continuer":      "Cliquer pour continuer",
+		"ctb.garde_pill":     "🛡 Garde",
+		"ctb.crit_float":     "%d CRIT !",
+		"ctb.combat_titre":   "⚔  COMBAT",
+
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPÉDITION TERMINÉE  —  %s",
 		"cycle.banner_title":     "Retour au village",
@@ -668,6 +684,22 @@ const STRINGS: Dictionary = {
 		"combat.unique_watches":  "☠  %s is watching you...",
 		"combat.unique_fight":    "⚔  Fight %s",
 		"combat.unique_refight":  "⚔  Fight %s again",
+
+		# ── UI de combat CTB (Rework Combat — chantier 5) ─────
+		"ctb.attaquer":       "⚔  Attack",
+		"ctb.defendre":       "🛡  Defend",
+		"ctb.choisir_cible":  "Choose a target:",
+		"ctb.annuler":        "Cancel",
+		"ctb.a_toi":          "%s's turn",
+		"ctb.file_titre":     "Action order",
+		"ctb.embuscade":      "⚡ AMBUSH!",
+		"ctb.embuscade_sub":  "The enemy strikes first — initiative delayed",
+		"ctb.victoire":       "VICTORY",
+		"ctb.defaite":        "DEFEAT",
+		"ctb.continuer":      "Click to continue",
+		"ctb.garde_pill":     "🛡 Guard",
+		"ctb.crit_float":     "%d CRIT!",
+		"ctb.combat_titre":   "⚔  BATTLE",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPEDITION ENDED  —  %s",

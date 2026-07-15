@@ -9,10 +9,15 @@
 # Fin d'étage, journal des événements à droite.
 #
 # Chantier 3 : les nœuds Combat / Attaque surprise jouent de VRAIS combats
-# CTB (avatar factice vs pool du bestiaire), AUTO-RÉSOLUS à l'entrée du nœud
-# (journal complet du moteur replié dans le journal de la run) ; PV de
-# l'Avatar persistants entre les nœuds, affichés en permanence ; défaite =
-# fin d'expédition immédiate.
+# CTB (avatar factice vs pool du bestiaire) ; PV de l'Avatar persistants
+# entre les nœuds, affichés en permanence ; défaite = fin d'expédition
+# immédiate.
+#
+# Chantier 5 : par défaut les combats sont JOUÉS À LA MAIN dans l'écran de
+# combat (CombatCtbUi — Attaquer / Défendre, cible au choix, embuscade
+# annoncée). La case « Combat auto » restaure l'auto-résolution du chantier 3
+# (journal du moteur replié dans celui de la run) ; le ScreenshotTool et les
+# suites de test pilotent ExpeRun directement et restent en auto.
 #
 # Outil de DEV : pas une UI de jeu (l'UI finale viendra avec sa DA).
 # ============================================================
@@ -45,7 +50,10 @@ var _btn_continuer: Button
 var _opt_palier: OptionButton
 var _spin_graine: SpinBox
 var _chk_heros: CheckBox
+var _chk_combat_auto: CheckBox
 var _lbl_etat: Label
+var _combat_data: Dictionary = {}    # payload du dernier combat_demarre (embuscade…)
+var _combat_ui: CombatCtbUi = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -86,6 +94,12 @@ func _construire_ui() -> void:
 			+ "via CtbPont.combattant_depuis_heros). Décoché : avatar factice (avatar.tres)."
 	_chk_heros.toggled.connect(func(_on: bool) -> void: _lancer())
 	barre.add_child(_chk_heros)
+	_chk_combat_auto = CheckBox.new()
+	_chk_combat_auto.text = "Combat auto"
+	_chk_combat_auto.button_pressed = false
+	_chk_combat_auto.tooltip_text = "Décoché : les combats se jouent à la main (écran de combat).\n" \
+			+ "Coché : auto-résolution (comportement chantier 3 — captures, calibrage)."
+	barre.add_child(_chk_combat_auto)
 	_lbl_etat = Label.new()
 	barre.add_child(_lbl_etat)
 
@@ -122,9 +136,14 @@ func _construire_ui() -> void:
 	_journal_scroll.add_child(_journal_label)
 
 func _lancer() -> void:
+	if _combat_ui != null:
+		_combat_ui.queue_free()
+		_combat_ui = null
 	var palier: PalierProfondeurData = PALIERS[maxi(_opt_palier.selected, 0)]
 	run = ExpeRun.new(CONFIG, palier, "lieu_factice_sandbox", int(_spin_graine.value),
 			_avatar_choisi(), POOL, CONFIG_COMBAT)
+	run.combat_demarre.connect(func(_m: CtbMoteur, data: Dictionary) -> void:
+		_combat_data = data)
 	run.demarrer()
 	_rafraichir()
 
@@ -140,12 +159,23 @@ func _avatar_choisi() -> CombattantCtbData:
 	var heros := CtbPont.combattant_depuis_heros()
 	return heros if heros != null else AVATAR
 
-# Auto-résolution du combat en attente (outil de dev : pas d'input joueur —
-# l'UI de combat viendra avec sa DA ; le journal du moteur est replié dans
-# celui de la run à la fin du combat).
-func _resoudre_combat_auto() -> void:
-	if run.combat_en_cours != null:
+# Combat en attente après un déplacement : joué à la main dans l'écran de
+# combat (défaut) ou auto-résolu si « Combat auto » est coché (le journal du
+# moteur est replié dans celui de la run à la fin du combat, dans les deux
+# cas). Le ScreenshotTool pilote ExpeRun directement : jamais d'UI chez lui.
+func _traiter_combat() -> void:
+	if run.combat_en_cours == null or _combat_ui != null:
+		return
+	if _chk_combat_auto.button_pressed:
 		run.combat_en_cours.derouler_auto()
+		return
+	_combat_ui = CombatCtbUi.new(run.combat_en_cours,
+			bool(_combat_data.get("embuscade", false)))
+	_combat_ui.fermee.connect(func(_recap: Dictionary) -> void:
+		_combat_ui.queue_free()
+		_combat_ui = null
+		_rafraichir())
+	add_child(_combat_ui)
 
 func _rafraichir() -> void:
 	_carte_view.queue_redraw()
@@ -213,7 +243,7 @@ func _input_carte(ev: InputEvent) -> void:
 			var nd := run.carte.noeud(v)
 			if nd.decouvert and _pos_ecran(nd.pos).distance_to(ev.position) <= 22.0:
 				run.deplacer_vers(v)
-				_resoudre_combat_auto()
+				_traiter_combat()
 				_rafraichir()
 				return
 	if ev is InputEventKey and ev.pressed and not ev.echo:
@@ -238,5 +268,5 @@ func _deplacer_direction(dir: Vector2) -> void:
 			best = v
 	if best >= 0:
 		run.deplacer_vers(best)
-		_resoudre_combat_auto()
+		_traiter_combat()
 		_rafraichir()

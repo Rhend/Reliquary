@@ -27,6 +27,12 @@ var bonus_pct: Dictionary = {}
 # Ordre de la liste = ordre de pose (le plus ancien en tête).
 var statuts: Array = []
 
+# Garde (action DEFENDRE, chantier 5) : dégâts d'ATTAQUE subis réduits
+# (ConfigCtbData.defendre_reduction_degats) jusqu'à la PROCHAINE activation de
+# ce combattant — le moteur baisse la garde à l'ouverture de l'activation.
+# État LISIBLE par l'UI (marqueur sur la carte du combattant).
+var en_defense := false
+
 func _init(d: CombattantCtbData, c: Enums.CampCtb, o: int) -> void:
 	data = d
 	camp = c

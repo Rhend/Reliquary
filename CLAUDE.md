@@ -36,7 +36,8 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Boucle idle (timer, rencontres, CycleStats, drops) | `scripts/systems/AdventureSystem.gd` |
 | Progression de Maîtrise (XP, plafonds, évolution manuelle) | `scripts/systems/MasterySystem.gd` |
 | Effets de passifs (bonus plats + conditionnels) | `scripts/systems/PassiveSystem.gd` |
-| Moteur combat TOUR PAR TOUR CTB (Rework ch.1 : file d'initiative `K/VIT`, DoT data-driven, N-vs-N, signaux `ctb_*` ; ch.3 : malus d'embuscade, purge des statuts en fin de combat) | `systems/combat_ctb/ctb_moteur.gd` + `ctb_combattant.gd` |
+| Moteur combat TOUR PAR TOUR CTB (Rework ch.1 : file d'initiative `K/VIT`, DoT data-driven, N-vs-N, signaux `ctb_*` ; ch.3 : malus d'embuscade, purge des statuts en fin de combat ; ch.5 : action DEFENDRE (`data/combat_ctb/config_ctb.tres`), signal structuré `evenement`, prédiction de file `prevoir_ordre(n)`) | `systems/combat_ctb/ctb_moteur.gd` + `ctb_combattant.gd` |
+| UI de combat CTB JOUABLE (Rework ch.5 : écran scindé placeholder, file d'initiative N=6, Attaquer/Défendre + choix de cible, dégâts flottants, transitions et issue de bataille — pull-based sur un moteur démarré, `facteur_delais = 0` pour les tests) | `scenes/combat_ctb/CombatCtbUi.gd` + `CarteCombattantCtb.gd` |
 | Pont bestiaire existant → combattant CTB (stats telles quelles via `GameData.get_effective_stats`) + pont HÉROS réel (ch.4 : source unique d'agrégation plats + % additifs, reconstruite de l'ancien combat_player — mappings et « laissé derrière » documentés en tête de fichier) | `systems/combat_ctb/ctb_pont.gd` |
 | Carte d'expédition free-roam (Rework ch.2 : génération Delaunay connexe seedable, brouillard « absent », 3 étages, Extraire/Continuer, signaux `expe_*` ; ch.3 : nœuds Combat/Attaque surprise = VRAIS combats CTB — run suspendue, PV persistants, défaite = fin immédiate ; Coffre/Bénédiction/Piège = stubs) | `systems/expedition/expe_run.gd` + `expe_carte.gd` (config + pools : `data/expedition/`) |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
@@ -67,7 +68,10 @@ pour les tests) et charge la sauvegarde s'il est lancé seul
 dans ctb_pont.gd) : bonus de familiarité par ennemi, modificateurs de cycle,
 effets de règle Forge, poison passif on-hit. `_resolve_victory` /
 `_resolve_unique_victory` sont conservés pour l'intégration. Règle générale :
-un système remplacé est SUPPRIMÉ, pas laissé en doublon.
+un système remplacé est SUPPRIMÉ, pas laissé en doublon. Chantier 5 : les
+combats d'expédition du sandbox sont JOUÉS À LA MAIN par défaut
+(`CombatCtbUi`, checkbox « Combat auto » pour l'auto-résolution — le
+ScreenshotTool et les tests pilotent ExpeRun directement, toujours en auto).
 
 Forge (Chantier 5) : l'équipement évolue par XP (MasterySystem, buffer DÉSACTIVÉ pour
 l'équipement) — PLUS d'ingrédient pour le palier (`recettes_evolution` est mort). Le
@@ -101,7 +105,11 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
   statuts purgés en fin de combat ; PV persistants entre les nœuds d'expédition ;
   attaque surprise (« ? » d'expédition) = combat CTB avec malus d'initiative
   ×1.5 (première horloge du camp joueur) ; crit_chance clampée [0;1] AU JET
-  seulement (la donnée peut déborder).
+  seulement (la donnée peut déborder) ; DEFENDRE (ch.5, valeur provisoire
+  06/07) = dégâts d'ATTAQUE subis −50 % (`config_ctb.tres`) jusqu'à la
+  PROCHAINE activation du défenseur (garde baissée à l'ouverture de son
+  activation), DoT jamais réduits, ordre contractuel ATK → mitigation DEF →
+  crit → Défendre → plancher MIN_DAMAGE → arrondi, IA sans Défendre.
 - Évolution : TOUJOURS manuelle (action joueur via `MasterySystem.evolve_entity`).
 - L'XP s'accumule au-delà des plafonds (jamais perdue) ; plafond créature dépend du
   tier du biome + de la zone (`Balance.CREATURE_CAP_*`).
@@ -115,7 +123,8 @@ dans `_build_library()` (provisoire, remplaçables par des fichiers). Bus
 ```bash
 # Les 3 suites (chacune quitte avec un code ≠ 0 en cas d'échec) :
 godot --headless --path . res://tests/TestScriptsLoad.tscn      # compile tous les scripts
-godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (35)
+godot --headless --path . res://tests/TestCombatCtb.tscn        # moteur CTB tour par tour (55)
+godot --headless --path . res://tests/TestCombatUi.tscn         # écran de combat CTB jouable (13)
 godot --headless --path . res://tests/TestExpeCarte.tscn        # carte d'expédition (39)
 godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔ nœuds d'expédition + ponts (45)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)

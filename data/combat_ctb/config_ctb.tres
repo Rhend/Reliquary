@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="ConfigCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/ConfigCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+defendre_reduction_degats = 0.5

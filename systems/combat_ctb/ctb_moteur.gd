@@ -14,8 +14,8 @@
 #   1. sélection du combattant (horloge minimale)          → activer_suivant()
 #   2. ticks des statuts DÉBUT (Saignement)                  ↳ mort ici =
 #      activation consommée : pas d'action, pas de ticks FIN, pas de réarmement
-#   3. UNE action (Attaquer / Compétence / Objet)          → jouer(action)
-#      — seul ATTAQUER est fonctionnel au chantier 1 ; l'input joueur peut
+#   3. UNE action (Attaquer / Défendre / Compétence / Objet) → jouer(action)
+#      — ATTAQUER et DEFENDRE sont fonctionnels ; l'input joueur peut
 #      attendre indéfiniment entre activer_suivant() et jouer()
 #   4. ticks des statuts FIN (Poison, Brûlure)
 #   5. réarmement de l'horloge (VIT courante)
@@ -42,6 +42,22 @@
 #       if c != null:
 #           m.jouer(m.action_auto(c))     # ou une action choisie par le joueur
 #
+# Chantier 5 (UI jouable) :
+#   • DEFENDRE — dégâts d'ATTAQUE subis × (1 − config.defendre_reduction_degats)
+#     de la mise en garde jusqu'à la PROCHAINE activation du défenseur (garde
+#     baissée à l'OUVERTURE de son activation, avant les ticks DÉBUT). Les ticks
+#     de DoT ne sont PAS réduits (dégâts figés à la pose — règle actée). Ordre
+#     d'application contractuel (testé) : ATK → mitigation DEF → critique →
+#     Défendre → plancher MIN_DAMAGE → arrondi. L'IA (action_auto) ne défend
+#     jamais (hors scope chantier 5).
+#   • `evenement` — signal STRUCTURÉ pour l'UI (le journal texte reste la
+#     référence de dev) : {"type": "activation"|"attaque"|"defense"|
+#     "defense_fin"|"statut_pose"|"tick_statut", ...} — cf. points d'émission.
+#   • prevoir_ordre(n) — prédiction PURE (sans mutation) de l'ordre des n
+#     prochaines activations, horloges simulées à VIT courante. Exact tant que
+#     rien ne meurt et qu'aucune VIT ne change d'ici là (la file affichée se
+#     recalcule après chaque action).
+#
 # Journal lisible dans `journal` (qui joue, valeur d'horloge, dégâts, ticks).
 # ============================================================
 class_name CtbMoteur
@@ -49,11 +65,18 @@ extends RefCounted
 
 signal victoire(recap: Dictionary)
 signal defaite(recap: Dictionary)
+# Événement structuré à destination d'une UI (dégâts chiffrés, crits, ticks,
+# garde) — émis PENDANT la résolution, avant les signaux de fin de combat.
+signal evenement(e: Dictionary)
 
 # Garde-fou anti-boucle infinie pour le déroulé automatique (non-balance).
 const MAX_ACTIVATIONS := 500
 
+const CONFIG_DEFAUT: ConfigCtbData = preload("res://data/combat_ctb/config_ctb.tres")
+
 var k_ctb: float = Balance.CTB_K     # constante d'horloge (exposée pour calibrage)
+# Réglages globaux du moteur (Défendre…) — remplaçable AVANT demarrer() (tests).
+var config: ConfigCtbData = CONFIG_DEFAUT
 # Embuscade (attaque surprise) : multiplie la PREMIÈRE horloge de chaque
 # combattant du camp JOUEUR (1.0 = pas de malus). À poser AVANT demarrer().
 var malus_horloge_initiale_joueur := 1.0
@@ -114,6 +137,13 @@ func activer_suivant() -> CtbCombattant:
 	var c := _plus_basse_horloge()
 	nb_activations += 1
 	_log("► %s s'active (horloge %.1f)" % [c.nom_journal(), c.horloge])
+	evenement.emit({"type": "activation", "combattant": c})
+	# La garde (DEFENDRE) expire à l'OUVERTURE de l'activation du défenseur —
+	# avant les ticks DÉBUT (les DoT ne sont de toute façon jamais réduits).
+	if c.en_defense:
+		c.en_defense = false
+		_log("    🛡 %s baisse sa garde" % c.nom_journal())
+		evenement.emit({"type": "defense_fin", "combattant": c})
 	_tick_statuts(c, Enums.TimingStatut.DEBUT_ACTIVATION)
 	if termine:
 		return null
@@ -133,10 +163,15 @@ func jouer(action: Dictionary) -> void:
 	match int(action.get("type", Enums.ActionCtb.ATTAQUER)):
 		Enums.ActionCtb.ATTAQUER:
 			_resoudre_attaque(c, action.get("cible"))
+		Enums.ActionCtb.DEFENDRE:
+			c.en_defense = true
+			_log("    🛡 %s se met en garde (dégâts d'attaque subis −%.0f %%)" % [
+					c.nom_journal(), config.defendre_reduction_degats * 100.0])
+			evenement.emit({"type": "defense", "combattant": c})
 		_:
-			# Compétence / Objet : prévus par l'architecture, sans contenu au
-			# chantier 1 (« non découvert = absent ») — l'activation est perdue.
-			_log("    %s tente une action non implémentée (chantier 1)" % c.nom_journal())
+			# Compétence / Objet : prévus par l'architecture, sans contenu
+			# (« non découvert = absent ») — l'activation est perdue.
+			_log("    %s tente une action non implémentée" % c.nom_journal())
 	if termine:
 		return
 	_tick_statuts(c, Enums.TimingStatut.FIN_ACTIVATION)
@@ -150,6 +185,36 @@ func jouer(action: Dictionary) -> void:
 # vivante du camp opposé.
 func action_auto(c: CtbCombattant) -> Dictionary:
 	return {"type": Enums.ActionCtb.ATTAQUER, "cible": _premiere_cible(c)}
+
+# Prédit l'ordre des `n` PROCHAINES activations sans muter l'état : horloges
+# simulées (réarmement à la VIT courante), même départage d'égalité que la
+# vraie file. Si une activation est OUVERTE (entre activer_suivant() et
+# jouer()), elle est considérée comme consommée : la prédiction commence à ce
+# qui vient APRÈS l'action en cours. Exact tant que personne ne meurt et
+# qu'aucune VIT ne change d'ici là — l'UI recalcule après chaque action
+# (les valeurs numériques d'horloge ne sont pas exposées : l'ordre suffit).
+func prevoir_ordre(n: int) -> Array[CtbCombattant]:
+	var out: Array[CtbCombattant] = []
+	if termine:
+		return out
+	var qui: Array[CtbCombattant] = []
+	var horloges: Array[float] = []
+	for c in combattants:
+		if c.est_vivant():
+			qui.append(c)
+			horloges.append(c.horloge + (k_ctb / _vit_sure(c) if c == _actif else 0.0))
+	if qui.is_empty():
+		return out
+	for _i in n:
+		var best := 0
+		for j in range(1, qui.size()):
+			if horloges[j] < horloges[best] - 1.0e-9 \
+					or (absf(horloges[j] - horloges[best]) <= 1.0e-9
+						and _prio(qui[j]) < _prio(qui[best])):
+				best = j
+		out.append(qui[best])
+		horloges[best] += k_ctb / _vit_sure(qui[best])
+	return out
 
 # Déroule le combat en automatique (toutes les activations en action_auto).
 # Garde-fou MAX_ACTIVATIONS contre les combats sans issue.
@@ -181,6 +246,8 @@ func appliquer_statut(cible: CtbCombattant, statut: StatutCtbData, poseur: CtbCo
 	_log("    ✚ %s posé sur %s par %s (%d stack%s)" % [
 			statut.nom_journal(), cible.nom_journal(), poseur.nom_journal(),
 			count, "s" if count >= 2 else ""])
+	evenement.emit({"type": "statut_pose", "cible": cible, "statut": statut,
+			"poseur": poseur})
 
 # Ticks de tous les statuts de `c` au timing donné : les stacks d'un même
 # statut cumulent ADDITIVEMENT (une seule application arrondie par statut),
@@ -206,6 +273,8 @@ func _tick_statuts(c: CtbCombattant, timing: Enums.TimingStatut) -> void:
 		c.pv = maxf(c.pv - float(degats), 0.0)
 		_log("    ▸ %s subit %s ×%d : %d dégâts (PV %d)" % [
 				c.nom_journal(), grp["nom"], grp["stacks"].size(), degats, int(roundf(c.pv))])
+		evenement.emit({"type": "tick_statut", "cible": c, "statut_id": id,
+				"nom": grp["nom"], "degats": degats, "mort": not c.est_vivant()})
 		for s: Dictionary in grp["stacks"]:
 			s["restant"] = int(s["restant"]) - 1
 			if int(s["restant"]) <= 0:
@@ -218,7 +287,9 @@ func _tick_statuts(c: CtbCombattant, timing: Enums.TimingStatut) -> void:
 
 # dégâts = ATK finale × (1 − 0.5 × DEF / (DEF + 40)) via Balance.mitigated_damage
 # (formule héritée, provisoire), × CritMult sur jet critique par coup,
-# arrondi entier, plancher MIN_DAMAGE. Stats finales = StatStacker (additif).
+# × (1 − réduction Défendre) si la cible est en garde, arrondi entier,
+# plancher MIN_DAMAGE (appliqué APRÈS Défendre : un coup inflige toujours ≥ 1).
+# Stats finales = StatStacker (additif).
 func _resoudre_attaque(att: CtbCombattant, cible) -> void:
 	var cb := cible as CtbCombattant
 	if cb == null or not cb.est_vivant():
@@ -232,13 +303,20 @@ func _resoudre_attaque(att: CtbCombattant, cible) -> void:
 	var brut := Balance.mitigated_damage(att.stat_finale("atk"), cb.stat_finale("def"))
 	if is_crit:
 		brut *= att.stat_finale("crit_multiplier")
+	if cb.en_defense:
+		brut *= 1.0 - config.defendre_reduction_degats
 	var degats := int(roundf(maxf(brut, Balance.MIN_DAMAGE)))
 	cb.pv = maxf(cb.pv - float(degats), 0.0)
-	_log("    ⚔ %s frappe %s : %d dégâts%s (PV %s : %d)" % [
+	_log("    ⚔ %s frappe %s : %d dégâts%s%s (PV %s : %d)" % [
 			att.nom_journal(), cb.nom_journal(), degats,
-			" CRITIQUE" if is_crit else "", cb.nom_journal(), int(roundf(cb.pv))])
+			" CRITIQUE" if is_crit else "",
+			" (garde)" if cb.en_defense else "",
+			cb.nom_journal(), int(roundf(cb.pv))])
 	if not cb.est_vivant():
 		_log("    ☠ %s est vaincu" % cb.nom_journal())
+	evenement.emit({"type": "attaque", "attaquant": att, "cible": cb,
+			"degats": degats, "crit": is_crit, "garde": cb.en_defense,
+			"mort": not cb.est_vivant()})
 	_verifier_fin()
 
 # ─── Fins de combat ──────────────────────────────────────────

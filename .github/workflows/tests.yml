@@ -40,6 +40,9 @@ jobs:
       - name: TestCombatCtb (moteur tour par tour CTB)
         run: $GODOT --headless --path . res://tests/TestCombatCtb.tscn
 
+      - name: TestCombatUi (écran de combat CTB jouable)
+        run: $GODOT --headless --path . res://tests/TestCombatUi.tscn
+
       - name: TestExpeCarte (carte d'expédition — génération, brouillard, étages)
         run: $GODOT --headless --path . res://tests/TestExpeCarte.tscn
 

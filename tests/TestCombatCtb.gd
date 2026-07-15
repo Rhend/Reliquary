@@ -1,9 +1,15 @@
 extends Node
-# Tests unitaires du moteur CTB (Rework Combat — chantier 1).
+# Tests unitaires du moteur CTB (Rework Combat — chantiers 1 et 5).
 # Déterministes : crit forcé à 0.0 / 1.0, RNG seedée, VIT choisies pour
 # contrôler l'ordre de la file. Vérifie : file CTB (cadence, égalités,
 # réarmement à VIT courante), formule de dégâts, stats finales additives,
 # hook DoT (timings début/fin, stacks, durées), signaux de fin, garde-fou.
+# Chantier 5 : action DEFENDRE (réduction exacte, expiration à la prochaine
+# activation du défenseur, cumul avec la mitigation DEF — ordre contractuel
+# ATK → DEF → crit → Défendre → plancher → arrondi, DoT jamais réduits,
+# IA sans Défendre, signal `evenement`), prédiction de file prevoir_ordre()
+# identique à l'ordre réel sur combats seedés (y c. activation ouverte,
+# changement de VIT en cours de combat, embuscade).
 
 var _results: Array = []
 
@@ -24,6 +30,13 @@ func _ready() -> void:
 	_test_defaite_signaux()
 	_test_victoire_signaux_et_recap()
 	_test_garde_fou()
+	_test_defendre_reduction_et_expiration()
+	_test_defendre_cumul_def_crit_plancher()
+	_test_defendre_dot_non_reduit()
+	_test_defendre_hors_ia_et_config()
+	_test_prevoir_ordre_seedee()
+	_test_prevoir_ordre_activation_ouverte()
+	_test_prevoir_ordre_vit_courante_et_embuscade()
 	_print_report()
 	var has_failure: bool = _results.any(func(r): return not r["ok"])
 	get_tree().quit(1 if has_failure else 0)
@@ -311,6 +324,186 @@ func _test_garde_fou() -> void:
 	m.derouler_auto()
 	_assert(not m.termine and m.nb_activations >= CtbMoteur.MAX_ACTIVATIONS,
 			"arrêt après %d activations sans vainqueur" % CtbMoteur.MAX_ACTIVATIONS)
+
+# ─── Tests : action DEFENDRE (chantier 5) ───────────────────
+
+# Réduction exacte (−50 % .tres) + expiration à la PROCHAINE activation du
+# défenseur + signaux structurés `evenement` (defense / defense_fin / garde
+# sur l'attaque). VIT égales : avatar (prioritaire), puis ennemi, en boucle.
+func _test_defendre_reduction_et_expiration() -> void:
+	print("\n[TEST] Défendre — réduction exacte + expiration")
+	var m := _moteur({"vit": 20.0, "pv_max": 1000.0, "atk": 1.0},
+			[{"vit": 20.0, "atk": 100.0, "pv_max": 1000.0}])
+	var av := m.avatar()
+	var events: Array = []
+	m.evenement.connect(func(e: Dictionary) -> void: events.append(e))
+	var c := m.activer_suivant()                    # avatar (égalité → joueur)
+	m.jouer({"type": Enums.ActionCtb.DEFENDRE})
+	_assert(av.en_defense, "en_defense visible après l'action (état lisible par l'UI)")
+	_assert(events.any(func(e: Dictionary) -> bool: return e["type"] == "defense"),
+			"evenement `defense` émis")
+	c = m.activer_suivant()                         # ennemi
+	m.jouer(m.action_auto(c))
+	_assert(absf(av.pv - 950.0) < 0.001,
+			"attaque sous garde : 100 × (1 − 0.5) = 50 dégâts (PV 1000 → 950)",
+			"pv=%.1f" % av.pv)
+	var att: Array = events.filter(func(e: Dictionary) -> bool: return e["type"] == "attaque")
+	_assert(att.size() == 1 and bool(att[0]["garde"]) and int(att[0]["degats"]) == 50,
+			"evenement `attaque` : garde=true, degats=50")
+	c = m.activer_suivant()                         # avatar : garde baissée à l'ouverture
+	_assert(not av.en_defense, "garde expirée à la PROCHAINE activation du défenseur")
+	_assert(events.any(func(e: Dictionary) -> bool: return e["type"] == "defense_fin"),
+			"evenement `defense_fin` émis")
+	m.jouer(m.action_auto(c))
+	c = m.activer_suivant()                         # ennemi : dégâts pleins
+	m.jouer(m.action_auto(c))
+	_assert(absf(av.pv - 850.0) < 0.001,
+			"garde expirée : l'attaque suivante inflige 100 (PV 950 → 850)", "pv=%.1f" % av.pv)
+
+# Ordre d'application contractuel : ATK → mitigation DEF → critique →
+# Défendre → plancher MIN_DAMAGE → arrondi.
+func _test_defendre_cumul_def_crit_plancher() -> void:
+	print("\n[TEST] Défendre — cumul mitigation DEF / crit / plancher")
+	# DEF 40 : 100 × (1 − 0.5×40/80) = 75 ; garde : 75 × 0.5 = 37.5 → 38.
+	var m := _moteur({"vit": 20.0, "pv_max": 1000.0, "atk": 1.0, "def": 40.0},
+			[{"vit": 20.0, "atk": 100.0, "pv_max": 1000.0}])
+	m.activer_suivant()
+	m.jouer({"type": Enums.ActionCtb.DEFENDRE})
+	var c := m.activer_suivant()
+	m.jouer(m.action_auto(c))
+	_assert(absf(m.avatar().pv - 962.0) < 0.001,
+			"DEF puis Défendre : 100 → 75 (DEF 40) → 37.5 → arrondi 38 (PV 1000 → 962)",
+			"pv=%.1f" % m.avatar().pv)
+	# Crit 100 % : 75 (DEF) × 2 (crit) × 0.5 (garde) = 75.
+	var m2 := _moteur({"vit": 20.0, "pv_max": 1000.0, "atk": 1.0, "def": 40.0},
+			[{"vit": 20.0, "atk": 100.0, "pv_max": 1000.0,
+			  "crit_chance": 1.0, "crit_multiplier": 2.0}])
+	m2.activer_suivant()
+	m2.jouer({"type": Enums.ActionCtb.DEFENDRE})
+	var c2 := m2.activer_suivant()
+	m2.jouer(m2.action_auto(c2))
+	_assert(absf(m2.avatar().pv - 925.0) < 0.001,
+			"ordre DEF → crit → Défendre : 100 → 75 → 150 → 75 (PV 1000 → 925)",
+			"pv=%.1f" % m2.avatar().pv)
+	# Plancher : la garde ne descend jamais un coup sous MIN_DAMAGE (≥ 1).
+	var m3 := _moteur({"vit": 20.0, "pv_max": 1000.0, "atk": 1.0, "def": 500.0},
+			[{"vit": 20.0, "atk": 1.0, "pv_max": 1000.0}])
+	m3.activer_suivant()
+	m3.jouer({"type": Enums.ActionCtb.DEFENDRE})
+	var c3 := m3.activer_suivant()
+	m3.jouer(m3.action_auto(c3))
+	_assert(absf(m3.avatar().pv - 999.0) < 0.001,
+			"plancher APRÈS Défendre : le coup inflige toujours ≥ 1 (PV 1000 → 999)",
+			"pv=%.1f" % m3.avatar().pv)
+
+# Les ticks de DoT ne sont PAS réduits par la garde (dégâts figés à la pose).
+func _test_defendre_dot_non_reduit() -> void:
+	print("\n[TEST] Défendre — les DoT ne sont pas réduits")
+	var poison := _statut("test_poison", Enums.TimingStatut.FIN_ACTIVATION, 0.10, 3, 3)
+	var m := _moteur({"vit": 40.0, "pv_max": 1000.0, "atk": 1.0},
+			[{"vit": 10.0, "atk": 100.0, "pv_max": 1000.0}])
+	var av := m.avatar()
+	m.appliquer_statut(av, poison, m.combattants[1])   # 10 % × 100 ATK = 10 / tick
+	m.activer_suivant()                                # avatar
+	m.jouer({"type": Enums.ActionCtb.DEFENDRE})        # garde posée AVANT le tick FIN
+	_assert(absf(av.pv - 990.0) < 0.001,
+			"tick FIN sous garde : 10 dégâts pleins (PV 1000 → 990, pas 995)",
+			"pv=%.1f" % av.pv)
+
+# L'IA (action_auto) ne défend jamais (hors scope chantier 5) ; la valeur de
+# réduction vient du .tres (remplaçable avant demarrer()).
+func _test_defendre_hors_ia_et_config() -> void:
+	print("\n[TEST] Défendre — IA sans garde + valeur .tres")
+	var m := _moteur({"vit": 40.0}, [{"vit": 10.0, "pv_max": 1000.0}])
+	_assert(int(m.action_auto(m.combattants[1])["type"]) == Enums.ActionCtb.ATTAQUER,
+			"action_auto = ATTAQUER (l'IA n'utilise pas Défendre)")
+	_assert(m.config != null and absf(m.config.defendre_reduction_degats - 0.5) < 0.001,
+			"config_ctb.tres chargé par défaut : réduction Défendre = 0.5")
+	# Valeur remplaçable (calibrage / tests) : −25 % → 100 × 0.75 = 75.
+	var m2 := CtbMoteur.new()
+	m2.rng.seed = 1337
+	var cfg := ConfigCtbData.new()
+	cfg.defendre_reduction_degats = 0.25
+	m2.config = cfg
+	m2.ajouter(_data("avatar", {"vit": 20.0, "pv_max": 1000.0, "atk": 1.0}), Enums.CampCtb.JOUEUR)
+	m2.ajouter(_data("ennemi_1", {"vit": 20.0, "atk": 100.0, "pv_max": 1000.0}),
+			Enums.CampCtb.ADVERSE)
+	m2.demarrer()
+	m2.activer_suivant()
+	m2.jouer({"type": Enums.ActionCtb.DEFENDRE})
+	var c := m2.activer_suivant()
+	m2.jouer(m2.action_auto(c))
+	_assert(absf(m2.avatar().pv - 925.0) < 0.001,
+			"réduction .tres remplacée (0.25) : 100 × 0.75 = 75 dégâts", "pv=%.1f" % m2.avatar().pv)
+
+# ─── Tests : prédiction de file (chantier 5) ────────────────
+
+# Prédiction n activations = ordre réellement joué, ids comparés un à un.
+# (Valable tant que rien ne meurt : PV énormes, ATK 1.)
+func _comparer_prediction(m: CtbMoteur, n: int, label: String) -> void:
+	var predit := m.prevoir_ordre(n)
+	var reel: Array = []
+	while reel.size() < n and not m.termine:
+		var c := m.activer_suivant()
+		if c != null:
+			reel.append(c)
+			m.jouer(m.action_auto(c))
+	var ok := predit.size() == n and reel.size() == n
+	if ok:
+		for i in n:
+			ok = ok and predit[i] == reel[i]
+	_assert(ok, label, "prédit=%s réel=%s" % [
+			str(predit.map(func(c: CtbCombattant) -> String: return c.data.id)),
+			str(reel.map(func(c: CtbCombattant) -> String: return c.data.id))])
+
+# Combat seedé 1 vs 2, VIT hétérogènes : la file prédite (N=6, valeur UI)
+# est identique à l'ordre réel.
+func _test_prevoir_ordre_seedee() -> void:
+	print("\n[TEST] prevoir_ordre — identique à l'ordre réel (combat seedé)")
+	var m := _moteur({"vit": 33.0, "atk": 1.0, "pv_max": 100000.0},
+			[{"vit": 21.0, "atk": 1.0, "pv_max": 100000.0},
+			 {"vit": 10.0, "atk": 1.0, "pv_max": 100000.0}])
+	_comparer_prediction(m, 6, "6 activations prédites = 6 activations jouées (1 v 2)")
+	_comparer_prediction(m, 6, "encore 6, en cours de combat (horloges non initiales)")
+
+# Activation OUVERTE (entre activer_suivant et jouer) : la prédiction
+# commence à ce qui vient APRÈS l'action en attente (cas de l'UI qui
+# affiche la file pendant le choix du joueur).
+func _test_prevoir_ordre_activation_ouverte() -> void:
+	print("\n[TEST] prevoir_ordre — pendant une activation ouverte")
+	var m := _moteur({"vit": 40.0, "atk": 1.0, "pv_max": 100000.0},
+			[{"vit": 10.0, "atk": 1.0, "pv_max": 100000.0}])
+	var c := m.activer_suivant()   # avatar (25) — activation OUVERTE
+	var predit := m.prevoir_ordre(3)
+	m.jouer(m.action_auto(c))      # l'avatar réarme (50)
+	var reel: Array = []
+	while reel.size() < 3:
+		var s := m.activer_suivant()
+		reel.append(s)
+		m.jouer(m.action_auto(s))
+	_assert(predit[0] == reel[0] and predit[1] == reel[1] and predit[2] == reel[2],
+			"la file prédite pendant l'attente d'input = suite réelle (avatar 50/75/100…)",
+			"prédit=%s réel=%s" % [
+				str(predit.map(func(x: CtbCombattant) -> String: return x.data.id)),
+				str(reel.map(func(x: CtbCombattant) -> String: return x.data.id))])
+
+# Un buff de VIT en cours de combat se reflète dans la file prédite ;
+# l'embuscade (première horloge ×1.5) aussi.
+func _test_prevoir_ordre_vit_courante_et_embuscade() -> void:
+	print("\n[TEST] prevoir_ordre — VIT courante + embuscade")
+	var m := _moteur({"vit": 20.0, "atk": 1.0, "pv_max": 100000.0},
+			[{"vit": 20.0, "atk": 1.0, "pv_max": 100000.0}])
+	m.combattants[1].ajouter_bonus_pct("vit", 1.0)   # ennemi ×2 dès maintenant
+	_comparer_prediction(m, 6, "buff VIT ×2 en cours de combat reflété dans la prédiction")
+	var m2 := CtbMoteur.new()
+	m2.rng.seed = 42
+	m2.malus_horloge_initiale_joueur = 1.5
+	m2.ajouter(_data("avatar", {"vit": 30.0, "atk": 1.0, "pv_max": 100000.0}),
+			Enums.CampCtb.JOUEUR)
+	m2.ajouter(_data("ennemi_1", {"vit": 25.0, "atk": 1.0, "pv_max": 100000.0}),
+			Enums.CampCtb.ADVERSE)
+	m2.demarrer()   # avatar : 33.3 × 1.5 = 50 ; ennemi : 40 → l'ennemi d'abord
+	_comparer_prediction(m2, 6, "embuscade : première horloge joueur ×1.5 dans la prédiction")
 
 # ─── Rapport ────────────────────────────────────────────────
 
