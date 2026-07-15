@@ -43,6 +43,9 @@ jobs:
       - name: TestCombatUi (écran de combat CTB jouable)
         run: $GODOT --headless --path . res://tests/TestCombatUi.tscn
 
+      - name: TestRecompenses (économie de récompense — XP + Euren)
+        run: $GODOT --headless --path . res://tests/TestRecompenses.tscn
+
       - name: TestExpeCarte (carte d'expédition — génération, brouillard, étages)
         run: $GODOT --headless --path . res://tests/TestExpeCarte.tscn
 

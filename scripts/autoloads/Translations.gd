@@ -306,6 +306,8 @@ const STRINGS: Dictionary = {
 		"ctb.garde_pill":     "🛡 Garde",
 		"ctb.crit_float":     "%d CRIT !",
 		"ctb.combat_titre":   "⚔  COMBAT",
+		"ctb.recompenses":    "+%d XP   ·   +%d Euren",
+		"ctb.entete_heros":   "Nv %d · XP %d/%d · Euren (run) %d",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPÉDITION TERMINÉE  —  %s",
@@ -700,6 +702,8 @@ const STRINGS: Dictionary = {
 		"ctb.garde_pill":     "🛡 Guard",
 		"ctb.crit_float":     "%d CRIT!",
 		"ctb.combat_titre":   "⚔  BATTLE",
+		"ctb.recompenses":    "+%d XP   ·   +%d Euren",
+		"ctb.entete_heros":   "Lv %d · XP %d/%d · Euren (run) %d",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPEDITION ENDED  —  %s",

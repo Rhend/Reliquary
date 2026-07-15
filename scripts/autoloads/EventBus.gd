@@ -137,6 +137,23 @@ signal expe_etage_termine(data: Dictionary)
 @warning_ignore("unused_signal")
 signal expe_terminee(recap: Dictionary)
 
+# ── Économie de récompense (Rework Combat — chantier 6) ─────
+
+# Émis à chaque crédit d'XP de NIVEAU du héros (immédiat à la victoire de
+# chaque combat — arbitrage 06/07/2026). Distinct de xp_gained (Maîtrise).
+@warning_ignore("unused_signal")
+signal heros_xp_gagnee(montant: float, xp_totale: float)
+
+# Émis quand le NIVEAU du héros monte (peut sauter plusieurs niveaux en un
+# gain). Pour la future UI ; le sandbox journalise « Niveau avant → apres ».
+@warning_ignore("unused_signal")
+signal heros_niveau_change(avant: int, apres: int)
+
+# Émis quand l'Euren possédé change (crédit à la SORTIE d'expédition
+# uniquement — extraction ou complétion ; défaite = rien).
+@warning_ignore("unused_signal")
+signal euren_change(total: float)
+
 # ── Équipement ──────────────────────────────────────────────
 
 # Émis quand un item est équipé ou déséquipé.

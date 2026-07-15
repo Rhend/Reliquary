@@ -74,7 +74,11 @@ var player: Dictionary = {
 	"bestiary": {},  # enc_id → { name, type, biome_id, biome_name, count, xp, tier }
 	# Forge (Chantier 5) : equipment_id → { points: int, nodes: [node_id] }.
 	# Sauvegardé automatiquement (sous-dict de player).
-	"forge": {}
+	"forge": {},
+	# Économie de récompense (Rework Combat, chantier 6) — état BRUT ; toute
+	# la logique (courbe de niveau, crédit) vit dans ProgressionHeros.
+	"heros_xp": 0.0,   # XP de NIVEAU du héros, totale cumulée (jamais perdue)
+	"euren":    0.0    # Euren possédé (crédité à la sortie d'expédition)
 }
 
 # ═══════════════════════════════════════════════════════════

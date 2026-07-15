@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="EurenConfigData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/EurenConfigData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_par_ennemi = 10.0
+multiplicateurs_par_palier = {0: 1.0, 1: 2.0, 2: 3.0, 3: 4.0, 4: 5.0, 5: 6.0}

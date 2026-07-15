@@ -58,14 +58,28 @@ func _ready() -> void:
 	_save_timer.timeout.connect(_flush_save)
 	add_child(_save_timer)
 
-	EventBus.xp_gained.connect(_on_progress)
-	EventBus.bestiary_updated.connect(_on_progress)
-	EventBus.resources_changed.connect(_on_progress)
-	EventBus.entity_evolved.connect(_on_progress)
-	EventBus.passive_unlocked.connect(_on_progress)
-	EventBus.equipment_changed.connect(_on_progress)
-	EventBus.equipement_evolue.connect(_on_progress)
-	EventBus.village_tier_change.connect(_on_progress)
+	for sig: Signal in signaux_progression():
+		sig.connect(_on_progress)
+
+# SOURCE UNIQUE des déclencheurs de sauvegarde. Les tests et le
+# ScreenshotTool itèrent cette liste pour se déconnecter (ne jamais écrire
+# la sauvegarde depuis un outil) — une liste en dur chez eux deviendrait
+# fausse au premier signal ajouté ici.
+func signaux_progression() -> Array[Signal]:
+	return [
+		EventBus.xp_gained,
+		EventBus.bestiary_updated,
+		EventBus.resources_changed,
+		EventBus.entity_evolved,
+		EventBus.passive_unlocked,
+		EventBus.equipment_changed,
+		EventBus.equipement_evolue,
+		EventBus.village_tier_change,
+		# Économie de récompense (chantier 6) :
+		EventBus.heros_xp_gagnee,
+		EventBus.heros_niveau_change,
+		EventBus.euren_change,
+	]
 
 # Lecture publique : load_save() a-t-il déjà tourné ? (Un outil dev — ex.
 # SandboxExpe pour le héros réel — charge la sauvegarde s'il est lancé seul,

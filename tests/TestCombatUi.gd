@@ -85,6 +85,8 @@ func _test_ecran_complet() -> void:
 			annonce = true
 	_assert(annonce, "annonce d'embuscade à l'ouverture du combat")
 	ui.fermee.connect(func(r: Dictionary) -> void: _fermee_recap.append(r))
+	# Écran d'issue enrichi (chantier 6) : récompenses fournies par l'appelant.
+	ui.recompenses_fournisseur = func() -> Dictionary: return {"xp": 30.0, "euren": 20.0}
 
 	# Laisser l'intro passer et la boucle atteindre l'attente d'input joueur.
 	await _attendre_tour_joueur(ui)
@@ -146,6 +148,12 @@ func _test_ecran_complet() -> void:
 		if enfant is Label and enfant.text == Translations.T("ctb.victoire"):
 			issue = true
 	_assert(issue, "issue VICTOIRE affichée sur l'écran de fin de bataille")
+	var attendu_rec := Translations.T("ctb.recompenses") % [30, 20]
+	var rec_visible := false
+	for enfant in ui._voile_contenu.get_children():
+		if enfant is Label and enfant.text == attendu_rec:
+			rec_visible = true
+	_assert(rec_visible, "récompenses du combat (XP + Euren) sur l'écran d'issue")
 	_assert(_fermee_recap.size() == 1 and bool(_fermee_recap[0]["victoire"]),
 			"signal fermee(recap) émis une fois, recap de victoire")
 	ui.queue_free()

@@ -10,6 +10,13 @@ var _results: Array = []
 
 func _ready() -> void:
 	await get_tree().process_frame
+	# Chantier 6 : les victoires d'ExpeRun créditent XP/Euren (signaux de
+	# progression) — déconnexion des déclencheurs de sauvegarde.
+	for sig: Signal in SaveManager.signaux_progression():
+		if sig.is_connected(SaveManager._on_progress):
+			sig.disconnect(SaveManager._on_progress)
+	SaveManager._save_timer.stop()
+	SaveManager._save_dirty = false
 	print("\n=== TEST CARTE D'EXPÉDITION ===\n")
 	_test_connexite()
 	_test_bornes_nb_noeuds()

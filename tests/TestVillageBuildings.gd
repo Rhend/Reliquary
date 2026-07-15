@@ -20,10 +20,7 @@ func _ready() -> void:
 	get_tree().quit(1 if _results.any(func(r): return not r["ok"]) else 0)
 
 func _disable_save_writes() -> void:
-	for sig: Signal in [EventBus.xp_gained, EventBus.bestiary_updated,
-			EventBus.resources_changed, EventBus.entity_evolved,
-			EventBus.passive_unlocked, EventBus.equipment_changed,
-			EventBus.equipement_evolue, EventBus.village_tier_change]:
+	for sig: Signal in SaveManager.signaux_progression():
 		if sig.is_connected(SaveManager._on_progress):
 			sig.disconnect(SaveManager._on_progress)
 	SaveManager._save_timer.stop()

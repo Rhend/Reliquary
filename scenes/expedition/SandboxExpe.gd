@@ -19,6 +19,11 @@
 # (journal du moteur replié dans celui de la run) ; le ScreenshotTool et les
 # suites de test pilotent ExpeRun directement et restent en auto.
 #
+# Chantier 6 : en-tête de run avec niveau / XP / Euren accumulé, écran
+# d'issue de bataille enrichi (XP + Euren du combat), Euren crédité affiché
+# en fin de run. Le sandbox se DÉCONNECTE des déclencheurs de sauvegarde
+# (progression de test jamais écrite dans la sauvegarde du joueur).
+#
 # Outil de DEV : pas une UI de jeu (l'UI finale viendra avec sa DA).
 # ============================================================
 extends Control
@@ -57,6 +62,16 @@ var _combat_ui: CombatCtbUi = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Chantier 6 : les combats créditent XP/Euren (signaux de progression).
+	# Le sandbox reste un OUTIL : il ne doit JAMAIS écrire la sauvegarde du
+	# joueur avec une progression de test — déconnexion des déclencheurs
+	# (même pattern que le ScreenshotTool ; la persistance réelle viendra
+	# avec le branchement au flux de jeu principal, hors scope).
+	for sig: Signal in SaveManager.signaux_progression():
+		if sig.is_connected(SaveManager._on_progress):
+			sig.disconnect(SaveManager._on_progress)
+	SaveManager._save_timer.stop()
+	SaveManager._save_dirty = false
 	_construire_ui()
 	_lancer()
 
@@ -171,6 +186,9 @@ func _traiter_combat() -> void:
 		return
 	_combat_ui = CombatCtbUi.new(run.combat_en_cours,
 			bool(_combat_data.get("embuscade", false)))
+	# Écran d'issue enrichi (chantier 6) : XP et Euren du combat gagné.
+	_combat_ui.recompenses_fournisseur = func() -> Dictionary:
+		return run.dernier_combat_recompenses
 	_combat_ui.fermee.connect(func(_recap: Dictionary) -> void:
 		_combat_ui.queue_free()
 		_combat_ui = null
@@ -182,11 +200,17 @@ func _rafraichir() -> void:
 	_btn_extraire.visible = run.choix_ouvert
 	_btn_continuer.visible = run.choix_ouvert and run.etage < CONFIG.nb_etages
 	var pv := "PV %d/%d" % [int(roundf(run.pv_avatar)), int(roundf(run.avatar_data.pv_max))]
+	# En-tête héros (chantier 6, placeholder) : niveau, XP x/y, Euren de la run.
+	var heros := Translations.T("ctb.entete_heros") % [ProgressionHeros.niveau(),
+			int(roundf(ProgressionHeros.xp_totale())),
+			int(roundf(ProgressionHeros.seuil_prochain_niveau())),
+			int(roundf(run.euren_accumule))]
 	if run.est_terminee:
-		_lbl_etat.text = "  %s — %s" % [
-				"☠ DÉFAITE" if run.defaite else "✔ Expédition terminée", pv]
+		var credit := " — ◈ crédité : %d" % int(roundf(run.euren_credite))
+		_lbl_etat.text = "  %s — %s · %s%s" % [
+				"☠ DÉFAITE" if run.defaite else "✔ Expédition terminée", pv, heros, credit]
 	else:
-		_lbl_etat.text = "  Étage %d/%d — %s" % [run.etage, CONFIG.nb_etages, pv]
+		_lbl_etat.text = "  Étage %d/%d — %s · %s" % [run.etage, CONFIG.nb_etages, pv, heros]
 	_journal_label.text = "\n".join(run.journal)
 	await get_tree().process_frame   # attendre la mesure du label avant de scroller en bas
 	_journal_scroll.scroll_vertical = int(_journal_scroll.get_v_scroll_bar().max_value)

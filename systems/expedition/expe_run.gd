@@ -21,6 +21,16 @@
 # PV PERSISTANTS entre les nœuds (pv_avatar, pleins au lancement — provisoire,
 # aucune régénération) ; statuts purgés en fin de combat (moteur).
 #
+# Récompenses (chantier 6) : à chaque VICTOIRE de combat, l'XP de niveau du
+# héros (xp_reward du bestiaire au palier de Maîtrise courant de la créature,
+# lu tel quel) est créditée IMMÉDIATEMENT (ProgressionHeros — la montée de
+# niveau en cours de run est voulue ; elle compte au prochain combat, jamais
+# à chaud) et l'Euren (base × multiplicateur du palier de la créature,
+# data/progression/euren.tres) est ACCUMULÉ dans la run. L'Euren n'est
+# crédité qu'à la SORTIE (extraction ou complétion) ; défaite = rien.
+# Le multiplicateur de PalierProfondeurData continue de circuler SANS effet
+# (mécanisme non décidé) — il ne s'applique pas aux récompenses.
+#
 # Brouillard : Entrée + Fin d'étage découvertes d'emblée (la Fin avec son
 # type — le joueur peut foncer dessus) ; tout autre nœud est ABSENT tant
 # qu'un voisin direct n'a pas été visité (révélation par adjacence). Le
@@ -36,6 +46,9 @@
 # ============================================================
 class_name ExpeRun
 extends RefCounted
+
+# Config Euren globale (pas un paramètre d'expédition — monnaie commune).
+const CONFIG_EUREN: EurenConfigData = preload("res://data/progression/euren.tres")
 
 signal noeud_resolu(data: Dictionary)
 signal etage_termine(data: Dictionary)
@@ -62,6 +75,12 @@ var combat_en_cours: CtbMoteur = null    # non-null = run suspendue sur un nœud
 var pv_avatar := 0.0                     # PV persistants entre les nœuds
 var defaite := false
 var nb_combats := 0
+
+# Récompenses (chantier 6).
+var xp_gagnee := 0.0                     # XP de niveau créditée pendant la run (info)
+var euren_accumule := 0.0                # Euren de la run (visible, non crédité)
+var euren_credite := 0.0                 # Euren réellement crédité à la sortie
+var dernier_combat_recompenses: Dictionary = {}   # {xp, euren} du dernier combat gagné
 
 # Compteurs pour le recap : type de nœud (int) → nb résolus, + contenus de « ? ».
 var _resolus_par_type: Dictionary = {}
@@ -284,16 +303,59 @@ func _fin_combat(recap: Dictionary, nd: ExpeNoeud, embuscade: bool) -> void:
 	pv_avatar = float(recap["pv_restants"].get(avatar_data.id, 0.0))
 	combat_en_cours = null
 	if not bool(recap["victoire"]):
+		# Défaite : AUCUNE récompense, même pour les ennemis tués dans ce
+		# combat (l'XP n'est créditée qu'à la VICTOIRE — arbitrage 06/07).
+		dernier_combat_recompenses = {}
 		defaite = true
 		_log("☠ Défaite au nœud %d — fin d'expédition immédiate" % nd.id)
 		_terminer(false)
 		return
 	_log("✔ Victoire au nœud %d — PV Avatar : %d" % [nd.id, int(roundf(pv_avatar))])
+	_crediter_victoire(recap["ennemis_vaincus"])
 	_resoudre_stub(nd, {
 		"embuscade":       embuscade,
 		"nb_activations":  recap["nb_activations"],
 		"ennemis_vaincus": recap["ennemis_vaincus"],
 	})
+
+# ─── Récompenses (chantier 6) ────────────────────────────────
+
+# Récompenses d'une victoire : XP de niveau créditée IMMÉDIATEMENT (montée
+# de niveau possible en cours de run, journalisée « Niveau x → y »), Euren
+# accumulé (crédité à la sortie seulement). Un combattant hors bestiaire
+# (ex. avatar de test côté adverse) ne rapporte rien.
+func _crediter_victoire(vaincus: Array) -> void:
+	var rec := _recompenses_pour(vaincus)
+	dernier_combat_recompenses = rec
+	if rec["xp"] > 0.0:
+		xp_gagnee += float(rec["xp"])
+		var niveaux: Dictionary = ProgressionHeros.gagner_xp(float(rec["xp"]))
+		_log("  ✧ +%d XP (héros : %d / %d)" % [int(roundf(rec["xp"])),
+				int(roundf(ProgressionHeros.xp_totale())),
+				int(roundf(ProgressionHeros.seuil_prochain_niveau()))])
+		if int(niveaux["apres"]) > int(niveaux["avant"]):
+			_log("  ⭐ Niveau %d → %d (compte au prochain combat)" % [
+					niveaux["avant"], niveaux["apres"]])
+	if rec["euren"] > 0.0:
+		euren_accumule += float(rec["euren"])
+		_log("  ◈ +%d Euren (run : %d — crédité à la sortie)" % [
+				int(roundf(rec["euren"])), int(roundf(euren_accumule))])
+
+# {xp, euren} pour une liste de vaincus (CombattantCtbData). xp_reward est lu
+# TEL QUEL au palier de Maîtrise courant de la créature (bestiaire,
+# stats_par_palier) ; l'Euren vient de la config (base × mult. de palier) —
+# aucun champ Euren au bestiaire (il sera remplacé).
+func _recompenses_pour(vaincus: Array) -> Dictionary:
+	var xp := 0.0
+	var euren := 0.0
+	for d: CombattantCtbData in vaincus:
+		var entity: Dictionary = GameData.get_entity(d.id)
+		if entity.is_empty():
+			continue   # hors bestiaire (combattant de test) → rien
+		var tier := int(entity.get("maitrise_actuelle", 0))
+		xp += float(GameData.stats_at_tier(entity, tier).get("xp_reward", 0.0))
+		euren += CONFIG_EUREN.gain_pour_palier(tier)
+	return {"xp": xp, "euren": euren}
 
 func _tirer_mystere() -> int:
 	var poids := [
@@ -316,6 +378,14 @@ func _tirer_mystere() -> int:
 func _terminer(extraction: bool) -> void:
 	est_terminee = true
 	choix_ouvert = false
+	# Euren crédité à la SORTIE uniquement : extraction OU complétion.
+	# Défaite = rien (comportement correct dès maintenant, même si le futur
+	# Game Over/rechargement rendra le point discutable).
+	if not defaite and euren_accumule > 0.0:
+		euren_credite = euren_accumule
+		ProgressionHeros.crediter_euren(euren_credite)
+		_log("◈ Euren crédité : %d (total : %d)" % [
+				int(roundf(euren_credite)), int(roundf(ProgressionHeros.euren()))])
 	var recap := _recap(extraction)
 	var issue := "EXTRACTION" if extraction else \
 			("DÉFAITE" if defaite else "EXPÉDITION BOUCLÉE")
@@ -338,6 +408,10 @@ func _recap(extraction: bool) -> Dictionary:
 		"mysteres_resolus":     _mysteres_par_contenu.duplicate(),  # ContenuMystere → nb
 		"nb_combats":           nb_combats,                      # défaite comprise
 		"ennemis_vaincus":      _vaincus_cumul.duplicate(),      # CombattantCtbData cumulés
+		# Récompenses (chantier 6) :
+		"xp_gagnee":            xp_gagnee,       # XP de niveau créditée pendant la run (info)
+		"euren_gagne":          euren_accumule,  # Euren accumulé dans la run
+		"euren_credite":        euren_credite,   # réellement crédité (0 si défaite)
 	}
 
 func _nom_type(nd: ExpeNoeud) -> String:

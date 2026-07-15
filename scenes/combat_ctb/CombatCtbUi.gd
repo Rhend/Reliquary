@@ -39,6 +39,11 @@ const BANDE_VS_PX := 80.0      # largeur de la découpe diagonale des deux fonds
 var moteur: CtbMoteur
 var embuscade := false
 var facteur_delais := 1.0
+# Récompenses du combat pour l'écran d'issue (chantier 6) : Callable SANS
+# argument retournant {xp, euren} (ou {}) — fournie par l'appelant (le
+# sandbox la branche sur ExpeRun.dernier_combat_recompenses). L'écran reste
+# générique : il ne connaît ni l'expédition ni l'économie.
+var recompenses_fournisseur := Callable()
 
 var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
 var _file_box: HBoxContainer
@@ -404,6 +409,17 @@ func _outro() -> void:
 			UIColors.LOG_VICTORY if gagne else UIColors.LOG_DEFEAT)
 	issue.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_voile_contenu.add_child(issue)
+	# Récompenses du combat (chantier 6) — seulement si l'appelant les fournit.
+	if gagne and recompenses_fournisseur.is_valid():
+		var rec: Dictionary = recompenses_fournisseur.call()
+		if not rec.is_empty() and (float(rec.get("xp", 0.0)) > 0.0
+				or float(rec.get("euren", 0.0)) > 0.0):
+			var recomp := UIHelpers.label(Translations.T("ctb.recompenses") % [
+					int(roundf(float(rec.get("xp", 0.0)))),
+					int(roundf(float(rec.get("euren", 0.0))))],
+					16, UIColors.LOOT_NEUTRAL.lightened(0.25))
+			recomp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_voile_contenu.add_child(recomp)
 	var invite := UIHelpers.label(Translations.T("ctb.continuer"), 13, UIColors.TEXT_MUTED)
 	invite.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_voile_contenu.add_child(invite)

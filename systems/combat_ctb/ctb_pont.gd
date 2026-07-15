@@ -39,12 +39,17 @@
 #   ForgeSystem *_pct, empilés ADDITIVEMENT — jamais de produit séquentiel).
 #
 # Mapping héros → CombattantCtbData (bonus de stats UNIQUEMENT) :
-#   pv_max      = (hp nue + passifs.hp_bonus + équip.hp)   × (1 + hp_pct)
-#   atk         = (atk nue + passifs.atk_bonus + équip.atk) × (1 + atk_pct)
-#   def         = (def nue + passifs.def_bonus + équip.def) × (1 + def_pct)
-#   vit         = vit nue × (1 + équip.attack_speed_pct/100 + forge atb_pct)
+#   pv_max      = (hp nue + passifs.hp_bonus + équip.hp + niveau.hp)   × (1 + hp_pct)
+#   atk         = (atk nue + passifs.atk_bonus + équip.atk + niveau.atk) × (1 + atk_pct)
+#   def         = (def nue + passifs.def_bonus + équip.def + niveau.def) × (1 + def_pct)
+#   vit         = (vit nue + niveau.vit) × (1 + équip.attack_speed_pct/100 + forge atb_pct)
 #   crit_chance = crit nue + (village CH_CRIT_PCT + forge crit_pct)  [points]
 #   crit_multiplier = crit_multiplier nue
+# niveau.* = bonus PLATS du niveau de héros (chantier 6, ProgressionHeros.
+# bonus_plats() — fractions cumulées (niveau−1) × gain, .tres), injectés à la
+# même position que les autres plats, AVANT les % (additif universel inchangé).
+# Le combattant étant construit AU LANCEMENT, un niveau gagné en cours de run
+# compte au prochain combat — jamais à chaud (arbitrage 06/07/2026).
 #
 # LAISSÉ DERRIÈRE (volontairement — hors bonus de stats du héros seul) :
 #   GameData.get_mastery_combat_bonus(enemy_id) — bonus d'ATK par familiarité
@@ -92,6 +97,7 @@ static func combattant_depuis_heros() -> CombattantCtbData:
 		return null
 	var passifs: Dictionary = PassiveSystem.get_combat_bonuses()
 	var equip: Dictionary = GameData.get_equipment_bonuses()
+	var niv: Dictionary = ProgressionHeros.bonus_plats()
 	var atk_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_ATK_PCT) \
 			+ ForgeSystem.get_stat_bonus("atk_pct")
 	var def_pct: float = VillageBuildings.get_bonus(VillageBuildings.CH_DEF_PCT) \
@@ -106,14 +112,15 @@ static func combattant_depuis_heros() -> CombattantCtbData:
 	d.nom_affichage_en = str(entity.get("nom_affichage_en", "Hero"))
 	d.pv_max = StatStacker.final_stat(
 			float(stats.get("hp", 100)) + float(passifs.get("hp_bonus", 0.0))
-			+ float(equip.get("hp", 0.0)), [hp_pct], "hp")
+			+ float(equip.get("hp", 0.0)) + float(niv.get("hp", 0.0)), [hp_pct], "hp")
 	d.atk = StatStacker.final_stat(
 			float(stats.get("atk", 0)) + float(passifs.get("atk_bonus", 0.0))
-			+ float(equip.get("atk", 0.0)), [atk_pct], "atk")
+			+ float(equip.get("atk", 0.0)) + float(niv.get("atk", 0.0)), [atk_pct], "atk")
 	d.def = StatStacker.final_stat(
 			float(stats.get("def", 0)) + float(passifs.get("def_bonus", 0.0))
-			+ float(equip.get("def", 0.0)), [def_pct], "def")
-	d.vit = StatStacker.final_stat(float(stats.get("vit", 20)),
+			+ float(equip.get("def", 0.0)) + float(niv.get("def", 0.0)), [def_pct], "def")
+	d.vit = StatStacker.final_stat(
+			float(stats.get("vit", 20)) + float(niv.get("vit", 0.0)),
 			[float(equip.get("attack_speed_pct", 0.0)) / 100.0,
 			ForgeSystem.get_stat_bonus("atb_pct")], "vit")
 	d.crit_chance = float(stats.get("crit_chance", Balance.CRIT_CHANCE)) + crit_pct

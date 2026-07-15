@@ -56,10 +56,7 @@ func _ready() -> void:
 # expéditions (XP, loot) qui marqueraient le flag dirty et, après le
 # debounce, ÉCRASERAIENT la sauvegarde du joueur avec l'état simulé.
 func _disable_save_writes() -> void:
-	for sig: Signal in [EventBus.xp_gained, EventBus.bestiary_updated,
-			EventBus.resources_changed, EventBus.entity_evolved,
-			EventBus.passive_unlocked, EventBus.equipment_changed,
-			EventBus.equipement_evolue, EventBus.village_tier_change]:
+	for sig: Signal in SaveManager.signaux_progression():
 		if sig.is_connected(SaveManager._on_progress):
 			sig.disconnect(SaveManager._on_progress)
 	SaveManager._save_timer.stop()
