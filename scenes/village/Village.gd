@@ -1101,21 +1101,57 @@ func lancer_expedition(lieu_id: String, palier: PalierProfondeurData, graine: in
 		_expe_lancement = null
 	if _holo_overlay != null and is_instance_valid(_holo_overlay):
 		(_holo_overlay as HoloMap3DOverlay).fermer()   # persistant → veille
+	# Point de sauvegarde de RÉFÉRENCE (chantier 9) : flush EXPLICITE — le
+	# debounce (2 s) ne garantit rien à cet instant. Mourir renverra à l'état
+	# exact du départ en expédition : ni plus tôt, ni pendant la run — les
+	# écritures sont SUSPENDUES jusqu'à la fin de la run (le debounce des
+	# crédits de victoire écrirait sinon un état de mi-run, sanction vide ;
+	# fermer la fenêtre en pleine run ne sauve rien non plus : à la
+	# réouverture, l'état est celui du départ, run non entamée).
+	SaveManager.sauvegarder_maintenant()
+	SaveManager.suspendre_ecritures()
 	var ecran := ExpeditionScreen.new(lieu_id, palier, heros, DESTINATIONS.pool_pour(lieu_id), graine)
 	ecran.z_index = 500
 	ecran.retour_qg.connect(_sur_retour_expedition)
 	add_child(ecran)
 	_expedition_screen = ecran
 
-# Retour au QG après le recap de fin d'expédition (extraction, complétion ou
-# défaite — même retour, la défaite ne crédite juste rien ; Game Over hors
-# scope). Le hub reprend la main, panneau ouvert rafraîchi (XP/Euren ont bougé).
-func _sur_retour_expedition(_recap: Dictionary) -> void:
+# Retour au QG après la fin d'expédition. Extraction/complétion : simple
+# retour (panneau/badges rafraîchis — XP/Euren ont bougé). DÉFAITE (chantier
+# 9) : SÉQUENCE DE GAME OVER — le message 1 (« R-XXX est détruit... ») a déjà
+# été confirmé sur l'écran d'expédition ; ici : incrément du compteur méta,
+# rechargement de la dernière sauvegarde (l'état du LANCEMENT — l'XP créditée
+# pendant la run perdue disparaît), puis message 2 avec le NOUVEAU compteur.
+func _sur_retour_expedition(recap: Dictionary) -> void:
 	if is_instance_valid(_expedition_screen):
 		_expedition_screen.queue_free()
 	_expedition_screen = null
+	if bool(recap.get("defaite", false)):
+		_terminer_game_over()
+		return
+	# Sortie normale : reprise des écritures + flush immédiat (XP de la run
+	# et Euren de sortie, accumulés en dirty pendant la suspension).
+	SaveManager.reprendre_ecritures(true)
 	_update_badges()
 	_refresh_active_panel()
+
+# Game Over (règles actées 06/07/2026) : mort = retour à la dernière
+# sauvegarde, compteur R-XXX méta-persistant incrémenté (il survit au
+# rechargement — fichier méta séparé, cf. SaveManager). Fermer le jeu n'est
+# PAS mourir : cette séquence ne passe QUE par la défaite en expédition.
+func _terminer_game_over() -> void:
+	SaveManager.incrementer_reconstruction()   # R-004 → R-005 (nom héros ré-appliqué)
+	SaveManager.reprendre_ecritures(false)     # rien à écrire : on recharge
+	SaveManager.recharger()                    # état exact du départ en expédition
+	_update_badges()
+	_refresh_active_panel()
+	# Message 2 : « Reconstruction de R-005 complète. » → clic → QG.
+	var ecran := EcranMessage.new()
+	ecran.message = Translations.T("gameover.reconstruit") % SaveManager.nom_reconstruction()
+	ecran.accent = Color(0.35, 0.90, 0.55)
+	ecran.z_index = 520
+	ecran.confirme.connect(ecran.queue_free)
+	add_child(ecran)
 
 # Construit les lieux d'expédition depuis les ZONES de la feuille « Carte ». Un LIEU =
 # une zone (bloc d'apparence) dont une cellule porte un ID (déjà détecté → zone["id"]).

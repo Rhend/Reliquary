@@ -61,6 +61,9 @@ jobs:
       - name: TestFluxExpedition (flux de jeu réel — QG → HoloMap → expédition → crédits persistés)
         run: $GODOT --headless --path . res://tests/TestFluxExpedition.tscn
 
+      - name: TestGameOver (sanction de mort — compteur R-XXX, rechargement, suspension)
+        run: $GODOT --headless --path . res://tests/TestGameOver.tscn
+
       - name: TestTierCap (plafond dur global T2)
         run: $GODOT --headless --path . res://tests/TestTierCap.tscn
 

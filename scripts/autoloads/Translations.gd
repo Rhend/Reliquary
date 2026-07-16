@@ -336,6 +336,10 @@ const STRINGS: Dictionary = {
 		"expe.recap_purge":         "Purgé en fin de run : %d affixe(s), %d consommable(s)",
 		"expe.retour_btn":          "⌂  RETOUR AU QG",
 
+		# ── Game Over / reconstruction (Rework Combat — chantier 9) ──
+		"gameover.detruit":         "%s est détruit...",
+		"gameover.reconstruit":     "Reconstruction de %s complète.",
+
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPÉDITION TERMINÉE  —  %s",
 		"cycle.banner_title":     "Retour au village",
@@ -758,6 +762,10 @@ const STRINGS: Dictionary = {
 		"expe.recap_euren":         "Euren credited: %d",
 		"expe.recap_purge":         "Purged at run's end: %d affix(es), %d consumable(s)",
 		"expe.retour_btn":          "⌂  BACK TO HQ",
+
+		# ── Game Over / reconstruction (Rework Combat — chantier 9) ──
+		"gameover.detruit":         "%s is destroyed...",
+		"gameover.reconstruit":     "Reconstruction of %s complete.",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPEDITION ENDED  —  %s",

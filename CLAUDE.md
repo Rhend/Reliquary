@@ -44,7 +44,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Flux de jeu RÉEL de l'expédition (Rework ch.8) : « Partir en expédition » ouvre la HoloMap → clic Lieu → `ExpeLancementPanel` (destination + palier) → `Village.lancer_expedition()` → `ExpeditionScreen` (écran de jeu, persistance ACTIVE, combats à la main) → recap → retour au QG. Destination → pool : `data/expedition/destinations.tres` (`ExpeDestinationsData`, provisoire : tout sur `pool_defaut`). Vue de carte partagée écran de jeu ↔ sandbox : `ExpeCarteView` | `scenes/expedition/ExpeditionScreen.gd` + `ExpeLancementPanel.gd` + `ExpeCarteView.gd` |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
-| Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
+| Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) + sanction de mort (Rework ch.9) : flush de RÉFÉRENCE au lancement d'expédition puis écritures SUSPENDUES pendant la run (`suspendre_ecritures`/`reprendre_ecritures` — fermer la fenêtre en run ne sauve rien), `recharger()` (Game Over = ré-application de la dernière sauvegarde), compteur de reconstruction **R-XXX MÉTA-PERSISTANT** (`user://IdleEvolutionMeta.json`, séparé de la partie, init R-001, plafond d'affichage R-999, `nom_reconstruction()` = source UNIQUE du formatage, appliqué à l'entité hero → tous les affichages) | `scripts/autoloads/SaveManager.gd` |
 | Quartiers / routes / bâtiments + bonus de village (Chantier 4) | `scripts/systems/VillageBuildings.gd` |
 | Forge : palier d'équipement (XP, sans ingrédient) + arbre de nœuds + bonus (Chantier 5) | `scripts/systems/ForgeSystem.gd` |
 
@@ -61,8 +61,14 @@ combat à la construction). Depuis le CHANTIER 8, l'expédition est BRANCHÉE AU
 JEU RÉEL : « Partir en expédition » (panneau ou hub) ouvre la HoloMap, un clic
 sur un Lieu ouvre le panneau de lancement (palier de profondeur — toujours sans
 effet mécanique), et la run se joue dans `ExpeditionScreen` avec persistance
-ACTIVE (XP/Euren déclenchent la sauvegarde). Retour au QG à toute sortie ;
-défaite = extraction sans butin (Game Over/rechargement : chantier suivant).
+ACTIVE (XP/Euren déclenchent la sauvegarde — écritures SUSPENDUES pendant la
+run depuis le ch.9, flushées à la sortie). Retour au QG à toute sortie
+normale ; DÉFAITE (ch.9) = GAME OVER : message « R-XXX est détruit... »
+(`EcranMessage`), incrément du compteur méta, rechargement de la dernière
+sauvegarde (= l'état du lancement — l'XP créditée pendant la run est perdue),
+message « Reconstruction de R-XXX+1 complète. », retour au QG. Fermer le jeu
+en pleine run n'est PAS mourir : rien n'est écrit, pas d'incrément — à la
+réouverture, l'état est celui du départ, run non entamée.
 L'ancienne boucle idle (`AdventureSystem`) n'a PLUS AUCUN point d'entrée UI
 (elle est morte avec son moteur : rencontres non résolues) — le système reste
 chargé pour ses utilitaires (drops de biome, zones, résumé de cycle) et
@@ -142,7 +148,8 @@ godot --headless --path . res://tests/TestExpeNoeuds.tscn       # nœuds réels 
 godot --headless --path . res://tests/TestExpeCarte.tscn        # carte d'expédition (39)
 godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔ nœuds d'expédition + ponts (45)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)
-godot --headless --path . res://tests/TestFluxExpedition.tscn   # flux de jeu réel QG→HoloMap→expédition→crédits persistés (46)
+godot --headless --path . res://tests/TestFluxExpedition.tscn   # flux de jeu réel QG→HoloMap→expédition→crédits persistés + Game Over (65)
+godot --headless --path . res://tests/TestGameOver.tscn         # sanction de mort : compteur R-XXX, rechargement, suspension (26)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
@@ -173,11 +180,18 @@ godot --headless --path . --quit-after 30
   passer par le Village ne peut plus détruire la progression du joueur.
 - Étendre : nouvelle donnée joueur → `GameData.player` (auto) ; nouveau flag d'entité
   → `SaveManager.PERSISTED_FLAGS` ; nouvel état système → `_save_systems()/_load_systems()`.
+- MÉTA-persistance (chantier 9) : `user://IdleEvolutionMeta.json` — compteur de
+  reconstruction R-XXX, SÉPARÉ de la partie (le Game Over recharge la sauvegarde,
+  le compteur ne recule jamais). Écrit à chaque incrément (atomique, .bak propre).
 - Ne JAMAIS écrire la sauvegarde dans un test : déconnecter les listeners de
   SaveManager (voir le pattern dans l'historique des tests d'intégration).
-  EXCEPTION UNIQUE : `TestFluxExpedition` (chantier 8), dont l'objet est le
-  round-trip réel — il MET DE CÔTÉ les fichiers réels au démarrage
-  (renommés `.avant_test`) et les RESTAURE avant de quitter.
+  EXCEPTIONS : `TestFluxExpedition` (chantier 8) et `TestGameOver` (chantier
+  9), dont l'objet est le round-trip réel — ils METTENT DE CÔTÉ les fichiers
+  réels au démarrage (renommés `.avant_test`, fichier méta compris) et les
+  RESTAURENT avant de quitter.
+- Nom du héros = compteur de reconstruction R-XXX (chantier 9) : JAMAIS de
+  formatage `R-%03d` ailleurs que `SaveManager.nom_reconstruction()` — le nom
+  est appliqué à l'entité hero (nom_affichage_*), tout le reste en découle.
 
 ## ⚠ Flags de dev à désactiver avant release
 

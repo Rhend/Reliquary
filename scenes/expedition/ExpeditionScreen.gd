@@ -233,12 +233,26 @@ func _sur_terminee(recap: Dictionary) -> void:
 	_recap_final = recap
 	_rafraichir()
 	# Défaite EN COMBAT : l'écran de combat affiche d'abord son issue (clic
-	# joueur pour le fermer), le recap d'expédition vient ensuite.
+	# joueur pour le fermer), la suite (recap ou Game Over) vient ensuite.
 	if _combat_ui != null:
 		_combat_ui.fermee.connect(func(_r: Dictionary) -> void:
-			_afficher_recap(recap), CONNECT_ONE_SHOT)
+			_afficher_fin(recap), CONNECT_ONE_SHOT)
 	else:
+		_afficher_fin(recap)
+
+# Extraction/complétion → recap ; défaite → SÉQUENCE DE GAME OVER (chantier 9,
+# remplace l'« extraction sans butin » provisoire) : message 1 « R-XXX est
+# détruit... » (compteur COURANT, avant incrément — l'incrément et le
+# rechargement sont chez le Village, déclenchés par retour_qg).
+func _afficher_fin(recap: Dictionary) -> void:
+	if not bool(recap.get("defaite", false)):
 		_afficher_recap(recap)
+		return
+	var ecran := EcranMessage.new()
+	ecran.message = Translations.T("gameover.detruit") % SaveManager.nom_reconstruction()
+	ecran.accent = Color(0.90, 0.30, 0.28)
+	ecran.confirme.connect(retour)
+	add_child(ecran)
 
 func _afficher_recap(recap: Dictionary) -> void:
 	var voile := ColorRect.new()

@@ -44,6 +44,12 @@ const PERSISTED_FLAGS: Array[String] = [
 
 var _save_dirty:  bool  = false
 var _save_loaded: bool  = false
+# Écritures SUSPENDUES pendant une run d'expédition (chantier 9) : la
+# sauvegarde de référence est celle du LANCEMENT — aucune écriture en cours
+# de run (ni debounce, ni flush de fermeture), sinon mourir renverrait à un
+# état de mi-run et la sanction serait vide. Le dirty est CONSERVÉ pour la
+# reprise (sortie normale → flush ; Game Over → rechargement, rien à écrire).
+var _suspendue := false
 # load_save() a tourné (même si aucun fichier n'existait). Tant que ce
 # n'est pas le cas, save() REFUSE d'écraser une sauvegarde existante :
 # un outil dev / test qui émet des signaux de progression sans passer
@@ -60,6 +66,10 @@ func _ready() -> void:
 
 	for sig: Signal in signaux_progression():
 		sig.connect(_on_progress)
+
+	# Nom du héros = compteur méta R-XXX dès le boot (GameData est chargé
+	# avant nous dans l'ordre des autoloads).
+	_appliquer_nom_hero()
 
 # SOURCE UNIQUE des déclencheurs de sauvegarde. Les tests et le
 # ScreenshotTool itèrent cette liste pour se déconnecter (ne jamais écrire
@@ -92,6 +102,8 @@ func _on_progress(_a = null, _b = null) -> void:
 	_save_timer.start()
 
 func _flush_save() -> void:
+	if _suspendue:
+		return   # run en cours : le dirty attend la reprise (jamais perdu)
 	if _save_dirty:
 		_save_dirty = false
 		save()
@@ -107,6 +119,8 @@ func _notification(what: int) -> void:
 # ═══════════════════════════════════════════════════════════
 
 func save() -> void:
+	if _suspendue:
+		return   # run d'expédition en cours : la référence reste le lancement
 	# Garde-fou : ne JAMAIS écraser une sauvegarde qu'on n'a pas chargée.
 	if not _load_attempted and FileAccess.file_exists(SAVE_PATH):
 		push_warning("SaveManager: écriture refusée — sauvegarde existante jamais chargée (outil/test ?)")
@@ -122,10 +136,13 @@ func save() -> void:
 		EventBus.save_completed.emit()
 
 # Écrit `content` dans `path` de façon atomique : écriture dans un .tmp,
-# rotation de l'ancienne sauvegarde vers .bak (filet de sécurité chargé
-# automatiquement si la principale devient illisible), puis renommage.
+# rotation de l'ancien fichier vers `path`.bak (filet de sécurité — pour la
+# sauvegarde de partie, il est rechargé automatiquement si la principale
+# devient illisible), puis renommage. Backup dérivé du chemin (le fichier
+# méta a le sien, jamais mélangé à celui de la sauvegarde).
 func _write_text_atomic(path: String, content: String) -> bool:
 	var tmp_path := path + ".tmp"
+	var bak_path := path + ".bak"
 	var file := FileAccess.open(tmp_path, FileAccess.WRITE)
 	if file == null:
 		push_error("SaveManager: impossible d'ouvrir %s en écriture" % tmp_path)
@@ -133,15 +150,15 @@ func _write_text_atomic(path: String, content: String) -> bool:
 	file.store_string(content)
 	file.flush()
 	file.close()
-	# Rotation : l'ancienne sauvegarde devient le backup.
+	# Rotation : l'ancien fichier devient le backup.
 	if FileAccess.file_exists(path):
-		if FileAccess.file_exists(BACKUP_PATH):
-			DirAccess.remove_absolute(BACKUP_PATH)
-		DirAccess.rename_absolute(path, BACKUP_PATH)
+		if FileAccess.file_exists(bak_path):
+			DirAccess.remove_absolute(bak_path)
+		DirAccess.rename_absolute(path, bak_path)
 	if DirAccess.rename_absolute(tmp_path, path) == OK:
 		return true
 	push_error("SaveManager: impossible de remplacer %s (l'ancienne version est dans %s)"
-			% [path, BACKUP_PATH])
+			% [path, bak_path])
 	return false
 
 func _save_player() -> Dictionary:
@@ -310,6 +327,114 @@ func _load_systems(data: Dictionary) -> void:
 # Versions supportées : 11 (format entities plat), 12+ (hiérarchique).
 func _is_version_supported(ver: int) -> bool:
 	return ver >= 11 and ver <= SAVE_VER
+
+# ═══════════════════════════════════════════════════════════
+#  Sanction de mort (chantier 9) : flush de lancement, rechargement,
+#  compteur de reconstruction R-XXX MÉTA-PERSISTANT
+# ═══════════════════════════════════════════════════════════
+
+# Fichier MÉTA, SÉPARÉ de la sauvegarde de partie (règle actée 06/07/2026) :
+# le Game Over recharge la sauvegarde, le compteur ne doit JAMAIS reculer
+# avec elle. JSON minimal { version, reconstructions } ; absent → R-001.
+const META_PATH := "user://IdleEvolutionMeta.json"
+const META_VER := 1
+# Plafond D'AFFICHAGE : le nom reste R-999 au-delà (l'interne continue de
+# compter — au plus simple, la donnée n'est pas perdue si un usage vient).
+const RECONSTRUCTION_MAX_AFFICHE := 999
+
+var _reconstructions := 1
+var _meta_chargee := false
+
+# Sauvegarde IMMÉDIATE (hors debounce) — point de sauvegarde de référence au
+# lancement d'une expédition : mourir renvoie à l'état exact du départ.
+func sauvegarder_maintenant() -> void:
+	if _suspendue:
+		return   # run en cours : la référence reste celle du lancement
+	_save_timer.stop()
+	_save_dirty = false
+	save()
+
+# Suspend toute écriture de la sauvegarde de partie (appelé par le Village au
+# lancement d'une expédition, APRÈS le flush de référence). Le fichier méta
+# n'est PAS concerné (écrit en direct, jamais par save()).
+func suspendre_ecritures() -> void:
+	_suspendue = true
+
+# Reprise des écritures à la fin de la run. `flush` : true = sortie normale
+# (la progression accumulée pendant la run — dirty conservé — est écrite
+# immédiatement) ; false = Game Over (l'état va être rechargé, rien à écrire).
+func reprendre_ecritures(flush := true) -> void:
+	_suspendue = false
+	if flush:
+		_flush_save()
+
+# Recharge la DERNIÈRE sauvegarde PAR-DESSUS l'état runtime (Game Over).
+# Ré-application du fichier : suffisant aujourd'hui — depuis la sauvegarde de
+# lancement, une run ne mutate que heros_xp / euren (crédités par signaux ;
+# les drops d'expédition n'existent pas encore). À re-évaluer quand une run
+# mutera d'autres états (drops, découvertes) : il faudra alors réinitialiser
+# GameData avant ré-application.
+func recharger() -> void:
+	_save_timer.stop()
+	_save_dirty = false
+	_save_loaded = false
+	load_save()
+
+# ─── Compteur de reconstruction R-XXX ────────────────────────
+
+# Nom courant du héros : « R-%03d », plafonné à R-999 à l'affichage.
+# SOURCE UNIQUE du formatage — ne jamais reformater ailleurs.
+func nom_reconstruction() -> String:
+	_charger_meta()
+	return "R-%03d" % mini(_reconstructions, RECONSTRUCTION_MAX_AFFICHE)
+
+func compteur_reconstruction() -> int:
+	_charger_meta()
+	return _reconstructions
+
+# Incrément au Game Over : écrit le fichier méta IMMÉDIATEMENT (il doit
+# survivre au rechargement qui suit, et à un crash) puis ré-applique le
+# nouveau nom à l'entité héros.
+func incrementer_reconstruction() -> void:
+	_charger_meta()
+	_reconstructions += 1
+	_ecrire_meta()
+	_appliquer_nom_hero()
+
+func _charger_meta() -> void:
+	if _meta_chargee:
+		return
+	_meta_chargee = true
+	if not FileAccess.file_exists(META_PATH):
+		return   # première partie : R-001, fichier créé au premier Game Over
+	var f := FileAccess.open(META_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var json := JSON.new()
+	var err := json.parse(f.get_as_text())
+	f.close()
+	if err != OK or not (json.get_data() is Dictionary):
+		push_warning("SaveManager: fichier méta illisible — compteur reparti à R-001")
+		return
+	_reconstructions = maxi(1, int((json.get_data() as Dictionary).get("reconstructions", 1)))
+
+func _ecrire_meta() -> void:
+	_write_text_atomic(META_PATH, JSON.stringify({
+		"version": META_VER,
+		"reconstructions": _reconstructions,
+	}, "\t"))
+
+# Le nom affiché du héros = compteur méta, branché à la SOURCE UNIQUE des
+# noms (l'entité « hero » de GameData — Translations.entity_name et le pont
+# CTB lisent nom_affichage_*). Appliqué au boot et à chaque incrément ;
+# identique FR/EN (matricule, pas un mot).
+func _appliquer_nom_hero() -> void:
+	var hero := GameData.get_entity("hero")
+	if hero.is_empty():
+		return
+	var nom := nom_reconstruction()
+	hero["nom_affichage_fr"] = nom
+	hero["nom_affichage_en"] = nom
 
 # ═══════════════════════════════════════════════════════════
 #  Export / Import (panneau Paramètres)

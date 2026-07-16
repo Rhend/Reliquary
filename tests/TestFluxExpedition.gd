@@ -17,7 +17,9 @@ extends Node
 # ============================================================
 
 const SAUV := "user://IdleEvolutionSave.json"
-const FICHIERS_SAUV: Array[String] = [SAUV, SAUV + ".bak"]
+const META := SaveManager.META_PATH
+# Protocole de protection (chantier 8, ÉTENDU au fichier méta au chantier 9).
+const FICHIERS_SAUV: Array[String] = [SAUV, SAUV + ".bak", META, META + ".bak"]
 const PALIER_ENCEINTE: PalierProfondeurData = preload("res://data/expedition/palier_enceinte.tres")
 const PALIER_PERIPHERIE: PalierProfondeurData = preload("res://data/expedition/palier_peripherie.tres")
 # Graine de la run de DÉFAITE (reproductible : le RNG Godot est déterministe
@@ -32,6 +34,11 @@ func _ready() -> void:
 	# taille du viewport, on rétablit la taille projet.
 	get_tree().root.size = Vector2i(1280, 720)
 	_proteger_sauvegarde()
+	# Le méta RÉEL a déjà été lu par SaveManager._ready (avant la protection) :
+	# repartir d'une partie neuve, compteur R-001 compris.
+	SaveManager._meta_chargee = true
+	SaveManager._reconstructions = 1
+	SaveManager._appliquer_nom_hero()
 	await _run_all()
 	_restaurer_sauvegarde()
 	_print_report()
@@ -82,6 +89,28 @@ func _restaurer_sauvegarde() -> void:
 		if FileAccess.file_exists(f + ".avant_test"):
 			DirAccess.rename_absolute(ProjectSettings.globalize_path(f) + ".avant_test",
 					ProjectSettings.globalize_path(f))
+
+# Lit le fichier de sauvegarde réel → dict `player` ({} si absent/illisible).
+func _joueur_du_fichier() -> Dictionary:
+	if not FileAccess.file_exists(SAUV):
+		return {}
+	var f := FileAccess.open(SAUV, FileAccess.READ)
+	var json := JSON.new()
+	if json.parse(f.get_as_text()) != OK or not (json.get_data() is Dictionary):
+		f.close()
+		return {}
+	f.close()
+	return (json.get_data() as Dictionary).get("player", {})
+
+# Premier EcranMessage vivant sous `racine` (récursif) — séquence Game Over.
+func _ecran_message_sous(racine: Node) -> EcranMessage:
+	for child in racine.get_children():
+		if child is EcranMessage:
+			return child
+		var trouve := _ecran_message_sous(child)
+		if trouve != null:
+			return trouve
+	return null
 
 # Tous les Buttons sous `racine` (récursif) — pour presser les vrais boutons.
 func _boutons_sous(racine: Node) -> Array[Button]:
@@ -208,6 +237,14 @@ func _test_lancement_vers_expedition() -> void:
 			"pool résolu par la destination (provisoire : pool_defaut partagé)")
 	_assert(screen.run.palier.id == "palier_enceinte",
 			"le palier choisi au lancement circule dans la run")
+	# Sauvegarde de RÉFÉRENCE au lancement (chantier 9) + écritures suspendues.
+	_assert(FileAccess.file_exists(SAUV), "sauvegarde de lancement écrite (flush explicite)")
+	_assert(is_equal_approx(float(_joueur_du_fichier().get("heros_xp", -1.0)),
+			ProgressionHeros.xp_totale()),
+			"la sauvegarde de lancement porte l'état exact du départ")
+	_assert(SaveManager._suspendue, "écritures suspendues pendant la run")
+	_assert(screen.run.avatar_data.nom_journal() == SaveManager.nom_reconstruction(),
+			"nom du héros en combat = compteur R-XXX (%s)" % SaveManager.nom_reconstruction())
 
 # ─── 4. Run jouée → sortie → crédits ────────────────────────
 
@@ -227,8 +264,17 @@ func _test_run_victoire_et_credits() -> void:
 
 	# Joue étage par étage jusqu'à avoir gagné au moins un combat, puis sort
 	# (extraction) ; complétion au dernier étage sinon (crédit identique).
+	var suspension_verifiee := false
 	while not run.est_terminee:
 		_jouer_etage(screen)
+		# Suspension (chantier 9) : de l'XP a été créditée en runtime, mais le
+		# FICHIER porte toujours l'état du lancement — même un flush simulé
+		# (fermeture de la fenêtre en pleine run) n'écrit rien.
+		if not suspension_verifiee and run.xp_gagnee > 0.0 and not run.est_terminee:
+			suspension_verifiee = true
+			SaveManager._flush_save()
+			_assert(is_equal_approx(float(_joueur_du_fichier().get("heros_xp", -1.0)),
+					xp_avant), "aucune écriture pendant la run (fermeture comprise)")
 		if run.est_terminee:
 			break
 		if run.choix_ouvert:
@@ -261,9 +307,10 @@ func _test_run_victoire_et_credits() -> void:
 
 func _test_persistance_round_trip() -> void:
 	print("\n[TEST 5] Crédits persistés (round-trip par le fichier de sauvegarde)")
-	_assert(SaveManager._save_dirty, "les crédits de la run ont marqué la sauvegarde dirty")
-	SaveManager._save_timer.stop()
-	SaveManager._flush_save()
+	# Chantier 9 : la reprise des écritures au retour a DÉJÀ flushé les
+	# crédits de la run (plus de debounce en attente).
+	_assert(not SaveManager._suspendue, "écritures reprises au retour au QG")
+	_assert(not SaveManager._save_dirty, "crédits déjà flushés à la reprise (rien en attente)")
 	_assert(FileAccess.file_exists(SAUV), "fichier de sauvegarde écrit")
 
 	var f := FileAccess.open(SAUV, FileAccess.READ)
@@ -278,12 +325,15 @@ func _test_persistance_round_trip() -> void:
 	_assert(is_equal_approx(float(joueur.get("euren", -1.0)), ProgressionHeros.euren()),
 			"euren du FICHIER == Euren runtime (round-trip)")
 
-# ─── 6. Défaite : retour sans crédit ────────────────────────
+# ─── 6. Défaite : SÉQUENCE DE GAME OVER (chantier 9) ────────
 
 func _test_defaite_sans_credit() -> void:
-	print("\n[TEST 6] Défaite → retour au QG SANS crédit d'Euren")
-	var xp_avant: float = ProgressionHeros.xp_totale()
+	print("\n[TEST 6] Défaite → Game Over : 2 messages, R-XXX incrémenté, état rechargé")
+	var xp_lancement: float = ProgressionHeros.xp_totale()
 	var euren_avant: float = ProgressionHeros.euren()
+	_assert(SaveManager.compteur_reconstruction() == 1,
+			"compteur NON incrémenté par l'extraction/complétion (toujours R-001)")
+	var nom_avant := SaveManager.nom_reconstruction()
 
 	# Même rail que le bouton PARTIR (lancer_expedition), graine fixée pour
 	# une carte reproductible ; héros sabré (PV 1) → première morsure = mort.
@@ -297,6 +347,12 @@ func _test_defaite_sans_credit() -> void:
 	run.avatar_data.atk = 1.0
 	run.avatar_data.def = 0.0
 	run.pv_avatar = 1.0
+
+	# XP « de run » simulée (crédit de victoire) : elle doit DISPARAÎTRE au
+	# rechargement — elle n'existait pas à la sauvegarde de lancement.
+	ProgressionHeros.gagner_xp(50.0)
+	_assert(is_equal_approx(ProgressionHeros.xp_totale(), xp_lancement + 50.0),
+			"XP de run créditée en runtime avant la mort")
 
 	# Marche vers le combat le plus proche, étage par étage, jusqu'à la mort.
 	while not run.est_terminee:
@@ -320,17 +376,55 @@ func _test_defaite_sans_credit() -> void:
 
 	_assert(run.est_terminee and run.defaite, "défaite survenue (graine %d)" % GRAINE_DEFAITE)
 	_assert(run.euren_credite == 0.0, "aucun Euren crédité en défaite")
-	_assert(is_equal_approx(ProgressionHeros.euren(), euren_avant),
-			"Euren possédé inchangé après la défaite")
-	_assert(is_equal_approx(ProgressionHeros.xp_totale(), xp_avant),
-			"XP inchangée (aucune victoire dans la run de défaite)")
-	_assert(bool(screen._recap_final.get("defaite", false)), "recap de défaite affiché")
 
-	var btn_retour := _bouton_texte(screen, Translations.T("expe.retour_btn"))
-	_assert(btn_retour != null, "bouton « Retour au QG » présent après défaite")
-	btn_retour.pressed.emit()
+	# Message 1 — « R-001 est détruit... » (compteur COURANT, avant incrément).
+	var msg1 := _ecran_message_sous(screen)
+	_assert(msg1 != null, "écran Game Over (message 1) affiché sur l'écran d'expédition")
+	if msg1 == null:
+		return
+	_assert(msg1.message == Translations.T("gameover.detruit") % nom_avant,
+			"message 1 = « %s est détruit... » (compteur AVANT incrément)" % nom_avant)
+	_assert(SaveManager.compteur_reconstruction() == 1,
+			"compteur pas encore incrémenté à l'affichage du message 1")
+	msg1.confirmer()
 	await get_tree().process_frame
-	_assert(village._expedition_screen == null, "retour au QG après défaite (sans Game Over — hors scope)")
+
+	# Incrément + rechargement + message 2 — « Reconstruction de R-002 complète. »
+	_assert(village._expedition_screen == null, "écran d'expédition libéré après confirmation")
+	_assert(SaveManager.compteur_reconstruction() == 2, "compteur incrémenté au Game Over (R-002)")
+	_assert(SaveManager.nom_reconstruction() == "R-002", "formatage R-%03d (R-002)")
+	var msg2 := _ecran_message_sous(village)
+	_assert(msg2 != null, "message 2 affiché sur le Village après rechargement")
+	if msg2 != null:
+		_assert(msg2.message == Translations.T("gameover.reconstruit") % "R-002",
+				"message 2 = « Reconstruction de R-002 complète. » (NOUVEAU compteur)")
+		msg2.confirmer()
+		await get_tree().process_frame
+		_assert(_ecran_message_sous(village) == null, "message 2 refermé → retour au QG")
+
+	# État RECHARGÉ = état exact du lancement : XP de run perdue, Euren intact.
+	_assert(is_equal_approx(ProgressionHeros.xp_totale(), xp_lancement),
+			"XP créditée pendant la run PERDUE au rechargement")
+	_assert(is_equal_approx(ProgressionHeros.euren(), euren_avant),
+			"Euren possédé inchangé après le Game Over")
+
+	# Nom du héros à jour PARTOUT (source unique : l'entité hero).
+	_assert(Translations.entity_name(GameData.get_entity("hero")) == "R-002",
+			"nom du héros (entité/Translations) = R-002 après reconstruction")
+	var transitoire := CtbPont.combattant_depuis_heros()
+	_assert(transitoire != null and transitoire.nom_affichage_fr == "R-002",
+			"prochain combattant héros (pont CTB) nommé R-002")
+
+	# Méta-persistance : le compteur survit au rechargement ET vit dans son
+	# propre fichier (round-trip réel : relecture forcée depuis le disque).
+	SaveManager.recharger()
+	_assert(SaveManager.compteur_reconstruction() == 2,
+			"le compteur survit à un rechargement de sauvegarde supplémentaire")
+	_assert(FileAccess.file_exists(META), "fichier méta écrit (séparé de la sauvegarde)")
+	SaveManager._meta_chargee = false
+	SaveManager._reconstructions = 1
+	_assert(SaveManager.compteur_reconstruction() == 2,
+			"round-trip méta : relecture du fichier → compteur 2")
 
 # ─── 7. Sandbox : toujours aucune écriture ──────────────────
 
