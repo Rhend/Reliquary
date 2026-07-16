@@ -60,3 +60,16 @@ Ce chantier :
 3. **Messages placeholder** : l'`EcranMessage` est prêt à accueillir la narration de la reconstruction (dialogues Reliquaire, hors scope) — remplacer les textes ou enrichir l'écran à ce moment-là.
 4. **`recharger()` par ré-application** : à re-évaluer dès qu'une run mutera d'autres états que heros_xp/euren (drops d'équipement/matériaux à venir) — un reset complet de GameData avant ré-application deviendra nécessaire.
 5. **Suspension globale** : aujourd'hui seule une run d'expédition suspend ; si un système hors expédition progresse pendant une run un jour (idle village ?), sa progression serait différée au retour — acceptable ou à raffiner ?
+
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 5 questions ouvertes ont été tranchées — **aucune modification de code** :
+1. **Méta illisible → R-001 + warning** : conservé, pas de quarantaine — enjeu faible assumé.
+2. **Compteur interne au-delà de 999** : conservé dans le fichier. Usage futur possible (stats, succès), l'affichage clampe.
+3. **Messages placeholder** : conservés. L'`EcranMessage` sera enrichi/remplacé au chantier narration (dialogues Reliquaire), pas avant.
+4. **`recharger()` par ré-application** : assumé. **Consigné comme dette BLOQUANTE du futur chantier drops** : dès qu'une run mute autre chose que XP/Euren, reset complet de GameData avant ré-application.
+5. **Suspension limitée aux runs** : acceptable — aucun système ne progresse hors expédition (l'idle est abandonné). À rouvrir seulement si ça change.
+
+L'écart « suspension des écritures pendant la run » est **validé** — il était nécessaire à la cohérence de la sanction.
+
+Baseline inchangée après addendum : **ScriptsLoad 124, CTB 63, CombatUi 21, Recompenses 48, ExpeNoeuds 24, ExpeCarte 39, ExpeCombat 45, ExpeditionFlow 28, FluxExpedition 65, GameOver 26.**
