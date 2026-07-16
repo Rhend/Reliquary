@@ -1148,7 +1148,7 @@ func _terminer_game_over() -> void:
 	# Message 2 : « Reconstruction de R-005 complète. » → clic → QG.
 	var ecran := EcranMessage.new()
 	ecran.message = Translations.T("gameover.reconstruit") % SaveManager.nom_reconstruction()
-	ecran.accent = Color(0.35, 0.90, 0.55)
+	ecran.accent = UIColors.CYBER_OK
 	ecran.z_index = 520
 	ecran.confirme.connect(ecran.queue_free)
 	add_child(ecran)

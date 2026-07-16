@@ -162,12 +162,25 @@ func _lancer() -> void:
 	run.demarrer()
 	_rafraichir()
 
-# Déplacement demandé par la vue (clic sur un nœud adjacent, flèches).
+# Déplacement demandé par la vue : navigation par chemin (chantier 10) —
+# même déroulé que l'écran de jeu (trajet séquencé sur nœuds résolus,
+# seul le dernier pas peut résoudre), miroir d'ExpeditionScreen.
+var _trajet_en_cours := false
+
 func _jouer_deplacement(nid: int) -> void:
-	if run.est_terminee or run.combat_en_cours != null:
+	if run.est_terminee or run.combat_en_cours != null or _trajet_en_cours:
 		return
-	if run.deplacer_vers(nid):
-		_traiter_combat()
+	var chemin := run.chemin_vers(nid)
+	if chemin.is_empty():
+		return
+	_trajet_en_cours = true
+	for i in chemin.size():
+		run.deplacer_vers(chemin[i])
+		_rafraichir()
+		if i < chemin.size() - 1:
+			await get_tree().create_timer(ExpeCarteView.DELAI_PAS).timeout
+	_trajet_en_cours = false
+	_traiter_combat()
 	_rafraichir()
 
 # Annonce placeholder (texte flottant au centre de la carte) du contenu d'un

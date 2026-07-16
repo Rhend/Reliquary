@@ -27,6 +27,9 @@ func _ready() -> void:
 	_test_revelation_adjacence()
 	_test_mystere_tire_a_l_entree()
 	_test_retour_arriere_et_inertie()
+	_test_chemin_valide_et_refus()
+	await _test_trajet_multi_noeuds_ecran()
+	_test_fin_etage_par_chemin()
 	_test_extraction()
 	_test_trois_etages()
 	_test_choix_rouvert()
@@ -260,6 +263,119 @@ func _test_retour_arriere_et_inertie() -> void:
 			break
 	if lointain >= 0:
 		_assert(not _pas(run, lointain), "déplacement non adjacent refusé")
+
+# ─── Navigation par chemin (chantier 10) ────────────────────
+
+# Chemin valide (multi-nœuds sur des résolus) → autorisé jusqu'à un nœud
+# NON résolu ; nœud coupé par du non-résolu → refusé ; adjacence = longueur 1.
+func _test_chemin_valide_et_refus() -> void:
+	print("\n[TEST] Navigation par chemin : chemin_vers / atteignables")
+	var run := _run(1337)
+	var entree := run.carte.entree_id
+
+	# Adjacence simple = chemin de longueur 1 (sur-ensemble du pas à pas).
+	var voisin: int = run.carte.noeud(entree).voisins[0]
+	var c1 := run.chemin_vers(voisin)
+	_assert(c1 == ([voisin] as Array[int]), "voisin direct → chemin [voisin] (longueur 1)")
+	_assert(run.atteignables().has(voisin), "voisin direct atteignable")
+
+	# Nœud découvert à 2 pas derrière un nœud NON résolu → refusé tant que
+	# l'intermédiaire n'est pas résolu, autorisé après.
+	_pas(run, voisin)   # résout le voisin (combat auto-résolu au besoin)
+	var deux_pas := -1
+	for v in run.carte.noeud(voisin).voisins:
+		if v != entree and not run.carte.noeud(v).resolu:
+			deux_pas = v
+			break
+	_pas(run, entree)   # retour au départ : deux_pas est à 2 pas via `voisin`
+	if deux_pas >= 0:
+		var chemin := run.chemin_vers(deux_pas)
+		_assert(chemin == ([voisin, deux_pas] as Array[int]),
+				"destination à 2 pas via un résolu → chemin complet")
+		_assert(run.atteignables().has(deux_pas), "destination à 2 pas atteignable")
+	# Un nœud découvert dont AUCUN chemin résolu n'existe → refusé.
+	var inaccessible := -1
+	for nd in run.noeuds_visibles():
+		if nd.id != run.position_joueur and run.chemin_vers(nd.id).is_empty():
+			inaccessible = nd.id
+			break
+	if inaccessible >= 0:
+		_assert(not run.atteignables().has(inaccessible),
+				"nœud visible sans chemin résolu : NON atteignable")
+	_assert(run.chemin_vers(run.position_joueur).is_empty(), "cible = position → []")
+	# Nœud non découvert : jamais de chemin.
+	var cache := -1
+	for nd in run.carte.noeuds:
+		if not nd.decouvert:
+			cache = nd.id
+			break
+	if cache >= 0:
+		_assert(run.chemin_vers(cache).is_empty(), "nœud NON découvert → aucun chemin")
+
+# Trajet multi-nœuds joué dans l'ÉCRAN réel : position finale correcte,
+# aucun re-déclenchement des nœuds traversés, résolution normale au bout.
+func _test_trajet_multi_noeuds_ecran() -> void:
+	print("\n[TEST] Trajet multi-nœuds séquencé (ExpeditionScreen)")
+	var ecran := ExpeditionScreen.new("lieu_test", _palier(), _avatar_costaud(),
+			load("res://data/expedition/pool_defaut.tres"), 1337)
+	ecran.combat_auto = true
+	ecran.graine = 1337
+	add_child(ecran)
+	var run: ExpeRun = ecran.run
+	var resolutions := [0]
+	run.noeud_resolu.connect(func(_d: Dictionary) -> void: resolutions[0] += 1)
+
+	# Résout un voisin, revient, puis vise un nœud à 2 pas (via le résolu).
+	var entree := run.carte.entree_id
+	var voisin: int = run.carte.noeud(entree).voisins[0]
+	ecran.jouer_deplacement(voisin)
+	var deux_pas := -1
+	for v in run.carte.noeud(voisin).voisins:
+		if v != entree and not run.carte.noeud(v).resolu:
+			deux_pas = v
+			break
+	ecran.jouer_deplacement(entree)
+	if deux_pas < 0:
+		_fail("graine 1337 : aucun nœud à 2 pas non résolu (mettre à jour la graine)")
+		ecran.queue_free()
+		return
+	var resolutions_avant: int = resolutions[0]
+	ecran.jouer_deplacement(deux_pas)
+	# Trajet séquencé (DELAI_PAS réels entre les pas) : attendre la fin.
+	var t0 := Time.get_ticks_msec()
+	while ecran._trajet_en_cours and Time.get_ticks_msec() - t0 < 3000:
+		await get_tree().process_frame
+	if run.combat_en_cours != null:   # destination = combat : auto-résolu par l'écran
+		run.combat_en_cours.derouler_auto()
+	_assert(run.position_joueur == deux_pas, "position finale = destination du trajet")
+	_assert(resolutions[0] == resolutions_avant + 1,
+			"UNE seule résolution (la destination) — aucun re-déclenchement en traversée",
+			"résolutions : %d → %d" % [resolutions_avant, resolutions[0]])
+	_assert(run.carte.noeud(deux_pas).resolu, "destination résolue normalement")
+	ecran.queue_free()
+
+# La Fin d'étage, visible d'emblée, n'est atteignable QUE via un chemin résolu.
+func _test_fin_etage_par_chemin() -> void:
+	print("\n[TEST] Fin d'étage : visible d'emblée, atteignable par chemin seulement")
+	var run := _run(2024)
+	var fin := run.carte.fin_id
+	_assert(run.carte.noeud(fin).decouvert, "Fin d'étage découverte d'emblée")
+	if fin in run.carte.noeud(run.position_joueur).voisins:
+		_assert(not run.chemin_vers(fin).is_empty(), "Fin adjacente : atteignable direct")
+	else:
+		_assert(run.chemin_vers(fin).is_empty(),
+				"Fin non adjacente au départ : PAS de chemin tant que rien n'est résolu")
+	# En résolvant tout le chemin BFS (pas à pas), la Fin devient atteignable.
+	for pas in _chemin_vers(run, fin):
+		if pas == fin:
+			break
+		_pas(run, pas)
+	_assert(not run.chemin_vers(fin).is_empty(),
+			"chemin résolu jusqu'à la Fin → atteignable par chemin")
+	var dernier: Array[int] = run.chemin_vers(fin)
+	for pas in dernier:
+		_pas(run, pas)
+	_assert(run.choix_ouvert, "arrivée sur la Fin par chemin : choix ouvert")
 
 # ─── Étages & fins ──────────────────────────────────────────
 

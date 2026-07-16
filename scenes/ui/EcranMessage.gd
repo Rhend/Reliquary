@@ -15,7 +15,7 @@ signal confirme
 
 # Définis AVANT add_child par l'appelant.
 var message := ""
-var accent := Color(0.85, 0.88, 0.95)
+var accent: Color = UIColors.CYBER_TEXTE
 
 var _confirme_emis := false
 
@@ -25,24 +25,38 @@ func _ready() -> void:
 
 	var fond := ColorRect.new()
 	fond.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	fond.color = Color(0.0, 0.0, 0.0, 0.96)
+	fond.color = Color(UIColors.CYBER_BG, 0.97)
 	fond.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(fond)
 
-	var vb := VBoxContainer.new()
-	vb.set_anchors_preset(Control.PRESET_CENTER)
-	vb.add_theme_constant_override("separation", 24)
-	vb.resized.connect(func() -> void:
-		vb.position = (size - vb.size) * 0.5)
-	add_child(vb)
+	# Cadre fin lumineux autour du message (peau cyberpunk, chantier 10).
+	var boite := PanelContainer.new()
+	boite.set_anchors_preset(Control.PRESET_CENTER)
+	boite.custom_minimum_size = Vector2(520, 0)
+	boite.add_theme_stylebox_override("panel", ExpeStyle.style_panneau(accent, 0.35, 1, 2))
+	boite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boite.resized.connect(func() -> void:
+		boite.position = (size - boite.size) * 0.5)
+	add_child(boite)
 
-	var lbl := UIHelpers.label(message, 26, accent)
+	var m := UIHelpers.margin_of(24)
+	boite.add_child(m)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 24)
+	m.add_child(vb)
+
+	# Pas d'autowrap : messages courts (une ligne) — un Label autowrap dans
+	# cette chaîne de conteneurs centrés gonfle la hauteur au premier layout.
+	var lbl := ExpeStyle.label_mono(message, 26, accent)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(lbl)
 
-	var invite := UIHelpers.label(Translations.T("ctb.continuer"), 12, UIColors.TEXT_MUTED)
+	var invite := ExpeStyle.label_mono(Translations.T("ctb.continuer"), 12,
+			UIColors.CYBER_TEXTE_MUTED)
 	invite.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(invite)
+
+	ExpeStyle.scanlines(self)
 
 func _gui_input(ev: InputEvent) -> void:
 	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:

@@ -187,6 +187,65 @@ func noeuds_visibles() -> Array[ExpeNoeud]:
 			out.append(nd)
 	return out
 
+# ─── Navigation par chemin (chantier 10, règle actée) ────────
+# Le joueur peut rejoindre N'IMPORTE QUEL nœud découvert s'il existe un
+# chemin composé uniquement de nœuds RÉSOLUS (« vaincus/claim ») entre sa
+# position et ce nœud — la destination elle-même peut être non résolue
+# (l'y déplacer déclenche sa résolution normale). L'adjacence simple reste
+# le cas particulier chemin de longueur 1.
+
+# Chemin (BFS, plus court) de la position du joueur vers `nid` : liste des
+# nids à traverser (départ exclu, destination incluse), [] si aucun chemin
+# valide (cible non découverte, coupée par des nœuds non résolus, run
+# suspendue/terminée, ou cible = position).
+func chemin_vers(nid: int) -> Array[int]:
+	if est_terminee or combat_en_cours != null or nid == position_joueur \
+			or nid < 0 or nid >= carte.noeuds.size() or not carte.noeud(nid).decouvert:
+		return []
+	var parent := {position_joueur: -1}
+	var file: Array[int] = [position_joueur]
+	while not file.is_empty():
+		var cur: int = file.pop_front()
+		for v in carte.noeud(cur).voisins:
+			if parent.has(v):
+				continue
+			parent[v] = cur
+			if v == nid:
+				var chemin: Array[int] = []
+				var n := nid
+				while n != position_joueur:
+					chemin.push_front(n)
+					n = parent[n]
+				return chemin
+			# On ne TRAVERSE que des nœuds résolus (la destination, atteinte
+			# ci-dessus, est le seul nœud du chemin qui peut ne pas l'être).
+			if carte.noeud(v).resolu:
+				file.append(v)
+	return []
+
+# Nids actuellement ATTEIGNABLES par chemin depuis la position du joueur
+# (nid → true) — feedback UI : nœud découvert atteignable vs
+# visible-mais-inaccessible. Un seul BFS (composante résolue + sa frontière
+# découverte), même règle que chemin_vers.
+func atteignables() -> Dictionary:
+	var out := {}
+	if est_terminee or combat_en_cours != null:
+		return out
+	var vus := {position_joueur: true}
+	var file: Array[int] = [position_joueur]
+	while not file.is_empty():
+		var cur: int = file.pop_front()
+		for v in carte.noeud(cur).voisins:
+			if vus.has(v):
+				continue
+			vus[v] = true
+			var nd := carte.noeud(v)
+			if nd.decouvert:
+				out[v] = true
+			if nd.resolu:
+				file.append(v)
+	return out
+
 # Nombre d'ennemis du prochain combat — tirage pondéré data-driven
 # (cfg_combat.poids_nb_ennemis). Public pour le test statistique.
 func tirer_nb_ennemis() -> int:

@@ -37,7 +37,8 @@ static func nom_ui(d: CombattantCtbData) -> String:
 
 func _init(combattant: CtbCombattant) -> void:
 	cb = combattant
-	_couleur_camp = UIColors.ENERGY_ACCENT if cb.est_joueur() else UIColors.TYPE_CREATURE
+	# Accents de camp de la peau cyberpunk (cyan joueur / magenta adverse).
+	_couleur_camp = ExpeStyle.accent_camp(cb.est_joueur())
 	custom_minimum_size = Vector2(240, 0)
 	_appliquer_style()
 
@@ -45,7 +46,7 @@ func _init(combattant: CtbCombattant) -> void:
 	v.add_theme_constant_override("separation", 4)
 	add_child(v)
 
-	_nom = UIHelpers.label(nom_ui(cb.data), 15, Color(0.92, 0.94, 1.0))
+	_nom = ExpeStyle.label_mono(nom_ui(cb.data), 15, UIColors.CYBER_TEXTE)
 	v.add_child(_nom)
 
 	_barre_pv = ProgressBar.new()
@@ -59,7 +60,7 @@ func _init(combattant: CtbCombattant) -> void:
 	_barre_pv.add_theme_stylebox_override("fill", _barre_fill)
 	v.add_child(_barre_pv)
 
-	_pv_txt = UIHelpers.label("", 12, Color(0.85, 0.88, 0.95))
+	_pv_txt = ExpeStyle.label_mono("", 12, UIColors.CYBER_TEXTE)
 	v.add_child(_pv_txt)
 
 	_pills = HFlowContainer.new()
@@ -118,8 +119,8 @@ func rafraichir() -> void:
 
 func _pill(texte: String, couleur: Color) -> Control:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UIHelpers.card_style(couleur, 0.22, 0.85, 1, 6))
-	var l := UIHelpers.label(texte, 11, couleur.lightened(0.45))
+	p.add_theme_stylebox_override("panel", ExpeStyle.style_chip(couleur))
+	var l := ExpeStyle.label_mono(texte, 11, couleur.lightened(0.45))
 	var m := UIHelpers.margin_of(3)
 	m.add_child(l)
 	p.add_child(m)
@@ -135,8 +136,9 @@ func _couleur_pv(frac: float) -> Color:
 	return UIColors.HP_CRITICAL
 
 func _appliquer_style() -> void:
+	# Peau cyberpunk : bordure fine au camp ; les ÉTATS restent des infos de
+	# jeu (or = ciblable, éclairci = activation en cours) — jamais dégradés.
 	var c := _couleur_camp
-	var alpha_fond := 0.28
 	var epaisseur := 1
 	if _ciblable:
 		c = UIColors.SELECTION_GOLD
@@ -144,11 +146,7 @@ func _appliquer_style() -> void:
 	elif _actif:
 		c = _couleur_camp.lightened(0.5)
 		epaisseur = 2
-		alpha_fond = 0.40
-	var style := UIHelpers.card_style(c, alpha_fond, 0.95, epaisseur, 6)
-	style.bg_color = Color(UIColors.PANEL_BG_DARK.r, UIColors.PANEL_BG_DARK.g,
-			UIColors.PANEL_BG_DARK.b, 0.82)
-	style.set_content_margin_all(8)
+	var style := ExpeStyle.style_panneau(c, 0.88, epaisseur, 2)
 	add_theme_stylebox_override("panel", style)
 
 func _sur_input(ev: InputEvent) -> void:

@@ -49,6 +49,7 @@ var _lbl_run: Label
 var _combat_data: Dictionary = {}    # payload du dernier combat_demarre (embuscade…)
 var _combat_ui: CombatCtbUi = null
 var _recap_final: Dictionary = {}
+var _trajet_en_cours := false        # trajet multi-nœuds séquencé (chantier 10)
 
 func _init(p_lieu: String, p_palier: PalierProfondeurData, p_avatar: CombattantCtbData,
 		p_pool: PoolEnnemisData, p_graine: int = 0) -> void:
@@ -67,7 +68,7 @@ func _ready() -> void:
 func _construire_ui() -> void:
 	var fond := ColorRect.new()
 	fond.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	fond.color = UIColors.BG_DARK
+	fond.color = UIColors.CYBER_BG
 	fond.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(fond)
 
@@ -79,53 +80,71 @@ func _construire_ui() -> void:
 	m.add_child(racine)
 
 	# ── En-tête : Lieu — palier · étage · PV, ligne héros, ligne de run ──
+	# (peau cyberpunk : police technique ; le Lieu garde sa couleur de PALIER
+	# — la palette de rareté reste la source, jamais une seconde palette).
 	var lieu := GameData.get_entity(lieu_id)
 	var tcolor := UIColors.tier_color(int(lieu.get("maitrise_actuelle", 0)))
-	_lbl_etat = UIHelpers.label("", 16, tcolor.lightened(0.25))
+	_lbl_etat = ExpeStyle.label_mono("", 16, tcolor.lightened(0.25))
 	racine.add_child(_lbl_etat)
-	_lbl_heros = UIHelpers.label("", 12, Color(0.85, 0.88, 0.95))
+	_lbl_heros = ExpeStyle.label_mono("", 12, UIColors.CYBER_TEXTE)
 	racine.add_child(_lbl_heros)
-	_lbl_run = UIHelpers.label("", 12, Color(0.75, 0.85, 1.0))
+	_lbl_run = ExpeStyle.label_mono("", 12, UIColors.CYBER_ACCENT.lightened(0.25))
 	racine.add_child(_lbl_run)
 
 	# ── Corps : carte (gauche) + journal (droite) ──
 	var corps := HBoxContainer.new()
 	corps.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	corps.add_theme_constant_override("separation", 8)
 	racine.add_child(corps)
 
 	var gauche := VBoxContainer.new()
 	gauche.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gauche.size_flags_stretch_ratio = 2.4
+	gauche.add_theme_constant_override("separation", 6)
 	corps.add_child(gauche)
 
+	var cadre_carte := PanelContainer.new()
+	cadre_carte.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cadre_carte.add_theme_stylebox_override("panel",
+			ExpeStyle.style_panneau(UIColors.CYBER_ACCENT, 0.35))
+	gauche.add_child(cadre_carte)
 	_carte_view = ExpeCarteView.new()
 	_carte_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_carte_view.deplacement_demande.connect(jouer_deplacement)
-	gauche.add_child(_carte_view)
+	cadre_carte.add_child(_carte_view)
 
 	var choix := HBoxContainer.new()
+	choix.add_theme_constant_override("separation", 8)
 	gauche.add_child(choix)
-	_btn_extraire = Button.new()
-	_btn_extraire.text = Translations.T("expe.extraire_btn")
+	_btn_extraire = ExpeStyle.bouton(Translations.T("expe.extraire_btn"), UIColors.CYBER_OK)
+	_btn_extraire.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_extraire.pressed.connect(func() -> void:
 		run.extraire()
 		_rafraichir())
 	choix.add_child(_btn_extraire)
-	_btn_continuer = Button.new()
-	_btn_continuer.text = Translations.T("expe.continuer_btn")
+	_btn_continuer = ExpeStyle.bouton(Translations.T("expe.continuer_btn"), UIColors.CYBER_ACCENT)
+	_btn_continuer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_btn_continuer.pressed.connect(func() -> void:
 		run.continuer()
 		_rafraichir())
 	choix.add_child(_btn_continuer)
 
+	var cadre_journal := PanelContainer.new()
+	cadre_journal.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cadre_journal.add_theme_stylebox_override("panel",
+			ExpeStyle.style_panneau(UIColors.CYBER_TEXTE_MUTED, 0.55))
+	corps.add_child(cadre_journal)
 	_journal_scroll = ScrollContainer.new()
 	_journal_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	corps.add_child(_journal_scroll)
-	_journal_label = Label.new()
-	_journal_label.add_theme_font_size_override("font_size", 12)
+	cadre_journal.add_child(_journal_scroll)
+	_journal_label = ExpeStyle.label_mono("", 11, UIColors.CYBER_TEXTE)
 	_journal_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_journal_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_journal_scroll.add_child(_journal_label)
+
+	# Scanlines sobres au-dessus du contenu de jeu (les overlays ultérieurs —
+	# combat, recap, Game Over — sont ajoutés après, donc dessinés au-dessus).
+	ExpeStyle.scanlines(self)
 
 func _lancer() -> void:
 	run = ExpeRun.new(CONFIG, palier, lieu_id, graine, avatar, pool, CONFIG_COMBAT)
@@ -139,13 +158,25 @@ func _lancer() -> void:
 
 # ─── Navigation (vue partagée → intention → run) ─────────────
 
-# Déplacement demandé (clic/flèche de la vue, ou piloté par un test) : joue
-# le pas, puis le combat en attente s'il y en a un, et rafraîchit.
+# Déplacement demandé (clic/flèche de la vue, ou piloté par un test) vers un
+# nœud ATTEIGNABLE : navigation par chemin (chantier 10) — trajet séquencé le
+# long des nœuds résolus (inertes par règle : rien ne se re-déclenche), seul
+# le DERNIER pas peut résoudre (combat, coffre, fin d'étage…). L'adjacence
+# simple = chemin de longueur 1, entièrement synchrone (aucune attente).
 func jouer_deplacement(nid: int) -> void:
-	if run.est_terminee or run.combat_en_cours != null:
+	if run.est_terminee or run.combat_en_cours != null or _trajet_en_cours:
 		return
-	if run.deplacer_vers(nid):
-		_traiter_combat()
+	var chemin := run.chemin_vers(nid)
+	if chemin.is_empty():
+		return   # non adjacent-résolu : clic refusé (feedback dans la vue)
+	_trajet_en_cours = true
+	for i in chemin.size():
+		run.deplacer_vers(chemin[i])
+		_rafraichir()
+		if i < chemin.size() - 1:
+			await get_tree().create_timer(ExpeCarteView.DELAI_PAS).timeout
+	_trajet_en_cours = false
+	_traiter_combat()
 	_rafraichir()
 
 # Combat en attente après un déplacement : joué à la main dans l'écran de
@@ -182,12 +213,12 @@ func _annoncer_contenu(data: Dictionary) -> void:
 		UIHelpers.float_text(self,
 				"%s %s (%s)" % ["✨" if positif else "☒", str(contenu["affixe_id"]),
 						str(contenu.get("resume", ""))],
-				18, Color(0.3, 0.95, 0.45) if positif else Color(0.95, 0.3, 0.25),
+				18, UIColors.CYBER_OK if positif else UIColors.CYBER_DANGER,
 				centre, 60.0, true, 2.2)
 	elif contenu.has("consommable_ids"):
 		var ids: Array = contenu["consommable_ids"]
 		UIHelpers.float_text(self, "🧰 %s" % ", ".join(ids.map(func(i): return str(i))),
-				18, Color(0.95, 0.8, 0.3), centre, 60.0, true, 2.2)
+				18, UIColors.CYBER_BUTIN, centre, 60.0, true, 2.2)
 
 # ─── Rafraîchissement ────────────────────────────────────────
 
@@ -250,23 +281,24 @@ func _afficher_fin(recap: Dictionary) -> void:
 		return
 	var ecran := EcranMessage.new()
 	ecran.message = Translations.T("gameover.detruit") % SaveManager.nom_reconstruction()
-	ecran.accent = Color(0.90, 0.30, 0.28)
+	ecran.accent = UIColors.CYBER_DANGER   # mort = danger (rouge réservé, acté)
 	ecran.confirme.connect(retour)
 	add_child(ecran)
 
 func _afficher_recap(recap: Dictionary) -> void:
 	var voile := ColorRect.new()
 	voile.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	voile.color = Color(0.0, 0.0, 0.0, 0.62)
+	voile.color = Color(UIColors.CYBER_BG, 0.72)
 	add_child(voile)
 
 	var defaite := bool(recap.get("defaite", false))
 	var extraction := bool(recap.get("extraction", false))
-	var accent := Color(0.90, 0.30, 0.28) if defaite else Color(0.35, 0.90, 0.55)
+	# Rouge = danger uniquement (défaite) ; sortie réussie = positif.
+	var accent := UIColors.CYBER_DANGER if defaite else UIColors.CYBER_OK
 
 	var boite := PanelContainer.new()
 	boite.custom_minimum_size = Vector2(420, 0)
-	boite.add_theme_stylebox_override("panel", UIHelpers.card_style(accent, 0.92, 1.0, 2, 10))
+	boite.add_theme_stylebox_override("panel", ExpeStyle.style_panneau(accent, 0.96, 1, 2))
 	boite.resized.connect(func() -> void:
 		boite.position = (size - boite.size) * 0.5)
 	add_child(boite)
@@ -279,7 +311,7 @@ func _afficher_recap(recap: Dictionary) -> void:
 
 	var cle_issue := "expe.issue_defaite" if defaite \
 			else ("expe.issue_extraction" if extraction else "expe.issue_complete")
-	var titre := UIHelpers.label(Translations.T(cle_issue), 20, accent)
+	var titre := ExpeStyle.label_mono(Translations.T(cle_issue), 20, accent)
 	titre.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(titre)
 	vb.add_child(HSeparator.new())
@@ -295,16 +327,13 @@ func _afficher_recap(recap: Dictionary) -> void:
 		Translations.T("expe.recap_purge") % [nb_affixes, maxi(nb_conso, 0)],
 	]
 	for l in lignes:
-		var lbl := UIHelpers.label(l, 13, Color(0.85, 0.88, 0.95))
+		var lbl := ExpeStyle.label_mono(l, 13, UIColors.CYBER_TEXTE)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(lbl)
 
 	vb.add_child(HSeparator.new())
-	var btn := Button.new()
-	btn.text = Translations.T("expe.retour_btn")
-	btn.custom_minimum_size = Vector2(200, 44)
-	btn.add_theme_font_size_override("font_size", 16)
-	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var btn := ExpeStyle.bouton(Translations.T("expe.retour_btn"), UIColors.CYBER_ACCENT,
+			16, Vector2(200, 44))
 	btn.pressed.connect(retour)
 	vb.add_child(btn)
 

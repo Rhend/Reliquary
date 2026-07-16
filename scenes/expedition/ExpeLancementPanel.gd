@@ -34,18 +34,21 @@ func _ready() -> void:
 
 	var voile := ColorRect.new()
 	voile.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	voile.color = Color(0.0, 0.0, 0.0, 0.55)
+	voile.color = Color(UIColors.CYBER_BG, 0.60)
 	voile.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(voile)
 
 	var lieu := GameData.get_entity(lieu_id)
 	var tier := int(lieu.get("maitrise_actuelle", 0))
+	# Le nom de la destination garde sa couleur de PALIER (palette de rareté =
+	# source unique) ; le chrome du panneau est à l'accent de la peau.
 	var tcolor := UIColors.tier_color(tier)
 
 	var boite := PanelContainer.new()
 	boite.set_anchors_preset(Control.PRESET_CENTER)
-	boite.custom_minimum_size = Vector2(440, 0)
-	boite.add_theme_stylebox_override("panel", UIHelpers.card_style(tcolor, 0.92, 1.0, 2, 10))
+	boite.custom_minimum_size = Vector2(460, 0)
+	boite.add_theme_stylebox_override("panel",
+			ExpeStyle.style_panneau(UIColors.CYBER_ACCENT, 0.96, 1, 2))
 	boite.resized.connect(func() -> void:
 		boite.position = (size - boite.size) * 0.5)
 	add_child(boite)
@@ -56,18 +59,20 @@ func _ready() -> void:
 	vb.add_theme_constant_override("separation", 10)
 	m.add_child(vb)
 
-	var titre := UIHelpers.label(Translations.T("expe.lancement_titre"), 20, tcolor.lightened(0.3))
+	var titre := ExpeStyle.label_mono(Translations.T("expe.lancement_titre"), 20,
+			UIColors.CYBER_ACCENT)
 	titre.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(titre)
 
-	var dest := UIHelpers.label(Translations.T("expe.destination")
-			% Translations.entity_name(lieu, lieu_id), 14, Color(0.85, 0.88, 0.95))
+	var dest := ExpeStyle.label_mono(Translations.T("expe.destination")
+			% Translations.entity_name(lieu, lieu_id), 14, tcolor.lightened(0.2))
 	dest.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(dest)
 
 	vb.add_child(HSeparator.new())
 
-	var lbl_palier := UIHelpers.label(Translations.T("expe.palier_titre"), 12, UIColors.TEXT_MUTED)
+	var lbl_palier := ExpeStyle.label_mono(Translations.T("expe.palier_titre"), 12,
+			UIColors.CYBER_TEXTE_MUTED)
 	lbl_palier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(lbl_palier)
 
@@ -79,12 +84,11 @@ func _ready() -> void:
 	var groupe := ButtonGroup.new()
 	for i in PALIERS.size():
 		var p := PALIERS[i]
-		var b := Button.new()
+		var b := ExpeStyle.bouton("%s (×%.1f)" % [Translations.resource_name(p),
+				p.multiplicateur], UIColors.CYBER_ACCENT, 13, Vector2(0, 36))
 		b.toggle_mode = true
 		b.button_group = groupe
-		b.text = "%s (×%.1f)" % [Translations.resource_name(p), p.multiplicateur]
 		b.button_pressed = i == _palier_idx
-		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		b.toggled.connect(func(actif: bool) -> void:
 			if actif:
 				_palier_idx = i)
@@ -98,24 +102,17 @@ func _ready() -> void:
 	actions.add_theme_constant_override("separation", 14)
 	vb.add_child(actions)
 
-	var btn_partir := Button.new()
-	btn_partir.text = Translations.T("expe.partir_btn")
-	btn_partir.custom_minimum_size = Vector2(180, 44)
-	btn_partir.add_theme_font_size_override("font_size", 17)
-	btn_partir.add_theme_color_override("font_color", tcolor.lightened(0.35))
-	btn_partir.add_theme_color_override("font_hover_color", Color.WHITE)
-	btn_partir.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.30, 1.0, 2, 8))
-	btn_partir.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.48, 1.0, 2, 8))
-	btn_partir.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var btn_partir := ExpeStyle.bouton(Translations.T("expe.partir_btn"),
+			UIColors.CYBER_ACCENT, 17, Vector2(180, 44))
 	btn_partir.pressed.connect(func() -> void: lancer.emit(PALIERS[_palier_idx]))
 	actions.add_child(btn_partir)
 
-	var btn_annuler := Button.new()
-	btn_annuler.text = Translations.T("expe.annuler_btn")
-	btn_annuler.custom_minimum_size = Vector2(110, 44)
-	btn_annuler.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var btn_annuler := ExpeStyle.bouton(Translations.T("expe.annuler_btn"),
+			UIColors.CYBER_TEXTE_MUTED, 14, Vector2(110, 44))
 	btn_annuler.pressed.connect(annuler)
 	actions.add_child(btn_annuler)
+
+	ExpeStyle.scanlines(self)
 
 # API publique : fermeture demandée (bouton Annuler, ou Échap capté par le
 # Village — même rail que la fermeture de la HoloMap).

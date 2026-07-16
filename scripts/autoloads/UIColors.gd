@@ -118,6 +118,31 @@ const DMG_BY_ENEMY  := Color(1.00, 0.30, 0.15)   # dégâts reçus par le héros
 const DMG_HEAVY_HERO  := Color(1.00, 0.50, 0.08)   # orange éclatant — dégâts forts par le héros
 const DMG_HEAVY_ENEMY := Color(1.00, 0.08, 0.08)   # rouge vif — dégâts forts par l'ennemi
 
+# ── Peau cyberpunk INTÉRIMAIRE — pipeline expédition (chantier 10) ──
+# TOKENS centralisés de l'habillage (avec les factories d'ExpeStyle) : la DA
+# de Christophe remplacera ces valeurs — jamais de littéraux dispersés dans
+# l'UI d'expédition. Le ROUGE est réservé à l'Artefact/danger (acté) : CYBER_DANGER
+# ne sert QUE la mort, la défaite, le piège — jamais décoratif.
+const CYBER_BG          := Color(0.012, 0.018, 0.042)  # fond quasi-noir bleuté
+const CYBER_BG_PANEL    := Color(0.028, 0.042, 0.082)  # fond de panneau
+const CYBER_BG_PANEL_2  := Color(0.045, 0.065, 0.115)  # panneau secondaire (cartes, chips)
+const CYBER_ACCENT      := Color(0.12, 0.86, 0.95)     # cyan néon dominant (camp joueur, chrome)
+const CYBER_ACCENT_2    := Color(0.88, 0.28, 0.86)     # magenta néon (camp adverse, contrepoint)
+const CYBER_DANGER      := TIER_UNIQUE                 # rouge Artefact/danger UNIQUEMENT (mort, piège)
+const CYBER_OK          := Color(0.30, 0.95, 0.60)     # positif (extraction, soin, bénédiction)
+const CYBER_BUTIN       := Color(0.98, 0.80, 0.28)     # butin/coffre (or, cf. SELECTION_GOLD)
+const CYBER_TEXTE       := Color(0.80, 0.90, 0.96)     # texte principal froid
+const CYBER_TEXTE_MUTED := Color(0.40, 0.52, 0.62)     # texte secondaire
+const CYBER_GRILLE      := Color(0.12, 0.86, 0.95, 0.05)  # grille de fond de la carte
+const CYBER_ARETE       := Color(0.12, 0.86, 0.95, 0.30)  # arêtes de la carte de nœuds
+
+# Nœuds de la carte d'expédition (types) — la Fin d'étage reprend l'accent.
+const CYBER_NOEUD_ENTREE  := Color(0.42, 0.50, 0.60)
+const CYBER_NOEUD_COMBAT  := Color(0.95, 0.42, 0.30)
+const CYBER_NOEUD_MYSTERE := Color(0.68, 0.44, 0.96)
+const CYBER_NOEUD_COFFRE  := CYBER_BUTIN
+const CYBER_NOEUD_FIN     := CYBER_ACCENT
+
 # ───────────────────────────────────────────────────────────
 #  Fonctions utilitaires (logique conditionnelle)
 # ───────────────────────────────────────────────────────────

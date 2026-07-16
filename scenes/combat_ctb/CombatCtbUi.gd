@@ -2,9 +2,10 @@
 # CombatCtbUi — Écran de combat CTB JOUABLE (Rework Combat, chantier 5).
 #
 # Écran scindé (référence Advanced Wars) : camp joueur à gauche, camp adverse
-# à droite (jusqu'à 3 combattants par camp — architecture N-vs-N actée), Lieu
-# en fond purement COSMÉTIQUE (placeholder : BiomeBackground scindé en
-# diagonale, survivant de l'ancien écran de combat). DA finale hors scope.
+# à droite (jusqu'à 3 combattants par camp — architecture N-vs-N actée), fond
+# purement COSMÉTIQUE (peau cyberpunk intérimaire du chantier 10 : moitiés
+# teintées cyan/magenta + bande diagonale — tokens UIColors.CYBER_* et
+# factories ExpeStyle). DA finale hors scope (Christophe).
 #
 # Pilote un CtbMoteur DÉJÀ démarré, en pull-based :
 #   • activation du camp joueur → attend l'input (Attaquer / Défendre —
@@ -87,22 +88,15 @@ func _ready() -> void:
 # ─── Construction (100 % code — règle projet) ────────────────
 
 func _construire() -> void:
-	# Fond scindé : ambiance Ville côté joueur, biome côté adverse (presets
-	# BiomeBackground survivants — placeholder du Lieu, purement cosmétique).
-	var fond_joueur := BiomeBackground.new()
-	fond_joueur.apply_preset("city")
-	fond_joueur.set_split(1, BANDE_VS_PX)
-	add_child(fond_joueur)
-	var fond_adverse := BiomeBackground.new()
-	fond_adverse.apply_preset("forest")
-	fond_adverse.set_split(2, BANDE_VS_PX)
-	add_child(fond_adverse)
-	var seam := Control.new()
-	seam.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	seam.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	seam.draw.connect(_dessiner_diagonale.bind(seam))
-	seam.resized.connect(seam.queue_redraw)
-	add_child(seam)
+	# Fond scindé CYBERPUNK (chantier 10, remplace les presets BiomeBackground) :
+	# base quasi-noire, moitié joueur teintée cyan / moitié adverse magenta
+	# (très faible alpha), bande diagonale lumineuse — purement cosmétique.
+	var fond := Control.new()
+	fond.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fond.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fond.draw.connect(_dessiner_fond.bind(fond))
+	fond.resized.connect(fond.queue_redraw)
+	add_child(fond)
 
 	# Colonne générale : file d'initiative / arène / barre d'actions.
 	var colonne := VBoxContainer.new()
@@ -113,7 +107,8 @@ func _construire() -> void:
 	var haut := VBoxContainer.new()
 	haut.add_theme_constant_override("separation", 2)
 	colonne.add_child(haut)
-	var titre_file := UIHelpers.label(Translations.T("ctb.file_titre"), 11, UIColors.TEXT_MUTED)
+	var titre_file := ExpeStyle.label_mono(Translations.T("ctb.file_titre"), 11,
+			UIColors.CYBER_TEXTE_MUTED)
 	titre_file.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	haut.add_child(titre_file)
 	var centre_file := HBoxContainer.new()
@@ -142,28 +137,24 @@ func _construire() -> void:
 	# Barre d'actions (bas) : bandeau de tour + Attaquer / Défendre + cibles.
 	# AUCUN bouton Objet : contenu absent, pas grisé (pilier projet).
 	var bas := PanelContainer.new()
-	var style_bas := UIHelpers.card_style(UIColors.TEXT_HEADER, 0.10, 0.35, 1, 6)
-	style_bas.bg_color = Color(UIColors.PANEL_BG_DARK.r, UIColors.PANEL_BG_DARK.g,
-			UIColors.PANEL_BG_DARK.b, 0.88)
+	var style_bas := ExpeStyle.style_panneau(UIColors.CYBER_ACCENT, 0.90)
 	style_bas.set_content_margin_all(10)
 	bas.add_theme_stylebox_override("panel", style_bas)
 	colonne.add_child(bas)
 	var bas_v := VBoxContainer.new()
 	bas_v.add_theme_constant_override("separation", 6)
 	bas.add_child(bas_v)
-	_bandeau_tour = UIHelpers.label("", 14, UIColors.TEXT_HEADER)
+	_bandeau_tour = ExpeStyle.label_mono("", 14, UIColors.CYBER_TEXTE)
 	_bandeau_tour.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	bas_v.add_child(_bandeau_tour)
 	_rangee_boutons = HBoxContainer.new()
 	_rangee_boutons.alignment = BoxContainer.ALIGNMENT_CENTER
 	_rangee_boutons.add_theme_constant_override("separation", 12)
 	bas_v.add_child(_rangee_boutons)
-	_btn_attaquer = Button.new()
-	_btn_attaquer.text = Translations.T("ctb.attaquer")
+	_btn_attaquer = ExpeStyle.bouton(Translations.T("ctb.attaquer"), UIColors.CYBER_ACCENT)
 	_btn_attaquer.pressed.connect(_sur_attaquer)
 	_rangee_boutons.add_child(_btn_attaquer)
-	_btn_defendre = Button.new()
-	_btn_defendre.text = Translations.T("ctb.defendre")
+	_btn_defendre = ExpeStyle.bouton(Translations.T("ctb.defendre"), UIColors.SHIELD)
 	_btn_defendre.pressed.connect(func() -> void:
 		_valider_action({"type": Enums.ActionCtb.DEFENDRE}))
 	_rangee_boutons.add_child(_btn_defendre)
@@ -180,6 +171,9 @@ func _construire() -> void:
 	_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_fx)
+
+	# Scanlines sobres (sous le voile de transition, au-dessus du jeu).
+	ExpeStyle.scanlines(self)
 
 	# Voile de transition (début / fin de bataille) — au-dessus de tout.
 	_voile = ColorRect.new()
@@ -204,21 +198,26 @@ func _colonne_camp(parent: Control, alignement: int) -> VBoxContainer:
 	parent.add_child(marge)
 	return v
 
-# Bande diagonale placeholder entre les deux fonds scindés (l'ancien
-# séparateur CombatVS a été supprimé avec le moteur temps réel).
-func _dessiner_diagonale(seam: Control) -> void:
-	var w := seam.size.x
-	var h := seam.size.y
+# Fond scindé cyberpunk : base sombre, deux moitiés diagonales teintées aux
+# accents de camp (cyan joueur / magenta adverse, alpha très faible) et bande
+# diagonale lumineuse. Tokens UIColors.CYBER_* uniquement.
+func _dessiner_fond(fond: Control) -> void:
+	var w := fond.size.x
+	var h := fond.size.y
 	if w <= 0.0 or h <= 0.0:
 		return
-	var demi := 3.0
-	var xt := w * 0.5 + BANDE_VS_PX * 0.5
-	var xb := w * 0.5 - BANDE_VS_PX * 0.5
-	var accent := BiomeBackground.accent_for_biome("")
-	seam.draw_colored_polygon(PackedVector2Array([
-		Vector2(xt - demi, 0), Vector2(xt + demi, 0),
-		Vector2(xb + demi, h), Vector2(xb - demi, h),
-	]), Color(accent.r, accent.g, accent.b, 0.55))
+	fond.draw_rect(Rect2(Vector2.ZERO, fond.size), UIColors.CYBER_BG)
+	var xt := w * 0.5 + BANDE_VS_PX * 0.5   # haut de la diagonale
+	var xb := w * 0.5 - BANDE_VS_PX * 0.5   # bas de la diagonale
+	fond.draw_colored_polygon(PackedVector2Array([
+		Vector2(0, 0), Vector2(xt, 0), Vector2(xb, h), Vector2(0, h),
+	]), Color(UIColors.CYBER_ACCENT, 0.045))
+	fond.draw_colored_polygon(PackedVector2Array([
+		Vector2(xt, 0), Vector2(w, 0), Vector2(w, h), Vector2(xb, h),
+	]), Color(UIColors.CYBER_ACCENT_2, 0.045))
+	fond.draw_line(Vector2(xt, 0), Vector2(xb, h), Color(UIColors.CYBER_ACCENT, 0.55), 2.0)
+	fond.draw_line(Vector2(xt + 5, 0), Vector2(xb + 5, h),
+			Color(UIColors.CYBER_ACCENT_2, 0.35), 1.0)
 
 # ─── Boucle de combat (pull-based, asynchrone) ───────────────
 
@@ -269,8 +268,7 @@ func _montrer_actions(on: bool) -> void:
 	if on and inventaire_fournisseur.is_valid():
 		var inv: Array = inventaire_fournisseur.call()
 		if not inv.is_empty():
-			_btn_objet = Button.new()
-			_btn_objet.text = Translations.T("ctb.objet")
+			_btn_objet = ExpeStyle.bouton(Translations.T("ctb.objet"), UIColors.CYBER_BUTIN)
 			_btn_objet.pressed.connect(_sur_objet)
 			_rangee_boutons.add_child(_btn_objet)
 	UIHelpers.clear_children_now(_rangee_cibles)
@@ -293,15 +291,15 @@ func _sur_attaquer() -> void:
 # boutons nominatifs + cartes ennemies cliquables + Annuler.
 func _montrer_choix_cibles(vivants: Array[CtbCombattant]) -> void:
 	UIHelpers.clear_children_now(_rangee_cibles)
-	_rangee_cibles.add_child(UIHelpers.label(
-			Translations.T("ctb.choisir_cible"), 12, UIColors.TEXT_MUTED))
+	_rangee_cibles.add_child(ExpeStyle.label_mono(
+			Translations.T("ctb.choisir_cible"), 12, UIColors.CYBER_TEXTE_MUTED))
 	for cb in vivants:
-		var b := Button.new()
-		b.text = CarteCombattantCtb.nom_ui(cb.data)
+		var b := ExpeStyle.bouton(CarteCombattantCtb.nom_ui(cb.data),
+				UIColors.CYBER_ACCENT_2, 13, Vector2(0, 34))
 		b.pressed.connect(_sur_cible_cliquee.bind(cb))
 		_rangee_cibles.add_child(b)
-	var annuler := Button.new()
-	annuler.text = Translations.T("ctb.annuler")
+	var annuler := ExpeStyle.bouton(Translations.T("ctb.annuler"),
+			UIColors.CYBER_TEXTE_MUTED, 13, Vector2(0, 34))
 	annuler.pressed.connect(func() -> void:
 		_objet_en_attente = null
 		UIHelpers.clear_children_now(_rangee_cibles)
@@ -317,8 +315,8 @@ func _sur_objet() -> void:
 		return
 	_objet_en_attente = null
 	UIHelpers.clear_children_now(_rangee_cibles)
-	_rangee_cibles.add_child(UIHelpers.label(
-			Translations.T("ctb.choisir_objet"), 12, UIColors.TEXT_MUTED))
+	_rangee_cibles.add_child(ExpeStyle.label_mono(
+			Translations.T("ctb.choisir_objet"), 12, UIColors.CYBER_TEXTE_MUTED))
 	var inv: Array = inventaire_fournisseur.call()
 	var groupes: Dictionary = {}   # id → {"objet": ConsommableData, "n": int}
 	for o: ConsommableData in inv:
@@ -328,16 +326,17 @@ func _sur_objet() -> void:
 	for id: String in groupes:
 		var grp: Dictionary = groupes[id]
 		var objet := grp["objet"] as ConsommableData
-		var b := Button.new()
 		var nom := Translations.entity_name({
 			"nom_affichage_fr": objet.nom_affichage_fr,
 			"nom_affichage_en": objet.nom_affichage_en,
 		}, objet.id)
-		b.text = nom if int(grp["n"]) == 1 else "%s ×%d" % [nom, int(grp["n"])]
+		var b := ExpeStyle.bouton(
+				nom if int(grp["n"]) == 1 else "%s ×%d" % [nom, int(grp["n"])],
+				UIColors.CYBER_BUTIN, 13, Vector2(0, 34))
 		b.pressed.connect(_sur_objet_choisi.bind(objet))
 		_rangee_cibles.add_child(b)
-	var annuler := Button.new()
-	annuler.text = Translations.T("ctb.annuler")
+	var annuler := ExpeStyle.bouton(Translations.T("ctb.annuler"),
+			UIColors.CYBER_TEXTE_MUTED, 13, Vector2(0, 34))
 	annuler.pressed.connect(func() -> void:
 		UIHelpers.clear_children_now(_rangee_cibles))
 	_rangee_cibles.add_child(annuler)
@@ -401,11 +400,11 @@ func _rafraichir_tout() -> void:
 func _rafraichir_file() -> void:
 	UIHelpers.clear_children_now(_file_box)
 	for cb in moteur.prevoir_ordre(N_FILE):
-		var couleur := UIColors.ENERGY_ACCENT if cb.est_joueur() else UIColors.TYPE_CREATURE
+		var couleur := ExpeStyle.accent_camp(cb.est_joueur())
 		var chip := PanelContainer.new()
-		chip.add_theme_stylebox_override("panel", UIHelpers.card_style(couleur, 0.18, 0.7, 1, 5))
+		chip.add_theme_stylebox_override("panel", ExpeStyle.style_chip(couleur))
 		var m := UIHelpers.margin_of(4)
-		m.add_child(UIHelpers.label(CarteCombattantCtb.nom_ui(cb.data), 11,
+		m.add_child(ExpeStyle.label_mono(CarteCombattantCtb.nom_ui(cb.data), 11,
 				couleur.lightened(0.35)))
 		chip.add_child(m)
 		_file_box.add_child(chip)
@@ -471,15 +470,17 @@ func _flotter(cb: CtbCombattant, texte: String, taille: int, couleur: Color,
 
 # Fondu d'ouverture (carte → combat) + annonce d'embuscade le cas échéant.
 func _intro() -> void:
-	var titre := UIHelpers.label(Translations.T("ctb.combat_titre"), 34, UIColors.TEXT_HEADER)
+	var titre := ExpeStyle.label_mono(Translations.T("ctb.combat_titre"), 34,
+			UIColors.CYBER_ACCENT)
 	titre.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_voile_contenu.add_child(titre)
 	if embuscade:
 		AudioManager.play_sfx("trap_appear", -4.0)
-		var amb := UIHelpers.label(Translations.T("ctb.embuscade"), 26, UIColors.MECH_AMBUSH)
+		var amb := ExpeStyle.label_mono(Translations.T("ctb.embuscade"), 26,
+				UIColors.MECH_AMBUSH)
 		amb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_voile_contenu.add_child(amb)
-		var sous := UIHelpers.label(Translations.T("ctb.embuscade_sub"), 13,
+		var sous := ExpeStyle.label_mono(Translations.T("ctb.embuscade_sub"), 13,
 				UIColors.MECH_AMBUSH.lightened(0.35))
 		sous.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_voile_contenu.add_child(sous)
@@ -504,9 +505,10 @@ func _outro() -> void:
 	var gagne := moteur.victoire_joueur
 	AudioManager.play_sfx("summary_victory" if gagne else "summary_defeat", -4.0)
 	_voile.mouse_filter = Control.MOUSE_FILTER_STOP
-	var issue := UIHelpers.label(
+	# Issue : positif (victoire) vs rouge danger (défaite = mort en approche).
+	var issue := ExpeStyle.label_mono(
 			Translations.T("ctb.victoire" if gagne else "ctb.defaite"), 42,
-			UIColors.LOG_VICTORY if gagne else UIColors.LOG_DEFEAT)
+			UIColors.CYBER_OK if gagne else UIColors.CYBER_DANGER)
 	issue.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_voile_contenu.add_child(issue)
 	# Récompenses du combat (chantier 6) — seulement si l'appelant les fournit.
@@ -514,13 +516,14 @@ func _outro() -> void:
 		var rec: Dictionary = recompenses_fournisseur.call()
 		if not rec.is_empty() and (float(rec.get("xp", 0.0)) > 0.0
 				or float(rec.get("euren", 0.0)) > 0.0):
-			var recomp := UIHelpers.label(Translations.T("ctb.recompenses") % [
+			var recomp := ExpeStyle.label_mono(Translations.T("ctb.recompenses") % [
 					int(roundf(float(rec.get("xp", 0.0)))),
 					int(roundf(float(rec.get("euren", 0.0))))],
-					16, UIColors.LOOT_NEUTRAL.lightened(0.25))
+					16, UIColors.CYBER_BUTIN)
 			recomp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			_voile_contenu.add_child(recomp)
-	var invite := UIHelpers.label(Translations.T("ctb.continuer"), 13, UIColors.TEXT_MUTED)
+	var invite := ExpeStyle.label_mono(Translations.T("ctb.continuer"), 13,
+			UIColors.CYBER_TEXTE_MUTED)
 	invite.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_voile_contenu.add_child(invite)
 	if facteur_delais > 0.0:

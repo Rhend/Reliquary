@@ -39,6 +39,7 @@ func _ready() -> void:
 		"holo_prop": await _shoot_holo_prop()
 		"holo_pins": await _shoot_holo_pins()
 		"expe":      await _shoot_expe()
+		"flux":      await _shoot_flux()
 		"combat":    await _shoot_combat()
 		"village":   await _shoot_village()
 		"evolution": await _shoot_evolution()
@@ -329,6 +330,41 @@ func _shoot_expe() -> void:
 	sandbox._rafraichir()
 	await get_tree().create_timer(0.5).timeout
 	await _capture("res://tests/_shot_expe_explore.png")
+
+# ── Écrans du flux d'expédition réel (chantiers 8-9) ──
+# Panneau de lancement (destination + palier), recap de fin de run,
+# message de Game Over — mise en scène directe (pas de Village complet).
+func _shoot_flux() -> void:
+	var lancement := ExpeLancementPanel.new()
+	lancement.lieu_id = "biome_foret"
+	_vp.add_child(lancement)
+	await get_tree().create_timer(0.4).timeout
+	await _capture("res://tests/_shot_expe_lancement.png")
+	lancement.queue_free()
+
+	var ecran := ExpeditionScreen.new("biome_foret",
+			load("res://data/expedition/palier_peripherie.tres"),
+			load("res://data/combat_ctb/avatar.tres"),
+			load("res://data/expedition/pool_defaut.tres"), 1337)
+	_vp.add_child(ecran)
+	await get_tree().create_timer(0.3).timeout
+	ecran._afficher_recap({
+		"extraction": true, "defaite": false, "etage_atteint": 2, "nb_combats": 3,
+		"xp_gagnee": 46.0, "euren_credite": 21.0,
+		"affixes": ["affixe_surtension"], "consommables_obtenus": ["consommable_bombe"],
+		"consommables_utilises": [],
+	})
+	await get_tree().create_timer(0.4).timeout
+	await _capture("res://tests/_shot_expe_recap.png")
+	ecran.queue_free()
+
+	var go := EcranMessage.new()
+	go.message = Translations.T("gameover.detruit") % "R-004"
+	go.accent = Color(0.90, 0.30, 0.28)
+	_vp.add_child(go)
+	await get_tree().create_timer(0.4).timeout
+	await _capture("res://tests/_shot_gameover.png")
+	go.queue_free()
 
 # ── Écran de combat CTB jouable (chantier 5) ──
 # 1er combat (embuscade, 3 ennemis) : annonce à l'ouverture, tour joueur
