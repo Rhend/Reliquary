@@ -89,3 +89,19 @@ Passe visuelle en jeu réel faite par Rhend — 4 retours, tous livrés :
 4. **Hex « Expéditions » du hub → HoloMap DIRECTEMENT** (plus de détour par le panneau). Le panneau de lancement a aussi été agrandi (640 px), DA validée par Rhend.
 
 **Arbitrage (Rhend)** : le panneau Expéditions (consultation biomes + boutons Évoluer biomes/créatures), désormais sans accès depuis le hub, **attendra le rework du QG** pour être rebranché — d'ici là, l'évolution des biomes/créatures est inaccessible en jeu (assumé) et la pastille d'alerte du hex Expéditions peut s'allumer sans destination.
+
+## Addendum 2 — Arbitrages design validés (06/07/2026)
+
+Les 5 questions ouvertes ont été tranchées — **aucune modification de code** :
+1. **Cyan/magenta** : en attente de validation Christophe. Tokens conservés tels quels d'ici là.
+2. **Scanlines 0,10** : calibrage en playtest.
+3. **Police mono système** : suffisant en intérim. La fonte embarquée sera décidée avec la DA de Christophe.
+4. **DELAI_PAS 0,12 s** : calibrage en playtest.
+5. **Mode présentation du sandbox** : non — outil dev, pas de valeur joueur.
+
+⚠ **AVERTISSEMENT CONSIGNÉ pour le futur rework QG** (rebranchement du panneau
+Expéditions) : le bouton « **Évoluer** » des BIOMES devra être **SUPPRIMÉ, pas
+rebranché** — **les Lieux n'évoluent plus (décision actée)**. « Évoluer »
+des CRÉATURES survit.
+
+Baseline inchangée après addendum : **ScriptsLoad 125, CTB 63, CombatUi 21, Recompenses 48, ExpeNoeuds 24, ExpeCarte 53, ExpeCombat 45, ExpeditionFlow 28, FluxExpedition 65, GameOver 26.**
