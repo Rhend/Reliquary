@@ -44,34 +44,35 @@ func _ready() -> void:
 	# source unique) ; le chrome du panneau est à l'accent de la peau.
 	var tcolor := UIColors.tier_color(tier)
 
+	# Gabarit AGRANDI (retour Rhend post-chantier 10) : le modal respire.
 	var boite := PanelContainer.new()
 	boite.set_anchors_preset(Control.PRESET_CENTER)
-	boite.custom_minimum_size = Vector2(460, 0)
+	boite.custom_minimum_size = Vector2(640, 0)
 	boite.add_theme_stylebox_override("panel",
 			ExpeStyle.style_panneau(UIColors.CYBER_ACCENT, 0.96, 1, 2))
 	boite.resized.connect(func() -> void:
 		boite.position = (size - boite.size) * 0.5)
 	add_child(boite)
 
-	var m := UIHelpers.margin_of(18)
+	var m := UIHelpers.margin_of(30)
 	boite.add_child(m)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
+	vb.add_theme_constant_override("separation", 16)
 	m.add_child(vb)
 
-	var titre := ExpeStyle.label_mono(Translations.T("expe.lancement_titre"), 20,
+	var titre := ExpeStyle.label_mono(Translations.T("expe.lancement_titre"), 26,
 			UIColors.CYBER_ACCENT)
 	titre.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(titre)
 
 	var dest := ExpeStyle.label_mono(Translations.T("expe.destination")
-			% Translations.entity_name(lieu, lieu_id), 14, tcolor.lightened(0.2))
+			% Translations.entity_name(lieu, lieu_id), 17, tcolor.lightened(0.2))
 	dest.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(dest)
 
 	vb.add_child(HSeparator.new())
 
-	var lbl_palier := ExpeStyle.label_mono(Translations.T("expe.palier_titre"), 12,
+	var lbl_palier := ExpeStyle.label_mono(Translations.T("expe.palier_titre"), 14,
 			UIColors.CYBER_TEXTE_MUTED)
 	lbl_palier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(lbl_palier)
@@ -79,13 +80,13 @@ func _ready() -> void:
 	# Choix du palier : 3 boutons radio (groupe), Périphérie présélectionnée.
 	var rangee := HBoxContainer.new()
 	rangee.alignment = BoxContainer.ALIGNMENT_CENTER
-	rangee.add_theme_constant_override("separation", 8)
+	rangee.add_theme_constant_override("separation", 10)
 	vb.add_child(rangee)
 	var groupe := ButtonGroup.new()
 	for i in PALIERS.size():
 		var p := PALIERS[i]
 		var b := ExpeStyle.bouton("%s (×%.1f)" % [Translations.resource_name(p),
-				p.multiplicateur], UIColors.CYBER_ACCENT, 13, Vector2(0, 36))
+				p.multiplicateur], UIColors.CYBER_ACCENT, 15, Vector2(0, 44))
 		b.toggle_mode = true
 		b.button_group = groupe
 		b.button_pressed = i == _palier_idx
@@ -99,16 +100,16 @@ func _ready() -> void:
 
 	var actions := HBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	actions.add_theme_constant_override("separation", 14)
+	actions.add_theme_constant_override("separation", 18)
 	vb.add_child(actions)
 
 	var btn_partir := ExpeStyle.bouton(Translations.T("expe.partir_btn"),
-			UIColors.CYBER_ACCENT, 17, Vector2(180, 44))
+			UIColors.CYBER_ACCENT, 19, Vector2(240, 54))
 	btn_partir.pressed.connect(func() -> void: lancer.emit(PALIERS[_palier_idx]))
 	actions.add_child(btn_partir)
 
 	var btn_annuler := ExpeStyle.bouton(Translations.T("expe.annuler_btn"),
-			UIColors.CYBER_TEXTE_MUTED, 14, Vector2(110, 44))
+			UIColors.CYBER_TEXTE_MUTED, 15, Vector2(140, 54))
 	btn_annuler.pressed.connect(annuler)
 	actions.add_child(btn_annuler)
 

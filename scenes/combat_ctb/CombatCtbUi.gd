@@ -2,10 +2,12 @@
 # CombatCtbUi — Écran de combat CTB JOUABLE (Rework Combat, chantier 5).
 #
 # Écran scindé (référence Advanced Wars) : camp joueur à gauche, camp adverse
-# à droite (jusqu'à 3 combattants par camp — architecture N-vs-N actée), fond
-# purement COSMÉTIQUE (peau cyberpunk intérimaire du chantier 10 : moitiés
-# teintées cyan/magenta + bande diagonale — tokens UIColors.CYBER_* et
-# factories ExpeStyle). DA finale hors scope (Christophe).
+# à droite (jusqu'à 3 combattants par camp — architecture N-vs-N actée), Lieu
+# en fond purement COSMÉTIQUE (BiomeBackground scindé en diagonale — CONSERVÉ
+# à la demande de Rhend, la peau cyberpunk du chantier 10 habille le chrome
+# par-dessus : panneaux opaques, tokens UIColors.CYBER_*, ExpeStyle). Scène de
+# bataille : SOL + emplacements des futurs sprites (placeholder : boules de
+# lumière EnergyBoule). DA finale hors scope (Christophe).
 #
 # Pilote un CtbMoteur DÉJÀ démarré, en pull-based :
 #   • activation du camp joueur → attend l'input (Attaquer / Défendre —
@@ -54,7 +56,16 @@ var recompenses_fournisseur := Callable()
 var inventaire_fournisseur := Callable()
 var sur_objet_utilise := Callable()
 
+const SOL_Y_FRAC := 0.60           # hauteur du sol de la scène (fraction écran)
+const SOL_X_JOUEUR := 0.34         # ancrage des emplacements du camp joueur
+const SOL_X_ADVERSE := 0.66        # ancrage des emplacements du camp adverse
+const SOL_PAS := Vector2(64, 46)   # décalage diagonal entre emplacements
+const ORBE_TAILLE := Vector2(64, 64)
+
 var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
+var _sol: Control = null       # scène : sol + emplacements des futurs sprites
+var _orbes: Dictionary = {}    # CtbCombattant → EnergyBoule (placeholder sprite)
+var _pieds: Dictionary = {}    # CtbCombattant → point d'appui au sol (dessin)
 var _file_box: HBoxContainer
 var _bandeau_tour: Label
 var _btn_attaquer: Button
@@ -88,15 +99,43 @@ func _ready() -> void:
 # ─── Construction (100 % code — règle projet) ────────────────
 
 func _construire() -> void:
-	# Fond scindé CYBERPUNK (chantier 10, remplace les presets BiomeBackground) :
-	# base quasi-noire, moitié joueur teintée cyan / moitié adverse magenta
-	# (très faible alpha), bande diagonale lumineuse — purement cosmétique.
-	var fond := Control.new()
-	fond.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	fond.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fond.draw.connect(_dessiner_fond.bind(fond))
-	fond.resized.connect(fond.queue_redraw)
-	add_child(fond)
+	# Fond scindé : ambiance Ville côté joueur, biome côté adverse (presets
+	# BiomeBackground — placeholder du Lieu, purement cosmétique). RESTAURÉ à
+	# la demande de Rhend après la passe cyberpunk : les biomes restent
+	# visibles, la peau habille le chrome PAR-DESSUS (panneaux opaques).
+	var fond_joueur := BiomeBackground.new()
+	fond_joueur.apply_preset("city")
+	fond_joueur.set_split(1, BANDE_VS_PX)
+	add_child(fond_joueur)
+	var fond_adverse := BiomeBackground.new()
+	fond_adverse.apply_preset("forest")
+	fond_adverse.set_split(2, BANDE_VS_PX)
+	add_child(fond_adverse)
+	var seam := Control.new()
+	seam.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	seam.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	seam.draw.connect(_dessiner_diagonale.bind(seam))
+	seam.resized.connect(seam.queue_redraw)
+	add_child(seam)
+
+	# Scène de bataille : SOL + emplacements des futurs sprites de personnages
+	# (placeholder : boules de lumière — retour Rhend, chantier 10).
+	_sol = Control.new()
+	_sol.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_sol.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sol.draw.connect(_dessiner_sol)
+	_sol.resized.connect(_placer_orbes)
+	add_child(_sol)
+	for cb in moteur.combattants:
+		var orbe := EnergyBoule.new()
+		orbe.accent = ExpeStyle.accent_camp(cb.est_joueur())
+		orbe.size = ORBE_TAILLE
+		_orbes[cb] = orbe
+		_sol.add_child(orbe)
+		# Placeholder de sprite, pas un élément interactif (EnergyBoule est
+		# cliquable par défaut au Village) : souris ignorée.
+		orbe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_placer_orbes()
 
 	# Colonne générale : file d'initiative / arène / barre d'actions.
 	var colonne := VBoxContainer.new()
@@ -104,9 +143,17 @@ func _construire() -> void:
 	colonne.add_theme_constant_override("separation", 8)
 	add_child(colonne)
 
+	# File d'initiative ENCADRÉE, fond opaque (retour Rhend : elle doit se
+	# détacher du biome visuel derrière).
+	var panneau_file := PanelContainer.new()
+	panneau_file.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var style_file := ExpeStyle.style_panneau(UIColors.CYBER_ACCENT, 1.0)
+	style_file.bg_color = UIColors.CYBER_BG   # opaque — jamais le biome au travers
+	panneau_file.add_theme_stylebox_override("panel", style_file)
+	colonne.add_child(panneau_file)
 	var haut := VBoxContainer.new()
 	haut.add_theme_constant_override("separation", 2)
-	colonne.add_child(haut)
+	panneau_file.add_child(haut)
 	var titre_file := ExpeStyle.label_mono(Translations.T("ctb.file_titre"), 11,
 			UIColors.CYBER_TEXTE_MUTED)
 	titre_file.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -198,26 +245,67 @@ func _colonne_camp(parent: Control, alignement: int) -> VBoxContainer:
 	parent.add_child(marge)
 	return v
 
-# Fond scindé cyberpunk : base sombre, deux moitiés diagonales teintées aux
-# accents de camp (cyan joueur / magenta adverse, alpha très faible) et bande
-# diagonale lumineuse. Tokens UIColors.CYBER_* uniquement.
-func _dessiner_fond(fond: Control) -> void:
-	var w := fond.size.x
-	var h := fond.size.y
+# Bande diagonale entre les deux fonds biome scindés — liseré double aux
+# accents de la peau (cyan/magenta), seule touche cyberpunk du fond.
+func _dessiner_diagonale(seam: Control) -> void:
+	var w := seam.size.x
+	var h := seam.size.y
 	if w <= 0.0 or h <= 0.0:
 		return
-	fond.draw_rect(Rect2(Vector2.ZERO, fond.size), UIColors.CYBER_BG)
-	var xt := w * 0.5 + BANDE_VS_PX * 0.5   # haut de la diagonale
-	var xb := w * 0.5 - BANDE_VS_PX * 0.5   # bas de la diagonale
-	fond.draw_colored_polygon(PackedVector2Array([
-		Vector2(0, 0), Vector2(xt, 0), Vector2(xb, h), Vector2(0, h),
-	]), Color(UIColors.CYBER_ACCENT, 0.045))
-	fond.draw_colored_polygon(PackedVector2Array([
-		Vector2(xt, 0), Vector2(w, 0), Vector2(w, h), Vector2(xb, h),
-	]), Color(UIColors.CYBER_ACCENT_2, 0.045))
-	fond.draw_line(Vector2(xt, 0), Vector2(xb, h), Color(UIColors.CYBER_ACCENT, 0.55), 2.0)
-	fond.draw_line(Vector2(xt + 5, 0), Vector2(xb + 5, h),
+	var xt := w * 0.5 + BANDE_VS_PX * 0.5
+	var xb := w * 0.5 - BANDE_VS_PX * 0.5
+	seam.draw_line(Vector2(xt, 0), Vector2(xb, h), Color(UIColors.CYBER_ACCENT, 0.55), 2.0)
+	seam.draw_line(Vector2(xt + 5, 0), Vector2(xb + 5, h),
 			Color(UIColors.CYBER_ACCENT_2, 0.35), 1.0)
+
+# ─── Scène de bataille : sol + emplacements (placeholder sprites) ──
+
+# Emplacements des FUTURS sprites de personnages, posés sur le sol —
+# placeholder : boules de lumière (EnergyBoule) aux accents de camp.
+func _placer_orbes() -> void:
+	# `resized` peut tirer PENDANT add_child(_sol), avant la création des orbes.
+	if _sol == null or _sol.size.x <= 0.0 or _orbes.is_empty():
+		return
+	_pieds.clear()
+	for camp_joueur in [true, false]:
+		var membres: Array[CtbCombattant] = []
+		for cb in moteur.combattants:
+			if cb.est_joueur() == camp_joueur:
+				membres.append(cb)
+		var base_x: float = _sol.size.x * (SOL_X_JOUEUR if camp_joueur else SOL_X_ADVERSE)
+		var dir := -1.0 if camp_joueur else 1.0
+		for i in membres.size():
+			var t := float(i) - float(membres.size() - 1) * 0.5
+			var pied := Vector2(base_x + dir * t * SOL_PAS.x,
+					_sol.size.y * SOL_Y_FRAC + t * SOL_PAS.y)
+			_pieds[membres[i]] = pied
+			var orbe: EnergyBoule = _orbes[membres[i]]
+			orbe.position = pied - Vector2(ORBE_TAILLE.x * 0.5, ORBE_TAILLE.y - 10.0)
+	_sol.queue_redraw()
+
+# Sol de la scène : ligne d'horizon + bande dégradée, et ellipse
+# d'emplacement sous chaque personnage (tokens CYBER_SOL / accents de camp).
+func _dessiner_sol() -> void:
+	var w := _sol.size.x
+	if w <= 0.0:
+		return
+	var y := _sol.size.y * SOL_Y_FRAC
+	_sol.draw_line(Vector2(0, y), Vector2(w, y), UIColors.CYBER_SOL, 2.0)
+	for i in 3:
+		_sol.draw_rect(Rect2(0.0, y + float(i) * 16.0, w, 16.0),
+				Color(UIColors.CYBER_SOL, UIColors.CYBER_SOL.a * (0.45 - 0.13 * float(i))))
+	for cb: CtbCombattant in _pieds:
+		var accent := ExpeStyle.accent_camp(cb.est_joueur())
+		var pied: Vector2 = _pieds[cb]
+		_sol.draw_set_transform(pied, 0.0, Vector2(1.0, 0.38))
+		_sol.draw_circle(Vector2.ZERO, 34.0, Color(UIColors.CYBER_BG, 0.55))
+		_sol.draw_arc(Vector2.ZERO, 34.0, 0.0, TAU, 40, Color(accent, 0.65), 2.0)
+		_sol.draw_set_transform(Vector2.ZERO)
+
+# Un personnage mort disparaît de la scène (l'ellipse d'emplacement reste).
+func _rafraichir_orbes() -> void:
+	for cb: CtbCombattant in _orbes:
+		(_orbes[cb] as EnergyBoule).modulate.a = 1.0 if cb.est_vivant() else 0.10
 
 # ─── Boucle de combat (pull-based, asynchrone) ───────────────
 
@@ -394,6 +482,7 @@ func _rafraichir_tout() -> void:
 	for cb: CtbCombattant in _cartes:
 		(_cartes[cb] as CarteCombattantCtb).rafraichir()
 	_rafraichir_file()
+	_rafraichir_orbes()
 
 # File d'initiative : ordre des N_FILE prochaines activations (sans valeurs
 # numériques — l'ordre suffit), recalculée après chaque action.

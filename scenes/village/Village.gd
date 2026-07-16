@@ -1469,7 +1469,12 @@ func _hex_tooltip(panel_id: String) -> String:
 
 # ─── Navigation → panneaux ────────────────────────────────────
 func _go_hero()       -> void: _open_panel("hero")
-func _go_adventure()  -> void: _open_panel("adventure")
+# Hex « Expéditions » (retour Rhend post-chantier 10) : ouvre DIRECTEMENT la
+# HoloMap — plus de détour par le panneau. ⚠ Conséquence assumée : le panneau
+# Expéditions (consultation des biomes + boutons Évoluer biomes/créatures)
+# n'a plus d'accès depuis le hub — à rebrancher (rework QG) ; l'API
+# _open_panel("adventure") reste en place.
+func _go_adventure()  -> void: open_expedition_map()
 # « Carte » n'est pas un panneau mais un overlay : on ouvre directement la carte
 # holo 3D depuis le hub (raccourci — plus besoin de passer par les Expéditions).
 func _go_map()        -> void: open_expedition_map()

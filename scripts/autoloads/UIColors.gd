@@ -136,6 +136,10 @@ const CYBER_TEXTE_MUTED := Color(0.40, 0.52, 0.62)     # texte secondaire
 const CYBER_GRILLE      := Color(0.12, 0.86, 0.95, 0.05)  # grille de fond de la carte
 const CYBER_ARETE       := Color(0.12, 0.86, 0.95, 0.30)  # arêtes de la carte de nœuds
 
+# Scène de combat : bande de SOL sous les emplacements de personnages
+# (placeholder en attendant les sprites — chantier 10, retour Rhend).
+const CYBER_SOL := Color(0.10, 0.32, 0.44, 0.35)
+
 # Nœuds de la carte d'expédition (types) — la Fin d'étage reprend l'accent.
 const CYBER_NOEUD_ENTREE  := Color(0.42, 0.50, 0.60)
 const CYBER_NOEUD_COMBAT  := Color(0.95, 0.42, 0.30)
