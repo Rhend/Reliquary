@@ -199,13 +199,10 @@ const STRINGS: Dictionary = {
 
 		# ── AdventurePanel ───────────────────────────────────
 		"adv.running.expedition": "Expédition en cours",
-		"adv.biome_placeholder":  "Choisir un biome pour partir en expédition",
 		"adv.start_btn":          "⚔   PARTIR EN EXPÉDITION",
-		"adv.start_btn_named":    "⚔   PARTIR EN EXPÉDITION — %s",
 		"adv.map_btn":            "🗺   CARTE",
 		"adv.map_title":          "CARTE DES EXPÉDITIONS",
 		"adv.map_hint":           "Sélectionnez un secteur découvert",
-		"adv.combat_wip":         "⚒ Combat en refonte — expédition sans combats pour l'instant",
 		"adv.section.biomes":     "◆  BIOMES DISPONIBLES",
 		"adv.entities_count":     "Entités %d/%d",
 		"adv.cat.creature":       "Créature",
@@ -310,6 +307,34 @@ const STRINGS: Dictionary = {
 		"ctb.entete_heros":   "Nv %d · XP %d/%d · Euren (run) %d",
 		"ctb.objet":          "🧪  Objet",
 		"ctb.choisir_objet":  "Choisir l'objet :",
+
+		# ── Expédition réelle (Rework Combat — chantier 8) ────
+		"expe.lancement_titre":     "PARTIR EN EXPÉDITION",
+		"expe.destination":         "Destination : %s",
+		"expe.palier_titre":        "Palier de profondeur",
+		"expe.partir_btn":          "⚔  PARTIR",
+		"expe.annuler_btn":         "Annuler",
+		"expe.etage":               "Étage %d/%d",
+		"expe.pv":                  "PV %d/%d",
+		"expe.extraire_btn":        "▲ EXTRAIRE (fin d'expédition)",
+		"expe.continuer_btn":       "▼ CONTINUER (étage suivant)",
+		"expe.affixes":             "Affixes : %s",
+		"expe.objets":              "Objets : %s",
+		"expe.noeud.entree":         "Entrée",
+		"expe.noeud.combat":         "Combat",
+		"expe.noeud.mystere":        "?",
+		"expe.noeud.mystere_resolu": "? résolu",
+		"expe.noeud.coffre":         "Coffre",
+		"expe.noeud.fin":            "Fin d'étage",
+		"expe.issue_extraction":    "▲ EXTRACTION RÉUSSIE",
+		"expe.issue_complete":      "✔ EXPÉDITION BOUCLÉE",
+		"expe.issue_defaite":       "☠ DÉFAITE",
+		"expe.recap_etage":         "Étage atteint : %d",
+		"expe.recap_combats":       "Combats : %d",
+		"expe.recap_xp":            "XP de niveau gagnée : %d",
+		"expe.recap_euren":         "Euren crédité : %d",
+		"expe.recap_purge":         "Purgé en fin de run : %d affixe(s), %d consommable(s)",
+		"expe.retour_btn":          "⌂  RETOUR AU QG",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPÉDITION TERMINÉE  —  %s",
@@ -597,13 +622,10 @@ const STRINGS: Dictionary = {
 
 		# ── AdventurePanel ───────────────────────────────────
 		"adv.running.expedition": "Expedition in progress",
-		"adv.biome_placeholder":  "Choose a biome to start an expedition",
 		"adv.start_btn":          "⚔   START EXPEDITION",
-		"adv.start_btn_named":    "⚔   START EXPEDITION — %s",
 		"adv.map_btn":            "🗺   MAP",
 		"adv.map_title":          "EXPEDITION MAP",
 		"adv.map_hint":           "Select a discovered sector",
-		"adv.combat_wip":         "⚒ Combat rework in progress — expeditions run without combats for now",
 		"adv.section.biomes":     "◆  AVAILABLE BIOMES",
 		"adv.entities_count":     "Entities %d/%d",
 		"adv.cat.creature":       "Creature",
@@ -708,6 +730,34 @@ const STRINGS: Dictionary = {
 		"ctb.entete_heros":   "Lv %d · XP %d/%d · Euren (run) %d",
 		"ctb.objet":          "🧪  Item",
 		"ctb.choisir_objet":  "Choose an item:",
+
+		# ── Expédition réelle (Rework Combat — chantier 8) ────
+		"expe.lancement_titre":     "START EXPEDITION",
+		"expe.destination":         "Destination: %s",
+		"expe.palier_titre":        "Depth tier",
+		"expe.partir_btn":          "⚔  DEPART",
+		"expe.annuler_btn":         "Cancel",
+		"expe.etage":               "Floor %d/%d",
+		"expe.pv":                  "HP %d/%d",
+		"expe.extraire_btn":        "▲ EXTRACT (end expedition)",
+		"expe.continuer_btn":       "▼ CONTINUE (next floor)",
+		"expe.affixes":             "Affixes: %s",
+		"expe.objets":              "Items: %s",
+		"expe.noeud.entree":         "Entrance",
+		"expe.noeud.combat":         "Battle",
+		"expe.noeud.mystere":        "?",
+		"expe.noeud.mystere_resolu": "? resolved",
+		"expe.noeud.coffre":         "Chest",
+		"expe.noeud.fin":            "Floor exit",
+		"expe.issue_extraction":    "▲ EXTRACTION SUCCESSFUL",
+		"expe.issue_complete":      "✔ EXPEDITION CLEARED",
+		"expe.issue_defaite":       "☠ DEFEAT",
+		"expe.recap_etage":         "Floor reached: %d",
+		"expe.recap_combats":       "Battles: %d",
+		"expe.recap_xp":            "Level XP earned: %d",
+		"expe.recap_euren":         "Euren credited: %d",
+		"expe.recap_purge":         "Purged at run's end: %d affix(es), %d consumable(s)",
+		"expe.retour_btn":          "⌂  BACK TO HQ",
 
 		# ── CycleSummaryScreen ───────────────────────────────
 		"cycle.title":            "EXPEDITION ENDED  —  %s",
@@ -860,6 +910,23 @@ func zone_tooltip(idx: int) -> String:
 # Retourne le nom d'un slot d'équipement traduit (clé = slot_key: "arme", "anneau"…).
 func equip_slot_name(slot_key: String) -> String:
 	return T("hero.equip.slot." + slot_key)
+
+# Nom d'affichage localisé d'une RESOURCE à champs nom_affichage_fr/en
+# (PalierProfondeurData, AffixeData, ConsommableData… — hors GameData.entities).
+# Même règle que pour les entités : jamais lire nom_affichage_fr en dur en UI.
+func resource_name(res: Resource, fallback: String = "?") -> String:
+	if res == null:
+		return fallback
+	var lang: String = GameSettings.language if GameSettings else "fr"
+	if lang == "en":
+		var en = res.get("nom_affichage_en")
+		if en != null and not str(en).is_empty():
+			return str(en)
+	var fr = res.get("nom_affichage_fr")
+	if fr != null and not str(fr).is_empty():
+		return str(fr)
+	var rid = res.get("id")
+	return str(rid) if rid != null and not str(rid).is_empty() else fallback
 
 # Nom d'affichage localisé d'une entité (dict GameData ou entrée de pool),
 # au palier de Maîtrise COURANT de l'entité. TOUJOURS passer par ici pour

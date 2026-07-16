@@ -45,27 +45,11 @@ static func build(host: Village) -> void:
 		# Pas de bouton de départ quand une expédition tourne déjà
 		host.rp_content.add_child(HSeparator.new())
 
-	# ── Slot supérieur : placeholder OU bouton ────────────────
-	var no_biome_selected := host.adv_selected_biome_id.is_empty()
-
-	# Encadré neutre (aucun biome choisi) — masqué si expédition en cours
-	var placeholder := PanelContainer.new()
-	placeholder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	placeholder.custom_minimum_size   = Vector2(0, 52)
-	placeholder.visible = no_biome_selected and not AdventureSystem.is_running
-	placeholder.add_theme_stylebox_override("panel", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.25, 1, 6))
-	var ph_lbl := UIHelpers.label(Translations.T("adv.biome_placeholder"), 13, UIColors.TEXT_MUTED)
-	ph_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ph_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ph_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ph_lbl.size_flags_vertical   = Control.SIZE_EXPAND_FILL
-	placeholder.add_child(ph_lbl)
-	host.rp_content.add_child(placeholder)
-
-	# Bouton actif (biome sélectionné) — masqué si expédition en cours.
-	# Volontairement plus imposant que les cartes alentour (hauteur, fond
-	# saturé, liseré épais, pulsation) : c'est l'action principale du panneau,
-	# elle ne doit pas se noyer dans la liste des biomes.
+	# ── Bouton de départ (chantier 8) : OUVRE LA HOLOMAP ──────
+	# Destination et palier se choisissent SUR LA CARTE (flux acté 06/07/2026) :
+	# le bouton est disponible qu'un biome soit sélectionné ou non (la sélection
+	# du panneau ne sert plus qu'à la consultation). Volontairement plus imposant
+	# que les cartes alentour : c'est l'action principale du panneau.
 	var btn := Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size   = Vector2(0, 64)
@@ -74,13 +58,8 @@ static func build(host: Village) -> void:
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
 	btn.add_theme_constant_override("outline_size", 5)
 	btn.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
-	btn.visible = not no_biome_selected and not AdventureSystem.is_running
-	if not no_biome_selected:
-		var bname: String = Translations.entity_name(
-				GameData.get_entity(host.adv_selected_biome_id), host.adv_selected_biome_id).to_upper()
-		btn.text = Translations.T("adv.start_btn_named") % bname
-	else:
-		btn.text = Translations.T("adv.start_btn")
+	btn.visible = not AdventureSystem.is_running
+	btn.text = Translations.T("adv.start_btn")
 	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.30, 1.0, 3, 8))
 	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.48, 1.0, 3, 8))
 	btn.pressed.connect(host.start_selected_expedition)
@@ -125,7 +104,6 @@ static func build(host: Village) -> void:
 	# Références partagées entre les closures pour l'accordéon
 	var contents:     Dictionary = {}   # biome_id → VBoxContainer (détail)
 	var arrows:       Dictionary = {}   # biome_id → Label (▶ / ▼)
-	var biome_names:  Dictionary = {}   # biome_id → nom affiché (pour le bouton)
 	var glows:        Dictionary = {}   # biome_id → SelectionGlow (liseré or)
 
 	for eid: String in GameData.entities:
@@ -135,7 +113,6 @@ static func build(host: Village) -> void:
 		if not e.get("est_decouvert", false):
 			continue
 		var bid := eid
-		biome_names[bid] = Translations.entity_name(e, bid).to_upper()
 
 		var result  := _adv_biome_card(host, bid, e)
 		var wrapper := result["wrapper"] as Control
@@ -152,21 +129,15 @@ static func build(host: Village) -> void:
 					and ev.button_index == MOUSE_BUTTON_LEFT \
 					and ev.pressed):
 				return
-			var bname := biome_names.get(bid, bid) as String
+			# Le bouton de départ ne dépend plus de la sélection (chantier 8 :
+			# la destination se choisit sur la HoloMap) — l'accordéon ne gère
+			# plus que le dépliage/consultation.
 			if bid == host.adv_selected_biome_id:
 				section.visible = not section.visible
 				arrow.text = "  ▼" if section.visible else "  ▶"
 				glow.visible = section.visible
-				if section.visible:
-					# Ré-sélection : bouton actif.
-					btn.text = Translations.T("adv.start_btn_named") % bname
-					btn.visible = true
-					placeholder.visible = false
-				else:
-					# Désélection : plus de biome choisi → bouton masqué, placeholder affiché.
+				if not section.visible:
 					host.adv_selected_biome_id = ""
-					btn.visible = false
-					placeholder.visible = true
 			else:
 				if host.adv_selected_biome_id in contents \
 						and is_instance_valid(contents[host.adv_selected_biome_id]):
@@ -177,9 +148,6 @@ static func build(host: Village) -> void:
 				section.visible = true
 				arrow.text = "  ▼"
 				glow.visible = true
-				btn.text = Translations.T("adv.start_btn_named") % bname
-				placeholder.visible = false
-				btn.visible = true
 		)
 		biomes_body.add_child(wrapper)
 

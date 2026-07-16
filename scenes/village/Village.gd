@@ -147,6 +147,13 @@ var _holo_cache           : HoloMap3DOverlay = null   # overlay PERSISTANT préc
 var _holo_xlsx            : HoloXlsxMap = null        # gabarit Excel parsé UNE fois (lieux + décor)
 var _backdrop             : VillageBackdrop    # fond d'ambiance (halo + poussières)
 
+# ─── Expédition réelle (Rework Combat — chantier 8) ───────────
+# Destination (Lieu) → pool d'ennemis : provisoire, tout retombe sur
+# pool_defaut tant que les Lieux différenciés n'existent pas (.tres prêt).
+const DESTINATIONS: ExpeDestinationsData = preload("res://data/expedition/destinations.tres")
+var _expe_lancement    : ExpeLancementPanel = null   # modal destination + palier, null si fermé
+var _expedition_screen : ExpeditionScreen = null     # écran d'expédition en cours, null sinon
+
 # ─── DEBUG : prévisualisation des paliers du Village ──────────
 # Boutons « Tier − / Tier + » en bas à gauche : montent/descendent le palier
 # du Village pour juger l'évolution visuelle du hub sans jouer.
@@ -190,12 +197,18 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.keycode == KEY_ESCAPE:
 		get_viewport().set_input_as_handled()
-		# Priorité d'Échap : carte des expéditions ouverte → la fermer (retour au
-		# hub). Géré ICI car _unhandled_key_input précède le _unhandled_input de
-		# l'overlay, qui ne voyait donc jamais Échap. Puis : Paramètres ouverts →
-		# les fermer ; sinon un panneau ouvert → le fermer ; sinon ouvrir les
-		# Paramètres.
-		if _holo_overlay != null and is_instance_valid(_holo_overlay):
+		# Priorité d'Échap : expédition en cours → rien (l'écran gère sa propre
+		# sortie via le recap — placeholder chantier 8) ; modal de lancement →
+		# l'annuler (retour à la carte) ; carte des expéditions ouverte → la
+		# fermer (retour au hub). Géré ICI car _unhandled_key_input précède le
+		# _unhandled_input de l'overlay, qui ne voyait donc jamais Échap. Puis :
+		# Paramètres ouverts → les fermer ; sinon un panneau ouvert → le fermer ;
+		# sinon ouvrir les Paramètres.
+		if is_instance_valid(_expedition_screen):
+			return
+		if is_instance_valid(_expe_lancement):
+			_expe_lancement.annuler()
+		elif _holo_overlay != null and is_instance_valid(_holo_overlay):
 			(_holo_overlay as HoloMap3DOverlay).fermer()
 		elif _settings_overlay and is_instance_valid(_settings_overlay):
 			_toggle_settings_overlay()
@@ -996,16 +1009,13 @@ func _fill_panel_content(panel_id: String) -> void:
 			elif _owner_of_room(panel_id) != "":
 				_panel_soon(Translations.panel_title(panel_id))
 
-# Lance l'aventure sur le biome sélectionné. ⚠ L'écran de combat a été SUPPRIMÉ
-# avec l'ancien moteur (Rework Combat) : l'expédition tourne en fond SANS
-# résolution de combat ; le nouvel écran CTB arrivera avec son chantier.
+# Point d'entrée expédition du jeu (chantier 8, flux acté 06/07/2026) :
+# « Partir en expédition » ouvre la HoloMap — destination et lancement s'y
+# choisissent. L'ancienne boucle idle (AdventureSystem.start_adventure) n'est
+# PLUS lancée d'ici : elle est morte avec son moteur (aucun autre point
+# d'entrée UI ; le système reste en place pour ses utilitaires — drops, zones).
 func start_selected_expedition() -> void:
-	if adv_selected_biome_id.is_empty():
-		return
-	GameData.player["active_biome_id"] = adv_selected_biome_id
-	AdventureSystem.start_adventure(adv_selected_biome_id)
-	show_banner(Translations.T("adv.combat_wip"),
-			Color(0.95, 0.60, 0.30), Color(0.18, 0.09, 0.02, 0.92), 3.0, 0.6)
+	open_expedition_map()
 
 # ─── Carte holographique 3D des expéditions (overlay) ─────────
 # API publique appelée par le bouton « Carte » de l'AdventurePanel. Ouvre la carte
@@ -1048,20 +1058,64 @@ func _creer_holo_overlay(en_veille: bool) -> HoloMap3DOverlay:
 	holo.persistant = true
 	holo.demarrer_en_veille = en_veille
 	holo.ferme.connect(func() -> void: _holo_overlay = null)   # veille ≠ free → rouvrir pan/zoom du hub
-	holo.lieu_selectionne.connect(func(biome_id: String) -> void:
-		adv_selected_biome_id = biome_id
-		if is_instance_valid(holo):
-			holo.fermer()
-		# La carte s'ouvre depuis le panneau Expéditions OU directement depuis le hub
-		# (hex « Carte »). Si le panneau est déjà actif → simple rafraîchissement ;
-		# sinon on l'OUVRE (sans quoi un clic depuis le hub sélectionnait le biome
-		# mais ne menait jamais au panneau). _open_panel togglerait s'il était actif.
-		if _active_panel_id == "adventure":
-			_refresh_active_panel()
-		else:
-			_open_panel("adventure")
-	)
+	# CHANTIER 8 : cliquer un Lieu ouvre le panneau de LANCEMENT d'expédition
+	# au-dessus de la carte (destination + palier + Partir). L'ancien rail
+	# « sélectionner le biome, fermer la carte, ouvrir le panneau Expéditions »
+	# est REMPLACÉ (il alimentait la boucle idle, morte avec son moteur).
+	holo.lieu_selectionne.connect(_ouvrir_lancement_expedition)
 	return holo
+
+# Ouvre le modal de lancement pour le Lieu cliqué sur la HoloMap. La carte
+# reste visible dessous (Annuler y revient) ; le biome sélectionné du panneau
+# Expéditions suit la destination (cohérence de consultation).
+func _ouvrir_lancement_expedition(lieu_id: String) -> void:
+	if is_instance_valid(_expe_lancement) or is_instance_valid(_expedition_screen):
+		return
+	adv_selected_biome_id = lieu_id
+	var panneau := ExpeLancementPanel.new()
+	panneau.lieu_id = lieu_id
+	panneau.z_index = 450   # au-dessus de la HoloMap (400)
+	panneau.lancer.connect(func(palier: PalierProfondeurData) -> void:
+		lancer_expedition(lieu_id, palier))
+	panneau.annule.connect(func() -> void:
+		if is_instance_valid(_expe_lancement):
+			_expe_lancement.queue_free()
+		_expe_lancement = null)
+	add_child(panneau)
+	_expe_lancement = panneau
+
+# Lance une expédition RÉELLE (chantier 8) : vrai héros (pont chantier 4),
+# pool résolu par la destination (DESTINATIONS — provisoire : pool_defaut
+# partagé), configs versionnées. `graine` : 0 = aléatoire (jeu) ; fixée par
+# les tests pour une run reproductible. Persistance ACTIVE : les crédits
+# XP/Euren de la run déclenchent la sauvegarde (signaux chantier 6).
+func lancer_expedition(lieu_id: String, palier: PalierProfondeurData, graine: int = 0) -> void:
+	if is_instance_valid(_expedition_screen):
+		return
+	var heros := CtbPont.combattant_depuis_heros()
+	if heros == null:
+		push_error("Village: héros introuvable — expédition annulée")
+		return
+	if is_instance_valid(_expe_lancement):
+		_expe_lancement.queue_free()
+		_expe_lancement = null
+	if _holo_overlay != null and is_instance_valid(_holo_overlay):
+		(_holo_overlay as HoloMap3DOverlay).fermer()   # persistant → veille
+	var ecran := ExpeditionScreen.new(lieu_id, palier, heros, DESTINATIONS.pool_pour(lieu_id), graine)
+	ecran.z_index = 500
+	ecran.retour_qg.connect(_sur_retour_expedition)
+	add_child(ecran)
+	_expedition_screen = ecran
+
+# Retour au QG après le recap de fin d'expédition (extraction, complétion ou
+# défaite — même retour, la défaite ne crédite juste rien ; Game Over hors
+# scope). Le hub reprend la main, panneau ouvert rafraîchi (XP/Euren ont bougé).
+func _sur_retour_expedition(_recap: Dictionary) -> void:
+	if is_instance_valid(_expedition_screen):
+		_expedition_screen.queue_free()
+	_expedition_screen = null
+	_update_badges()
+	_refresh_active_panel()
 
 # Construit les lieux d'expédition depuis les ZONES de la feuille « Carte ». Un LIEU =
 # une zone (bloc d'apparence) dont une cellule porte un ID (déjà détecté → zone["id"]).

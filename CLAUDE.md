@@ -41,6 +41,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Économie de récompense (Rework ch.6) : NIVEAU du héros (XP totale cumulée dans `GameData.player.heros_xp`, niveau DÉRIVÉ, bonus plats injectés par le pont héros AVANT les %) + Euren (`player.euren`, crédité à la SORTIE d'expédition seulement — défaite = rien). class_name statique, pas autoload ; courbe/gains/multiplicateurs dans `data/progression/*.tres` (provisoires, à calibrer) | `scripts/autoloads/ProgressionHeros.gd` |
 | Pont bestiaire existant → combattant CTB (stats telles quelles via `GameData.get_effective_stats`) + pont HÉROS réel (ch.4 : source unique d'agrégation plats + % additifs, reconstruite de l'ancien combat_player — mappings et « laissé derrière » documentés en tête de fichier) | `systems/combat_ctb/ctb_pont.gd` |
 | Carte d'expédition free-roam (Rework ch.2 : génération Delaunay connexe seedable, brouillard « absent », 3 étages, Extraire/Continuer, signaux `expe_*` ; ch.3 : nœuds Combat/Attaque surprise = VRAIS combats CTB — run suspendue, PV persistants, défaite = fin immédiate ; ch.7 : TOUS les nœuds réels — Bénédiction = affixe positif de run, Piège = affixe négatif, Coffre = consommables de run (action OBJET en combat, inventaire dans ExpeRun via `consommer()`), purge systématique en fin de run, pools dans `config_noeuds.tres`) | `systems/expedition/expe_run.gd` + `expe_carte.gd` (config + pools : `data/expedition/`) |
+| Flux de jeu RÉEL de l'expédition (Rework ch.8) : « Partir en expédition » ouvre la HoloMap → clic Lieu → `ExpeLancementPanel` (destination + palier) → `Village.lancer_expedition()` → `ExpeditionScreen` (écran de jeu, persistance ACTIVE, combats à la main) → recap → retour au QG. Destination → pool : `data/expedition/destinations.tres` (`ExpeDestinationsData`, provisoire : tout sur `pool_defaut`). Vue de carte partagée écran de jeu ↔ sandbox : `ExpeCarteView` | `scenes/expedition/ExpeditionScreen.gd` + `ExpeLancementPanel.gd` + `ExpeCarteView.gd` |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) | `scripts/autoloads/SaveManager.gd` |
@@ -56,25 +57,33 @@ AdventureSystem, PassiveSystem, VillageBuildings, ForgeSystem, MasteryRegistry, 
 (`systems/combat_ctb/`, sandbox `scenes/combat_ctb/SandboxCtb.tscn`) est branché
 aux nœuds d'expédition free-roam depuis le chantier 3 (sandbox
 `scenes/expedition/SandboxExpe.tscn` — ExpeRun reçoit avatar + pool + config
-combat à la construction). En revanche la boucle idle du village
-(`AdventureSystem`) reste NON branchée : ses rencontres créature sont
-constatées mais NON résolues (`_combat_non_resolu`) — ni dégâts, ni XP de
-combat, ni drops. En expédition, l'XP de niveau et l'Euren sont RÉELS depuis
-le chantier 6 (XP créditée à chaque victoire, Euren à la sortie), et TOUS
-les nœuds sont réels depuis le chantier 7 (affixes de run, consommables —
-drops d'équipement/matériaux non designés, à venir). Le camp joueur en
-expédition = VRAI héros (ch.4 : `CtbPont.combattant_depuis_heros()`, stats
-effectives équipement compris, transitoire construit au lancement) ; le
-sandbox a une checkbox Héros réel / avatar factice (`avatar.tres`, conservé
-pour les tests) et charge la sauvegarde s'il est lancé seul
-(`SaveManager.est_chargee()`). Laissé derrière par le pont héros (documenté
-dans ctb_pont.gd) : bonus de familiarité par ennemi, modificateurs de cycle,
-effets de règle Forge, poison passif on-hit. `_resolve_victory` /
-`_resolve_unique_victory` sont conservés pour l'intégration. Règle générale :
-un système remplacé est SUPPRIMÉ, pas laissé en doublon. Chantier 5 : les
-combats d'expédition du sandbox sont JOUÉS À LA MAIN par défaut
-(`CombatCtbUi`, checkbox « Combat auto » pour l'auto-résolution — le
-ScreenshotTool et les tests pilotent ExpeRun directement, toujours en auto).
+combat à la construction). Depuis le CHANTIER 8, l'expédition est BRANCHÉE AU
+JEU RÉEL : « Partir en expédition » (panneau ou hub) ouvre la HoloMap, un clic
+sur un Lieu ouvre le panneau de lancement (palier de profondeur — toujours sans
+effet mécanique), et la run se joue dans `ExpeditionScreen` avec persistance
+ACTIVE (XP/Euren déclenchent la sauvegarde). Retour au QG à toute sortie ;
+défaite = extraction sans butin (Game Over/rechargement : chantier suivant).
+L'ancienne boucle idle (`AdventureSystem`) n'a PLUS AUCUN point d'entrée UI
+(elle est morte avec son moteur : rencontres non résolues) — le système reste
+chargé pour ses utilitaires (drops de biome, zones, résumé de cycle) et
+`_resolve_victory` / `_resolve_unique_victory` sont conservés pour
+réintégration future. L'XP de niveau et l'Euren sont RÉELS depuis le
+chantier 6 (XP créditée à chaque victoire, Euren à la sortie), TOUS les
+nœuds sont réels depuis le chantier 7 (affixes de run, consommables — drops
+d'équipement/matériaux non designés, à venir). Le camp joueur en expédition
+= VRAI héros (ch.4 : `CtbPont.combattant_depuis_heros()`, stats effectives
+équipement compris, transitoire construit au lancement) ; le sandbox a une
+checkbox Héros réel / avatar factice (`avatar.tres`, conservé pour les
+tests) et charge la sauvegarde s'il est lancé seul (`SaveManager.est_chargee()`),
+en restant DÉBRANCHÉ des déclencheurs de sauvegarde (outil dev, jamais
+d'écriture). Laissé derrière par le pont héros (documenté dans ctb_pont.gd) :
+bonus de familiarité par ennemi, modificateurs de cycle, effets de règle
+Forge, poison passif on-hit. Règle générale : un système remplacé est
+SUPPRIMÉ, pas laissé en doublon. Chantier 5 : les combats d'expédition
+(jeu réel comme sandbox) sont JOUÉS À LA MAIN par défaut (`CombatCtbUi` ;
+sandbox : checkbox « Combat auto » ; ExpeditionScreen : hook de test
+`combat_auto`, jamais exposé en UI — le ScreenshotTool et les tests pilotent
+ExpeRun directement, toujours en auto).
 
 Forge (Chantier 5) : l'équipement évolue par XP (MasterySystem, buffer DÉSACTIVÉ pour
 l'équipement) — PLUS d'ingrédient pour le palier (`recettes_evolution` est mort). Le
@@ -133,6 +142,7 @@ godot --headless --path . res://tests/TestExpeNoeuds.tscn       # nœuds réels 
 godot --headless --path . res://tests/TestExpeCarte.tscn        # carte d'expédition (39)
 godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔ nœuds d'expédition + ponts (45)
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)
+godot --headless --path . res://tests/TestFluxExpedition.tscn   # flux de jeu réel QG→HoloMap→expédition→crédits persistés (46)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
@@ -165,6 +175,9 @@ godot --headless --path . --quit-after 30
   → `SaveManager.PERSISTED_FLAGS` ; nouvel état système → `_save_systems()/_load_systems()`.
 - Ne JAMAIS écrire la sauvegarde dans un test : déconnecter les listeners de
   SaveManager (voir le pattern dans l'historique des tests d'intégration).
+  EXCEPTION UNIQUE : `TestFluxExpedition` (chantier 8), dont l'objet est le
+  round-trip réel — il MET DE CÔTÉ les fichiers réels au démarrage
+  (renommés `.avant_test`) et les RESTAURE avant de quitter.
 
 ## ⚠ Flags de dev à désactiver avant release
 

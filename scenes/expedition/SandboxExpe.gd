@@ -38,16 +38,8 @@ const CONFIG_COMBAT: ExpeCombatConfigData = preload("res://data/expedition/confi
 const POOL: PoolEnnemisData = preload("res://data/expedition/pool_defaut.tres")
 const AVATAR: CombattantCtbData = preload("res://data/combat_ctb/avatar.tres")
 
-const COULEURS := {
-	Enums.TypeNoeud.ENTREE:    Color(0.55, 0.55, 0.60),
-	Enums.TypeNoeud.COMBAT:    Color(0.90, 0.35, 0.30),
-	Enums.TypeNoeud.MYSTERE:   Color(0.70, 0.45, 0.95),
-	Enums.TypeNoeud.COFFRE:    Color(0.95, 0.78, 0.30),
-	Enums.TypeNoeud.FIN_ETAGE: Color(0.30, 0.90, 0.95),
-}
-
 var run: ExpeRun
-var _carte_view: Control
+var _carte_view: ExpeCarteView   # rendu + navigation partagés avec l'écran de jeu (chantier 8)
 var _journal_label: Label
 var _journal_scroll: ScrollContainer
 var _btn_extraire: Button
@@ -125,11 +117,9 @@ func _construire_ui() -> void:
 	_lbl_run.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0))
 	gauche.add_child(_lbl_run)
 
-	_carte_view = Control.new()
+	_carte_view = ExpeCarteView.new()
 	_carte_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_carte_view.draw.connect(_dessiner_carte)
-	_carte_view.gui_input.connect(_input_carte)
-	_carte_view.focus_mode = Control.FOCUS_ALL
+	_carte_view.deplacement_demande.connect(_jouer_deplacement)
 	gauche.add_child(_carte_view)
 
 	var choix := HBoxContainer.new()
@@ -168,7 +158,16 @@ func _lancer() -> void:
 		_combat_data = data)
 	# Popup placeholder à l'obtention d'un contenu de nœud (affixe/coffre).
 	run.noeud_resolu.connect(_annoncer_contenu)
+	_carte_view.run = run
 	run.demarrer()
+	_rafraichir()
+
+# Déplacement demandé par la vue (clic sur un nœud adjacent, flèches).
+func _jouer_deplacement(nid: int) -> void:
+	if run.est_terminee or run.combat_en_cours != null:
+		return
+	if run.deplacer_vers(nid):
+		_traiter_combat()
 	_rafraichir()
 
 # Annonce placeholder (texte flottant au centre de la carte) du contenu d'un
@@ -231,7 +230,7 @@ func _traiter_combat() -> void:
 	add_child(_combat_ui)
 
 func _rafraichir() -> void:
-	_carte_view.queue_redraw()
+	_carte_view.rafraichir()
 	_btn_extraire.visible = run.choix_ouvert
 	_btn_continuer.visible = run.choix_ouvert and run.etage < CONFIG.nb_etages
 	var pv := "PV %d/%d" % [int(roundf(run.pv_avatar)), int(roundf(run.pv_max_effectif()))]
@@ -266,82 +265,5 @@ func _rafraichir() -> void:
 	await get_tree().process_frame   # attendre la mesure du label avant de scroller en bas
 	_journal_scroll.scroll_vertical = int(_journal_scroll.get_v_scroll_bar().max_value)
 
-# ─── Rendu de la carte (brouillard réel : non découvert = pas dessiné) ──
-func _pos_ecran(p: Vector2) -> Vector2:
-	var taille := _carte_view.size
-	var marge := 40.0
-	return Vector2(
-		marge + p.x / ExpeCarte.LARGEUR * (taille.x - marge * 2.0),
-		marge + p.y / ExpeCarte.HAUTEUR * (taille.y - marge * 2.0))
-
-func _dessiner_carte() -> void:
-	var cv := _carte_view
-	cv.draw_rect(Rect2(Vector2.ZERO, cv.size), Color(0.06, 0.07, 0.10))
-	if run == null:
-		return
-	# Arêtes : uniquement entre deux nœuds découverts.
-	for nd in run.noeuds_visibles():
-		for v in nd.voisins:
-			var nv := run.carte.noeud(v)
-			if nv.decouvert and v > nd.id:
-				cv.draw_line(_pos_ecran(nd.pos), _pos_ecran(nv.pos), Color(0.35, 0.40, 0.50), 2.0)
-	# Nœuds découverts (les autres N'EXISTENT PAS à l'écran).
-	for nd in run.noeuds_visibles():
-		var pe := _pos_ecran(nd.pos)
-		var col: Color = COULEURS.get(nd.type, Color.WHITE)
-		if nd.resolu and nd.type != Enums.TypeNoeud.FIN_ETAGE:
-			col = col.darkened(0.55)   # inerte
-		cv.draw_circle(pe, 16.0, col)
-		var etiquette := _etiquette(nd)
-		cv.draw_string(get_theme_default_font(), pe + Vector2(-14, 34), etiquette,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.85, 0.88, 0.95))
-	# Marqueur joueur.
-	var pj := _pos_ecran(run.carte.noeud(run.position_joueur).pos)
-	cv.draw_arc(pj, 22.0, 0.0, TAU, 24, Color(1, 1, 1), 3.0)
-
-func _etiquette(nd: ExpeNoeud) -> String:
-	match nd.type:
-		Enums.TypeNoeud.ENTREE:    return "Entrée"
-		Enums.TypeNoeud.MYSTERE:   return "?" if nd.contenu_mystere < 0 else "? résolu"
-		Enums.TypeNoeud.COMBAT:    return "Combat"
-		Enums.TypeNoeud.COFFRE:    return "Coffre"
-		Enums.TypeNoeud.FIN_ETAGE: return "Fin d'étage"
-	return ""
-
-# ─── Entrées : clic sur un nœud adjacent, flèches directionnelles ──
-func _input_carte(ev: InputEvent) -> void:
-	if run == null or run.est_terminee:
-		return
-	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
-		_carte_view.grab_focus()
-		for v in run.carte.noeud(run.position_joueur).voisins:
-			var nd := run.carte.noeud(v)
-			if nd.decouvert and _pos_ecran(nd.pos).distance_to(ev.position) <= 22.0:
-				run.deplacer_vers(v)
-				_traiter_combat()
-				_rafraichir()
-				return
-	if ev is InputEventKey and ev.pressed and not ev.echo:
-		var dir := Vector2.ZERO
-		match ev.keycode:
-			KEY_LEFT:  dir = Vector2.LEFT
-			KEY_RIGHT: dir = Vector2.RIGHT
-			KEY_UP:    dir = Vector2.UP
-			KEY_DOWN:  dir = Vector2.DOWN
-		if dir != Vector2.ZERO:
-			_deplacer_direction(dir)
-
-# Flèche : va vers le voisin adjacent le mieux aligné avec la direction.
-func _deplacer_direction(dir: Vector2) -> void:
-	var cur := run.carte.noeud(run.position_joueur)
-	var best := -1
-	var best_dot := 0.35   # seuil : ignorer les voisins trop perpendiculaires
-	for v in cur.voisins:
-		var d := (run.carte.noeud(v).pos - cur.pos).normalized().dot(dir)
-		if d > best_dot:
-			best_dot = d
-			best = v
-	if best >= 0:
-		run.deplacer_vers(best)
-		_traiter_combat()
-		_rafraichir()
+# (Rendu de la carte et navigation clic/flèches : extraits dans ExpeCarteView
+#  — chantier 8, vue partagée avec l'écran de jeu réel ExpeditionScreen.)
