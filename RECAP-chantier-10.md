@@ -79,3 +79,13 @@ Ce chantier :
 3. **Police monospace système** (Consolas/Cascadia) : suffisant en intérim ; la DA apportera-t-elle une fonte embarquée (les builds export sur d'autres OS retomberont sur la fallback système) ?
 4. **DELAI_PAS = 0,12 s** par pas de trajet : à calibrer en jouant (ressenti).
 5. **SandboxExpe** : ses contrôles dev restent bruts — l'habiller n'a pas de valeur joueur, mais si les captures de calibrage doivent être « propres », un mode presentation pourrait venir plus tard.
+
+## Addendum — Retours de playtest Rhend (post-livraison, commit 2c9077a)
+
+Passe visuelle en jeu réel faite par Rhend — 4 retours, tous livrés :
+1. **Fonds biome du combat RESTAURÉS** (le remplacement cyberpunk du fond scindé était une erreur d'appréciation — le reste de la peau validé « bien mieux aligné à la DA ») : la peau n'habille que le chrome, par-dessus les biomes.
+2. **File d'initiative encadrée** sur fond OPAQUE (`CYBER_BG`) : se détache du biome.
+3. **Sol de scène + emplacements de personnages** : ligne d'horizon + bande (`CYBER_SOL`), ellipse d'emplacement par combattant, placeholders de sprites = boules de lumière `EnergyBoule` aux accents de camp (éteintes à la mort). Points d'appui dans `_pieds` — les futurs sprites s'y poseront.
+4. **Hex « Expéditions » du hub → HoloMap DIRECTEMENT** (plus de détour par le panneau). Le panneau de lancement a aussi été agrandi (640 px), DA validée par Rhend.
+
+**Arbitrage (Rhend)** : le panneau Expéditions (consultation biomes + boutons Évoluer biomes/créatures), désormais sans accès depuis le hub, **attendra le rework du QG** pour être rebranché — d'ici là, l'évolution des biomes/créatures est inaccessible en jeu (assumé) et la pastille d'alerte du hex Expéditions peut s'allumer sans destination.
