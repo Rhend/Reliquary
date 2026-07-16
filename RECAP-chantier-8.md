@@ -80,3 +80,16 @@ Ce chantier :
 3. **Bloc « expédition en cours » de l'AdventurePanel** (gated `is_running`, inerte) et `CycleSummaryScreen`/`CycleData` : à supprimer avec le rework des bâtiments/QG ou lors de la réintégration des utilitaires d'AdventureSystem ?
 4. **Un seul écran à la fois** : relancer une expédition depuis le recap (sans repasser par le QG) — utile ? (une ligne dans `_sur_retour_expedition`).
 5. **`graine` exposée au joueur** un jour (défis quotidiens, partage de runs) ? Le paramètre existe déjà de bout en bout.
+
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 5 questions ouvertes ont été tranchées — **aucune modification de code** :
+1. **Abandon en cours de run** : tranché au chantier Game Over/rechargement (le prochain). Comportement actuel assumé d'ici là.
+2. **Retour au QG** : conservé. Rebasculement vers la HoloMap seulement si le playtest montre l'enchaînement d'expéditions comme usage dominant.
+3. **Orphelins** (bloc « expédition en cours » de l'AdventurePanel, CycleSummaryScreen/CycleData) : suppression au rework des bâtiments/QG. Rien maintenant.
+4. **Relancer depuis le recap** : non — sera ajouté si le playtest le réclame.
+5. **Graine exposée au joueur** : non designé, ne rien faire. Le paramètre de bout en bout suffit.
+
+L'exception encadrée « TestFluxExpedition écrit la sauvegarde » (protocole `.avant_test` → restauration) est **validée**.
+
+Baseline inchangée après addendum : **ScriptsLoad 122, CTB 63, CombatUi 21, Recompenses 48, ExpeNoeuds 24, ExpeCarte 39, ExpeCombat 45, ExpeditionFlow 28, FluxExpedition 46.**
