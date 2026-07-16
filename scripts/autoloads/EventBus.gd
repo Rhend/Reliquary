@@ -154,6 +154,21 @@ signal heros_niveau_change(avant: int, apres: int)
 @warning_ignore("unused_signal")
 signal euren_change(total: float)
 
+# ── Alarme & assauts de Lieutenants (Rework Combat — chantier 11) ──
+
+# Émis à CHAQUE victoire d'assaut sur le Lieutenant d'un Lieu.
+# premier = true si c'est le premier kill (le slot d'Alarme se remplit —
+# déclencheur de sauvegarde) ; false = re-kill (récompenses normales, pas
+# de re-slot).
+@warning_ignore("unused_signal")
+signal lieutenant_vaincu(lieu_id: String, premier: bool)
+
+# Émis UNE fois quand le 6e slot d'Alarme se remplit : l'alarme sonne —
+# déclencheur de fin de jeu (la voie de la Pyramide s'ouvre ; la 7e
+# expédition elle-même est hors scope, seul le déclencheur existe).
+@warning_ignore("unused_signal")
+signal alarme_sonnee()
+
 # ── Équipement ──────────────────────────────────────────────
 
 # Émis quand un item est équipé ou déséquipé.

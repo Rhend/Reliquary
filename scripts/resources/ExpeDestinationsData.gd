@@ -22,7 +22,17 @@ extends Resource
 # Pool de repli pour toute destination sans pool dédié.
 @export var pool_defaut: PoolEnnemisData = null
 
+# lieu_id (String) → CombattantCtbData du LIEUTENANT du Lieu (chantier 11 :
+# assauts). 6 placeholders (identités réelles = session narration) — les 3
+# Lieux secondaires sont mappés d'avance, injoignables tant que leurs zones
+# n'existent pas sur la HoloMap.
+@export var lieutenants_par_lieu: Dictionary = {}
+
 # Pool d'ennemis de la destination : dédié s'il existe, sinon le défaut.
 func pool_pour(lieu_id: String) -> PoolEnnemisData:
 	var p: PoolEnnemisData = pools_par_lieu.get(lieu_id, null)
 	return p if p != null else pool_defaut
+
+# Lieutenant de la destination (null si non mappé — l'Assaut ne se lance pas).
+func lieutenant_pour(lieu_id: String) -> CombattantCtbData:
+	return lieutenants_par_lieu.get(lieu_id, null)

@@ -101,6 +101,16 @@ var dernier_combat_recompenses: Dictionary = {}   # {xp, euren} du dernier comba
 
 # Nœuds réels (chantier 7) — remplaçable AVANT demarrer() (tests).
 var cfg_noeuds: ExpeNoeudsConfigData = CONFIG_NOEUDS_DEFAUT
+
+# Assaut de Lieutenant (chantier 11) — à définir AVANT demarrer() (pattern
+# cfg_noeuds) : expédition spéciale d'1 SEUL étage dont la Fin d'étage est
+# remplacée par un nœud BOSS (Lieutenant + 2 sbires du pool). Aucune
+# extraction : victoire, ou défaite (Game Over normal). Hors strates : le
+# palier qui circule est la valeur dédiée « Assaut » (palier_assaut.tres).
+var est_assaut := false
+var lieutenant: CombattantCtbData = null
+const NB_SBIRES_ASSAUT := 2
+var _premier_kill_lieutenant := false   # pour le recap d'assaut
 var affixes: Array[AffixeData] = []              # actifs jusqu'à la fin de la run
 var inventaire: Array[ConsommableData] = []      # consommables de run
 var _conso_obtenus: Array[ConsommableData] = []  # cumul pour le recap
@@ -129,10 +139,12 @@ func demarrer() -> void:
 	assert(avatar_data != null, "avatar requis (CombattantCtbData)")
 	assert(pool != null and not pool.creature_ids.is_empty(), "pool d'ennemis requis")
 	assert(cfg_combat != null, "config de combat requise")
+	assert(not est_assaut or lieutenant != null, "assaut : Lieutenant requis")
 	# PV pleins au lancement — provisoire : la gestion hors expédition n'existe pas.
 	pv_avatar = avatar_data.pv_max
-	_log("═ Expédition : %s — palier %s (×%.1f), %d étages" % [
-			lieu_id, palier.nom_journal(), palier.multiplicateur, config.nb_etages])
+	_log("═ %s : %s — palier %s (×%.1f), %d étage(s)" % [
+			"ASSAUT DE LIEUTENANT" if est_assaut else "Expédition",
+			lieu_id, palier.nom_journal(), palier.multiplicateur, nb_etages_effectif()])
 	_log("  ✦ %s — PV %d, ATK %d, DEF %d, VIT %d, crit %.0f %% ×%.2f" % [
 			avatar_data.nom_journal(), int(roundf(avatar_data.pv_max)),
 			int(roundf(avatar_data.atk)), int(roundf(avatar_data.def)),
@@ -262,6 +274,10 @@ func tirer_nb_ennemis() -> int:
 
 # ─── Internes ────────────────────────────────────────────────
 
+# Nombre d'étages EFFECTIF de la run : un assaut n'en a qu'un (chantier 11).
+func nb_etages_effectif() -> int:
+	return 1 if est_assaut else config.nb_etages
+
 func _nouvel_etage() -> void:
 	carte = ExpeCarte.generer(config, rng)
 	position_joueur = carte.entree_id
@@ -269,9 +285,14 @@ func _nouvel_etage() -> void:
 	entree.decouvert = true
 	entree.resolu = true          # nœud neutre : jamais déclenché
 	# Fin d'étage VISIBLE d'emblée (position et type) — foncer dessus est permis.
+	# Assaut (chantier 11) : la Fin d'étage est REMPLACÉE par le nœud BOSS
+	# (mêmes règles de visibilité et de navigation ; génération inchangée).
+	if est_assaut:
+		carte.noeud(carte.fin_id).type = Enums.TypeNoeud.BOSS
 	carte.noeud(carte.fin_id).decouvert = true
-	_log("─ Étage %d : %d nœuds, entrée %d, fin %d (visible)" % [
-			etage, carte.noeuds.size(), carte.entree_id, carte.fin_id])
+	_log("─ Étage %d : %d nœuds, entrée %d, %s %d (visible)" % [
+			etage, carte.noeuds.size(), carte.entree_id,
+			"BOSS" if est_assaut else "fin", carte.fin_id])
 	_reveler_voisins(carte.entree_id)
 
 # Révélation par adjacence : les voisins directs du nœud visité apparaissent
@@ -290,6 +311,9 @@ func _resoudre(nd: ExpeNoeud) -> void:
 	if nd.type == Enums.TypeNoeud.MYSTERE and nd.contenu_mystere < 0:
 		nd.contenu_mystere = _tirer_mystere()
 		_log("  ？ Le mystère se révèle : %s" % _nom_mystere(nd.contenu_mystere))
+	if nd.type == Enums.TypeNoeud.BOSS:
+		_lancer_combat(nd, false)   # composition boss + sbires (type du nœud)
+		return
 	if nd.type == Enums.TypeNoeud.COMBAT:
 		_lancer_combat(nd, false)
 		return
@@ -349,9 +373,13 @@ func _finaliser_noeud(nd: ExpeNoeud, extra: Dictionary = {}) -> void:
 
 # Monte et démarre le combat du nœud : avatar (PV persistants réinjectés) vs
 # 1-3 ennemis tirés du pool (uniforme avec remise, stats du bestiaire via
-# CtbPont). Embuscade : première horloge du camp joueur × malus (.tres).
+# CtbPont). Nœud BOSS (chantier 11) : composition FIXE Lieutenant + 2 sbires
+# du pool. Embuscade : première horloge du camp joueur × malus (.tres).
+# L'ALARME (chantier 11) renforce chaque ennemi à sa création — même endroit
+# que le pont bestiaire, le moteur reste agnostique.
 # La run reste SUSPENDUE tant que l'appelant n'a pas déroulé le moteur.
 func _lancer_combat(nd: ExpeNoeud, embuscade: bool) -> void:
+	var boss := nd.type == Enums.TypeNoeud.BOSS
 	var m := CtbMoteur.new()
 	m.rng.seed = rng.randi()   # crits reproductibles dans une run seedée
 	var av := m.ajouter(avatar_data, Enums.CampCtb.JOUEUR)
@@ -364,18 +392,21 @@ func _lancer_combat(nd: ExpeNoeud, embuscade: bool) -> void:
 	av.pv = minf(pv_avatar, av.stat_finale("pv_max"))
 	if embuscade:
 		m.malus_horloge_initiale_joueur = cfg_combat.malus_horloge_embuscade
-	var nb := tirer_nb_ennemis()
 	var noms: PackedStringArray = []
+	if boss:
+		Alarme.appliquer(m.ajouter(lieutenant, Enums.CampCtb.ADVERSE))
+		noms.append(lieutenant.nom_journal())
+	var nb := NB_SBIRES_ASSAUT if boss else tirer_nb_ennemis()
 	for i in nb:
 		var cid: String = pool.creature_ids[rng.randi_range(0, pool.creature_ids.size() - 1)]
 		var dc := CtbPont.combattant_depuis_entite(cid)
 		if dc == null:
 			continue
-		m.ajouter(dc, Enums.CampCtb.ADVERSE)
+		Alarme.appliquer(m.ajouter(dc, Enums.CampCtb.ADVERSE))
 		noms.append(dc.nom_journal())
 	_log("⚔ %s au nœud %d : %d ennemi(s) — %s" % [
-			"ATTAQUE SURPRISE" if embuscade else "Combat", nd.id, noms.size(),
-			", ".join(noms)])
+			"BOSS" if boss else ("ATTAQUE SURPRISE" if embuscade else "Combat"),
+			nd.id, noms.size(), ", ".join(noms)])
 	combat_en_cours = m
 	# ⚠ Ne PAS capturer `m` ici : une lambda qui référence le moteur dans son
 	# propre signal crée un cycle RefCounted jamais libéré (la connexion du
@@ -410,6 +441,23 @@ func _fin_combat(recap: Dictionary, nd: ExpeNoeud, embuscade: bool) -> void:
 		return
 	_log("✔ Victoire au nœud %d — PV Avatar : %d" % [nd.id, int(roundf(pv_avatar))])
 	_crediter_victoire(recap["ennemis_vaincus"])
+	# Victoire de BOSS (chantier 11) : premier kill → le slot d'Alarme du Lieu
+	# se remplit (persisté — signal lieutenant_vaincu, déclencheur de
+	# sauvegarde) ; re-kill → récompenses normales, pas de re-slot. Puis fin
+	# d'assaut immédiate (complétion — la seule autre sortie était la défaite).
+	if nd.type == Enums.TypeNoeud.BOSS:
+		_premier_kill_lieutenant = GameData.marquer_lieutenant_vaincu(lieu_id)
+		_log("★ Lieutenant vaincu : %s%s — Alarme %d/%d" % [
+				lieutenant.nom_journal(),
+				" (PREMIER kill : slot d'Alarme rempli)" if _premier_kill_lieutenant else " (re-kill)",
+				GameData.nb_lieutenants_vaincus(), GameData.NB_SLOTS_ALARME])
+		_finaliser_noeud(nd, {"combat": {
+			"embuscade":       embuscade,
+			"nb_activations":  recap["nb_activations"],
+			"ennemis_vaincus": recap["ennemis_vaincus"],
+		}})
+		_terminer(false)
+		return
 	_finaliser_noeud(nd, {"combat": {
 		"embuscade":       embuscade,
 		"nb_activations":  recap["nb_activations"],

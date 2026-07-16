@@ -89,6 +89,8 @@ func signaux_progression() -> Array[Signal]:
 		EventBus.heros_xp_gagnee,
 		EventBus.heros_niveau_change,
 		EventBus.euren_change,
+		# Alarme & assauts (chantier 11) — un slot rempli doit survivre :
+		EventBus.lieutenant_vaincu,
 	]
 
 # Lecture publique : load_save() a-t-il déjà tourné ? (Un outil dev — ex.

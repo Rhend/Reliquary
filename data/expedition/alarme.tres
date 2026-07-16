@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AlarmeConfigData" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/AlarmeConfigData.gd" id="1"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_blindage_renforce.tres" id="2"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_surtension.tres" id="3"]
+[ext_resource type="Resource" path="res://data/expedition/affixes/affixe_overclock.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+pct_par_slot = {"pv_max": 0.05, "atk": 0.05}
+affixes_par_palier = {4: ExtResource("2"), 5: ExtResource("3"), 6: ExtResource("4")}

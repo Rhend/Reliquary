@@ -1,9 +1,16 @@
-[gd_resource type="Resource" script_class="ExpeDestinationsData" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="ExpeDestinationsData" load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/ExpeDestinationsData.gd" id="1"]
 [ext_resource type="Resource" path="res://data/expedition/pool_defaut.tres" id="2"]
+[ext_resource type="Resource" path="res://data/expedition/lieutenants/lieutenant_foret.tres" id="3"]
+[ext_resource type="Resource" path="res://data/expedition/lieutenants/lieutenant_marecage.tres" id="4"]
+[ext_resource type="Resource" path="res://data/expedition/lieutenants/lieutenant_montagne.tres" id="5"]
+[ext_resource type="Resource" path="res://data/expedition/lieutenants/lieutenant_colline.tres" id="6"]
+[ext_resource type="Resource" path="res://data/expedition/lieutenants/lieutenant_ville_fantome.tres" id="7"]
+[ext_resource type="Resource" path="res://data/expedition/lieutenants/lieutenant_cimetiere.tres" id="8"]
 
 [resource]
 script = ExtResource("1")
 pools_par_lieu = {}
 pool_defaut = ExtResource("2")
+lieutenants_par_lieu = {"biome_foret": ExtResource("3"), "biome_marecage": ExtResource("4"), "biome_montagne": ExtResource("5"), "biome_colline": ExtResource("6"), "biome_ville_fantome": ExtResource("7"), "biome_cimetiere": ExtResource("8")}

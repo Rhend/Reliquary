@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CombattantCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CombattantCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "lieutenant_cimetiere"
+nom_affichage_fr = "Lieutenant du Cimetière"
+nom_affichage_en = "Lieutenant of the Graveyard"
+pv_max = 380.0
+atk = 34.0
+def = 14.0
+vit = 24.0
+crit_chance = 0.1
+crit_multiplier = 1.8

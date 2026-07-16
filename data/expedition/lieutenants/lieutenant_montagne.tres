@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CombattantCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CombattantCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "lieutenant_montagne"
+nom_affichage_fr = "Lieutenant de la Montagne"
+nom_affichage_en = "Lieutenant of the Mountain"
+pv_max = 400.0
+atk = 32.0
+def = 16.0
+vit = 22.0
+crit_chance = 0.1
+crit_multiplier = 1.8

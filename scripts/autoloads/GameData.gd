@@ -78,7 +78,12 @@ var player: Dictionary = {
 	# Économie de récompense (Rework Combat, chantier 6) — état BRUT ; toute
 	# la logique (courbe de niveau, crédit) vit dans ProgressionHeros.
 	"heros_xp": 0.0,   # XP de NIVEAU du héros, totale cumulée (jamais perdue)
-	"euren":    0.0    # Euren possédé (crédité à la sortie d'expédition)
+	"euren":    0.0,   # Euren possédé (crédité à la sortie d'expédition)
+	# Alarme & assauts (Rework Combat, chantier 11) — dans la SAUVEGARDE DE
+	# PARTIE (pas le méta) : la sauvegarde de lancement les capture, un Game
+	# Over annule donc un kill fait PENDANT la run perdue (cohérent, testé).
+	"expe_completions":    {},   # lieu_id → { palier_id: true } (strates complétées jusqu'au bout)
+	"lieutenants_vaincus": {},   # lieu_id → true (premier kill = slot d'Alarme)
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -570,3 +575,54 @@ func add_resource(item_id: String, qty: int) -> void:
 func get_mastery_combat_bonus(enemy_id: String) -> float:
 	var entry = player.get("bestiary", {}).get(enemy_id, {})
 	return float(entry.get("tier", 0)) * Balance.MASTERY_COMBAT_ATK_PER_TIER
+
+# ═══════════════════════════════════════════════════════════
+#  Expéditions : complétion Lieu × strate + Lieutenants / Alarme
+#  (Rework Combat — chantier 11)
+# ═══════════════════════════════════════════════════════════
+
+const NB_SLOTS_ALARME := 6   # un slot par Lieutenant (règle actée 06/07/2026)
+
+# Marque une strate (palier de profondeur) d'un Lieu comme COMPLÉTÉE jusqu'au
+# bout (fin du 3e étage). L'extraction anticipée et la défaite ne passent
+# jamais ici (l'appelant — ExpeRun — ne marque que les complétions).
+func marquer_strate_completee(lieu_id: String, palier_id: String) -> void:
+	if lieu_id == "" or palier_id == "":
+		return
+	var completions: Dictionary = player.get("expe_completions", {})
+	var strates: Dictionary = completions.get(lieu_id, {})
+	strates[palier_id] = true
+	completions[lieu_id] = strates
+	player["expe_completions"] = completions
+
+func strate_completee(lieu_id: String, palier_id: String) -> bool:
+	return bool(player.get("expe_completions", {}).get(lieu_id, {}).get(palier_id, false))
+
+# Nombre de strates complétées d'un Lieu (0-3) — 3/3 débloque l'Assaut.
+func nb_strates_completees(lieu_id: String) -> int:
+	return (player.get("expe_completions", {}).get(lieu_id, {}) as Dictionary).size()
+
+# Marque le Lieutenant d'un Lieu comme vaincu. Retourne true si c'est le
+# PREMIER kill (le slot d'Alarme se remplit — les kills suivants ne
+# re-remplissent rien). Émet lieutenant_vaincu (déclencheur de sauvegarde),
+# et alarme_sonnee quand le 6e slot se remplit (déclencheur de fin de jeu —
+# la 7e expédition elle-même est hors scope).
+func marquer_lieutenant_vaincu(lieu_id: String) -> bool:
+	if lieu_id == "":
+		return false
+	var vaincus: Dictionary = player.get("lieutenants_vaincus", {})
+	var premier: bool = not vaincus.get(lieu_id, false)
+	if premier:
+		vaincus[lieu_id] = true
+		player["lieutenants_vaincus"] = vaincus
+	EventBus.lieutenant_vaincu.emit(lieu_id, premier)
+	if premier and nb_lieutenants_vaincus() >= NB_SLOTS_ALARME:
+		EventBus.alarme_sonnee.emit()
+	return premier
+
+func lieutenant_vaincu(lieu_id: String) -> bool:
+	return bool(player.get("lieutenants_vaincus", {}).get(lieu_id, false))
+
+# Nombre de slots d'Alarme remplis (0-6) = niveau d'Alarme (cf. Alarme.gd).
+func nb_lieutenants_vaincus() -> int:
+	return (player.get("lieutenants_vaincus", {}) as Dictionary).size()

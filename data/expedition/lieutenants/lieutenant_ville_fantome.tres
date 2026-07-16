@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CombattantCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CombattantCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "lieutenant_ville_fantome"
+nom_affichage_fr = "Lieutenant de la Ville Fantôme"
+nom_affichage_en = "Lieutenant of the Ghost Town"
+pv_max = 330.0
+atk = 36.0
+def = 10.0
+vit = 32.0
+crit_chance = 0.1
+crit_multiplier = 1.8

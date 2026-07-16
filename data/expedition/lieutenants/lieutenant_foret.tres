@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CombattantCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CombattantCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "lieutenant_foret"
+nom_affichage_fr = "Lieutenant de la Forêt Sombre"
+nom_affichage_en = "Lieutenant of the Dark Forest"
+pv_max = 320.0
+atk = 34.0
+def = 10.0
+vit = 34.0
+crit_chance = 0.1
+crit_multiplier = 1.8

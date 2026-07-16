@@ -95,12 +95,15 @@ enum EffetConsommable {
 
 # Types de nœuds d'un étage. MYSTERE = le nœud « ? » : son contenu réel
 # (ContenuMystere) n'est déterminé et révélé qu'à l'ENTRÉE du joueur.
+# BOSS (chantier 11) : remplace la Fin d'étage dans un ASSAUT de Lieutenant —
+# jamais généré par ExpeCarte, posé par ExpeRun en mode assaut.
 enum TypeNoeud {
 	ENTREE    = 0,
 	COMBAT    = 1,
 	MYSTERE   = 2,
 	COFFRE    = 3,
 	FIN_ETAGE = 4,
+	BOSS      = 5,
 }
 
 # Contenu réel d'un nœud « ? », tiré à l'entrée (probas data-driven).
