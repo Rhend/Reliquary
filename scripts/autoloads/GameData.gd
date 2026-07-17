@@ -91,10 +91,13 @@ var player: Dictionary = {
 	"lieutenants_vaincus": {},   # lieu_id → true (premier kill = slot d'Alarme)
 	# Chantier 12 : objets uniques de Lieutenants (« Sceau du <Lieu> »,
 	# accordés au PREMIER kill — mêmes rails que le slot d'Alarme : crédités
-	# au kill, annulés par le Game Over qui recharge la sauvegarde) et voies
-	# du QG ouvertes (action manuelle avec l'objet en poche, persistée).
-	"objets_lieutenants":  {},   # lieu_id → true (Sceau possédé)
-	"voies_ouvertes":      {},   # lieu_id → true (voie/quartier restauré)
+	# au kill, annulés par le Game Over qui recharge la sauvegarde).
+	"objets_lieutenants":  {},   # lieu_id → true (Sceau possédé — provenance narrative)
+	# Chantier 13 (refonte du modèle « voie par Lieu » du ch.12) : les voies
+	# s'ouvrent dans un ORDRE FIXE 1→6, 1 Sceau libre (interchangeable) = 1
+	# voie — voies_ouvertes est un COMPTEUR (migration v13→v14 : ancien dict
+	# lieu_id→true converti en taille). Voie 1 = Atelier/Forge.
+	"voies_ouvertes":      0,
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -349,26 +352,11 @@ func unlock_biome_equipment(biome_id: String) -> void:
 		EventBus.equipment_unlocked.emit(eid)
 		EventBus.equipment_changed.emit()
 
-# Rattrapage (anciennes sauvegardes / changement de règle), appelé après
-# load : biome Peu Commun+ → équipement livré ; biome en dessous →
-# équipement repris (la règle s'applique rétroactivement).
-func reconcile_equipment_unlocks() -> void:
-	for eid in entities:
-		var equip: Dictionary = entities[eid]
-		if equip.get("entity_type", "") != Enums.EntityType.EQUIPMENT:
-			continue
-		var bid := str(equip.get("biome_source_id", ""))
-		if bid == "" or str(equip.get("nom_affichage_fr", "")) == "":
-			continue   # placeholder sans contenu
-		var btier := int(get_entity(bid).get("maitrise_actuelle", 0))
-		if btier >= Balance.EQUIPMENT_UNLOCK_BIOME_TIER:
-			unlock_biome_equipment(bid)
-		elif equip.get("est_debloque", false):
-			equip["est_debloque"] = false
-			var slot_idx := int(equip.get("slot", 0))
-			if slot_idx < EQUIP_SLOT_KEYS.size() \
-					and str(player["equipped"].get(EQUIP_SLOT_KEYS[slot_idx], "")) == eid:
-				player["equipped"][EQUIP_SLOT_KEYS[slot_idx]] = ""
+# (Le rattrapage reconcile_equipment_unlocks — « biome Peu Commun →
+# équipement livré / repris » — a été SUPPRIMÉ au chantier 13 : l'équipement
+# Commun est présent dès la partie neuve (appliquer_equipement_depart) et sa
+# reprise rétroactive aurait dépouillé le joueur à chaque chargement, les
+# biomes n'évoluant plus. Le hook unlock_biome_equipment reste en place.)
 
 # Palier max du Village : plafond DUR global (« Palier Max atteint »).
 func village_max_tier() -> int:
@@ -646,12 +634,16 @@ func nb_lieutenants_vaincus() -> int:
 
 # ═══════════════════════════════════════════════════════════
 #  Économie du QG : objets de Lieutenants & voies
-#  (Rework Combat — chantier 12)
+#  (Rework Combat — chantier 12 ; ordre fixe au chantier 13)
 # ═══════════════════════════════════════════════════════════
+
+const NB_VOIES := 6       # une voie par Lieutenant (même compte que l'Alarme)
+const VOIE_ATELIER := 1   # la voie 1 est l'Atelier/Forge (acté 06/07/2026)
 
 # Le joueur possède-t-il l'objet unique du Lieutenant d'un Lieu (« Sceau du
 # <Lieu> », placeholder — nommage réel à la session narration) ? Accordé au
-# premier kill (marquer_lieutenant_vaincu), jamais consommé.
+# premier kill (marquer_lieutenant_vaincu). Tracé PAR LIEU pour la narration
+# future, mais DÉPENSÉ comme un compteur interchangeable (chantier 13).
 func possede_objet_lieutenant(lieu_id: String) -> bool:
 	return bool(player.get("objets_lieutenants", {}).get(lieu_id, false))
 
@@ -659,23 +651,64 @@ func possede_objet_lieutenant(lieu_id: String) -> bool:
 func objets_lieutenants() -> Array:
 	return (player.get("objets_lieutenants", {}) as Dictionary).keys()
 
-# La voie du Lieu est-elle ouverte (quartier restauré) ?
-func voie_ouverte(lieu_id: String) -> bool:
-	return bool(player.get("voies_ouvertes", {}).get(lieu_id, false))
+func nb_sceaux() -> int:
+	return (player.get("objets_lieutenants", {}) as Dictionary).size()
 
-# Ouvre la voie d'un Lieu (action MANUELLE du joueur : « prêt → clic »).
-# Exige l'objet du Lieutenant ; refuse si déjà ouverte. Persisté avec la
-# partie ; émet voie_ouverte (déclencheur de sauvegarde + UI).
-func ouvrir_voie(lieu_id: String) -> bool:
-	if lieu_id == "" or voie_ouverte(lieu_id) or not possede_objet_lieutenant(lieu_id):
+# Sceaux non encore dépensés dans une voie (1 voie ouverte = 1 Sceau engagé).
+func sceaux_libres() -> int:
+	return maxi(0, nb_sceaux() - nb_voies_ouvertes())
+
+# Nombre de quartiers restaurés (voies ouvertes, 0-6) — SOURCE UNIQUE du
+# compteur « quartiers ouverts » (l'évolution visuelle du QG s'y branchera).
+func nb_voies_ouvertes() -> int:
+	return int(player.get("voies_ouvertes", 0))
+
+# La voie `numero` (1-based) est-elle ouverte ? Ordre fixe : la voie n est
+# ouverte ssi n ≤ nb_voies_ouvertes().
+func voie_ouverte(numero: int) -> bool:
+	return numero >= 1 and numero <= nb_voies_ouvertes()
+
+# L'Atelier (Forge) est-il déverrouillé ? = la voie 1 est ouverte.
+func atelier_ouvert() -> bool:
+	return voie_ouverte(VOIE_ATELIER)
+
+# La voie suivante est-elle ouvrable ? (pas toutes ouvertes + 1 Sceau libre)
+func peut_ouvrir_voie_suivante() -> bool:
+	return nb_voies_ouvertes() < NB_VOIES and sceaux_libres() >= 1
+
+# Ouvre la voie SUIVANTE (action MANUELLE du joueur : « prêt → clic ») —
+# ordre fixe 1→6, exige 1 Sceau libre (interchangeable). Persisté avec la
+# partie ; émet voie_ouverte(numero) (déclencheur de sauvegarde + UI).
+func ouvrir_voie_suivante() -> bool:
+	if not peut_ouvrir_voie_suivante():
 		return false
-	var voies: Dictionary = player.get("voies_ouvertes", {})
-	voies[lieu_id] = true
-	player["voies_ouvertes"] = voies
-	EventBus.voie_ouverte.emit(lieu_id)
+	player["voies_ouvertes"] = nb_voies_ouvertes() + 1
+	EventBus.voie_ouverte.emit(nb_voies_ouvertes())
 	return true
 
-# Nombre de quartiers restaurés (voies ouvertes) — SOURCE UNIQUE du compteur
-# « quartiers ouverts » (l'évolution visuelle du QG s'y branchera, DA à venir).
-func nb_voies_ouvertes() -> int:
-	return (player.get("voies_ouvertes", {}) as Dictionary).size()
+# ═══════════════════════════════════════════════════════════
+#  Équipement de départ (chantier 13)
+# ═══════════════════════════════════════════════════════════
+
+# Liste de dotation data-driven (les équipements Commun existants, un par
+# slot couvert — ne jamais en inventer ici : compléter le .tres).
+const EQUIPEMENT_DEPART: EquipementDepartData = \
+		preload("res://data/progression/equipement_depart.tres")
+
+# Dote une PARTIE NEUVE de son équipement de départ : chaque équipement de
+# la config est débloqué et équipé dans son slot (rareté Commun = palier 0
+# des .tres). Appelé par SaveManager.load_save UNIQUEMENT quand aucune
+# sauvegarde n'existe — une partie en cours n'est jamais touchée. Un id
+# inconnu ou un placeholder sans contenu (nom vide) est ignoré avec warning
+# (jamais inventé en silence).
+func appliquer_equipement_depart() -> void:
+	for eid: String in EQUIPEMENT_DEPART.equipement_ids:
+		var equip := get_entity(eid)
+		if equip.is_empty() or str(equip.get("nom_affichage_fr", "")) == "":
+			push_warning("GameData: équipement de départ « %s » introuvable ou vide — ignoré" % eid)
+			continue
+		equip["est_debloque"] = true
+		var slot_idx := int(equip.get("slot", 0))
+		if slot_idx < EQUIP_SLOT_KEYS.size():
+			player["equipped"][EQUIP_SLOT_KEYS[slot_idx]] = eid
+	EventBus.equipment_changed.emit()

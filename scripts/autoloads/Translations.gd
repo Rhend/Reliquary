@@ -349,15 +349,21 @@ const STRINGS: Dictionary = {
 		"alarme.jauge":             "ALARME",
 		"alarme.sonnee":            "L'ALARME SONNE — LA VOIE DE LA PYRAMIDE S'OUVRE",
 
-		# ── Économie du QG : Sceaux & voies (Rework Combat — chantier 12) ──
-		"voies.compteur":      "Quartiers restaurés : %d / %d",
-		"voies.sceaux_titre":  "Sceaux de Lieutenants",
-		"voies.sceaux_aucun":  "Aucun Sceau. Détruisez un Lieutenant (Assaut) pour obtenir le sien.",
-		"voies.sceau":         "Sceau · %s",
-		"voies.scellee":       "Voie scellée",
-		"voies.scellee_hint":  "le Sceau du Lieutenant de ce Lieu est requis",
-		"voies.restauree":     "Quartier restauré — contenu à venir",
-		"voies.restaurer_btn": "Restaurer la voie",
+		# ── Économie du QG : Sceaux & voies (chantier 12 ; ordre fixe ch.13) ──
+		"voies.compteur":         "Quartiers restaurés : %d / %d",
+		"voies.sceaux_titre":     "Sceaux de Lieutenants",
+		"voies.sceaux_aucun":     "Aucun Sceau. Détruisez un Lieutenant (Assaut) pour obtenir le sien.",
+		"voies.sceau":            "Sceau · %s",
+		"voies.sceaux_libres":    "Sceaux libres : %d",
+		"voies.nom_atelier":      "Atelier (Forge)",
+		"voies.nom_generique":    "Quartier scellé",
+		"voies.scellee":          "Voie scellée",
+		"voies.suivante_hint":    "1 Sceau libre requis — détruisez un Lieutenant (Assaut)",
+		"voies.verrouillee":      "ouvrez d'abord la voie précédente",
+		"voies.restauree":        "Quartier restauré — contenu à venir",
+		"voies.atelier_restaure": "Atelier restauré — la Forge est ouverte",
+		"voies.restaurer_btn":    "Restaurer la voie",
+		"forge.scelle":           "L'Atelier est scellé. Restaurez la voie 1 (panneau VOIES) avec un Sceau de Lieutenant.",
 
 		# ── Game Over / reconstruction (Rework Combat — chantier 9) ──
 		"gameover.detruit":         "%s est détruit...",
@@ -797,15 +803,21 @@ const STRINGS: Dictionary = {
 		"alarme.jauge":             "ALARM",
 		"alarme.sonnee":            "THE ALARM SOUNDS — THE PATH TO THE PYRAMID OPENS",
 
-		# ── Économie du QG : Sceaux & voies (Rework Combat — chantier 12) ──
-		"voies.compteur":      "Districts restored: %d / %d",
-		"voies.sceaux_titre":  "Lieutenant Seals",
-		"voies.sceaux_aucun":  "No Seal yet. Destroy a Lieutenant (Assault) to claim theirs.",
-		"voies.sceau":         "Seal · %s",
-		"voies.scellee":       "Sealed path",
-		"voies.scellee_hint":  "requires this Location's Lieutenant Seal",
-		"voies.restauree":     "District restored — content to come",
-		"voies.restaurer_btn": "Restore the path",
+		# ── Économie du QG : Sceaux & voies (chantier 12 ; ordre fixe ch.13) ──
+		"voies.compteur":         "Districts restored: %d / %d",
+		"voies.sceaux_titre":     "Lieutenant Seals",
+		"voies.sceaux_aucun":     "No Seal yet. Destroy a Lieutenant (Assault) to claim theirs.",
+		"voies.sceau":            "Seal · %s",
+		"voies.sceaux_libres":    "Free Seals: %d",
+		"voies.nom_atelier":      "Workshop (Forge)",
+		"voies.nom_generique":    "Sealed district",
+		"voies.scellee":          "Sealed path",
+		"voies.suivante_hint":    "1 free Seal required — destroy a Lieutenant (Assault)",
+		"voies.verrouillee":      "open the previous path first",
+		"voies.restauree":        "District restored — content to come",
+		"voies.atelier_restaure": "Workshop restored — the Forge is open",
+		"voies.restaurer_btn":    "Restore the path",
+		"forge.scelle":           "The Workshop is sealed. Restore path 1 (PATHS panel) with a Lieutenant Seal.",
 
 		# ── Game Over / reconstruction (Rework Combat — chantier 9) ──
 		"gameover.detruit":         "%s is destroyed...",

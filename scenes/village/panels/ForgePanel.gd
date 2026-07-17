@@ -6,10 +6,12 @@
 # d'XP/palier, ses points de Forge, le bouton d'évolution (rituel) si prêt, et
 # l'accès à l'arbre spatial (ForgeTreeOverlay).
 #
-# OUVERT D'EMBLÉE depuis le chantier 12 (rework économique du QG) : l'ancien
-# verrou « Village Peu Commun » est mort avec les paliers du QG — l'équipement
-# est nécessaire avant de pouvoir tuer un Lieutenant, l'Atelier ne peut pas
-# être derrière une voie.
+# VERROUILLÉ derrière la VOIE 1 (chantier 13, supersède l'ouverture d'emblée
+# du ch.12) : l'hex Forge/Atelier est ABSENT du hub tant que la voie 1 n'est
+# pas ouverte (GameData.atelier_ouvert) — le verrou ci-dessous est une
+# défense en profondeur (l'ancien verrou par palier de Village reste mort).
+# L'équipement Commun de départ couvre le joueur d'ici là ; la progression
+# d'équipement passe par son amélioration ici, débloquée au premier Sceau.
 # ============================================================
 class_name ForgePanel
 
@@ -21,6 +23,12 @@ const EQUIPS: Array = [
 ]
 
 static func build(host: Village) -> void:
+	if not GameData.atelier_ouvert():
+		var lbl := UIHelpers.label(Translations.T("forge.scelle"), 12, UIColors.TEXT_MUTED)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		host.rp_content.add_child(lbl)
+		return
 	for e in EQUIPS:
 		_build_equip_section(host, e[0] as String, e[1] as String)
 

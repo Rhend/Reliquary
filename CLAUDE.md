@@ -51,7 +51,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Alarme & assauts de Lieutenants (Rework ch.11) : 6 slots (un par Lieutenant détruit, PREMIER kill seulement — état dans `GameData.player.lieutenants_vaincus`), effets data-driven par niveau (`data/expedition/alarme.tres` : +5 % PV/ATK ennemis par slot + affixes permanents aux paliers 4/5/6), appliqués à la CRÉATION de chaque ennemi (ExpeRun, même endroit que le pont bestiaire — PV re-remplis au pv_max final) ; 6/6 → `EventBus.alarme_sonnee` (déclencheur Pyramide, message différé au retour QG — la 7ᵉ expédition est hors scope) ; jauge diégétique 6 slots sur la HoloMap (`HoloHud._jauge_alarme`, rouge = son métier). ASSAUT : débloqué par Lieu quand ses 3 strates sont complétées (`GameData.expe_completions`, marquées par ExpeRun à la COMPLÉTION seule — extraction/défaite non), option ABSENTE avant (jamais grisée, `ExpeLancementPanel`), expédition d'1 étage, Fin d'étage → nœud BOSS (Lieutenant du Lieu + 2 sbires du pool, `destinations.tres.lieutenants_par_lieu` — 6 placeholders), AUCUNE extraction, palier dédié `palier_assaut.tres` (hors strates), recap distinct, re-kill = récompenses normales sans re-slot | `scripts/autoloads/Alarme.gd` + `scripts/resources/AlarmeConfigData.gd` (config : `data/expedition/alarme.tres`, lieutenants : `data/expedition/lieutenants/`) |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) + sanction de mort (Rework ch.9) : flush de RÉFÉRENCE au lancement d'expédition puis écritures SUSPENDUES pendant la run (`suspendre_ecritures`/`reprendre_ecritures` — fermer la fenêtre en run ne sauve rien), `recharger()` (Game Over = ré-application de la dernière sauvegarde), compteur de reconstruction **R-XXX MÉTA-PERSISTANT** (`user://IdleEvolutionMeta.json`, séparé de la partie, init R-001, plafond d'affichage R-999, `nom_reconstruction()` = source UNIQUE du formatage, appliqué à l'entité hero → tous les affichages) | `scripts/autoloads/SaveManager.gd` |
 | Quartiers / bâtiments + bonus de village (Chantier 4 ; ch.12 : coûts refondus en EUREN + MODULES — courbe unique data-driven `data/progression/couts_batiments.tres`, plus JAMAIS de ressource de biome ; ROUTES SUPPRIMÉES, quartiers de base ouverts d'emblée) | `scripts/systems/VillageBuildings.gd` |
-| Économie du QG (Rework ch.12) : objets de Lieutenants (« Sceau », accordé au PREMIER kill dans `GameData.marquer_lieutenant_vaincu` — `player.objets_lieutenants`, annulé par Game Over comme le slot d'Alarme) + 6 VOIES scellées (une par Lieutenant, ouverture MANUELLE avec l'objet — `GameData.ouvrir_voie`, persistée `player.voies_ouvertes`, quartier placeholder vide) ; compteur « quartiers restaurés » source UNIQUE : `GameData.nb_voies_ouvertes()` (la DA s'y branchera). UI : hex VOIES du hub → `VoiesPanel` (Sceaux possédés + 6 voies + bouton Restaurer) | `scripts/autoloads/GameData.gd` + `scenes/village/panels/VoiesPanel.gd` |
+| Économie du QG (Rework ch.12 ; ordre fixe ch.13) : objets de Lieutenants (« Sceau », accordé au PREMIER kill dans `GameData.marquer_lieutenant_vaincu` — `player.objets_lieutenants` trace la provenance par Lieu, annulé par Game Over comme le slot d'Alarme) + 6 VOIES à ORDRE FIXE 1→6 (1 Sceau LIBRE interchangeable = 1 voie, ouverture MANUELLE `GameData.ouvrir_voie_suivante()`, compteur persisté `player.voies_ouvertes` int — VOIE 1 = Atelier/Forge, `atelier_ouvert()` déverrouille hex + panneau ; voies 2-6 placeholders vides) ; compteur « quartiers restaurés » source UNIQUE : `GameData.nb_voies_ouvertes()` (la DA s'y branchera). Équipement de DÉPART (ch.13) : `GameData.appliquer_equipement_depart()` sur partie neuve seulement (config `data/progression/equipement_depart.tres`). UI : hex VOIES du hub → `VoiesPanel` (Sceaux possédés/libres + 6 voies ordonnées, la suivante mise en avant) | `scripts/autoloads/GameData.gd` + `scenes/village/panels/VoiesPanel.gd` |
 | Forge : palier d'équipement (XP, sans ingrédient) + arbre de nœuds + bonus (Chantier 5) | `scripts/systems/ForgeSystem.gd` |
 
 Autoloads (ordre dans project.godot) : UIColors, EventBus, AudioManager, Translations,
@@ -101,17 +101,26 @@ domaine/housing — Euren + MODULES remplacent les ressources silotées pour
 les COÛTS DE BÂTIMENTS (périmètre strict : Forge/équipement et drops de
 ressources non touchés, les anciennes ressources existent toujours mais ne
 sont plus jamais demandées par un bâtiment). Le QG n'a PLUS de palier de
-rareté propre côté accès : Héros, Expéditions et Forge/Atelier sont ouverts
-d'emblée (hex Forge tier_min 0, verrou du ForgePanel supprimé, gate de drop
-d'AdventureSystem supprimé), les ROUTES sont supprimées (chemins des
-quartiers de base présents d'emblée). Les 6 VOIES scellées s'ouvrent avec
-l'objet du Lieutenant (premier kill) — action manuelle, quartiers
-placeholder vides (contenus = session narration). « Évoluer biomes » est
-SUPPRIMÉ (les Lieux n'évoluent plus — décision actée, avertissement
-consigné : l'obtention d'équipement liée au palier de biome est de fait
-gelée en attendant son rework) ; le panneau Expéditions est REBRANCHÉ (hex
-EXPÉDITIONS → panneau, consultation + Évoluer créatures ; hex CARTE →
-HoloMap directe ; le départ en expédition reste sur la HoloMap).
+rareté propre côté accès ; les ROUTES sont supprimées (chemins des
+quartiers de base présents d'emblée) ; le gate de drop d'AdventureSystem
+est supprimé. « Évoluer biomes » est SUPPRIMÉ (les Lieux n'évoluent plus —
+décision actée) ; le panneau Expéditions est REBRANCHÉ (hex EXPÉDITIONS →
+panneau, consultation + Évoluer créatures ; hex CARTE → HoloMap directe ;
+le départ en expédition reste sur la HoloMap).
+CHANTIER 13 (supersède deux arbitrages du ch.12, acté 06/07/2026) :
+l'ÉQUIPEMENT COMPLET Commun est présent dès la PARTIE NEUVE (dotation
+data-driven `data/progression/equipement_depart.tres`, appliquée par
+SaveManager.load_save UNIQUEMENT sans sauvegarde existante — VS : 3 slots
+réels arme/anneau/armure, les 3 autres sont des placeholders vides ; le
+rattrapage `reconcile_equipment_unlocks` est SUPPRIMÉ, il aurait repris la
+dotation à chaque chargement). Les VOIES s'ouvrent dans un ORDRE FIXE 1→6 :
+1 Sceau LIBRE (interchangeable — `objets_lieutenants` garde la provenance
+par Lieu) = 1 voie, `GameData.ouvrir_voie_suivante()` ; la VOIE 1 est
+l'ATELIER/FORGE — l'hex Forge est ABSENT (jamais grisé) tant qu'elle n'est
+pas ouverte (`GameData.atelier_ouvert`, filtre `Village._hex_disponible` +
+verrou de défense dans ForgePanel) ; quartiers de base d'emblée = Avatar et
+Expéditions SEULEMENT. La progression d'équipement passe par la Forge,
+débloquée au premier Sceau.
 
 Forge (Chantier 5) : l'équipement évolue par XP (MasterySystem, buffer DÉSACTIVÉ pour
 l'équipement) — PLUS d'ingrédient pour le palier (`recettes_evolution` est mort). Le
@@ -173,8 +182,9 @@ godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédi
 godot --headless --path . res://tests/TestFluxExpedition.tscn   # flux de jeu réel QG→HoloMap→expédition→crédits persistés + Game Over (65)
 godot --headless --path . res://tests/TestGameOver.tscn         # sanction de mort : compteur R-XXX, rechargement, suspension (26)
 godot --headless --path . res://tests/TestAlarme.tscn           # Alarme + assauts de Lieutenants : strates, boss, slots, deltas (73)
-godot --headless --path . res://tests/TestEconomieQG.tscn       # économie du QG : Modules, Sceaux, voies, panneaux (53)
+godot --headless --path . res://tests/TestEconomieQG.tscn       # économie du QG : Modules, Sceaux, voies ordonnées, panneaux (65)
 godot --headless --path . res://tests/TestVillageBuildings.tscn # bâtiments : coûts Euren+Modules, bonus (55)
+godot --headless --path . res://tests/TestEquipementDepart.tscn # équipement de départ Commun + pont CTB (27)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
@@ -197,7 +207,7 @@ godot --headless --path . --quit-after 30
 ## Sauvegarde
 
 - `user://IdleEvolutionSave.json` (`%APPDATA%/Godot/app_userdata/IdleEvolution/`),
-  `SAVE_VER = 13`, versions acceptées 11+. À chaque écriture l'ancienne sauvegarde
+  `SAVE_VER = 14` (ch.13 : voies dict→compteur, migration v13→v14), versions acceptées 11+. À chaque écriture l'ancienne sauvegarde
   devient `.bak` (rechargé automatiquement si la principale est illisible) ; un
   fichier illisible est copié en `.corrupt` au lieu d'être écrasé en silence.
 - `save()` REFUSE d'écrire si `load_save()` n'a jamais tourné alors qu'une
@@ -240,12 +250,14 @@ godot --headless --path . --quit-after 30
 Progression d'un biome : T0 découverte → **T1 Peu Commun : son équipement est
 obtenu (à T0) et auto-équipé** (`Balance.EQUIPMENT_UNLOCK_BIOME_TIER`,
 `GameData.unlock_biome_equipment`) → T2 Rare : mécanique forte → T4 Légendaire :
-biome secondaire révélé. Le joueur démarre SANS équipement.
+biome secondaire révélé.
 ⚠ Chantier 12 : « Évoluer biomes » est SUPPRIMÉ (les Lieux n'évoluent plus,
-décision actée) — cette échelle de jalons est DE FAIT gelée (plus aucun moyen
-de montée en jeu ; l'obtention d'équipement/mécaniques/zones attendra le
-rework « au fil de l'eau » de l'acquisition). La mécanique `entity_evolved`
-et les hooks restent en place.
+décision actée) — cette échelle de jalons est DE FAIT gelée. ⚠ Chantier 13 :
+le joueur ne démarre PLUS sans équipement — l'équipement Commun complet est
+présent dès la partie neuve (dotation `equipement_depart.tres`, 3 slots
+réels du VS) et progresse par la Forge (voie 1). La mécanique
+`entity_evolved` et le hook `unlock_biome_equipment` restent en place
+(`reconcile_equipment_unlocks` supprimé).
 
 Biomes secondaires (révélés au Légendaire du parent) : Collines, Ville Fantôme, Cimetière.
 Ambiances visuelles : presets dans `BiomeBackground.PRESETS` (+ `accent_for_biome()`

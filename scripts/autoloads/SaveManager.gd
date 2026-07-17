@@ -32,7 +32,7 @@ extends Node
 const SAVE_PATH     := "user://IdleEvolutionSave.json"
 const BACKUP_PATH   := SAVE_PATH + ".bak"      # avant-dernière sauvegarde valide
 const CORRUPT_PATH  := SAVE_PATH + ".corrupt"  # copie d'un fichier illisible (preuve)
-const SAVE_VER      := 13
+const SAVE_VER      := 14
 const SAVE_DEBOUNCE := 2.0
 
 # Flags d'état booléens persistés par entité (en plus de la progression de Maîtrise).
@@ -221,6 +221,9 @@ func load_save() -> void:
 					ProjectSettings.globalize_path(SAVE_PATH),
 					ProjectSettings.globalize_path(CORRUPT_PATH))
 			push_error("SaveManager: sauvegarde illisible — copie conservée dans %s" % CORRUPT_PATH)
+		# PARTIE NEUVE (aucune sauvegarde utilisable) : dotation d'équipement
+		# de départ (chantier 13) — jamais appliquée à une partie en cours.
+		GameData.appliquer_equipement_depart()
 		return
 
 	var saved_ver: int = int(data.get("version", 0))
@@ -228,6 +231,8 @@ func load_save() -> void:
 	# Migrations en chaîne (modifient data in-place)
 	if saved_ver < 13:
 		_migrate_v12_to_v13(data)
+	if saved_ver < 14:
+		_migrate_v13_to_v14(data)
 
 	_load_player(data)
 	if saved_ver < 12:
@@ -237,9 +242,6 @@ func load_save() -> void:
 	_load_systems(data)
 	if data.has("village"):
 		GameData.village.merge(data["village"], true)
-	# Rattrapage de la règle « biome Peu Commun → équipement » sur les
-	# sauvegardes antérieures à son introduction.
-	GameData.reconcile_equipment_unlocks()
 	EventBus.load_completed.emit()
 
 # Lit et valide un fichier de sauvegarde. Retourne {} si le fichier est
@@ -320,6 +322,13 @@ func _migrate_v12_to_v13(data: Dictionary) -> void:
 		v.erase("xp_maitrise")
 	if data.has("player"):
 		data["player"].erase("active_creature_id")
+
+# Chantier 13 : voies « par Lieu » (dict lieu_id → true) → ordre fixe
+# (COMPTEUR int). Une sauvegarde v13 avec n voies ouvertes garde n voies.
+func _migrate_v13_to_v14(data: Dictionary) -> void:
+	if data.has("player") and data["player"].get("voies_ouvertes") is Dictionary:
+		data["player"]["voies_ouvertes"] = \
+				(data["player"]["voies_ouvertes"] as Dictionary).size()
 
 func _load_systems(data: Dictionary) -> void:
 	if not data.has("systems"):

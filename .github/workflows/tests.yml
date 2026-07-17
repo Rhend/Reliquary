@@ -67,8 +67,11 @@ jobs:
       - name: TestAlarme (Alarme + assauts de Lieutenants — chantier 11)
         run: $GODOT --headless --path . res://tests/TestAlarme.tscn
 
-      - name: TestEconomieQG (Modules, Sceaux, voies, panneaux — chantier 12)
+      - name: TestEconomieQG (Modules, Sceaux, voies, panneaux — chantiers 12-13)
         run: $GODOT --headless --path . res://tests/TestEconomieQG.tscn
+
+      - name: TestEquipementDepart (équipement de départ Commun — chantier 13)
+        run: $GODOT --headless --path . res://tests/TestEquipementDepart.tscn
 
       - name: TestVillageBuildings (bâtiments — coûts Euren + Modules)
         run: $GODOT --headless --path . res://tests/TestVillageBuildings.tscn

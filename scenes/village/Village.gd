@@ -49,12 +49,13 @@ const TIER_0_COLOR := UIColors.VILLAGE_NASCENT
 
 # [label, icon, tier_min, callback_name, panel_id]
 # tier_min = palier de Maîtrise du VILLAGE requis pour afficher l'hexagone
-# (filtrage uniforme dans _build_hub). Chantier 12 (rework économique du QG) :
-# les quartiers de BASE — Héros/Avatar, Expéditions, Forge/Atelier — sont
-# accessibles d'emblée (l'équipement est nécessaire avant de pouvoir tuer un
-# Lieutenant : l'Atelier ne peut pas être derrière une voie ; l'ancien gating
-# « Forge au Village Peu Commun » est mort avec les paliers du QG). VOIES =
-# les 6 voies scellées des Lieutenants (renames Avatar/Atelier = chantier DA).
+# (filtrage via _hex_disponible dans _build_hub). Chantier 13 (supersède
+# l'ouverture d'emblée du ch.12) : quartiers de base = Héros/Avatar et
+# Expéditions SEULEMENT — l'hex FORGE/Atelier n'apparaît que la VOIE 1
+# ouverte (GameData.atelier_ouvert — ABSENT avant, jamais grisé ; l'ancien
+# gating par palier de Village reste mort). L'équipement Commun de départ
+# (chantier 13) couvre le joueur d'ici là. VOIES = les 6 voies à ordre fixe
+# (renames Avatar/Atelier = chantier DA).
 const MENU_ITEMS: Array = [
 	["HÉROS",       "👤", 0, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  0, "_go_adventure", "adventure" ],
@@ -190,10 +191,17 @@ func _ready() -> void:
 	# Alarme 6/6 (chantier 11) : le signal part en PLEINE run d'assaut (victoire
 	# de boss) — l'annonce est différée au retour au QG (par-dessus le recap fermé).
 	EventBus.alarme_sonnee.connect(func() -> void: _alarme_a_annoncer = true)
-	# Voie ouverte (chantier 12) : le panneau VOIES se rafraîchit (état
-	# scellée → restaurée) et la pastille du hex s'éteint.
-	EventBus.voie_ouverte.connect(func(_lieu: String) -> void:
-		_refresh_active_panel()
+	# Voie ouverte (chantiers 12-13) : la voie 1 fait APPARAÎTRE l'hex
+	# Forge/Atelier → hub reconstruit et panneau courant rouvert (pattern
+	# langue) ; les autres voies rafraîchissent le panneau et les pastilles.
+	EventBus.voie_ouverte.connect(func(numero: int) -> void:
+		if numero == GameData.VOIE_ATELIER:
+			var was := _active_panel_id
+			_rebuild_hub()
+			if was != "":
+				_open_panel(was)
+		else:
+			_refresh_active_panel()
 		_update_badges())
 	EventBus.adventure_cycle_ended.connect(func(_s): _update_badges())
 	EventBus.adventure_stopped.connect(_update_badges)
@@ -238,6 +246,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 # Palier de Maîtrise du Village — détermine le layout et les couleurs du hub.
 func village_tier() -> int:
 	return int(GameData.village.get("maitrise_actuelle", 0))
+
+# Un hexagone de MENU_ITEMS est-il disponible ? Gate par palier de Village
+# (tier_min), PLUS voie 1 pour la Forge/Atelier (chantier 13 : absent tant
+# que la voie n'est pas restaurée — jamais grisé). Statique et pur : testé
+# directement par les suites headless.
+static func _hex_disponible(d: Array, village_maitrise: int) -> bool:
+	if (d[4] as String) == "forge" and not GameData.atelier_ouvert():
+		return false
+	return (d[2] as int) <= village_maitrise
 
 # ─── Construction principale ──────────────────────────────────
 # Point d'entrée de construction : tier 0 → orbe cliquable, tier 1+ → hub hexagonal.
@@ -340,9 +357,9 @@ func _build_hub() -> void:
 		max_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		center_box.add_child(max_lbl)
 
-	# ── HexItems : tous gated uniformément par village_maitrise ──
+	# ── HexItems : gate par palier de Village + voie 1 pour la Forge ──
 	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
-		return (d[2] as int) <= village_maitrise
+		return _hex_disponible(d, village_maitrise)
 	)
 	var n := unlocked.size()
 
@@ -1484,13 +1501,9 @@ func _update_badges() -> void:
 			adv_alert = true
 			break
 
-	# voies (chantier 12) : un Sceau de Lieutenant en poche dont la voie n'est
-	# pas encore ouverte → « prêt → clic ».
-	var voies_alert := false
-	for lieu in GameData.objets_lieutenants():
-		if not GameData.voie_ouverte(str(lieu)):
-			voies_alert = true
-			break
+	# voies (chantiers 12-13) : un Sceau LIBRE en poche et une voie suivante
+	# ouvrable → « prêt → clic ».
+	var voies_alert := GameData.peut_ouvrir_voie_suivante()
 
 	for pid in _hex_items:
 		var item := _hex_items[pid] as HexItem

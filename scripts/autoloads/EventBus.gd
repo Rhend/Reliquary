@@ -163,10 +163,12 @@ signal euren_change(total: float)
 @warning_ignore("unused_signal")
 signal modules_change(total: int)
 
-# Émis quand une voie de Lieutenant est OUVERTE (action manuelle du joueur,
-# avec l'objet du Lieutenant en poche) — déclencheur de sauvegarde + UI.
+# Émis quand une voie est OUVERTE (action manuelle du joueur, un Sceau libre
+# dépensé — chantier 13 : ordre FIXE 1→6, la voie 1 est l'Atelier/Forge).
+# `numero` = numéro (1-based) de la voie qui vient de s'ouvrir.
+# Déclencheur de sauvegarde + UI.
 @warning_ignore("unused_signal")
-signal voie_ouverte(lieu_id: String)
+signal voie_ouverte(numero: int)
 
 # ── Alarme & assauts de Lieutenants (Rework Combat — chantier 11) ──
 
