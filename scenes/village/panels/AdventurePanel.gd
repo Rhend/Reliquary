@@ -14,10 +14,6 @@ static func build(host: Village) -> void:
 	var tier   := host.village_tier()
 	var tcolor := UIColors.tier_color(tier)
 
-	# Route du quartier Expédition (tout en haut) : reconstruire fait apparaître
-	# le chemin vers le quartier de gestion.
-	BuildingPanel.build_route_section(host, "adventure")
-
 	# Invalide la sélection si l'entité n'existe plus (pas d'auto-select)
 	if not host.adv_selected_biome_id.is_empty() and GameData.get_entity(host.adv_selected_biome_id).is_empty():
 		host.adv_selected_biome_id = ""
@@ -227,9 +223,9 @@ static func _adv_biome_card(host: Village, biome_id: String, biome: Dictionary) 
 	var section := VBoxContainer.new()
 	section.add_theme_constant_override("separation", 2)
 	section.visible = is_selected
-	if MasterySystem.can_evolve(biome_id):
-		wrapper.add_child(host.make_evolve_btn(biome_id,
-				Translations.entity_name(biome, biome_id), Enums.EntityType.BIOME, btier))
+	# « Évoluer biomes » SUPPRIMÉ (chantier 12, décision actée — avertissement
+	# consigné) : les Lieux n'évoluent plus. La carte reste consultable ; les
+	# créatures, elles, gardent leur bouton Évoluer (_adv_entity_rows).
 	wrapper.add_child(section)
 
 	var indent := MarginContainer.new()

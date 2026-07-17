@@ -245,7 +245,7 @@ func _rafraichir() -> void:
 	_lbl_heros.text = Translations.T("ctb.entete_heros") % [ProgressionHeros.niveau(),
 			int(roundf(ProgressionHeros.xp_totale())),
 			int(roundf(ProgressionHeros.seuil_prochain_niveau())),
-			int(roundf(run.euren_accumule))]
+			int(roundf(run.euren_accumule)), run.modules_accumules]
 	# Ligne de run : affixes actifs (résumés) + inventaire (chantier 7).
 	var morceaux: PackedStringArray = []
 	if not run.affixes.is_empty():
@@ -351,6 +351,7 @@ func _afficher_recap(recap: Dictionary) -> void:
 		Translations.T("expe.recap_combats") % int(recap.get("nb_combats", 0)),
 		Translations.T("expe.recap_xp") % int(roundf(float(recap.get("xp_gagnee", 0.0)))),
 		Translations.T("expe.recap_euren") % int(roundf(float(recap.get("euren_credite", 0.0)))),
+		Translations.T("expe.recap_modules") % int(recap.get("modules_credites", 0)),
 		Translations.T("expe.recap_purge") % [nb_affixes, maxi(nb_conso, 0)],
 	]
 	for l in lignes:

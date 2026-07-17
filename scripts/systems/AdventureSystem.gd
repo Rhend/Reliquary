@@ -543,12 +543,9 @@ func roll_biome_drops(freq_id: String, rare_id: String, creature_tier: int,
 func _drop_biome_resources(enemy: Dictionary) -> void:
 	if enemy.get("est_unique", false):
 		return
-	# AUCUN drop (ressource NI ingrédient) tant que la Forge n'est pas débloquée
-	# (Village ≥ Peu Commun). Les drops s'activent EXACTEMENT au passage à Peu Commun
-	# (la montée de palier qui débloque la Forge). Avant, le farm sert au compteur de
-	# kills (seuil Commun → Peu Commun), pas aux ressources.
-	if int(GameData.village.get("maitrise_actuelle", 0)) < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
-		return
+	# L'ancien gate « aucun drop avant la Forge (Village ≥ Peu Commun) » est
+	# mort au chantier 12 : l'Atelier est ouvert d'emblée (le QG n'a plus de
+	# palier de rareté propre), les drops sont toujours actifs.
 	var biome := GameData.get_entity(current_biome_id)
 	var ids := roll_biome_drops(
 		str(biome.get("ressource_frequente_id", "")),

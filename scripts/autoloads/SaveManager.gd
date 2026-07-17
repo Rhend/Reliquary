@@ -91,6 +91,9 @@ func signaux_progression() -> Array[Signal]:
 		EventBus.euren_change,
 		# Alarme & assauts (chantier 11) — un slot rempli doit survivre :
 		EventBus.lieutenant_vaincu,
+		# Économie du QG (chantier 12) — Modules (crédit/débit) et voies :
+		EventBus.modules_change,
+		EventBus.voie_ouverte,
 	]
 
 # Lecture publique : load_save() a-t-il déjà tourné ? (Un outil dev — ex.
@@ -372,13 +375,16 @@ func reprendre_ecritures(flush := true) -> void:
 
 # Recharge la DERNIÈRE sauvegarde PAR-DESSUS l'état runtime (Game Over).
 # Ré-application du fichier : suffisant aujourd'hui — depuis la sauvegarde de
-# lancement, une run ne mutate que heros_xp / euren (crédités par signaux)
-# et, depuis le chantier 11, expe_completions / lieutenants_vaincus : ces
+# lancement, une run ne mutate que heros_xp / euren (crédités par signaux),
+# depuis le chantier 11 expe_completions / lieutenants_vaincus, et depuis le
+# chantier 12 modules / objets_lieutenants (accordés au premier kill) : ces
 # clés sont TOUJOURS présentes dans la sauvegarde de lancement (player
-# dupliqué intégralement), donc _load_player (merge overwrite) les écrase —
-# un Lieutenant tué PENDANT la run perdue est bien annulé (règle actée,
-# testé). À re-évaluer quand une run mutera d'autres états (drops,
-# découvertes) : il faudra alors réinitialiser GameData avant ré-application.
+# dupliqué intégralement, défauts initialisés dans GameData.player), donc
+# _load_player (merge overwrite) les écrase — un Lieutenant tué ou un
+# Module gagné PENDANT la run perdue est bien annulé (règle actée, testé ;
+# dette « point ouvert 22 » réévaluée au chantier 12 : couvert).
+# À re-évaluer quand une run mutera d'autres états (drops, découvertes) :
+# il faudra alors réinitialiser GameData avant ré-application.
 func recharger() -> void:
 	_save_timer.stop()
 	_save_dirty = false

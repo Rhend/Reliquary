@@ -279,57 +279,20 @@ const FRAGMENT_RELEASE_TIERS: Array[int] = [2, 4, 5]
 const SECONDARY_BIOME_REVEAL_TIER: int = 4
 
 # ═══════════════════════════════════════════════════════════
-#  Village — Quartiers, routes & bâtiments (Chantier 4)
-#  Source de vérité : « Gestion du Village — Quartiers & Coûts »
+#  Village — Quartiers & bâtiments (Chantier 4 ; coûts refondus chantier 12)
 # ═══════════════════════════════════════════════════════════
-# Courbe de coût UNIQUE, commune à TOUS les bâtiments (la différenciation par
-# impact viendra plus tard). Paliers Délabré → T0 → T1 → T2 → T3 → T4 → T5.
-#
-# BUILDING_COST_BASE (20) et BUILDING_COST_GROWTH (1,6) sont les constantes
-# nommées de l'INTENTION de courbe (la fréquente démarre à 20, ×1,6/palier).
-# La table BUILDING_COST_STEPS ci-dessous est la DONNÉE adressable faisant foi :
-# elle reprend cette intention pour les premiers paliers puis l'aplatit
-# délibérément (la fréquente ne suit plus 1,6 dès T2 — réglage v1).
-#
-# Chaque palier (index = palier CIBLE, 0=Délabré→T0 … 5=T4→T5) résout en
-# ressources concrètes contre l'assignation de biome du bâtiment :
-#   • freq → quantité de la ressource FRÉQUENTE du biome principal (chaque palier)
-#   • rare → quantité de la ressource RARE du biome principal (à partir de T2)
-#   • add_count → nombre de biomes additionnels qui contribuent leur fréquente
-#   • add_each  → quantité par biome additionnel
-# Les biomes additionnels se résolvent contre BuildingData.biomes_additionnels
-# (les `add_count` premiers). VS : T0→T2 mono-biome ; T3+ exige le multi-biomes.
-const BUILDING_COST_BASE:   float = 20.0
-const BUILDING_COST_GROWTH: float = 1.6
-
-const BUILDING_COST_STEPS: Array = [
-	{ "freq": 20, "rare": 0,  "add_count": 0, "add_each": 0  },  # Délabré → T0
-	{ "freq": 32, "rare": 0,  "add_count": 0, "add_each": 0  },  # → T1
-	{ "freq": 40, "rare": 3,  "add_count": 0, "add_each": 0  },  # → T2
-	{ "freq": 52, "rare": 5,  "add_count": 1, "add_each": 10 },  # → T3
-	{ "freq": 68, "rare": 7,  "add_count": 2, "add_each": 14 },  # → T4
-	{ "freq": 90, "rare": 10, "add_count": 2, "add_each": 18 },  # → T5
-]
+# Les COÛTS des bâtiments (courbe unique Euren + Modules) sont data-driven
+# depuis le chantier 12 : data/progression/couts_batiments.tres
+# (BatimentsCoutsData, consommé par VillageBuildings). L'ancienne courbe en
+# ressources silotées par biome (BUILDING_COST_STEPS), les coûts de routes
+# (VILLAGE_ROUTE_COSTS) et le gate Forge (FORGE_HUB_UNLOCK_VILLAGE_TIER)
+# sont SUPPRIMÉS — les quartiers de base sont ouverts d'emblée.
 
 # Palier Délabré (état initial d'un bâtiment, avant toute reconstruction) et
 # palier maximum atteignable. Indépendants du plafond DUR global des entités
 # (les bâtiments ne sont pas des entités à Maîtrise).
 const BUILDING_TIER_DELABRE: int = -1
 const BUILDING_MAX_TIER:     int = 5
-
-# ─── Routes (gate mou d'onboarding) ─────────────────────────
-# Segment unique reconstruit d'un coup (pas de paliers). Coût bas en ressource
-# fréquente du biome dominant du quartier — sous le coût d'une reconstruction
-# de bâtiment T0. quartier → { res_id, qty }.
-const VILLAGE_ROUTE_COSTS: Dictionary = {
-	"hero":      { "res_id": "res_fourrure", "qty": 12 },  # Forêt
-	"adventure": { "res_id": "res_pierre",   "qty": 12 },  # Montagne
-	"forge":     { "res_id": "res_pierre",   "qty": 15 },  # Montagne
-}
-
-# Palier de Maîtrise du VILLAGE requis pour débloquer le hub Forge (et donc la
-# route Forge). Aligné sur MENU_ITEMS de Village.gd (Forge = tier_min 1).
-const FORGE_HUB_UNLOCK_VILLAGE_TIER: int = 1
 
 # ═══════════════════════════════════════════════════════════
 #  Forge — Évolution & arbre d'équipement (Chantier 5)

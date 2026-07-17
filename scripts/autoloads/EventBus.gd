@@ -150,9 +150,23 @@ signal heros_xp_gagnee(montant: float, xp_totale: float)
 signal heros_niveau_change(avant: int, apres: int)
 
 # Émis quand l'Euren possédé change (crédit à la SORTIE d'expédition
-# uniquement — extraction ou complétion ; défaite = rien).
+# uniquement — extraction ou complétion ; défaite = rien — ou débit d'un
+# coût de bâtiment, chantier 12).
 @warning_ignore("unused_signal")
 signal euren_change(total: float)
+
+# ── Économie du QG (Rework Combat — chantier 12) ────────────
+
+# Émis quand le nombre de Modules possédés change : crédit à la SORTIE
+# d'expédition (mêmes rails que l'Euren — défaite = rien) ou débit d'un
+# coût de bâtiment.
+@warning_ignore("unused_signal")
+signal modules_change(total: int)
+
+# Émis quand une voie de Lieutenant est OUVERTE (action manuelle du joueur,
+# avec l'objet du Lieutenant en poche) — déclencheur de sauvegarde + UI.
+@warning_ignore("unused_signal")
+signal voie_ouverte(lieu_id: String)
 
 # ── Alarme & assauts de Lieutenants (Rework Combat — chantier 11) ──
 

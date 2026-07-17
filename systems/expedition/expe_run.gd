@@ -44,6 +44,8 @@
 # crédité qu'à la SORTIE (extraction ou complétion) ; défaite = rien.
 # Le multiplicateur de PalierProfondeurData continue de circuler SANS effet
 # (mécanisme non décidé) — il ne s'applique pas aux récompenses.
+# Modules (chantier 12) : +1 à la première arrivée sur chaque Fin d'étage
+# (max 3 par raid, 0 en assaut), crédités à la sortie — mêmes rails.
 #
 # Brouillard : Entrée + Fin d'étage découvertes d'emblée (la Fin avec son
 # type — le joueur peut foncer dessus) ; tout autre nœud est ABSENT tant
@@ -98,6 +100,14 @@ var xp_gagnee := 0.0                     # XP de niveau créditée pendant la ru
 var euren_accumule := 0.0                # Euren de la run (visible, non crédité)
 var euren_credite := 0.0                 # Euren réellement crédité à la sortie
 var dernier_combat_recompenses: Dictionary = {}   # {xp, euren} du dernier combat gagné
+
+# Modules (chantier 12) : +1 à la PREMIÈRE arrivée sur chaque Fin d'étage
+# (la résolution du nœud, unique par construction — les retours dessus sont
+# inertes). Déterministe : max 3 par raid de 3 étages ; un assaut n'a pas de
+# Fin d'étage (remplacée par le Boss) → 0 Module. Crédités à la SORTIE avec
+# l'Euren (défaite = rien).
+var modules_accumules := 0
+var modules_credites := 0
 
 # Nœuds réels (chantier 7) — remplaçable AVANT demarrer() (tests).
 var cfg_noeuds: ExpeNoeudsConfigData = CONFIG_NOEUDS_DEFAUT
@@ -359,6 +369,10 @@ func _finaliser_noeud(nd: ExpeNoeud, extra: Dictionary = {}) -> void:
 	noeud_resolu.emit(data)
 	EventBus.expe_noeud_resolu.emit(data)
 	if nd.type == Enums.TypeNoeud.FIN_ETAGE:
+		# Module (chantier 12) : la première arrivée = la résolution (les
+		# retours sur une Fin d'étage résolue ne repassent jamais ici).
+		modules_accumules += 1
+		_log("  ◧ +1 Module (run : %d — crédité à la sortie)" % modules_accumules)
 		var fin_data := {"etage": etage, "lieu_id": lieu_id, "palier_id": palier.id}
 		etage_termine.emit(fin_data)
 		EventBus.expe_etage_termine.emit(fin_data)
@@ -625,6 +639,12 @@ func _terminer(extraction: bool) -> void:
 		ProgressionHeros.crediter_euren(euren_credite)
 		_log("◈ Euren crédité : %d (total : %d)" % [
 				int(roundf(euren_credite)), int(roundf(ProgressionHeros.euren()))])
+	# Modules (chantier 12) : mêmes rails que l'Euren — sortie seulement.
+	if not defaite and modules_accumules > 0:
+		modules_credites = modules_accumules
+		ProgressionHeros.crediter_modules(modules_credites)
+		_log("◧ Modules crédités : %d (total : %d)" % [
+				modules_credites, ProgressionHeros.modules()])
 	# Complétion de STRATE (chantier 11) : seule une expédition normale bouclée
 	# jusqu'au bout (fin du dernier étage) compte — l'extraction anticipée et
 	# la défaite non ; un assaut est HORS strates (palier dédié « Assaut »).
@@ -667,6 +687,9 @@ func _recap(extraction: bool) -> Dictionary:
 		"xp_gagnee":            xp_gagnee,       # XP de niveau créditée pendant la run (info)
 		"euren_gagne":          euren_accumule,  # Euren accumulé dans la run
 		"euren_credite":        euren_credite,   # réellement crédité (0 si défaite)
+		# Modules (chantier 12) — mêmes rails que l'Euren :
+		"modules_gagnes":       modules_accumules,  # +1 par première Fin d'étage
+		"modules_credites":     modules_credites,   # réellement crédités (0 si défaite)
 		# Nœuds réels (chantier 7) — ids, à titre d'information (tout est purgé) :
 		"affixes":              affixes.map(func(a: AffixeData) -> String: return a.id),
 		"consommables_obtenus": _conso_obtenus.map(

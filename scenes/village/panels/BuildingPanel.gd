@@ -1,13 +1,14 @@
 # ============================================================
-# BuildingPanel — Panneau de gestion d'un bâtiment de quartier (Chantier 4).
+# BuildingPanel — Panneau de gestion d'un bâtiment de quartier (Chantier 4 ;
+# coûts refondus au chantier 12 : Euren + Modules).
 #
 # Ouvert depuis une pièce d'un quartier (cf. Village.DISTRICTS /
-# VillageBuildings.ROOM_TO_BUILDING). Trois états :
+# VillageBuildings.ROOM_TO_BUILDING). Deux états :
 #   • Gelé (Couturier) : carte verrouillée, aucune action.
-#   • Route non reconstruite : la couche gestion est gated → carte « Reconstruire
-#     la route » (coût + bouton). Le hub reste fonctionnel sans ça.
-#   • Route faite : palier courant + bonus actifs + aperçu/​coût du palier suivant
-#     + bouton Améliorer (consomme les ressources droppées).
+#   • Gestion : palier courant + bonus actifs + aperçu/coût du palier suivant
+#     + bouton Améliorer (débite Euren + Modules — plus aucune ressource de
+#     biome ; les ROUTES ont été supprimées au chantier 12, la couche gestion
+#     est accessible d'emblée).
 #
 # 100 % API publique du Village (host.rp_content). Les actions passent par
 # VillageBuildings ; le rafraîchissement vient des signaux resources_changed /
@@ -43,9 +44,6 @@ static func build(host: Village, building_id: String) -> void:
 		_add_note(host, Translations.T("building.frozen"), UIColors.TEXT_MUTED)
 		return
 
-	# La route se reconstruit depuis le panneau du HUB (build_route_section) et son
-	# chemin doit exister pour qu'on accède à cette pièce → ici la route est toujours
-	# faite. On ne gère que bonus + amélioration.
 	_add_bonuses_card(host, building_id)
 	_add_upgrade_card(host, building_id)
 
@@ -67,55 +65,6 @@ static func _add_header(host: Village, b: Dictionary, building_id: String) -> vo
 
 	row.add_child(_tier_pill(tier))
 	host.rp_content.add_child(row)
-
-# ═══════════════════════════════════════════════════════════
-#  Route — section EN HAUT du panneau de hub (Héros/Expédition/Forge)
-# ═══════════════════════════════════════════════════════════
-# Appelée en tête de HeroPanel/AdventurePanel/ForgePanel (quartier = "hero"/
-# "adventure"/"forge"). Trois états :
-#   • route déjà reconstruite → RIEN (le chemin est dessiné sur la carte du hub).
-#   • Forge débloquée (Village ≥ Peu Commun) → bouton « Reconstruire la route » + coût.
-#   • avant (Commun) → message : pas encore d'artisans assez expérimentés (et aucune
-#     ressource ne drop avant la Forge, donc rien à reconstruire). Reconstruire la
-#     route fait APPARAÎTRE le chemin (host.refresh_hub_after_route).
-
-static func build_route_section(host: Village, quartier: String) -> void:
-	if VillageBuildings.route_built(quartier):
-		return  # route faite → le chemin est dessiné ; plus rien à afficher ici
-
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel",
-			UIHelpers.card_style(UIColors.TEXT_HEADER, 0.05, 0.22, 1, 6))
-	var m := UIHelpers.margin_of(12)
-	card.add_child(m)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 8)
-	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	m.add_child(vb)
-
-	vb.add_child(UIHelpers.label(Translations.T("building.route.title"), 13, UIColors.TEXT_HEADER))
-
-	# Avant la Forge (Village < Peu Commun) : aucun drop → rien à reconstruire.
-	if int(GameData.village.get("maitrise_actuelle", 0)) < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
-		var locked := UIHelpers.label(Translations.T("building.route.craftsmen_locked"), 11, UIColors.TEXT_MUTED)
-		locked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vb.add_child(locked)
-		host.rp_content.add_child(card)
-		return
-
-	var hint := UIHelpers.label(Translations.T("building.route.hint"), 11, UIColors.TEXT_MUTED)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vb.add_child(hint)
-
-	vb.add_child(_cost_block(VillageBuildings.route_cost(quartier)))
-
-	var can := VillageBuildings.can_rebuild_route(quartier)
-	vb.add_child(_action_btn(Translations.T("building.route.btn"), can,
-			func() -> void:
-				if VillageBuildings.rebuild_route(quartier):
-					# Anime l'apparition du filament/boule au lieu de tout reconstruire.
-					host.animate_route_creation(quartier)))
-	host.rp_content.add_child(card)
 
 # ═══════════════════════════════════════════════════════════
 #  Bonus actifs
@@ -188,17 +137,25 @@ static func _add_upgrade_card(host: Village, building_id: String) -> void:
 #  Helpers
 # ═══════════════════════════════════════════════════════════
 
-# Bloc « coût » : une carte par ressource avec stock have / need coloré.
+# Bloc « coût » (chantier 12) : une carte par devise (Euren, puis Modules si
+# le palier en demande) avec solde have / need coloré.
 static func _cost_block(cost: Dictionary) -> Control:
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 3)
 	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for rid: String in cost:
-		var need := int(cost[rid])
-		var have := int(GameData.player.get("resources", {}).get(rid, 0))
+	var lignes: Array = [
+		["◈ " + Translations.T("currency.euren"), int(roundf(float(cost.get("euren", 0.0)))),
+				int(roundf(ProgressionHeros.euren()))],
+		["◧ " + Translations.T("currency.modules"), int(cost.get("modules", 0)),
+				ProgressionHeros.modules()],
+	]
+	for ligne: Array in lignes:
+		var need := int(ligne[1])
+		if need <= 0:
+			continue   # devise non demandée à ce palier (Modules avant T2)
+		var have := int(ligne[2])
 		var ok := have >= need
 		var ic := UIColors.INGREDIENT_OK if ok else UIColors.INGREDIENT_MISSING
-		var res := GameData.get_entity(rid)
 
 		var card := PanelContainer.new()
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -211,7 +168,7 @@ static func _cost_block(cost: Dictionary) -> Control:
 
 		row.add_child(UIHelpers.label("✓" if ok else "✗", 12, ic))
 
-		var nl := UIHelpers.label(Translations.entity_name(res, rid), 11, ic)
+		var nl := UIHelpers.label(str(ligne[0]), 11, ic)
 		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(nl)
 

@@ -33,10 +33,6 @@ static func build(host: Village) -> void:
 	var can_ev := tier < hero_max and xp >= xpmax
 	var tcolor := UIColors.tier_color(tier)
 
-	# ── Route du quartier Héros (tout en haut du panneau) ─────
-	# Reconstruire la route fait apparaître le chemin vers le quartier de gestion.
-	BuildingPanel.build_route_section(host, "hero")
-
 	# ── Bonhomme d'équipement : 6 slots anatomiques ───────────
 	# Tout en haut, avant la barre d'XP et les Statistiques.
 	host.rp_content.add_child(HeroDoll.new())

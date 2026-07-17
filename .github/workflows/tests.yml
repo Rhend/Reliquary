@@ -67,6 +67,12 @@ jobs:
       - name: TestAlarme (Alarme + assauts de Lieutenants — chantier 11)
         run: $GODOT --headless --path . res://tests/TestAlarme.tscn
 
+      - name: TestEconomieQG (Modules, Sceaux, voies, panneaux — chantier 12)
+        run: $GODOT --headless --path . res://tests/TestEconomieQG.tscn
+
+      - name: TestVillageBuildings (bâtiments — coûts Euren + Modules)
+        run: $GODOT --headless --path . res://tests/TestVillageBuildings.tscn
+
       - name: TestTierCap (plafond dur global T2)
         run: $GODOT --headless --path . res://tests/TestTierCap.tscn
 

@@ -14,6 +14,9 @@
 # compte au prochain combat, cf. CtbPont).
 # Crédit d'Euren : à la SORTIE d'expédition uniquement (extraction ou
 # complétion ; défaite = rien) — appelé par ExpeRun._terminer.
+# Chantier 12 : les MODULES (devise rare du QG) suivent les mêmes rails
+# (état GameData.player["modules"], crédit à la sortie), et l'Euren comme
+# les Modules se DÉPENSENT (coûts de bâtiments — VillageBuildings).
 # ============================================================
 class_name ProgressionHeros
 
@@ -56,10 +59,42 @@ static func gagner_xp(montant: float) -> Dictionary:
 static func euren() -> float:
 	return float(GameData.player.get("euren", 0.0))
 
-# Crédite de l'Euren (à la sortie d'expédition uniquement — l'appelant
-# décide ; aucun puits de dépense à ce chantier).
+# Crédite de l'Euren (à la sortie d'expédition uniquement — l'appelant décide).
 static func crediter_euren(montant: float) -> void:
 	if montant <= 0.0:
 		return
 	GameData.player["euren"] = euren() + montant
 	EventBus.euren_change.emit(euren())
+
+# Débite de l'Euren (coûts de bâtiments du QG, chantier 12). Refuse un
+# solde insuffisant — l'appelant vérifie d'abord (can_afford) mais le
+# garde-fou reste ici (jamais de solde négatif).
+static func depenser_euren(montant: float) -> bool:
+	if montant < 0.0 or euren() < montant:
+		return false
+	if montant > 0.0:
+		GameData.player["euren"] = euren() - montant
+		EventBus.euren_change.emit(euren())
+	return true
+
+# ─── Modules (chantier 12) ───────────────────────────────────
+# Devise RARE de l'économie du QG : +1 Module à la PREMIÈRE arrivée sur
+# chaque Fin d'étage d'une expédition (déterministe — max 3 par raid de 3
+# étages, 0 en assaut), crédité à la SORTIE avec l'Euren (défaite = rien).
+
+static func modules() -> int:
+	return int(GameData.player.get("modules", 0))
+
+static func crediter_modules(montant: int) -> void:
+	if montant <= 0:
+		return
+	GameData.player["modules"] = modules() + montant
+	EventBus.modules_change.emit(modules())
+
+static func depenser_modules(montant: int) -> bool:
+	if montant < 0 or modules() < montant:
+		return false
+	if montant > 0:
+		GameData.player["modules"] = modules() - montant
+		EventBus.modules_change.emit(modules())
+	return true

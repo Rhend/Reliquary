@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="BatimentsCoutsData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BatimentsCoutsData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+euren_par_palier = Array[float]([100.0, 160.0, 260.0, 420.0, 670.0, 1070.0])
+modules_par_palier = Array[int]([0, 0, 1, 2, 3, 4])

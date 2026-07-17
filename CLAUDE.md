@@ -41,7 +41,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Effets de passifs (bonus plats + conditionnels) | `scripts/systems/PassiveSystem.gd` |
 | Moteur combat TOUR PAR TOUR CTB (Rework ch.1 : file d'initiative `K/VIT`, DoT data-driven, N-vs-N, signaux `ctb_*` ; ch.3 : malus d'embuscade, purge des statuts en fin de combat ; ch.5 : action DEFENDRE (`data/combat_ctb/config_ctb.tres`), signal structuré `evenement`, prédiction de file `prevoir_ordre(n)`) | `systems/combat_ctb/ctb_moteur.gd` + `ctb_combattant.gd` |
 | UI de combat CTB JOUABLE (Rework ch.5 : écran scindé placeholder, file d'initiative N=6, Attaquer/Défendre + choix de cible, dégâts flottants, transitions et issue de bataille — pull-based sur un moteur démarré, `facteur_delais = 0` pour les tests ; ch.6 : issue enrichie XP/Euren via `recompenses_fournisseur`) | `scenes/combat_ctb/CombatCtbUi.gd` + `CarteCombattantCtb.gd` |
-| Économie de récompense (Rework ch.6) : NIVEAU du héros (XP totale cumulée dans `GameData.player.heros_xp`, niveau DÉRIVÉ, bonus plats injectés par le pont héros AVANT les %) + Euren (`player.euren`, crédité à la SORTIE d'expédition seulement — défaite = rien). class_name statique, pas autoload ; courbe/gains/multiplicateurs dans `data/progression/*.tres` (provisoires, à calibrer) | `scripts/autoloads/ProgressionHeros.gd` |
+| Économie de récompense (Rework ch.6) : NIVEAU du héros (XP totale cumulée dans `GameData.player.heros_xp`, niveau DÉRIVÉ, bonus plats injectés par le pont héros AVANT les %) + Euren (`player.euren`, crédité à la SORTIE d'expédition seulement — défaite = rien) + MODULES (ch.12 : `player.modules`, +1 par PREMIÈRE arrivée sur chaque Fin d'étage — max 3/raid, 0 en assaut — crédités à la sortie, mêmes rails ; Euren et Modules se DÉPENSENT via `depenser_euren`/`depenser_modules`). class_name statique, pas autoload ; courbe/gains/multiplicateurs dans `data/progression/*.tres` (provisoires, à calibrer) | `scripts/autoloads/ProgressionHeros.gd` |
 | Pont bestiaire existant → combattant CTB (stats telles quelles via `GameData.get_effective_stats`) + pont HÉROS réel (ch.4 : source unique d'agrégation plats + % additifs, reconstruite de l'ancien combat_player — mappings et « laissé derrière » documentés en tête de fichier) | `systems/combat_ctb/ctb_pont.gd` |
 | Carte d'expédition free-roam (Rework ch.2 : génération Delaunay connexe seedable, brouillard « absent », 3 étages, Extraire/Continuer, signaux `expe_*` ; ch.3 : nœuds Combat/Attaque surprise = VRAIS combats CTB — run suspendue, PV persistants, défaite = fin immédiate ; ch.7 : TOUS les nœuds réels — Bénédiction = affixe positif de run, Piège = affixe négatif, Coffre = consommables de run (action OBJET en combat, inventaire dans ExpeRun via `consommer()`), purge systématique en fin de run, pools dans `config_noeuds.tres`) | `systems/expedition/expe_run.gd` + `expe_carte.gd` (config + pools : `data/expedition/`) |
 | Flux de jeu RÉEL de l'expédition (Rework ch.8) : « Partir en expédition » ouvre la HoloMap → clic Lieu → `ExpeLancementPanel` (destination + palier) → `Village.lancer_expedition()` → `ExpeditionScreen` (écran de jeu, persistance ACTIVE, combats à la main) → recap → retour au QG. Destination → pool : `data/expedition/destinations.tres` (`ExpeDestinationsData`, provisoire : tout sur `pool_defaut`). Vue de carte partagée écran de jeu ↔ sandbox : `ExpeCarteView` — ch.10 : NAVIGATION PAR CHEMIN (clic sur tout nœud découvert atteignable via des nœuds RÉSOLUS — `ExpeRun.chemin_vers`/`atteignables`, trajet séquencé `DELAI_PAS`, nœud inaccessible atténué + non cliquable) | `scenes/expedition/ExpeditionScreen.gd` + `ExpeLancementPanel.gd` + `ExpeCarteView.gd` |
@@ -50,7 +50,8 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Alarme & assauts de Lieutenants (Rework ch.11) : 6 slots (un par Lieutenant détruit, PREMIER kill seulement — état dans `GameData.player.lieutenants_vaincus`), effets data-driven par niveau (`data/expedition/alarme.tres` : +5 % PV/ATK ennemis par slot + affixes permanents aux paliers 4/5/6), appliqués à la CRÉATION de chaque ennemi (ExpeRun, même endroit que le pont bestiaire — PV re-remplis au pv_max final) ; 6/6 → `EventBus.alarme_sonnee` (déclencheur Pyramide, message différé au retour QG — la 7ᵉ expédition est hors scope) ; jauge diégétique 6 slots sur la HoloMap (`HoloHud._jauge_alarme`, rouge = son métier). ASSAUT : débloqué par Lieu quand ses 3 strates sont complétées (`GameData.expe_completions`, marquées par ExpeRun à la COMPLÉTION seule — extraction/défaite non), option ABSENTE avant (jamais grisée, `ExpeLancementPanel`), expédition d'1 étage, Fin d'étage → nœud BOSS (Lieutenant du Lieu + 2 sbires du pool, `destinations.tres.lieutenants_par_lieu` — 6 placeholders), AUCUNE extraction, palier dédié `palier_assaut.tres` (hors strates), recap distinct, re-kill = récompenses normales sans re-slot | `scripts/autoloads/Alarme.gd` + `scripts/resources/AlarmeConfigData.gd` (config : `data/expedition/alarme.tres`, lieutenants : `data/expedition/lieutenants/`) |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) + sanction de mort (Rework ch.9) : flush de RÉFÉRENCE au lancement d'expédition puis écritures SUSPENDUES pendant la run (`suspendre_ecritures`/`reprendre_ecritures` — fermer la fenêtre en run ne sauve rien), `recharger()` (Game Over = ré-application de la dernière sauvegarde), compteur de reconstruction **R-XXX MÉTA-PERSISTANT** (`user://IdleEvolutionMeta.json`, séparé de la partie, init R-001, plafond d'affichage R-999, `nom_reconstruction()` = source UNIQUE du formatage, appliqué à l'entité hero → tous les affichages) | `scripts/autoloads/SaveManager.gd` |
-| Quartiers / routes / bâtiments + bonus de village (Chantier 4) | `scripts/systems/VillageBuildings.gd` |
+| Quartiers / bâtiments + bonus de village (Chantier 4 ; ch.12 : coûts refondus en EUREN + MODULES — courbe unique data-driven `data/progression/couts_batiments.tres`, plus JAMAIS de ressource de biome ; ROUTES SUPPRIMÉES, quartiers de base ouverts d'emblée) | `scripts/systems/VillageBuildings.gd` |
+| Économie du QG (Rework ch.12) : objets de Lieutenants (« Sceau », accordé au PREMIER kill dans `GameData.marquer_lieutenant_vaincu` — `player.objets_lieutenants`, annulé par Game Over comme le slot d'Alarme) + 6 VOIES scellées (une par Lieutenant, ouverture MANUELLE avec l'objet — `GameData.ouvrir_voie`, persistée `player.voies_ouvertes`, quartier placeholder vide) ; compteur « quartiers restaurés » source UNIQUE : `GameData.nb_voies_ouvertes()` (la DA s'y branchera). UI : hex VOIES du hub → `VoiesPanel` (Sceaux possédés + 6 voies + bouton Restaurer) | `scripts/autoloads/GameData.gd` + `scenes/village/panels/VoiesPanel.gd` |
 | Forge : palier d'équipement (XP, sans ingrédient) + arbre de nœuds + bonus (Chantier 5) | `scripts/systems/ForgeSystem.gd` |
 
 Autoloads (ordre dans project.godot) : UIColors, EventBus, AudioManager, Translations,
@@ -95,6 +96,22 @@ SUPPRIMÉ, pas laissé en doublon. Chantier 5 : les combats d'expédition
 sandbox : checkbox « Combat auto » ; ExpeditionScreen : hook de test
 `combat_auto`, jamais exposé en UI — le ScreenshotTool et les tests pilotent
 ExpeRun directement, toujours en auto).
+CHANTIER 12 (rework économique du QG, acté 06/07/2026) : modèle
+domaine/housing — Euren + MODULES remplacent les ressources silotées pour
+les COÛTS DE BÂTIMENTS (périmètre strict : Forge/équipement et drops de
+ressources non touchés, les anciennes ressources existent toujours mais ne
+sont plus jamais demandées par un bâtiment). Le QG n'a PLUS de palier de
+rareté propre côté accès : Héros, Expéditions et Forge/Atelier sont ouverts
+d'emblée (hex Forge tier_min 0, verrou du ForgePanel supprimé, gate de drop
+d'AdventureSystem supprimé), les ROUTES sont supprimées (chemins des
+quartiers de base présents d'emblée). Les 6 VOIES scellées s'ouvrent avec
+l'objet du Lieutenant (premier kill) — action manuelle, quartiers
+placeholder vides (contenus = session narration). « Évoluer biomes » est
+SUPPRIMÉ (les Lieux n'évoluent plus — décision actée, avertissement
+consigné : l'obtention d'équipement liée au palier de biome est de fait
+gelée en attendant son rework) ; le panneau Expéditions est REBRANCHÉ (hex
+EXPÉDITIONS → panneau, consultation + Évoluer créatures ; hex CARTE →
+HoloMap directe ; le départ en expédition reste sur la HoloMap).
 
 Forge (Chantier 5) : l'équipement évolue par XP (MasterySystem, buffer DÉSACTIVÉ pour
 l'équipement) — PLUS d'ingrédient pour le palier (`recettes_evolution` est mort). Le
@@ -156,6 +173,8 @@ godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédi
 godot --headless --path . res://tests/TestFluxExpedition.tscn   # flux de jeu réel QG→HoloMap→expédition→crédits persistés + Game Over (65)
 godot --headless --path . res://tests/TestGameOver.tscn         # sanction de mort : compteur R-XXX, rechargement, suspension (26)
 godot --headless --path . res://tests/TestAlarme.tscn           # Alarme + assauts de Lieutenants : strates, boss, slots, deltas (73)
+godot --headless --path . res://tests/TestEconomieQG.tscn       # économie du QG : Modules, Sceaux, voies, panneaux (53)
+godot --headless --path . res://tests/TestVillageBuildings.tscn # bâtiments : coûts Euren+Modules, bonus (55)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
@@ -222,6 +241,11 @@ Progression d'un biome : T0 découverte → **T1 Peu Commun : son équipement es
 obtenu (à T0) et auto-équipé** (`Balance.EQUIPMENT_UNLOCK_BIOME_TIER`,
 `GameData.unlock_biome_equipment`) → T2 Rare : mécanique forte → T4 Légendaire :
 biome secondaire révélé. Le joueur démarre SANS équipement.
+⚠ Chantier 12 : « Évoluer biomes » est SUPPRIMÉ (les Lieux n'évoluent plus,
+décision actée) — cette échelle de jalons est DE FAIT gelée (plus aucun moyen
+de montée en jeu ; l'obtention d'équipement/mécaniques/zones attendra le
+rework « au fil de l'eau » de l'acquisition). La mécanique `entity_evolved`
+et les hooks restent en place.
 
 Biomes secondaires (révélés au Légendaire du parent) : Collines, Ville Fantôme, Cimetière.
 Ambiances visuelles : presets dans `BiomeBackground.PRESETS` (+ `accent_for_biome()`

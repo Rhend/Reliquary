@@ -54,8 +54,10 @@ var village: Dictionary = {
 	"clics_eclosion":      0,     # progression de la phase d'éclosion (→ Balance.ECLOSION_CLICS)
 	# Chantier 4 — Quartiers & bâtiments. Sauvegardés avec le reste du village
 	# (merge tolérant dans SaveManager) : aucune migration requise.
+	# (La clé "routes" du chantier 4 a été supprimée au chantier 12 — les
+	# quartiers de base sont ouverts d'emblée ; une vieille sauvegarde peut
+	# encore la porter, elle est inerte via le merge tolérant.)
 	"buildings":           {},    # building_id → palier (Balance.BUILDING_TIER_DELABRE = Délabré par défaut)
-	"routes":              {},    # quartier ("hero"/"adventure"/"forge") → bool (route reconstruite ?)
 }
 
 var player: Dictionary = {
@@ -79,11 +81,20 @@ var player: Dictionary = {
 	# la logique (courbe de niveau, crédit) vit dans ProgressionHeros.
 	"heros_xp": 0.0,   # XP de NIVEAU du héros, totale cumulée (jamais perdue)
 	"euren":    0.0,   # Euren possédé (crédité à la sortie d'expédition)
+	# Économie du QG (Rework Combat, chantier 12) : Modules (devise rare —
+	# +1 par première Fin d'étage, crédités à la sortie comme l'Euren).
+	"modules":  0,
 	# Alarme & assauts (Rework Combat, chantier 11) — dans la SAUVEGARDE DE
 	# PARTIE (pas le méta) : la sauvegarde de lancement les capture, un Game
 	# Over annule donc un kill fait PENDANT la run perdue (cohérent, testé).
 	"expe_completions":    {},   # lieu_id → { palier_id: true } (strates complétées jusqu'au bout)
 	"lieutenants_vaincus": {},   # lieu_id → true (premier kill = slot d'Alarme)
+	# Chantier 12 : objets uniques de Lieutenants (« Sceau du <Lieu> »,
+	# accordés au PREMIER kill — mêmes rails que le slot d'Alarme : crédités
+	# au kill, annulés par le Game Over qui recharge la sauvegarde) et voies
+	# du QG ouvertes (action manuelle avec l'objet en poche, persistée).
+	"objets_lieutenants":  {},   # lieu_id → true (Sceau possédé)
+	"voies_ouvertes":      {},   # lieu_id → true (voie/quartier restauré)
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -386,7 +397,8 @@ func can_upgrade_village() -> bool:
 
 # Fait évoluer le Village d'UN palier (action MANUELLE du joueur). Aucun coût consommé
 # (la condition kills/bâtiments est le seul gate). Émet village_tier_change → déblocage
-# du secteur (Forge à Peu Commun, Sanctuaire à Rare). Retourne false si la condition
+# du secteur (Sanctuaire à Rare — la Forge/Atelier est ouverte d'emblée depuis
+# le chantier 12). Retourne false si la condition
 # n'est pas remplie.
 func upgrade_village() -> bool:
 	if not can_upgrade_village():
@@ -606,7 +618,9 @@ func nb_strates_completees(lieu_id: String) -> int:
 # PREMIER kill (le slot d'Alarme se remplit — les kills suivants ne
 # re-remplissent rien). Émet lieutenant_vaincu (déclencheur de sauvegarde),
 # et alarme_sonnee quand le 6e slot se remplit (déclencheur de fin de jeu —
-# la 7e expédition elle-même est hors scope).
+# la 7e expédition elle-même est hors scope). Chantier 12 : le premier kill
+# accorde AUSSI l'objet unique du Lieutenant (même moment, même persistance
+# → même annulation par le Game Over qui recharge la sauvegarde).
 func marquer_lieutenant_vaincu(lieu_id: String) -> bool:
 	if lieu_id == "":
 		return false
@@ -615,6 +629,9 @@ func marquer_lieutenant_vaincu(lieu_id: String) -> bool:
 	if premier:
 		vaincus[lieu_id] = true
 		player["lieutenants_vaincus"] = vaincus
+		var objets: Dictionary = player.get("objets_lieutenants", {})
+		objets[lieu_id] = true
+		player["objets_lieutenants"] = objets
 	EventBus.lieutenant_vaincu.emit(lieu_id, premier)
 	if premier and nb_lieutenants_vaincus() >= NB_SLOTS_ALARME:
 		EventBus.alarme_sonnee.emit()
@@ -626,3 +643,39 @@ func lieutenant_vaincu(lieu_id: String) -> bool:
 # Nombre de slots d'Alarme remplis (0-6) = niveau d'Alarme (cf. Alarme.gd).
 func nb_lieutenants_vaincus() -> int:
 	return (player.get("lieutenants_vaincus", {}) as Dictionary).size()
+
+# ═══════════════════════════════════════════════════════════
+#  Économie du QG : objets de Lieutenants & voies
+#  (Rework Combat — chantier 12)
+# ═══════════════════════════════════════════════════════════
+
+# Le joueur possède-t-il l'objet unique du Lieutenant d'un Lieu (« Sceau du
+# <Lieu> », placeholder — nommage réel à la session narration) ? Accordé au
+# premier kill (marquer_lieutenant_vaincu), jamais consommé.
+func possede_objet_lieutenant(lieu_id: String) -> bool:
+	return bool(player.get("objets_lieutenants", {}).get(lieu_id, false))
+
+# Lieux dont l'objet de Lieutenant est possédé (pour l'affichage sobre au QG).
+func objets_lieutenants() -> Array:
+	return (player.get("objets_lieutenants", {}) as Dictionary).keys()
+
+# La voie du Lieu est-elle ouverte (quartier restauré) ?
+func voie_ouverte(lieu_id: String) -> bool:
+	return bool(player.get("voies_ouvertes", {}).get(lieu_id, false))
+
+# Ouvre la voie d'un Lieu (action MANUELLE du joueur : « prêt → clic »).
+# Exige l'objet du Lieutenant ; refuse si déjà ouverte. Persisté avec la
+# partie ; émet voie_ouverte (déclencheur de sauvegarde + UI).
+func ouvrir_voie(lieu_id: String) -> bool:
+	if lieu_id == "" or voie_ouverte(lieu_id) or not possede_objet_lieutenant(lieu_id):
+		return false
+	var voies: Dictionary = player.get("voies_ouvertes", {})
+	voies[lieu_id] = true
+	player["voies_ouvertes"] = voies
+	EventBus.voie_ouverte.emit(lieu_id)
+	return true
+
+# Nombre de quartiers restaurés (voies ouvertes) — SOURCE UNIQUE du compteur
+# « quartiers ouverts » (l'évolution visuelle du QG s'y branchera, DA à venir).
+func nb_voies_ouvertes() -> int:
+	return (player.get("voies_ouvertes", {}) as Dictionary).size()

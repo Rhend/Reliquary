@@ -247,13 +247,15 @@ func _rafraichir() -> void:
 	_btn_extraire.visible = run.choix_ouvert
 	_btn_continuer.visible = run.choix_ouvert and run.etage < CONFIG.nb_etages
 	var pv := "PV %d/%d" % [int(roundf(run.pv_avatar)), int(roundf(run.pv_max_effectif()))]
-	# En-tête héros (chantier 6, placeholder) : niveau, XP x/y, Euren de la run.
+	# En-tête héros (chantier 6, placeholder) : niveau, XP x/y, Euren et
+	# Modules de la run (chantier 12).
 	var heros := Translations.T("ctb.entete_heros") % [ProgressionHeros.niveau(),
 			int(roundf(ProgressionHeros.xp_totale())),
 			int(roundf(ProgressionHeros.seuil_prochain_niveau())),
-			int(roundf(run.euren_accumule))]
+			int(roundf(run.euren_accumule)), run.modules_accumules]
 	if run.est_terminee:
-		var credit := " — ◈ crédité : %d" % int(roundf(run.euren_credite))
+		var credit := " — ◈ crédité : %d · ◧ %d" % [int(roundf(run.euren_credite)),
+				run.modules_credites]
 		_lbl_etat.text = "  %s — %s · %s%s" % [
 				"☠ DÉFAITE" if run.defaite else "✔ Expédition terminée", pv, heros, credit]
 	else:

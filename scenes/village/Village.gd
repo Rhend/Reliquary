@@ -49,13 +49,18 @@ const TIER_0_COLOR := UIColors.VILLAGE_NASCENT
 
 # [label, icon, tier_min, callback_name, panel_id]
 # tier_min = palier de Maîtrise du VILLAGE requis pour afficher l'hexagone
-# (filtrage uniforme dans _build_hub). Le Village éclot en T0 avec le héros
-# et les expéditions déjà disponibles ; la Forge arrive en T1, etc.
+# (filtrage uniforme dans _build_hub). Chantier 12 (rework économique du QG) :
+# les quartiers de BASE — Héros/Avatar, Expéditions, Forge/Atelier — sont
+# accessibles d'emblée (l'équipement est nécessaire avant de pouvoir tuer un
+# Lieutenant : l'Atelier ne peut pas être derrière une voie ; l'ancien gating
+# « Forge au Village Peu Commun » est mort avec les paliers du QG). VOIES =
+# les 6 voies scellées des Lieutenants (renames Avatar/Atelier = chantier DA).
 const MENU_ITEMS: Array = [
 	["HÉROS",       "👤", 0, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  0, "_go_adventure", "adventure" ],
 	["CARTE",       "🗺", 0, "_go_map",       "map"       ],
-	["FORGE",       "🔨", 1, "_go_forge",     "forge"     ],
+	["FORGE",       "🔨", 0, "_go_forge",     "forge"     ],
+	["VOIES",       "🔒", 0, "_go_voies",     "voies"     ],
 	["SANCTUAIRE",  "✦",  2, "_go_sanctuary", "sanctuary" ],
 	["RELIQUE",     "◈",  3, "_go_relic",     "relic"     ],
 	["?",           "?",  4, "_go_tbd",       "tbd"       ],
@@ -65,6 +70,7 @@ const PANEL_TITLES: Dictionary = {
 	"hero":      "HÉROS",
 	"adventure": "EXPÉDITIONS",
 	"forge":     "FORGE",
+	"voies":     "VOIES",
 	"sanctuary": "SANCTUAIRE",
 	"relic":     "RELIQUE",
 	"tbd":       "?",
@@ -184,6 +190,11 @@ func _ready() -> void:
 	# Alarme 6/6 (chantier 11) : le signal part en PLEINE run d'assaut (victoire
 	# de boss) — l'annonce est différée au retour au QG (par-dessus le recap fermé).
 	EventBus.alarme_sonnee.connect(func() -> void: _alarme_a_annoncer = true)
+	# Voie ouverte (chantier 12) : le panneau VOIES se rafraîchit (état
+	# scellée → restaurée) et la pastille du hex s'éteint.
+	EventBus.voie_ouverte.connect(func(_lieu: String) -> void:
+		_refresh_active_panel()
+		_update_badges())
 	EventBus.adventure_cycle_ended.connect(func(_s): _update_badges())
 	EventBus.adventure_stopped.connect(_update_badges)
 	GameSettings.language_changed.connect(_on_language_changed)
@@ -361,11 +372,8 @@ func _build_district_links(unlocked: Array, n: int, vp: Vector2, tcolor: Color) 
 	if n <= 0:
 		return
 	for owner_id in DISTRICTS:
-		# Le CHEMIN (route) n'apparaît qu'une fois la route RECONSTRUITE depuis le
-		# panneau du hub. Avant : aucun filament/boule/quartier (rien à reconstruire
-		# tant qu'on n'a pas de ressources — gate Forge géré dans la section route).
-		if not VillageBuildings.route_built(owner_id):
-			continue
+		# Chantier 12 : les ROUTES sont supprimées — le chemin de chaque quartier
+		# de base (Avatar/Expédition/Atelier) existe d'emblée, sans coût ni gate.
 		var idx := -1
 		for i in n:
 			if (unlocked[i] as Array)[4] == owner_id:
@@ -377,8 +385,7 @@ func _build_district_links(unlocked: Array, n: int, vp: Vector2, tcolor: Color) 
 
 # Tend le lien d'un owner donné, puis rétablit son état (boule cliquable, ou
 # quartier déjà ouvert si on reconstruit le hub).
-func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Color,
-		animate: bool = false) -> void:
+func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Color) -> void:
 	var ang := -PI * 0.5 + idx * TAU / n
 	var outward := Vector2(cos(ang), sin(ang))         # direction radiale de l'owner
 	var owner_center := vp * 0.5 + outward * RING_RADIUS
@@ -404,65 +411,8 @@ func _build_one_link(owner_id: String, idx: int, n: int, vp: Vector2, tcolor: Co
 		# Quartier déjà ouvert (reconstruction du hub) : on le rebâtit tel quel,
 		# sans ré-animer ni recentrer la vue (et sans boule, consommée).
 		_reveal_district(owner_id, false)
-	elif animate:
-		# Route fraîchement reconstruite : le filament JAILLIT du cercle vers son
-		# point d'énergie, puis la boule surgit au bout (pas de reconstruction du hub).
-		_grow_link(owner_id, link, start_pt, end_pt)
 	else:
 		_spawn_boule(owner_id)
-
-# Anime l'apparition d'un filament de route : fondu + extension de la pointe
-# (end_point) du cercle de l'owner jusqu'au point d'énergie, puis pop de la boule.
-func _grow_link(owner_id: String, link: EnergyLink, start_pt: Vector2, end_pt: Vector2) -> void:
-	link.modulate.a = 0.0
-	link.end_point  = start_pt
-	var tw := create_tween().set_parallel(true)
-	tw.tween_property(link, "modulate:a", 1.0, 0.35).set_ease(Tween.EASE_OUT)
-	tw.tween_property(link, "end_point", end_pt, 0.55) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	tw.chain().tween_callback(func() -> void:
-		if not is_instance_valid(link):
-			return
-		_spawn_boule(owner_id)
-		var boule: Variant = _boules.get(owner_id)
-		if is_instance_valid(boule):
-			(boule as Control).pivot_offset = (boule as Control).size * 0.5
-			(boule as Control).scale = Vector2(0.4, 0.4)
-			boule.create_tween().tween_property(boule, "scale", Vector2.ONE, 0.4) \
-					.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	)
-
-# Reconstruction d'une route depuis un panneau de hub : au lieu de tout
-# reconstruire (_rebuild_hub rechargeait toute la page), on POUSSE le filament du
-# quartier en douceur, puis on rafraîchit le panneau ouvert — sa section « route »
-# disparaît, la route étant désormais faite.
-func animate_route_creation(owner_id: String) -> void:
-	# Pas de hub vivant, ou lien déjà présent → repli/refresh simple.
-	if _hub_root == null or not is_instance_valid(_hub_root):
-		refresh_hub_after_route()
-		return
-	if _links.has(owner_id) and is_instance_valid(_links[owner_id]):
-		_refresh_active_panel()
-		return
-
-	var vp := get_viewport_rect().size
-	var village_maitrise := int(GameData.village.get("maitrise_actuelle", 0))
-	var tcolor := UIColors.tier_color(village_maitrise)
-	var unlocked: Array = MENU_ITEMS.filter(func(d: Array) -> bool:
-		return (d[2] as int) <= village_maitrise)
-	var n := unlocked.size()
-	var idx := -1
-	for i in n:
-		if (unlocked[i] as Array)[4] == owner_id:
-			idx = i
-			break
-	if idx < 0:
-		refresh_hub_after_route()   # owner pas sur l'anneau (cas limite) → repli sûr
-		return
-
-	AudioManager.play_sfx("ui_select", -6.0)
-	_build_one_link(owner_id, idx, n, vp, tcolor, true)
-	_refresh_active_panel()
 
 # (Re)crée la boule d'énergie CLIQUABLE au bout du lien diffus d'un owner.
 # Réutilisé à la construction du hub ET à la fermeture du quartier (le lien
@@ -1002,14 +952,14 @@ func _fill_panel_content(panel_id: String) -> void:
 		"hero":      HeroPanel.build(self)
 		"adventure": AdventurePanel.build(self)
 		"forge":     ForgePanel.build(self)
+		"voies":     VoiesPanel.build(self)
 		"sanctuary": _panel_soon("SANCTUAIRE")
 		"relic":     _panel_soon("RELIQUE")
 		"tbd":       _panel_soon("?")
 		_:
-			# Pièce de quartier (Chantier 4). On n'y accède QUE si le chemin existe
-			# (route reconstruite) → la gestion de la route vit dans le panneau du
-			# hub (BuildingPanel.build_route_section), plus ici. Pièce = bâtiment →
-			# panneau de gestion ; sinon placeholder titré.
+			# Pièce de quartier (Chantier 4 ; routes supprimées au chantier 12 —
+			# les chemins existent d'emblée). Pièce = bâtiment → panneau de
+			# gestion ; sinon placeholder titré.
 			var bid := VillageBuildings.building_for_room(panel_id)
 			if bid != "":
 				BuildingPanel.build(self, bid)
@@ -1252,15 +1202,6 @@ func _panel_soon(label: String) -> void:
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rp_content.add_child(lbl)
 
-# Appelé par la section route d'un panneau de hub après une reconstruction réussie :
-# reconstruit le hub (le chemin/filament du quartier apparaît) puis rouvre le panneau
-# courant (la section route y disparaît, la route étant désormais faite).
-func refresh_hub_after_route() -> void:
-	var was_open := _active_panel_id
-	_rebuild_hub()
-	if was_open != "":
-		_open_panel(was_open)
-
 # ─── Village ──────────────────────────────────────────────────
 
 # Recrée le hub (après upgrade village ou changement de tier).
@@ -1499,16 +1440,17 @@ func _hex_tooltip(panel_id: String) -> String:
 
 # ─── Navigation → panneaux ────────────────────────────────────
 func _go_hero()       -> void: _open_panel("hero")
-# Hex « Expéditions » (retour Rhend post-chantier 10) : ouvre DIRECTEMENT la
-# HoloMap — plus de détour par le panneau. ⚠ Conséquence assumée : le panneau
-# Expéditions (consultation des biomes + boutons Évoluer biomes/créatures)
-# n'a plus d'accès depuis le hub — à rebrancher (rework QG) ; l'API
-# _open_panel("adventure") reste en place.
-func _go_adventure()  -> void: open_expedition_map()
+# Hex « Expéditions » (chantier 12, point ouvert 23 refermé) : rouvre le
+# PANNEAU Expéditions (consultation des biomes + Évoluer créatures — «
+# Évoluer biomes » est supprimé, les Lieux n'évoluent plus). Le départ en
+# expédition reste sur la HoloMap : gros bouton « Partir en expédition » du
+# panneau, ou hex « Carte » (accès direct conservé).
+func _go_adventure()  -> void: _open_panel("adventure")
 # « Carte » n'est pas un panneau mais un overlay : on ouvre directement la carte
 # holo 3D depuis le hub (raccourci — plus besoin de passer par les Expéditions).
 func _go_map()        -> void: open_expedition_map()
 func _go_forge()     -> void: _open_panel("forge")
+func _go_voies()     -> void: _open_panel("voies")
 func _go_sanctuary() -> void: _open_panel("sanctuary")
 func _go_relic()     -> void: _open_panel("relic")
 func _go_tbd()       -> void: _open_panel("tbd")
@@ -1533,12 +1475,21 @@ func _update_badges() -> void:
 			forge_alert = true
 			break
 
-	# adventure : un biome ou une créature prêt à évoluer
+	# adventure : une créature prête à évoluer (chantier 12 : les biomes/Lieux
+	# n'évoluent plus — décision actée, plus de bouton ni de pastille pour eux)
 	var adv_alert := false
 	for eid in GameData.entities:
 		var e := GameData.entities[eid] as Dictionary
-		if e.get("entity_type", "") in [Enums.EntityType.BIOME, Enums.EntityType.CREATURE] and MasterySystem.can_evolve(eid):
+		if e.get("entity_type", "") == Enums.EntityType.CREATURE and MasterySystem.can_evolve(eid):
 			adv_alert = true
+			break
+
+	# voies (chantier 12) : un Sceau de Lieutenant en poche dont la voie n'est
+	# pas encore ouverte → « prêt → clic ».
+	var voies_alert := false
+	for lieu in GameData.objets_lieutenants():
+		if not GameData.voie_ouverte(str(lieu)):
+			voies_alert = true
 			break
 
 	for pid in _hex_items:
@@ -1547,6 +1498,7 @@ func _update_badges() -> void:
 			"hero":      item.has_notification = hero_alert
 			"forge":     item.has_notification = forge_alert
 			"adventure": item.has_notification = adv_alert
+			"voies":     item.has_notification = voies_alert
 		item.queue_redraw()
 
 # Refresh du panneau forge ou héro si ouvert, après un drop de ressources ou une forge.

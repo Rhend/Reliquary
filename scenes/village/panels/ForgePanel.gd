@@ -6,7 +6,10 @@
 # d'XP/palier, ses points de Forge, le bouton d'évolution (rituel) si prêt, et
 # l'accès à l'arbre spatial (ForgeTreeOverlay).
 #
-# Verrouillé tant que le Village n'est pas Peu Commun (T1) — cf. hub Forge.
+# OUVERT D'EMBLÉE depuis le chantier 12 (rework économique du QG) : l'ancien
+# verrou « Village Peu Commun » est mort avec les paliers du QG — l'équipement
+# est nécessaire avant de pouvoir tuer un Lieutenant, l'Atelier ne peut pas
+# être derrière une voie.
 # ============================================================
 class_name ForgePanel
 
@@ -18,12 +21,6 @@ const EQUIPS: Array = [
 ]
 
 static func build(host: Village) -> void:
-	if int(GameData.village.get("maitrise_actuelle", 0)) < 1:
-		_build_locked(host)
-		return
-	# Route du quartier Forge (tout en haut) : reconstruire fait apparaître le
-	# chemin vers le quartier de gestion (forgeron/armurier/joaillier/couturier).
-	BuildingPanel.build_route_section(host, "forge")
 	for e in EQUIPS:
 		_build_equip_section(host, e[0] as String, e[1] as String)
 
@@ -132,32 +129,6 @@ static func _build_equip_section(host: Village, equip_id: String, icon: String) 
 			host.add_child(overlay)
 		)
 	host.rp_content.add_child(tree_btn)
-
-# ─── États verrouillés ───────────────────────────────────────
-
-static func _build_locked(host: Village) -> void:
-	var card := PanelContainer.new()
-	card.add_theme_stylebox_override("panel",
-			UIHelpers.card_style(UIColors.TEXT_MUTED, 0.04, 0.18, 1, 8))
-	var m := UIHelpers.margin_of(24)
-	card.add_child(m)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 12)
-	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	m.add_child(vb)
-	var icon_lbl := Label.new()
-	icon_lbl.text = "🔨"
-	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lbl.add_theme_font_size_override("font_size", 36)
-	vb.add_child(icon_lbl)
-	var title_lbl := UIHelpers.label(Translations.T("forge.locked.title"), 14, UIColors.TEXT_HEADER)
-	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(title_lbl)
-	var hint := UIHelpers.label(Translations.T("forge.locked.hint"), 11, UIColors.TEXT_MUTED)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vb.add_child(hint)
-	host.rp_content.add_child(card)
 
 # Formate des stats d'équipement en string (réutilisé par HeroDoll pour ses tooltips).
 static func _stats_line(stats: Dictionary) -> String:

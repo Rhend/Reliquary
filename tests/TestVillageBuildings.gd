@@ -1,9 +1,11 @@
 extends Node
-# Tests du système Quartiers / Routes / Bâtiments (Chantier 4) :
+# Tests du système Quartiers / Bâtiments (Chantier 4 ; coûts refondus au
+# chantier 12 — rework économique du QG) :
 #   • chargement des 10 bâtiments,
-#   • courbe de coût UNIQUE résolue contre l'assignation de biome,
-#   • reconstruction de route (consommation + gate Forge),
-#   • amélioration de bâtiment (route requise, consommation, palier max),
+#   • courbe de coût UNIQUE Euren + Modules (couts_batiments.tres) — plus
+#     JAMAIS de ressource de biome demandée par un bâtiment,
+#   • amélioration de bâtiment (payable/refusée selon les soldes, débit
+#     exact, palier max, plus aucun gate de route),
 #   • agrégation des bonus par canal (sum / max / or) + accesseurs dérivés,
 #   • bâtiment gelé (Couturier) et registre sans bonus (Reliquaire).
 #
@@ -42,23 +44,21 @@ func _print_report() -> void:
 # recalcule le cache de bonus global.
 func _set_only(building_id: String, tier: int) -> void:
 	GameData.village["buildings"] = { building_id: tier }
-	GameData.village["routes"]    = {}
 	VillageBuildings.refresh_bonuses()
-
-func _set_tier(building_id: String, tier: int) -> void:
-	GameData.village["buildings"][building_id] = tier
 
 func _approx(a: float, b: float) -> bool:
 	return absf(a - b) < 0.0001
 
+func _set_soldes(euren: float, modules: int) -> void:
+	GameData.player["euren"] = euren
+	GameData.player["modules"] = modules
+
 # ─── Tests ──────────────────────────────────────────────────
 
 func _run_all() -> void:
-	print("\n=== TEST VILLAGE BUILDINGS (Chantier 4) ===\n")
+	print("\n=== TEST VILLAGE BUILDINGS (Chantier 4 + coûts chantier 12) ===\n")
 	_test_loaded()
-	_test_cost_curve_constants()
-	_test_building_cost_resolution()
-	_test_route_rebuild()
+	_test_cost_curve()
 	_test_building_upgrade()
 	_test_bonus_aggregation()
 	_test_gauge_and_special()
@@ -75,77 +75,75 @@ func _test_loaded() -> void:
 		_assert(not b.is_empty() and b.get("entity_type", "") == Enums.EntityType.BUILDING,
 				"%s chargé (type building)" % bid)
 
-func _test_cost_curve_constants() -> void:
-	print("\n[TEST 2] Constantes de courbe")
-	_assert(_approx(Balance.BUILDING_COST_BASE, 20.0), "base = 20")
-	_assert(_approx(Balance.BUILDING_COST_GROWTH, 1.6), "raison = 1.6")
-	var freq := []
-	for s in Balance.BUILDING_COST_STEPS:
-		freq.append(int(s["freq"]))
-	_assert(freq == [20, 32, 40, 52, 68, 90], "fréquentes = [20,32,40,52,68,90]", str(freq))
+func _test_cost_curve() -> void:
+	print("\n[TEST 2] Courbe de coût Euren + Modules (chantier 12, table actée)")
+	var euren_attendu := [100.0, 160.0, 260.0, 420.0, 670.0, 1070.0]
+	var modules_attendu := [0, 0, 1, 2, 3, 4]
+	for cible in 6:
+		var c := VillageBuildings.COUTS.cout(cible)
+		_assert(_approx(float(c.get("euren", -1.0)), euren_attendu[cible])
+				and int(c.get("modules", -1)) == modules_attendu[cible],
+				"palier cible %d → %d Euren + %d Module(s)" % [cible,
+						int(euren_attendu[cible]), modules_attendu[cible]],
+				"obtenu %s" % str(c))
+	_assert(VillageBuildings.COUTS.cout(-1).is_empty()
+			and VillageBuildings.COUTS.cout(6).is_empty(), "hors courbe → {}")
 	_assert(Balance.BUILDING_MAX_TIER == 5 and Balance.BUILDING_TIER_DELABRE == -1,
 			"max=5, Délabré=-1")
 
-func _test_building_cost_resolution() -> void:
-	print("\n[TEST 3] Résolution du coût (Maison : Forêt + Marécage + Montagne)")
-	# Maison : principal Forêt (fourrure/venin), additionnels [marécage(slime), montagne(pierre)].
-	var expected := {
-		-1: {"res_fourrure": 20},
-		0:  {"res_fourrure": 32},
-		1:  {"res_fourrure": 40, "res_venin": 3},
-		2:  {"res_fourrure": 52, "res_venin": 5, "res_slime": 10},
-		3:  {"res_fourrure": 68, "res_venin": 7, "res_slime": 14, "res_pierre": 14},
-		4:  {"res_fourrure": 90, "res_venin": 10, "res_slime": 18, "res_pierre": 18},
-	}
-	for cur in expected:
-		_set_tier_isolated("bat_maison", cur)
-		var got := VillageBuildings.building_cost("bat_maison")
-		_assert(got == expected[cur], "palier %d → %s" % [cur, str(expected[cur])], "obtenu %s" % str(got))
+	# building_cost : courbe COMMUNE (même coût quel que soit le bâtiment) et
+	# plus JAMAIS de ressource de biome dans le coût.
+	for bid in ["bat_maison", "bat_tour", "bat_forgeron"]:
+		GameData.village["buildings"] = { bid: 1 }
+		var cost := VillageBuildings.building_cost(bid)
+		_assert(_approx(float(cost.get("euren", 0.0)), 260.0)
+				and int(cost.get("modules", 0)) == 1,
+				"%s (T1→T2) → 260 Euren + 1 Module (courbe commune)" % bid,
+				"obtenu %s" % str(cost))
+		var sans_res := true
+		for k in cost:
+			if str(k).begins_with("res_"):
+				sans_res = false
+		_assert(sans_res, "%s : aucune ressource de biome demandée" % bid, str(cost))
 	# Au palier max : plus de coût.
-	_set_tier_isolated("bat_maison", 5)
+	GameData.village["buildings"] = { "bat_maison": 5 }
 	_assert(VillageBuildings.building_cost("bat_maison").is_empty(), "palier max → coût vide")
 
-func _set_tier_isolated(building_id: String, tier: int) -> void:
-	GameData.village["buildings"] = { building_id: tier }
-
-func _test_route_rebuild() -> void:
-	print("\n[TEST 4] Reconstruction de route")
-	GameData.village["routes"] = {}
-	GameData.village["maitrise_actuelle"] = 0
-	_assert(VillageBuildings.route_cost("hero") == {"res_fourrure": 12}, "coût route Héros = 12 fourrure")
-
-	GameData.player["resources"] = {"res_fourrure": 20}
-	_assert(VillageBuildings.can_rebuild_route("hero"), "route Héros reconstructible avec ressources")
-	_assert(VillageBuildings.rebuild_route("hero"), "rebuild_route Héros → true")
-	_assert(VillageBuildings.route_built("hero"), "route Héros marquée reconstruite")
-	_assert(int(GameData.player["resources"]["res_fourrure"]) == 8, "12 fourrure consommées (reste 8)",
-			str(GameData.player["resources"]))
-	_assert(not VillageBuildings.can_rebuild_route("hero"), "route déjà faite → non reconstructible")
-
-	# Route Forge : gated tant que le Village n'est pas Peu Commun (T1).
-	GameData.player["resources"] = {"res_pierre": 50}
-	GameData.village["maitrise_actuelle"] = 0
-	_assert(not VillageBuildings.can_rebuild_route("forge"), "route Forge bloquée (Village T0)")
-	GameData.village["maitrise_actuelle"] = 1
-	_assert(VillageBuildings.can_rebuild_route("forge"), "route Forge dispo (Village T1) avec ressources")
-
 func _test_building_upgrade() -> void:
-	print("\n[TEST 5] Amélioration de bâtiment")
+	print("\n[TEST 3] Amélioration : soldes vérifiés, débit exact, refus")
 	GameData.village["buildings"] = {}
-	GameData.village["routes"]    = {}
-	GameData.player["resources"]  = {"res_fourrure": 100}
-	# Sans route : pas d'amélioration possible.
-	_assert(not VillageBuildings.can_upgrade_building("bat_maison"), "sans route → non améliorable")
-	GameData.village["routes"] = {"hero": true}
-	_assert(VillageBuildings.can_upgrade_building("bat_maison"), "avec route + ressources → améliorable")
+	# Délabré → T0 : 100 Euren, 0 Module. Les ressources de biome à ZÉRO :
+	# elles ne doivent jouer aucun rôle.
+	GameData.player["resources"] = {}
+	_set_soldes(99.0, 0)
+	_assert(not VillageBuildings.can_upgrade_building("bat_maison"),
+			"99 Euren < 100 → refus")
+	_assert(VillageBuildings.upgrade_building("bat_maison") == Balance.BUILDING_TIER_DELABRE - 1,
+			"upgrade refusé (retour -2)")
+	_set_soldes(150.0, 0)
+	_assert(VillageBuildings.can_upgrade_building("bat_maison"),
+			"150 Euren, 0 Module → payable (aucune route requise, ressources à 0)")
 	var nt := VillageBuildings.upgrade_building("bat_maison")
 	_assert(nt == 0, "Maison Délabré → T0", "obtenu %d" % nt)
-	_assert(VillageBuildings.building_tier("bat_maison") == 0, "palier persisté = 0")
-	_assert(int(GameData.player["resources"]["res_fourrure"]) == 80, "20 fourrure consommées (reste 80)",
-			str(GameData.player["resources"]))
+	_assert(_approx(ProgressionHeros.euren(), 50.0), "débit exact : 150 − 100 = 50 Euren",
+			"%f" % ProgressionHeros.euren())
+	_assert(ProgressionHeros.modules() == 0, "0 Module débité (palier sans Module)")
+
+	# T1 → T2 : le Module entre en jeu. Euren suffisant mais 0 Module → refus.
+	GameData.village["buildings"] = { "bat_maison": 1 }
+	_set_soldes(1000.0, 0)
+	_assert(not VillageBuildings.can_upgrade_building("bat_maison"),
+			"1000 Euren mais 0 Module → refus (T2 exige 1 Module)")
+	_set_soldes(1000.0, 3)
+	_assert(VillageBuildings.can_upgrade_building("bat_maison"), "1000 Euren + 3 Modules → payable")
+	_assert(VillageBuildings.upgrade_building("bat_maison") == 2, "Maison T1 → T2")
+	_assert(_approx(ProgressionHeros.euren(), 740.0) and ProgressionHeros.modules() == 2,
+			"débit exact : −260 Euren, −1 Module",
+			"euren %f, modules %d" % [ProgressionHeros.euren(), ProgressionHeros.modules()])
+	_set_soldes(0.0, 0)
 
 func _test_bonus_aggregation() -> void:
-	print("\n[TEST 6] Agrégation des bonus (cumul incrémental)")
+	print("\n[TEST 4] Agrégation des bonus (cumul incrémental)")
 	# Salle d'entraînement à T4 : atk_pct 0.03+0.05+0.08, def_pct 0.03+0.05.
 	_set_only("bat_salle", 4)
 	_assert(_approx(VillageBuildings.get_bonus(VillageBuildings.CH_ATK_PCT), 0.16),
@@ -165,7 +163,7 @@ func _test_bonus_aggregation() -> void:
 			"Jardin T5 → réduction debuff = 1")
 
 func _test_gauge_and_special() -> void:
-	print("\n[TEST 7] Canaux MAX / OR + accesseurs dérivés")
+	print("\n[TEST 5] Canaux MAX / OR + accesseurs dérivés")
 	# Tour de Guet : jauge anti-embuscade prend le MAX (0.25@T1, 0.50@T3) = 0.50.
 	_set_only("bat_tour", 3)
 	_assert(_approx(VillageBuildings.get_bonus(VillageBuildings.CH_AMBUSH_GAUGE), 0.50),
@@ -189,40 +187,36 @@ func _test_gauge_and_special() -> void:
 	_assert(not VillageBuildings.poison_immune_for_tier(3), "Jardin T4 → pas encore d'immunité")
 
 func _test_frozen_and_registry() -> void:
-	print("\n[TEST 8] Gelé (Couturier) & registre sans bonus (Reliquaire)")
+	print("\n[TEST 6] Gelé (Couturier) & registre sans bonus (Reliquaire)")
 	GameData.village["buildings"] = {"bat_couturier": -1}
-	GameData.village["routes"]    = {"forge": true}
-	GameData.player["resources"]  = {"res_pierre": 999, "res_slime": 999, "res_fourrure": 999}
+	_set_soldes(99999.0, 99)
 	_assert(VillageBuildings.building_cost("bat_couturier").is_empty(), "Couturier gelé → coût vide")
 	_assert(not VillageBuildings.can_upgrade_building("bat_couturier"), "Couturier gelé → non améliorable")
 	# Reliquaire : améliorable mais aucun bonus de stat.
 	_set_only("bat_reliquaire", 5)
 	_assert(VillageBuildings.building_effects("bat_reliquaire", 5).is_empty(),
 			"Reliquaire → aucun bonus de stat (registre)")
+	_set_soldes(0.0, 0)
 
 # Fume-test du rendu : BuildingPanel ne touche que host.rp_content → on le pilote
 # avec une instance Village nue (hors arbre, _ready non déclenché). Couvre les
-# trois états (route à faire, gelé, gestion) sans crash de mise en page.
+# deux états (gelé, gestion) sans crash de mise en page.
 func _test_panel_smoke() -> void:
-	print("\n[TEST 9] Rendu BuildingPanel (3 états)")
+	print("\n[TEST 7] Rendu BuildingPanel (2 états)")
 	var v := Village.new()
 	var cases := [
-		["route non reconstruite", func() -> void:
-			GameData.village["routes"] = {}; GameData.village["buildings"] = {}],
-		["gelé (Couturier)", func() -> void:
-			GameData.village["routes"] = {"forge": true}],
-		["gestion (route faite)", func() -> void:
-			GameData.village["routes"] = {"hero": true}
+		["gelé (Couturier)", "bat_couturier", func() -> void:
+			GameData.village["buildings"] = {}],
+		["gestion", "bat_salle", func() -> void:
 			GameData.village["buildings"] = {"bat_salle": 2}],
 	]
-	GameData.player["resources"] = {"res_pierre": 999, "res_fourrure": 999, "res_venin": 999}
+	_set_soldes(500.0, 2)
 	for case in cases:
-		(case[1] as Callable).call()
+		(case[2] as Callable).call()
 		v.rp_content = VBoxContainer.new()
-		var bid := "bat_couturier" if case[0] == "gelé (Couturier)" else \
-				("bat_salle" if case[0] == "gestion (route faite)" else "bat_maison")
-		BuildingPanel.build(v, bid)
+		BuildingPanel.build(v, case[1] as String)
 		_assert(v.rp_content.get_child_count() > 0, "panneau « %s » : contenu rendu" % case[0],
 				"0 enfant")
 		v.rp_content.free()
+	_set_soldes(0.0, 0)
 	v.free()

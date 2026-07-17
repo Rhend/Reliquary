@@ -1,25 +1,37 @@
 # ============================================================
-# VillageBuildings.gd — Quartiers, routes & bâtiments (Chantier 4).
+# VillageBuildings.gd — Quartiers & bâtiments (Chantier 4 ; coûts refondus
+# au chantier 12 — rework économique du QG).
 #
 # Responsabilités :
-#   1. État : palier de chaque bâtiment (Délabré → T5) et reconstruction des
-#      routes. Vit dans GameData.village (buildings/routes) → sauvegardé avec
-#      le reste du village (merge tolérant SaveManager), aucune migration.
-#   2. Coûts : la courbe UNIQUE (Balance.BUILDING_COST_STEPS) est résolue en
-#      ressources concrètes contre l'assignation de biome de chaque bâtiment
-#      (BuildingData.biome_principal_id / biomes_additionnels).
-#   3. Actions : reconstruire une route, améliorer un bâtiment — consomment les
-#      ressources droppées (Chantier 3) via GameData.player.resources.
+#   1. État : palier de chaque bâtiment (Délabré → T5). Vit dans
+#      GameData.village (buildings) → sauvegardé avec le reste du village
+#      (merge tolérant SaveManager), aucune migration.
+#   2. Coûts (chantier 12) : courbe UNIQUE Euren + Modules, data-driven
+#      (data/progression/couts_batiments.tres). Les anciennes ressources
+#      silotées par biome ne sont PLUS JAMAIS demandées par les bâtiments
+#      (elles existent toujours en jeu — rework des drops au fil de l'eau).
+#   3. Actions : améliorer un bâtiment — débite Euren/Modules via
+#      ProgressionHeros (source unique des soldes).
 #   4. Bonus : agrège les effets passifs débloqués palier par palier en canaux
 #      nommés. Tous les % passent ensuite par l'agrégateur additif (StatStacker)
 #      aux points de consommation (combat, régén, XP, drops…). Encodage
 #      INCRÉMENTAL dans les .tres : un bâtiment au palier T cumule les paliers 0..T.
+#
+# ROUTES : SUPPRIMÉES au chantier 12 (les quartiers de base — Avatar,
+# Expédition, Atelier — sont accessibles d'emblée, le QG n'a plus de palier
+# de rareté propre). Neutralisé : coût des routes (Balance.VILLAGE_ROUTE_COSTS),
+# gate Forge (Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER), route_built/rebuild_route
+# et la section route des panneaux. GameData.village["routes"] des anciennes
+# sauvegardes est ignoré (merge tolérant, clé inerte).
 #
 # Bonus NON traités ici (Chantier 5 — Forge) : les canaux forge_points_* /
 # forge_xp_* sont agrégés (get_bonus) mais inertes tant que la Forge (points,
 # seuil d'XP, arbres d'équipement) n'existe pas.
 # ============================================================
 extends Node
+
+# Courbe de coût Euren + Modules (chantier 12) — data-driven, provisoire.
+const COUTS: BatimentsCoutsData = preload("res://data/progression/couts_batiments.tres")
 
 # ─── Canaux de bonus (clés stables, pas de string magique chez les appelants) ──
 const CH_ATK_PCT            := "atk_pct"
@@ -75,10 +87,6 @@ func _ready() -> void:
 func building_tier(building_id: String) -> int:
 	return int(GameData.village.get("buildings", {}).get(building_id, Balance.BUILDING_TIER_DELABRE))
 
-# Route d'un quartier reconstruite ?
-func route_built(quartier: String) -> bool:
-	return bool(GameData.village.get("routes", {}).get(quartier, false))
-
 # building_id de la pièce de quartier `room_panel_id`, "" si inconnue.
 func building_for_room(room_panel_id: String) -> String:
 	return ROOM_TO_BUILDING.get(room_panel_id, "")
@@ -98,20 +106,12 @@ func count_buildings_tier0_plus() -> int:
 	return n
 
 # ═══════════════════════════════════════════════════════════
-#  Coûts
+#  Coûts (chantier 12 : Euren + Modules, courbe unique data-driven)
 # ═══════════════════════════════════════════════════════════
 
-# Coût (res_id → qté) pour reconstruire la route d'un quartier, {} si inconnue.
-func route_cost(quartier: String) -> Dictionary:
-	var def: Dictionary = Balance.VILLAGE_ROUTE_COSTS.get(quartier, {})
-	if def.is_empty():
-		return {}
-	return { str(def.get("res_id", "")): int(def.get("qty", 0)) }
-
-# Coût (res_id → qté) pour amener un bâtiment à son palier SUIVANT. {} si gelé,
-# au palier max, ou bâtiment inconnu. Résout la courbe unique contre les biomes
-# assignés (principal : fréquente à chaque palier + rare dès T2 ; additionnels :
-# fréquente à T3/T4/T5 selon add_count).
+# Coût pour amener un bâtiment à son palier SUIVANT :
+# { "euren": float, "modules": int }. {} si gelé, au palier max, ou inconnu.
+# Courbe COMMUNE à tous les bâtiments — plus aucune ressource de biome.
 func building_cost(building_id: String) -> Dictionary:
 	var b := GameData.get_entity(building_id)
 	if b.is_empty() or b.get("gele", false):
@@ -119,93 +119,46 @@ func building_cost(building_id: String) -> Dictionary:
 	var target := building_tier(building_id) + 1
 	if target < 0 or target > Balance.BUILDING_MAX_TIER:
 		return {}
-	var step: Dictionary = Balance.BUILDING_COST_STEPS[target]
-	var cost: Dictionary = {}
+	return COUTS.cout(target)
 
-	var biome := GameData.get_entity(str(b.get("biome_principal_id", "")))
-	var freq_id := str(biome.get("ressource_frequente_id", ""))
-	var rare_id := str(biome.get("ressource_rare_id", ""))
-	if freq_id != "" and int(step.get("freq", 0)) > 0:
-		cost[freq_id] = int(cost.get(freq_id, 0)) + int(step["freq"])
-	if rare_id != "" and int(step.get("rare", 0)) > 0:
-		cost[rare_id] = int(cost.get(rare_id, 0)) + int(step["rare"])
-
-	var adds: Array = b.get("biomes_additionnels", [])
-	var add_each := int(step.get("add_each", 0))
-	for i in mini(int(step.get("add_count", 0)), adds.size()):
-		var ab := GameData.get_entity(str(adds[i]))
-		var afid := str(ab.get("ressource_frequente_id", ""))
-		if afid != "" and add_each > 0:
-			cost[afid] = int(cost.get(afid, 0)) + add_each
-	return cost
-
-# Le joueur possède-t-il toutes les ressources d'un coût (res_id → qté) ?
+# Le joueur peut-il payer un coût { euren, modules } ? (soldes ProgressionHeros)
 func can_afford(cost: Dictionary) -> bool:
 	if cost.is_empty():
 		return false
-	var res: Dictionary = GameData.player.get("resources", {})
-	for rid in cost:
-		if int(res.get(rid, 0)) < int(cost[rid]):
-			return false
-	return true
+	return ProgressionHeros.euren() >= float(cost.get("euren", 0.0)) \
+			and ProgressionHeros.modules() >= int(cost.get("modules", 0))
 
 # ═══════════════════════════════════════════════════════════
 #  Actions
 # ═══════════════════════════════════════════════════════════
 
-# Route reconstructible ? (pas déjà faite, hub débloqué pour la Forge, payable)
-func can_rebuild_route(quartier: String) -> bool:
-	if route_built(quartier):
-		return false
-	if quartier == "forge" and int(GameData.village.get("maitrise_actuelle", 0)) < Balance.FORGE_HUB_UNLOCK_VILLAGE_TIER:
-		return false
-	return can_afford(route_cost(quartier))
-
-# Reconstruit la route d'un quartier : consomme les ressources, déverrouille la
-# couche gestion (bâtiments). Retourne false si impossible.
-func rebuild_route(quartier: String) -> bool:
-	if not can_rebuild_route(quartier):
-		return false
-	_consume(route_cost(quartier))
-	var routes: Dictionary = GameData.village.get("routes", {})
-	routes[quartier] = true
-	GameData.village["routes"] = routes
-	EventBus.resources_changed.emit()
-	EventBus.village_buildings_changed.emit()
-	return true
-
-# Bâtiment améliorable ? (non gelé, route du quartier faite, sous le palier max, payable)
+# Bâtiment améliorable ? (non gelé, sous le palier max, payable — les routes
+# n'existent plus : aucun gate de quartier depuis le chantier 12)
 func can_upgrade_building(building_id: String) -> bool:
 	var b := GameData.get_entity(building_id)
 	if b.is_empty() or b.get("gele", false):
-		return false
-	if not route_built(str(b.get("quartier", ""))):
 		return false
 	if building_tier(building_id) >= Balance.BUILDING_MAX_TIER:
 		return false
 	return can_afford(building_cost(building_id))
 
-# Améliore un bâtiment d'un palier : consomme les ressources, monte le palier,
+# Améliore un bâtiment d'un palier : débite Euren + Modules, monte le palier,
 # recalcule les bonus. Retourne le NOUVEAU palier, ou Balance.BUILDING_TIER_DELABRE−1
 # (= -2) si impossible.
 func upgrade_building(building_id: String) -> int:
 	if not can_upgrade_building(building_id):
 		return Balance.BUILDING_TIER_DELABRE - 1
-	_consume(building_cost(building_id))
+	var cost := building_cost(building_id)
+	# can_afford vient de passer : les deux débits ne peuvent pas échouer.
+	ProgressionHeros.depenser_euren(float(cost.get("euren", 0.0)))
+	ProgressionHeros.depenser_modules(int(cost.get("modules", 0)))
 	var new_tier := building_tier(building_id) + 1
 	var buildings: Dictionary = GameData.village.get("buildings", {})
 	buildings[building_id] = new_tier
 	GameData.village["buildings"] = buildings
 	refresh_bonuses()
-	EventBus.resources_changed.emit()
 	EventBus.village_buildings_changed.emit()
 	return new_tier
-
-func _consume(cost: Dictionary) -> void:
-	var res: Dictionary = GameData.player.get("resources", {})
-	for rid in cost:
-		res[rid] = maxi(0, int(res.get(rid, 0)) - int(cost[rid]))
-	GameData.player["resources"] = res
 
 # ═══════════════════════════════════════════════════════════
 #  Bonus agrégés
