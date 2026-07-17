@@ -102,3 +102,15 @@ Branche : `ReworkCombat`. Dernier système de la base (règles actées 06/07/202
 2. **Stats des Lieutenants** (~320 PV / 34 ATK) : premières valeurs « élevées », à calibrer en playtest — data-driven, un `.tres` par Lieu.
 3. **Alarme et sbires d'assaut** : l'Alarme renforce AUSSI le boss et ses sbires (cohérent « tous les ennemis ») — si les re-kills deviennent trop durs à 6/6, exclure le nœud Boss serait une ligne dans ExpeRun.
 4. **Bonus one-shot des Lieutenants** : toujours gelés (hors scope acté) — le hook naturel existe (`premier_kill` au recap).
+
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 4 questions ouvertes ont été tranchées — **aucune modification de code** :
+1. **Forme diégétique de la jauge** : décision DA (Christophe). Le label placeholder reste d'ici là.
+2. **Stats des Lieutenants** : calibrage en playtest, data-driven — rien à faire.
+3. **Alarme sur boss et sbires d'assaut** : CONSERVÉ (cohérent « tous les ennemis »). L'exclusion du nœud Boss ne sera considérée QUE si le playtest montre des re-kills impraticables à haut palier.
+4. **Bonus one-shot des Lieutenants** : toujours gelé. Le hook `premier_kill` est le point d'ancrage acté le jour venu.
+
+La correction « PV de départ re-remplis au pv_max final » (§2) est **validée** (bug réel).
+
+Baseline inchangée après addendum : **ScriptsLoad 128, CTB 63, CombatUi 21, Recompenses 48, ExpeNoeuds 24, ExpeCarte 53, ExpeCombat 45, ExpeditionFlow 28, FluxExpedition 65, GameOver 26, Alarme 73.**
