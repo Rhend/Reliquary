@@ -336,6 +336,17 @@ const STRINGS: Dictionary = {
 		"expe.recap_purge":         "Purgé en fin de run : %d affixe(s), %d consommable(s)",
 		"expe.retour_btn":          "⌂  RETOUR AU QG",
 
+		# ── Alarme & assauts de Lieutenants (Rework Combat — chantier 11) ──
+		"expe.strates":             "Strates complétées : %s",
+		"expe.assaut_btn":          "☠  ASSAUT : %s",
+		"expe.noeud.boss":          "Boss",
+		"expe.issue_assaut":        "★ ASSAUT ACCOMPLI",
+		"expe.recap_lieutenant":    "Lieutenant vaincu : %s",
+		"expe.recap_alarme_slot":   "Slot d'Alarme rempli — Alarme %d/%d",
+		"expe.recap_alarme_rekill": "Déjà vaincu — récompenses normales, pas de nouveau slot",
+		"alarme.jauge":             "ALARME",
+		"alarme.sonnee":            "L'ALARME SONNE — LA VOIE DE LA PYRAMIDE S'OUVRE",
+
 		# ── Game Over / reconstruction (Rework Combat — chantier 9) ──
 		"gameover.detruit":         "%s est détruit...",
 		"gameover.reconstruit":     "Reconstruction de %s complète.",
@@ -762,6 +773,17 @@ const STRINGS: Dictionary = {
 		"expe.recap_euren":         "Euren credited: %d",
 		"expe.recap_purge":         "Purged at run's end: %d affix(es), %d consumable(s)",
 		"expe.retour_btn":          "⌂  BACK TO HQ",
+
+		# ── Alarme & assauts de Lieutenants (Rework Combat — chantier 11) ──
+		"expe.strates":             "Completed strata: %s",
+		"expe.assaut_btn":          "☠  ASSAULT: %s",
+		"expe.noeud.boss":          "Boss",
+		"expe.issue_assaut":        "★ ASSAULT COMPLETE",
+		"expe.recap_lieutenant":    "Lieutenant defeated: %s",
+		"expe.recap_alarme_slot":   "Alarm slot filled — Alarm %d/%d",
+		"expe.recap_alarme_rekill": "Already defeated — normal rewards, no new slot",
+		"alarme.jauge":             "ALARM",
+		"alarme.sonnee":            "THE ALARM SOUNDS — THE PATH TO THE PYRAMID OPENS",
 
 		# ── Game Over / reconstruction (Rework Combat — chantier 9) ──
 		"gameover.detruit":         "%s is destroyed...",

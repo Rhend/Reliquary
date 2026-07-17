@@ -33,6 +33,13 @@ var avatar: CombattantCtbData
 var pool: PoolEnnemisData
 var graine := 0                     # 0 = aléatoire ; fixé par les tests (reproductible)
 
+# Assaut de Lieutenant (chantier 11) — définis AVANT add_child par l'appelant
+# (pattern combat_auto) : 1 étage, Fin d'étage remplacée par le nœud Boss
+# (Lieutenant + 2 sbires), aucune extraction (les boutons de choix ne
+# s'affichent jamais : choix_ouvert reste false, le nœud Boss termine la run).
+var est_assaut := false
+var lieutenant: CombattantCtbData = null
+
 # Hook de TEST/outillage UNIQUEMENT (jamais exposé en UI de jeu) :
 # auto-résolution des combats — les suites headless ne jouent pas l'écran.
 var combat_auto := false
@@ -148,6 +155,8 @@ func _construire_ui() -> void:
 
 func _lancer() -> void:
 	run = ExpeRun.new(CONFIG, palier, lieu_id, graine, avatar, pool, CONFIG_COMBAT)
+	run.est_assaut = est_assaut
+	run.lieutenant = lieutenant
 	run.combat_demarre.connect(func(_m: CtbMoteur, data: Dictionary) -> void:
 		_combat_data = data)
 	run.noeud_resolu.connect(_annoncer_contenu)
@@ -225,12 +234,12 @@ func _annoncer_contenu(data: Dictionary) -> void:
 func _rafraichir() -> void:
 	_carte_view.rafraichir()
 	_btn_extraire.visible = run.choix_ouvert
-	_btn_continuer.visible = run.choix_ouvert and run.etage < CONFIG.nb_etages
+	_btn_continuer.visible = run.choix_ouvert and run.etage < run.nb_etages_effectif()
 	var lieu := GameData.get_entity(lieu_id)
 	_lbl_etat.text = "⚔ %s — %s · %s · %s" % [
 			Translations.entity_name(lieu, lieu_id),
 			Translations.resource_name(palier),
-			Translations.T("expe.etage") % [run.etage, CONFIG.nb_etages],
+			Translations.T("expe.etage") % [run.etage, run.nb_etages_effectif()],
 			Translations.T("expe.pv") % [int(roundf(run.pv_avatar)),
 					int(roundf(run.pv_max_effectif()))]]
 	_lbl_heros.text = Translations.T("ctb.entete_heros") % [ProgressionHeros.niveau(),
@@ -309,12 +318,30 @@ func _afficher_recap(recap: Dictionary) -> void:
 	vb.add_theme_constant_override("separation", 8)
 	m.add_child(vb)
 
+	# Recap d'ASSAUT distinct (chantier 11) : titre dédié + mention du
+	# Lieutenant vaincu + état du slot d'Alarme (premier kill vs re-kill).
+	var assaut := bool(recap.get("est_assaut", false))
 	var cle_issue := "expe.issue_defaite" if defaite \
-			else ("expe.issue_extraction" if extraction else "expe.issue_complete")
+			else ("expe.issue_assaut" if assaut \
+			else ("expe.issue_extraction" if extraction else "expe.issue_complete"))
 	var titre := ExpeStyle.label_mono(Translations.T(cle_issue), 20, accent)
 	titre.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(titre)
 	vb.add_child(HSeparator.new())
+
+	if assaut and not defaite:
+		var lignes_assaut: Array[String] = [
+			Translations.T("expe.recap_lieutenant")
+					% Translations.resource_name(lieutenant),
+			Translations.T("expe.recap_alarme_slot") % [
+					GameData.nb_lieutenants_vaincus(), GameData.NB_SLOTS_ALARME] \
+					if bool(recap.get("premier_kill", false)) \
+					else Translations.T("expe.recap_alarme_rekill"),
+		]
+		for l in lignes_assaut:
+			var lbl := ExpeStyle.label_mono(l, 13, UIColors.CYBER_DANGER.lightened(0.25))
+			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			vb.add_child(lbl)
 
 	var nb_affixes := (recap.get("affixes", []) as Array).size()
 	var nb_conso := (recap.get("consommables_obtenus", []) as Array).size() \

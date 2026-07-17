@@ -33,6 +33,10 @@ static func appliquer(cb: CtbCombattant) -> void:
 	for a: AffixeData in affixes_actifs():
 		for stat: String in a.bonus:
 			cb.ajouter_bonus_pct(stat, float(a.bonus[stat]))
+	# PV pleins au pv_max FINAL : CtbCombattant._init a figé pv AVANT ces
+	# bonus (un ennemi est toujours créé frais — sans ça, le bonus PV de
+	# l'Alarme n'existerait que sur le plafond, jamais sur les PV de départ).
+	cb.pv = cb.stat_finale("pv_max")
 
 # Affixes permanents ACTIFS au niveau courant (cumulatif : tous les paliers
 # atteints) — aussi utilisé par l'UI/les tests.

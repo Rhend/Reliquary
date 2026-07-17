@@ -151,8 +151,12 @@ var _backdrop             : VillageBackdrop    # fond d'ambiance (halo + poussi�
 # Destination (Lieu) → pool d'ennemis : provisoire, tout retombe sur
 # pool_defaut tant que les Lieux différenciés n'existent pas (.tres prêt).
 const DESTINATIONS: ExpeDestinationsData = preload("res://data/expedition/destinations.tres")
+# Palier dédié des ASSAUTS de Lieutenant (chantier 11) : un assaut est hors
+# strates — cette valeur circule dans les signaux comme les autres paliers.
+const PALIER_ASSAUT: PalierProfondeurData = preload("res://data/expedition/palier_assaut.tres")
 var _expe_lancement    : ExpeLancementPanel = null   # modal destination + palier, null si fermé
 var _expedition_screen : ExpeditionScreen = null     # écran d'expédition en cours, null sinon
+var _alarme_a_annoncer := false   # 6/6 pendant la run → annonce différée au retour QG
 
 # ─── DEBUG : prévisualisation des paliers du Village ──────────
 # Boutons « Tier − / Tier + » en bas à gauche : montent/descendent le palier
@@ -177,6 +181,9 @@ func _ready() -> void:
 	EventBus.equipment_unlocked.connect(_on_equipment_unlocked)
 	EventBus.entity_ready_to_evolve.connect(func(_id): _update_badges())
 	EventBus.entity_evolved.connect(func(_id, _t): _update_badges())
+	# Alarme 6/6 (chantier 11) : le signal part en PLEINE run d'assaut (victoire
+	# de boss) — l'annonce est différée au retour au QG (par-dessus le recap fermé).
+	EventBus.alarme_sonnee.connect(func() -> void: _alarme_a_annoncer = true)
 	EventBus.adventure_cycle_ended.connect(func(_s): _update_badges())
 	EventBus.adventure_stopped.connect(_update_badges)
 	GameSettings.language_changed.connect(_on_language_changed)
@@ -1077,6 +1084,8 @@ func _ouvrir_lancement_expedition(lieu_id: String) -> void:
 	panneau.z_index = 450   # au-dessus de la HoloMap (400)
 	panneau.lancer.connect(func(palier: PalierProfondeurData) -> void:
 		lancer_expedition(lieu_id, palier))
+	panneau.lancer_assaut.connect(func() -> void:
+		lancer_expedition(lieu_id, PALIER_ASSAUT, 0, true))
 	panneau.annule.connect(func() -> void:
 		if is_instance_valid(_expe_lancement):
 			_expe_lancement.queue_free()
@@ -1089,8 +1098,16 @@ func _ouvrir_lancement_expedition(lieu_id: String) -> void:
 # partagé), configs versionnées. `graine` : 0 = aléatoire (jeu) ; fixée par
 # les tests pour une run reproductible. Persistance ACTIVE : les crédits
 # XP/Euren de la run déclenchent la sauvegarde (signaux chantier 6).
-func lancer_expedition(lieu_id: String, palier: PalierProfondeurData, graine: int = 0) -> void:
+# `assaut` (chantier 11) : expédition spéciale d'1 étage terminée par le
+# nœud Boss (Lieutenant du Lieu + 2 sbires) — l'appelant passe PALIER_ASSAUT
+# (un assaut est hors strates, le palier dédié « Assaut » circule).
+func lancer_expedition(lieu_id: String, palier: PalierProfondeurData, graine: int = 0,
+		assaut: bool = false) -> void:
 	if is_instance_valid(_expedition_screen):
+		return
+	var lieutenant := DESTINATIONS.lieutenant_pour(lieu_id)
+	if assaut and lieutenant == null:
+		push_error("Village: aucun Lieutenant mappé pour « %s » — assaut annulé" % lieu_id)
 		return
 	var heros := CtbPont.combattant_depuis_heros()
 	if heros == null:
@@ -1111,6 +1128,9 @@ func lancer_expedition(lieu_id: String, palier: PalierProfondeurData, graine: in
 	SaveManager.sauvegarder_maintenant()
 	SaveManager.suspendre_ecritures()
 	var ecran := ExpeditionScreen.new(lieu_id, palier, heros, DESTINATIONS.pool_pour(lieu_id), graine)
+	if assaut:
+		ecran.est_assaut = true
+		ecran.lieutenant = lieutenant
 	ecran.z_index = 500
 	ecran.retour_qg.connect(_sur_retour_expedition)
 	add_child(ecran)
@@ -1134,6 +1154,16 @@ func _sur_retour_expedition(recap: Dictionary) -> void:
 	SaveManager.reprendre_ecritures(true)
 	_update_badges()
 	_refresh_active_panel()
+	# 6/6 — l'alarme sonne (chantier 11) : annonce placeholder au retour au QG.
+	# Le déclencheur SEUL existe — la 7e expédition (Pyramide) est hors scope.
+	if _alarme_a_annoncer:
+		_alarme_a_annoncer = false
+		var ecran := EcranMessage.new()
+		ecran.message = Translations.T("alarme.sonnee")
+		ecran.accent = UIColors.CYBER_DANGER   # l'alarme EST le danger (rouge acté)
+		ecran.z_index = 520
+		ecran.confirme.connect(ecran.queue_free)
+		add_child(ecran)
 
 # Game Over (règles actées 06/07/2026) : mort = retour à la dernière
 # sauvegarde, compteur R-XXX méta-persistant incrémenté (il survit au

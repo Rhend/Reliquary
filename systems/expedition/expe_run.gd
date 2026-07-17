@@ -625,6 +625,14 @@ func _terminer(extraction: bool) -> void:
 		ProgressionHeros.crediter_euren(euren_credite)
 		_log("◈ Euren crédité : %d (total : %d)" % [
 				int(roundf(euren_credite)), int(roundf(ProgressionHeros.euren()))])
+	# Complétion de STRATE (chantier 11) : seule une expédition normale bouclée
+	# jusqu'au bout (fin du dernier étage) compte — l'extraction anticipée et
+	# la défaite non ; un assaut est HORS strates (palier dédié « Assaut »).
+	if not extraction and not defaite and not est_assaut:
+		GameData.marquer_strate_completee(lieu_id, palier.id)
+		_log("◈ Strate complétée : %s @ %s (%d/3)" % [
+				palier.nom_journal(), lieu_id,
+				GameData.nb_strates_completees(lieu_id)])
 	var recap := _recap(extraction)
 	# Purge systématique (chantier 7) : affixes ET consommables sont « de
 	# run » — rien ne persiste, quelle que soit la sortie (le recap garde
@@ -665,6 +673,12 @@ func _recap(extraction: bool) -> Dictionary:
 				func(c: ConsommableData) -> String: return c.id),
 		"consommables_utilises": _conso_utilises.map(
 				func(c: ConsommableData) -> String: return c.id),
+		# Assaut de Lieutenant (chantier 11) — recap DISTINCT :
+		"est_assaut":    est_assaut,
+		"lieutenant_id": lieutenant.id if lieutenant != null else "",
+		# true = ce kill a rempli le slot d'Alarme (premier) ; false = re-kill
+		# ou assaut perdu (le recap d'assaut victorieux mentionne le Lieutenant).
+		"premier_kill":  _premier_kill_lieutenant,
 	}
 
 func _nom_type(nd: ExpeNoeud) -> String:
@@ -674,6 +688,7 @@ func _nom_type(nd: ExpeNoeud) -> String:
 		Enums.TypeNoeud.MYSTERE:   return "?"
 		Enums.TypeNoeud.COFFRE:    return "Coffre"
 		Enums.TypeNoeud.FIN_ETAGE: return "Fin d'étage"
+		Enums.TypeNoeud.BOSS:      return "Boss"
 	return "Inconnu"
 
 func _nom_mystere(c: int) -> String:

@@ -46,6 +46,8 @@ static func couleur_noeud(type: int) -> Color:
 		Enums.TypeNoeud.MYSTERE:   return UIColors.CYBER_NOEUD_MYSTERE
 		Enums.TypeNoeud.COFFRE:    return UIColors.CYBER_NOEUD_COFFRE
 		Enums.TypeNoeud.FIN_ETAGE: return UIColors.CYBER_NOEUD_FIN
+		# Boss d'assaut (chantier 11) : rouge = danger, c'est SON métier.
+		Enums.TypeNoeud.BOSS:      return UIColors.CYBER_DANGER
 	return Color.WHITE
 
 # ─── Rendu (brouillard réel : non découvert = pas dessiné) ───
@@ -106,6 +108,7 @@ func _etiquette(nd: ExpeNoeud) -> String:
 		Enums.TypeNoeud.COMBAT:    return Translations.T("expe.noeud.combat")
 		Enums.TypeNoeud.COFFRE:    return Translations.T("expe.noeud.coffre")
 		Enums.TypeNoeud.FIN_ETAGE: return Translations.T("expe.noeud.fin")
+		Enums.TypeNoeud.BOSS:      return Translations.T("expe.noeud.boss")
 	return ""
 
 # ─── Entrées : clic sur un nœud ATTEIGNABLE, flèches directionnelles ──

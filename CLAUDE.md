@@ -48,6 +48,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Peau cyberpunk INTÉRIMAIRE du pipeline expédition (Rework ch.10 — la DA finale appartient à Christophe) : TOKENS de couleur `UIColors.CYBER_*` + factories `ExpeStyle` (police mono système, panneaux à bordure néon, boutons, chips, scanlines sobres `cyber_scanlines.gdshader`). AUCUN littéral de style dans l'UI d'expédition — remplacer la peau = changer ces deux points. Rouge = Artefact/danger UNIQUEMENT (`CYBER_DANGER`) ; palette de rareté inchangée (source des couleurs de palier) | `scripts/autoloads/ExpeStyle.gd` + tokens dans `UIColors.gd` |
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
+| Alarme & assauts de Lieutenants (Rework ch.11) : 6 slots (un par Lieutenant détruit, PREMIER kill seulement — état dans `GameData.player.lieutenants_vaincus`), effets data-driven par niveau (`data/expedition/alarme.tres` : +5 % PV/ATK ennemis par slot + affixes permanents aux paliers 4/5/6), appliqués à la CRÉATION de chaque ennemi (ExpeRun, même endroit que le pont bestiaire — PV re-remplis au pv_max final) ; 6/6 → `EventBus.alarme_sonnee` (déclencheur Pyramide, message différé au retour QG — la 7ᵉ expédition est hors scope) ; jauge diégétique 6 slots sur la HoloMap (`HoloHud._jauge_alarme`, rouge = son métier). ASSAUT : débloqué par Lieu quand ses 3 strates sont complétées (`GameData.expe_completions`, marquées par ExpeRun à la COMPLÉTION seule — extraction/défaite non), option ABSENTE avant (jamais grisée, `ExpeLancementPanel`), expédition d'1 étage, Fin d'étage → nœud BOSS (Lieutenant du Lieu + 2 sbires du pool, `destinations.tres.lieutenants_par_lieu` — 6 placeholders), AUCUNE extraction, palier dédié `palier_assaut.tres` (hors strates), recap distinct, re-kill = récompenses normales sans re-slot | `scripts/autoloads/Alarme.gd` + `scripts/resources/AlarmeConfigData.gd` (config : `data/expedition/alarme.tres`, lieutenants : `data/expedition/lieutenants/`) |
 | Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) + sanction de mort (Rework ch.9) : flush de RÉFÉRENCE au lancement d'expédition puis écritures SUSPENDUES pendant la run (`suspendre_ecritures`/`reprendre_ecritures` — fermer la fenêtre en run ne sauve rien), `recharger()` (Game Over = ré-application de la dernière sauvegarde), compteur de reconstruction **R-XXX MÉTA-PERSISTANT** (`user://IdleEvolutionMeta.json`, séparé de la partie, init R-001, plafond d'affichage R-999, `nom_reconstruction()` = source UNIQUE du formatage, appliqué à l'entité hero → tous les affichages) | `scripts/autoloads/SaveManager.gd` |
 | Quartiers / routes / bâtiments + bonus de village (Chantier 4) | `scripts/systems/VillageBuildings.gd` |
 | Forge : palier d'équipement (XP, sans ingrédient) + arbre de nœuds + bonus (Chantier 5) | `scripts/systems/ForgeSystem.gd` |
@@ -154,6 +155,7 @@ godot --headless --path . res://tests/TestExpeCombat.tscn       # combat CTB ↔
 godot --headless --path . res://tests/TestExpeditionFlow.tscn   # boucle expédition (28)
 godot --headless --path . res://tests/TestFluxExpedition.tscn   # flux de jeu réel QG→HoloMap→expédition→crédits persistés + Game Over (65)
 godot --headless --path . res://tests/TestGameOver.tscn         # sanction de mort : compteur R-XXX, rechargement, suspension (26)
+godot --headless --path . res://tests/TestAlarme.tscn           # Alarme + assauts de Lieutenants : strates, boss, slots, deltas (73)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
@@ -189,10 +191,10 @@ godot --headless --path . --quit-after 30
   le compteur ne recule jamais). Écrit à chaque incrément (atomique, .bak propre).
 - Ne JAMAIS écrire la sauvegarde dans un test : déconnecter les listeners de
   SaveManager (voir le pattern dans l'historique des tests d'intégration).
-  EXCEPTIONS : `TestFluxExpedition` (chantier 8) et `TestGameOver` (chantier
-  9), dont l'objet est le round-trip réel — ils METTENT DE CÔTÉ les fichiers
-  réels au démarrage (renommés `.avant_test`, fichier méta compris) et les
-  RESTAURENT avant de quitter.
+  EXCEPTIONS : `TestFluxExpedition` (chantier 8), `TestGameOver` (chantier 9)
+  et `TestAlarme` (chantier 11), dont l'objet est le round-trip réel — ils
+  METTENT DE CÔTÉ les fichiers réels au démarrage (renommés `.avant_test`,
+  fichier méta compris) et les RESTAURENT avant de quitter.
 - Nom du héros = compteur de reconstruction R-XXX (chantier 9) : JAMAIS de
   formatage `R-%03d` ailleurs que `SaveManager.nom_reconstruction()` — le nom
   est appliqué à l'entité hero (nom_affichage_*), tout le reste en découle.

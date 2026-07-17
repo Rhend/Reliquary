@@ -372,10 +372,13 @@ func reprendre_ecritures(flush := true) -> void:
 
 # Recharge la DERNIÈRE sauvegarde PAR-DESSUS l'état runtime (Game Over).
 # Ré-application du fichier : suffisant aujourd'hui — depuis la sauvegarde de
-# lancement, une run ne mutate que heros_xp / euren (crédités par signaux ;
-# les drops d'expédition n'existent pas encore). À re-évaluer quand une run
-# mutera d'autres états (drops, découvertes) : il faudra alors réinitialiser
-# GameData avant ré-application.
+# lancement, une run ne mutate que heros_xp / euren (crédités par signaux)
+# et, depuis le chantier 11, expe_completions / lieutenants_vaincus : ces
+# clés sont TOUJOURS présentes dans la sauvegarde de lancement (player
+# dupliqué intégralement), donc _load_player (merge overwrite) les écrase —
+# un Lieutenant tué PENDANT la run perdue est bien annulé (règle actée,
+# testé). À re-évaluer quand une run mutera d'autres états (drops,
+# découvertes) : il faudra alors réinitialiser GameData avant ré-application.
 func recharger() -> void:
 	_save_timer.stop()
 	_save_dirty = false

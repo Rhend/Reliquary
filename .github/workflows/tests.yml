@@ -64,6 +64,9 @@ jobs:
       - name: TestGameOver (sanction de mort — compteur R-XXX, rechargement, suspension)
         run: $GODOT --headless --path . res://tests/TestGameOver.tscn
 
+      - name: TestAlarme (Alarme + assauts de Lieutenants — chantier 11)
+        run: $GODOT --headless --path . res://tests/TestAlarme.tscn
+
       - name: TestTierCap (plafond dur global T2)
         run: $GODOT --headless --path . res://tests/TestTierCap.tscn
 

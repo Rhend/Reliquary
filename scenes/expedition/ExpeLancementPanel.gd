@@ -6,14 +6,21 @@
 #
 # Contenu : destination (le Lieu cliqué — nom/palier via l'entité GameData),
 # choix du PALIER DE PROFONDEUR (Périphérie / Enceinte / Noyau — rappel :
-# aucun effet mécanique, le paramètre circule), puis PARTIR ou Annuler.
-# Le panneau ne lance rien lui-même : il émet `lancer(palier)` / `annule`,
-# le Village orchestre (fermeture de la carte, écran d'expédition).
+# aucun effet mécanique, le paramètre circule), MARQUEURS de complétion des
+# 3 strates (chantier 11 — ◆ complétée / ◇ non, placeholder acté), puis
+# PARTIR ou Annuler. Quand les 3 strates du Lieu sont complétées ET qu'un
+# Lieutenant y est mappé, l'option ASSAUT apparaît (règle pilier : ABSENTE
+# avant, jamais grisée) : elle émet `lancer_assaut` — expédition spéciale
+# d'1 étage terminée par le nœud Boss, palier dédié « Assaut ».
+# Le panneau ne lance rien lui-même : il émet `lancer(palier)` /
+# `lancer_assaut` / `annule`, le Village orchestre (fermeture de la carte,
+# écran d'expédition).
 # ============================================================
 class_name ExpeLancementPanel
 extends Control
 
 signal lancer(palier: PalierProfondeurData)
+signal lancer_assaut
 signal annule
 
 const PALIERS: Array[PalierProfondeurData] = [
@@ -21,6 +28,8 @@ const PALIERS: Array[PalierProfondeurData] = [
 	preload("res://data/expedition/palier_enceinte.tres"),
 	preload("res://data/expedition/palier_noyau.tres"),
 ]
+# Même ressource que le Village (destination → pool + Lieutenant).
+const DESTINATIONS: ExpeDestinationsData = preload("res://data/expedition/destinations.tres")
 
 # Défini AVANT add_child par l'appelant : id d'entité du Lieu cliqué.
 var lieu_id := ""
@@ -95,6 +104,31 @@ func _ready() -> void:
 				_palier_idx = i)
 		rangee.add_child(b)
 		_boutons_palier.append(b)
+
+	# Marqueurs de complétion des strates (chantier 11, placeholder acté) :
+	# ◆ = complétée jusqu'au bout (fin du 3e étage), ◇ = pas encore.
+	var marqueurs: PackedStringArray = []
+	for p in PALIERS:
+		marqueurs.append("%s %s" % [
+				"◆" if GameData.strate_completee(lieu_id, p.id) else "◇",
+				Translations.resource_name(p)])
+	var lbl_strates := ExpeStyle.label_mono(
+			Translations.T("expe.strates") % "  ·  ".join(marqueurs), 13,
+			UIColors.CYBER_TEXTE_MUTED)
+	lbl_strates.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(lbl_strates)
+
+	# Option ASSAUT (chantier 11) : ABSENTE tant que les 3 strates ne sont pas
+	# complétées ou que le Lieu n'a pas de Lieutenant mappé (jamais grisée —
+	# règle pilier). Rouge = danger : l'assaut du Lieutenant en est un.
+	var lieutenant := DESTINATIONS.lieutenant_pour(lieu_id)
+	if GameData.nb_strates_completees(lieu_id) >= PALIERS.size() and lieutenant != null:
+		vb.add_child(HSeparator.new())
+		var btn_assaut := ExpeStyle.bouton(Translations.T("expe.assaut_btn")
+				% Translations.resource_name(lieutenant),
+				UIColors.CYBER_DANGER, 17, Vector2(0, 50))
+		btn_assaut.pressed.connect(func() -> void: lancer_assaut.emit())
+		vb.add_child(btn_assaut)
 
 	vb.add_child(HSeparator.new())
 
