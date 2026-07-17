@@ -113,3 +113,13 @@ Branche : `ReworkCombat`. Rework économique du QG acté (06/07/2026), modèle d
 2. **Solde d'Euren/Modules visible au QG hors panneau bâtiment** : aujourd'hui have/need s'affiche dans le bloc de coût — un affichage permanent (en-tête de hub ?) est une affaire de DA.
 3. **Acquisition d'équipement** : gelée de fait avec « Évoluer biomes » (cf. §2) — à traiter au rework acquisition/drops (au fil de l'eau).
 4. **Contenus des 6 quartiers** : session narration/PNJ (placeholders en place, `nb_voies_ouvertes()` prêt pour la DA).
+
+## Addendum — Arbitrages design validés (06/07/2026)
+
+Les 4 questions ouvertes ont été tranchées — **aucune modification de code** (statu quo intégral) :
+1. **Courbe unique de coûts** : CONSERVÉE. La différenciation par impact reste un point ouvert hérité, non prioritaire.
+2. **Solde Euren/Modules permanent au QG** : chantier DA/UI. Le have/need du bloc de coût suffit d'ici là.
+3. **Acquisition d'équipement** : consignée point ouvert **PRIORITAIRE** côté design — le trou est acté et connu (aucune acquisition possible en partie neuve). Un chantier dédié viendra après la session de design ; **ne rien improviser d'ici là** — les hooks conservés (`entity_evolved`, `unlock_biome_equipment`) sont la bonne décision.
+4. **Contenus des 6 quartiers** : session narration/PNJ. Placeholders et `nb_voies_ouvertes()` sont les bons points d'ancrage.
+
+Baseline inchangée après addendum : **ScriptsLoad 131, CTB 63, CombatUi 21, Recompenses 48, ExpeNoeuds 24, ExpeCarte 53, ExpeCombat 45, ExpeditionFlow 28, FluxExpedition 65, GameOver 26, Alarme 73, EconomieQG 53, VillageBuildings 55.**
