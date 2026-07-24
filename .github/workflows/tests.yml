@@ -87,3 +87,6 @@ jobs:
 
       - name: TestHoloTraffic (simulation de trafic — pas de croisement)
         run: $GODOT --headless --path . res://tests/TestHoloTraffic.tscn
+
+      - name: TestHoloPicking (picking des zones d'expédition sur la carte holo)
+        run: $GODOT --headless --path . res://tests/TestHoloPicking.tscn

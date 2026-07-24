@@ -226,20 +226,12 @@ func _traiter_combat() -> void:
 	if _chk_combat_auto.button_pressed:
 		run.combat_en_cours.derouler_auto()
 		return
-	_combat_ui = CombatCtbUi.new(run.combat_en_cours,
-			bool(_combat_data.get("embuscade", false)))
-	# Écran d'issue enrichi (chantier 6) : XP et Euren du combat gagné.
-	_combat_ui.recompenses_fournisseur = func() -> Dictionary:
-		return run.dernier_combat_recompenses
-	# Consommables de run (chantier 7) : l'inventaire vit dans ExpeRun.
-	_combat_ui.inventaire_fournisseur = func() -> Array:
-		return run.inventaire
-	_combat_ui.sur_objet_utilise = func(objet: ConsommableData) -> void:
-		run.consommer(objet)
-	_combat_ui.fermee.connect(func(_recap: Dictionary) -> void:
-		_combat_ui.queue_free()
-		_combat_ui = null
-		_rafraichir())
+	# Câblage récompenses/inventaire/consommation : fabrique partagée avec le
+	# jeu réel (CombatCtbUi.pour_run — un seul point de vérité).
+	_combat_ui = CombatCtbUi.pour_run(run, bool(_combat_data.get("embuscade", false)),
+			func() -> void:
+				_combat_ui = null
+				_rafraichir())
 	add_child(_combat_ui)
 
 func _rafraichir() -> void:

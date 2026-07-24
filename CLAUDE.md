@@ -186,6 +186,7 @@ godot --headless --path . res://tests/TestAlarme.tscn           # Alarme + assau
 godot --headless --path . res://tests/TestEconomieQG.tscn       # économie du QG : Modules, Sceaux, voies ordonnées, panneaux (65)
 godot --headless --path . res://tests/TestVillageBuildings.tscn # bâtiments : coûts Euren+Modules, bonus (55)
 godot --headless --path . res://tests/TestEquipementDepart.tscn # équipement de départ Commun + pont CTB (27)
+godot --headless --path . res://tests/TestHoloPicking.tscn      # picking des zones d'expédition sur la HoloMap (70)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
@@ -294,6 +295,13 @@ champ de force), commissariat `2B5A9E`, **grand parc urbain `3FA06B`** (émeraud
 Feuille **Surélevé** (ouvrages en hauteur, altitude = chiffre tapé dans la cellule) :
 pont `9FB2C4`, autoroute `D6248F`, **passerelle `7FD8A0`**, **héliport `F2D43D`**,
 **spots `BFF0FF`**, **téléphérique `E8843D`**, **antennes `B89CE8`**, **enseignes `F58FD4`**.
+
+**Picking des Lieux (HoloLocation3D)** : la collision d'un lieu = DEUX boîtes
+(corps de zone au ras du décor + petite boîte autour du pin) — JAMAIS une
+colonne pleine sol→pin : l'air entre toit et pin capterait le rayon et volerait
+le survol/clic des zones situées derrière dès que la caméra s'abaisse
+(régression corrigée 07/2026, gardée par `tests/TestHoloPicking.tscn` — survol,
+persistance souris immobile, réveil ch.12, angle bas, Village réel).
 
 **Règles verticalité :**
 - Altitude **TOUJOURS saisie par l'auteur**, jamais déduite.

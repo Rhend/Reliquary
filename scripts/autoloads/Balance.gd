@@ -121,10 +121,13 @@ static func def_reduction(def_val: float) -> float:
 		return 0.0
 	return DEF_REDUCTION_CAP * def_val / (def_val + DEF_REDUCTION_HALF)
 
-# Dégâts d'un coup APRÈS atténuation par la DEF, planchés à MIN_DAMAGE.
-# Crit / multiplicateurs de mécaniques sont appliqués EN AVAL (CtbMoteur).
+# Dégâts d'un coup APRÈS atténuation par la DEF — SANS plancher : l'ordre
+# contractuel du moteur CTB est ATK → mitigation DEF → crit → Défendre →
+# plancher MIN_DAMAGE → arrondi (le plancher vit en FIN de _resoudre_attaque).
+# Un plancher ici, AVANT le crit, gonflait les coups faibles critiques
+# (ex. brut 0.75 → plafonné 1.0 → ×1.8 = 2 au lieu de round(1.35) = 1).
 static func mitigated_damage(atk: float, def_val: float) -> float:
-	return maxf(atk * (1.0 - def_reduction(def_val)), MIN_DAMAGE)
+	return atk * (1.0 - def_reduction(def_val))
 
 # ─── Endurcissement de biome (Montagne) ─────────────────────
 # (Valeur de design conservée ; la mécanique sera rebranchée au moteur CTB.)

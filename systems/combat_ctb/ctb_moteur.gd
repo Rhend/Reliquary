@@ -239,14 +239,17 @@ func derouler_auto() -> void:
 func appliquer_statut(cible: CtbCombattant, statut: StatutCtbData, poseur: CtbCombattant) -> void:
 	var memes: Array = cible.statuts.filter(
 			func(s: Dictionary) -> bool: return (s["statut"] as StatutCtbData).id == statut.id)
-	if memes.size() >= statut.stacks_max:
+	# Garde-fou data : stacks_max ≤ 0 dans un .tres (faute de saisie) planterait
+	# `memes[0]` à la première pose — un statut posable a toujours ≥ 1 stack.
+	var cap := maxi(statut.stacks_max, 1)
+	if memes.size() >= cap:
 		cible.statuts.erase(memes[0])   # le plus ancien (ordre de pose)
 	cible.statuts.append({
 		"statut": statut,
 		"degats_par_tick": poseur.stat_finale("atk") * statut.degats_pct_atk,
 		"restant": statut.duree_activations,
 	})
-	var count := mini(memes.size() + 1, statut.stacks_max)
+	var count := mini(memes.size() + 1, cap)
 	_log("    ✚ %s posé sur %s par %s (%d stack%s)" % [
 			statut.nom_journal(), cible.nom_journal(), poseur.nom_journal(),
 			count, "s" if count >= 2 else ""])
@@ -294,8 +297,8 @@ func _tick_statuts(c: CtbCombattant, timing: Enums.TimingStatut) -> void:
 # × (1 − réduction Défendre) si la cible est en garde, arrondi entier,
 # plancher MIN_DAMAGE (appliqué APRÈS Défendre : un coup inflige toujours ≥ 1).
 # Stats finales = StatStacker (additif).
-func _resoudre_attaque(att: CtbCombattant, cible) -> void:
-	var cb := cible as CtbCombattant
+func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant) -> void:
+	var cb := cible
 	if cb == null or not cb.est_vivant():
 		cb = _premiere_cible(att)
 	if cb == null:
@@ -415,6 +418,9 @@ func _recap() -> Dictionary:
 	var pv_restants := {}
 	var vaincus: Array[CombattantCtbData] = []
 	for c in combattants:
+		# ⚠ Indexé par data.id : deux ennemis jumeaux (même entité) s'écrasent —
+		# seule l'entrée de l'AVATAR est contractuelle (lue par ExpeRun). Ne pas
+		# s'appuyer sur les entrées ennemies sans passer à une clé par instance.
 		pv_restants[c.data.id] = c.pv
 		if not c.est_joueur() and not c.est_vivant():
 			vaincus.append(c.data)

@@ -56,14 +56,25 @@ func _ready() -> void:
 	_pin_y = hauteur + pin_float
 	_construire()
 
-	# Collision : colonne englobant la zone + le pin (clic sur tout le marqueur).
-	var c := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	var total_h := _pin_y + PIN_H
-	shape.size = Vector3(maxf(taille_x, 0.2), total_h, maxf(taille_z, 0.2))
-	c.shape = shape
-	c.position = Vector3(0, total_h * 0.5, 0)
-	add_child(c)
+	# Collision en DEUX boîtes : le corps de la zone (au ras du décor) + le pin
+	# seul. JAMAIS une colonne pleine sol→pin : l'air entre le toit et le pin
+	# capterait le rayon et volerait le survol/clic des zones situées DERRIÈRE
+	# dès que la caméra s'abaisse (régression vue en jeu quand pin_float et la
+	# hauteur des piliers ont grandi — la colonne invisible a grandi avec eux).
+	var c_zone := CollisionShape3D.new()
+	var s_zone := BoxShape3D.new()
+	var h_zone := hauteur + 0.3   # léger débord au-dessus du toit (barrière)
+	s_zone.size = Vector3(maxf(taille_x, 0.2), h_zone, maxf(taille_z, 0.2))
+	c_zone.shape = s_zone
+	c_zone.position = Vector3(0, h_zone * 0.5, 0)
+	add_child(c_zone)
+	var c_pin := CollisionShape3D.new()
+	var s_pin := BoxShape3D.new()
+	# Marge autour du diamant (cible confortable) + amplitude du flottement.
+	s_pin.size = Vector3(PIN_R * 3.2, PIN_H * 2.2, PIN_R * 3.2)
+	c_pin.shape = s_pin
+	c_pin.position = Vector3(0, _pin_y, 0)
+	add_child(c_pin)
 
 	mouse_entered.connect(func() -> void:
 		_hover = true

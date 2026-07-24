@@ -19,7 +19,6 @@ var cb: CtbCombattant
 
 var _couleur_camp: Color
 var _nom: Label
-var _barre_fond: StyleBoxFlat
 var _barre_pv: ProgressBar
 var _barre_fill: StyleBoxFlat
 var _pv_txt: Label
@@ -30,10 +29,7 @@ var _ciblable := false
 # Nom d'affichage localisé d'un combattant CTB — TOUJOURS via Translations
 # (les champs nom_affichage_* de la ressource, l'id en secours).
 static func nom_ui(d: CombattantCtbData) -> String:
-	return Translations.entity_name({
-		"nom_affichage_fr": d.nom_affichage_fr,
-		"nom_affichage_en": d.nom_affichage_en,
-	}, d.id)
+	return Translations.resource_name(d, d.id)
 
 func _init(combattant: CtbCombattant) -> void:
 	cb = combattant
@@ -54,9 +50,9 @@ func _init(combattant: CtbCombattant) -> void:
 	_barre_pv.custom_minimum_size = Vector2(0, 12)
 	_barre_pv.min_value = 0.0
 	_barre_pv.max_value = 1.0
-	_barre_fond = UIHelpers.card_style(UIColors.BG_BAR, 0.9, 0.4, 1, 3)
+	var barre_fond := UIHelpers.card_style(UIColors.BG_BAR, 0.9, 0.4, 1, 3)
 	_barre_fill = UIHelpers.card_style(UIColors.HP_HIGH, 0.95, 0.0, 0, 3)
-	_barre_pv.add_theme_stylebox_override("background", _barre_fond)
+	_barre_pv.add_theme_stylebox_override("background", barre_fond)
 	_barre_pv.add_theme_stylebox_override("fill", _barre_fill)
 	v.add_child(_barre_pv)
 
@@ -110,10 +106,7 @@ func rafraichir() -> void:
 	for id: String in par_statut:
 		var grp: Dictionary = par_statut[id]
 		var sd := grp["statut"] as StatutCtbData
-		var nom := Translations.entity_name({
-			"nom_affichage_fr": sd.nom_affichage_fr,
-			"nom_affichage_en": sd.nom_affichage_en,
-		}, sd.id)
+		var nom := Translations.resource_name(sd, sd.id)
 		_pills.add_child(_pill("☠ %s ×%d (%d)" % [nom, int(grp["n"]), int(grp["restant"])],
 				UIColors.POISON))
 

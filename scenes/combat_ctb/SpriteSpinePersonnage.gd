@@ -37,6 +37,7 @@ var _mort := false        # Death jouée : plus aucune autre animation
 
 static func disponible() -> bool:
 	return ClassDB.class_exists("SpineSprite") \
+			and ClassDB.class_exists("SpineSkeletonDataResource") \
 			and ResourceLoader.exists(CHEMIN_SKEL) \
 			and ResourceLoader.exists(CHEMIN_ATLAS)
 
@@ -57,13 +58,19 @@ func _construire_spine() -> bool:
 	if skel == null or atlas == null:
 		push_warning("SpriteSpinePersonnage : assets Spine illisibles (%s)" % CHEMIN_SKEL)
 		return false
-	var donnees: Resource = ClassDB.instantiate("SpineSkeletonDataResource")
+	var donnees := ClassDB.instantiate("SpineSkeletonDataResource") as Resource
+	if donnees == null:
+		push_warning("SpriteSpinePersonnage : SpineSkeletonDataResource introuvable (runtime incomplet)")
+		return false
 	donnees.skeleton_file_res = skel
 	donnees.atlas_res = atlas
 	if not bool(donnees.call("is_skeleton_data_loaded")):
 		push_warning("SpriteSpinePersonnage : données Spine invalides (%s)" % CHEMIN_SKEL)
 		return false
 	_spine = ClassDB.instantiate("SpineSprite") as Node
+	if _spine == null:
+		push_warning("SpriteSpinePersonnage : SpineSprite non instanciable")
+		return false
 	_spine.set("skeleton_data_res", donnees)
 	add_child(_spine)
 	# Échelle : hauteur native du squelette → HAUTEUR_CIBLE_PX à l'écran.
@@ -88,19 +95,29 @@ func jouer_hit() -> void:
 # aucune animation n'est acceptée ensuite (idempotent : rafraîchi à chaque
 # _rafraichir_orbes de l'écran de combat).
 func jouer_mort() -> void:
-	if _spine == null or _mort:
+	if _mort:
+		return
+	var etat := _etat_animation()
+	if etat == null:
 		return
 	_mort = true
-	var etat: Object = _spine.call("get_animation_state")
 	etat.call("set_animation", ANIM_DEATH, false, 0)
 
 func _one_shot_puis_idle(nom: String) -> void:
-	if _spine == null or _mort:
+	if _mort:
 		return
-	var etat: Object = _spine.call("get_animation_state")
+	var etat := _etat_animation()
+	if etat == null:
+		return
 	etat.call("set_animation", nom, false, 0)
 	etat.call("add_animation", ANIM_IDLE, 0.0, true, 0)
 
 func _jouer(nom: String, boucle: bool) -> void:
-	var etat: Object = _spine.call("get_animation_state")
-	etat.call("set_animation", nom, boucle, 0)
+	var etat := _etat_animation()
+	if etat != null:
+		etat.call("set_animation", nom, boucle, 0)
+
+func _etat_animation() -> Object:
+	if _spine == null:
+		return null
+	return _spine.call("get_animation_state") as Object

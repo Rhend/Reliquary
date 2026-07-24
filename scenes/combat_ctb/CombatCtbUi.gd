@@ -57,7 +57,11 @@ const DUEL_ZOOM_CRIT := 1.55       # un crit frappe plus fort → caméra aussi
 const DUEL_ECART_PX := 120.0       # distance des deux pieds au centre (face à face)
 const DUEL_FOCUS_HAUT_PX := 60.0   # remonte le pivot des pieds vers les torses
 const DUEL_DUREE_IN := 0.14
-const DUEL_TENUE := 0.55
+# Tenue calibrée pour que le duel (in + tenue + out = 0.89 s) soit ENTIÈREMENT
+# retombé avant la première activation ennemie qui suit (pause post-action
+# 0.35 s + pause de bandeau 0.55 s = 0.90 s) — sinon le coup ennemi se
+# jouerait pendant le dé-zoom, contredisant « ennemis sans effet de caméra ».
+const DUEL_TENUE := 0.45
 const DUEL_DUREE_OUT := 0.30
 
 var moteur: CtbMoteur
@@ -87,6 +91,7 @@ var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
 var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
 var _duel_tween: Tween = null
 var _duel_restaure: Array = []      # paires [CanvasItem, position d'origine]
+var _duel_acteurs: Array = []       # [attaquant, cible] du duel en cours
 var _sol: Control = null       # scène : sol + emplacements des futurs sprites
 var _orbes: Dictionary = {}    # CtbCombattant → EnergyBoule (placeholder sprite)
 var _sprites: Dictionary = {}  # CtbCombattant → SpriteSpinePersonnage (sprite RÉEL)
@@ -109,6 +114,24 @@ signal _action_choisie
 func _init(m: CtbMoteur, avec_embuscade: bool = false) -> void:
 	moteur = m
 	embuscade = avec_embuscade
+
+# Fabrique l'écran CÂBLÉ au combat en cours d'une run d'expédition —
+# récompenses, inventaire, consommation, libération à la fermeture (câblage
+# identique jeu réel / sandbox : UN point de vérité). L'écran lui-même reste
+# générique : le contrat n'est fait QUE des Callables déjà publics.
+# `sur_fermee` est appelée après libération (rafraîchissement chez l'appelant).
+static func pour_run(run: ExpeRun, avec_embuscade: bool, sur_fermee: Callable) -> CombatCtbUi:
+	var ui := CombatCtbUi.new(run.combat_en_cours, avec_embuscade)
+	ui.recompenses_fournisseur = func() -> Dictionary:
+		return run.dernier_combat_recompenses
+	ui.inventaire_fournisseur = func() -> Array:
+		return run.inventaire
+	ui.sur_objet_utilise = func(objet: ConsommableData) -> void:
+		run.consommer(objet)
+	ui.fermee.connect(func(_recap: Dictionary) -> void:
+		ui.queue_free()
+		sur_fermee.call())
+	return ui
 
 func _ready() -> void:
 	# and_offsets : set_anchors_preset seul CONSERVE les offsets courants —
@@ -308,6 +331,9 @@ func _placer_orbes() -> void:
 	# `resized` peut tirer PENDANT add_child(_sol), avant la création des orbes.
 	if _sol == null or _sol.size.x <= 0.0 or (_orbes.is_empty() and _sprites.is_empty()):
 		return
+	# Resize pendant un duel : les positions d'origine capturées par le tween
+	# seraient obsolètes — on coupe net, chacun sera replacé juste dessous.
+	_duel_interrompre()
 	_pieds.clear()
 	for camp_joueur in [true, false]:
 		var membres: Array[CtbCombattant] = []
@@ -321,13 +347,9 @@ func _placer_orbes() -> void:
 			var pied := Vector2(base_x + dir * t * SOL_PAS.x,
 					_sol.size.y * SOL_Y_FRAC + t * SOL_PAS.y)
 			_pieds[membres[i]] = pied
-			var orbe: EnergyBoule = _orbes.get(membres[i])
-			if orbe != null:
-				orbe.position = pied - Vector2(ORBE_TAILLE.x * 0.5, ORBE_TAILLE.y - 10.0)
-			# Sprite Spine : origine du squelette = pieds → position = appui sol.
-			var sprite: SpriteSpinePersonnage = _sprites.get(membres[i])
-			if sprite != null:
-				sprite.position = pied
+			var noeud := _noeud_bataille(membres[i])
+			if noeud != null:
+				noeud.position = _pos_depuis_pied(membres[i], pied)
 	_sol.queue_redraw()
 
 # Sol de la scène : ligne d'horizon + bande dégradée, et ellipse
@@ -352,8 +374,13 @@ func _dessiner_sol() -> void:
 # Un personnage mort disparaît de la scène (l'ellipse d'emplacement reste) ;
 # un sprite Spine joue son animation Death et TIENT la pose (pas de fondu) —
 # idempotent, couvre tous les chemins de mort (attaque, DoT).
+# Pendant un duel, les DEUX acteurs gardent leur alpha : le coup fatal doit se
+# JOUER à l'écran (glissement + tenue) — le fondu du vaincu est réappliqué à
+# la fin du duel (tween.finished → _rafraichir_orbes).
 func _rafraichir_orbes() -> void:
 	for cb: CtbCombattant in _orbes:
+		if _duel_tween != null and cb in _duel_acteurs:
+			continue
 		(_orbes[cb] as EnergyBoule).modulate.a = 1.0 if cb.est_vivant() else 0.10
 	for cb: CtbCombattant in _sprites:
 		if not cb.est_vivant():
@@ -466,10 +493,7 @@ func _sur_objet() -> void:
 	for id: String in groupes:
 		var grp: Dictionary = groupes[id]
 		var objet := grp["objet"] as ConsommableData
-		var nom := Translations.entity_name({
-			"nom_affichage_fr": objet.nom_affichage_fr,
-			"nom_affichage_en": objet.nom_affichage_en,
-		}, objet.id)
+		var nom := Translations.resource_name(objet, objet.id)
 		var b := ExpeStyle.bouton(
 				nom if int(grp["n"]) == 1 else "%s ×%d" % [nom, int(grp["n"])],
 				UIColors.CYBER_BUTIN, 13, Vector2(0, 34))
@@ -580,6 +604,9 @@ func _duel_interrompre() -> void:
 	_duel_restaure.clear()
 	if _couche_scene != null:
 		_couche_scene.scale = Vector2.ONE
+	if not _duel_acteurs.is_empty():
+		_duel_acteurs = []
+		_rafraichir_orbes()   # réapplique le fondu différé d'un vaincu du duel
 
 # Zoom-DUEL (attaque du joueur seulement — voir les constantes DUEL_*) :
 # glissement simultané des deux personnages vers le centre + punch-in de la
@@ -600,6 +627,7 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool) -> void
 	var pos_att := _pos_depuis_pied(att, centre + Vector2(-DUEL_ECART_PX * 0.5, 0.0))
 	var pos_cib := _pos_depuis_pied(cible, centre + Vector2(DUEL_ECART_PX * 0.5, 0.0))
 	_duel_restaure = [[noeud_att, noeud_att.position], [noeud_cib, noeud_cib.position]]
+	_duel_acteurs = [att, cible]
 	_couche_scene.pivot_offset = centre - Vector2(0.0, DUEL_FOCUS_HAUT_PX)
 	var zoom := DUEL_ZOOM_CRIT if crit else DUEL_ZOOM
 	var f := facteur_delais
@@ -621,7 +649,9 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool) -> void
 			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	_duel_tween.finished.connect(func() -> void:
 		_duel_restaure.clear()
-		_duel_tween = null)
+		_duel_tween = null
+		_duel_acteurs = []
+		_rafraichir_orbes())   # fondu différé du vaincu, une fois le duel joué
 
 func _sur_evenement(e: Dictionary) -> void:
 	if not is_inside_tree():
@@ -664,10 +694,7 @@ func _sur_evenement(e: Dictionary) -> void:
 			var sd := e["statut"] as StatutCtbData
 			# StatutCtbData partage les champs nom_affichage_* : même chemin
 			# Translations que les combattants (pas de FR en dur).
-			var nom := Translations.entity_name({
-				"nom_affichage_fr": sd.nom_affichage_fr,
-				"nom_affichage_en": sd.nom_affichage_en,
-			}, sd.id)
+			var nom := Translations.resource_name(sd, sd.id)
 			_flotter(e["cible"] as CtbCombattant, "+ %s" % nom, 13, UIColors.POISON, false)
 		"defense":
 			_flotter(e["combattant"] as CtbCombattant,
@@ -726,6 +753,14 @@ func _intro() -> void:
 func _outro() -> void:
 	_montrer_actions(false)
 	_marquer_actif(null)
+	# Le duel du coup FATAL se joue en entier avant l'écran d'issue (c'est le
+	# moment le plus dramatique du combat) ; puis coupe-filet pour un état
+	# final déterministe (scène nette, chacun à sa place, fondu du vaincu).
+	if _duel_tween != null and _duel_tween.is_valid() and facteur_delais > 0.0:
+		await _duel_tween.finished
+		if not is_inside_tree():
+			return
+	_duel_interrompre()
 	_rafraichir_tout()
 	var gagne := moteur.victoire_joueur
 	AudioManager.play_sfx("summary_victory" if gagne else "summary_defeat", -4.0)

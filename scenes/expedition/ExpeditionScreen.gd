@@ -196,18 +196,10 @@ func _traiter_combat() -> void:
 	if combat_auto:
 		run.combat_en_cours.derouler_auto()
 		return
-	_combat_ui = CombatCtbUi.new(run.combat_en_cours,
-			bool(_combat_data.get("embuscade", false)))
-	_combat_ui.recompenses_fournisseur = func() -> Dictionary:
-		return run.dernier_combat_recompenses
-	_combat_ui.inventaire_fournisseur = func() -> Array:
-		return run.inventaire
-	_combat_ui.sur_objet_utilise = func(objet: ConsommableData) -> void:
-		run.consommer(objet)
-	_combat_ui.fermee.connect(func(_recap: Dictionary) -> void:
-		_combat_ui.queue_free()
-		_combat_ui = null
-		_rafraichir())
+	_combat_ui = CombatCtbUi.pour_run(run, bool(_combat_data.get("embuscade", false)),
+			func() -> void:
+				_combat_ui = null
+				_rafraichir())
 	add_child(_combat_ui)
 
 # Annonce placeholder (texte flottant) du contenu d'un nœud résolu :
