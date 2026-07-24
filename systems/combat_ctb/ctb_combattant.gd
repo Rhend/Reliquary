@@ -33,6 +33,17 @@ var statuts: Array = []
 # État LISIBLE par l'UI (marqueur sur la carte du combattant).
 var en_defense := false
 
+# Cooldowns de compétences (chantier 16) : id → activations restantes.
+# Posé à l'usage (valeur du .tres), décrémenté par le moteur à l'OUVERTURE
+# de chaque activation de CE combattant. Absent ou ≤ 0 = prête.
+var cooldowns: Dictionary = {}
+
+func competence_prete(comp: CompetenceCtbData) -> bool:
+	return int(cooldowns.get(comp.id, 0)) <= 0
+
+func cooldown_restant(comp: CompetenceCtbData) -> int:
+	return maxi(int(cooldowns.get(comp.id, 0)), 0)
+
 func _init(d: CombattantCtbData, c: Enums.CampCtb, o: int) -> void:
 	data = d
 	camp = c

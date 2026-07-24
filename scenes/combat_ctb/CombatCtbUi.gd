@@ -17,9 +17,11 @@
 # chrome UI reste fixe. DA finale hors scope (Christophe).
 #
 # Pilote un CtbMoteur DÉJÀ démarré, en pull-based :
-#   • activation du camp joueur → attend l'input (Attaquer / Défendre —
-#     PAS de bouton Objet : les consommables n'existent pas, « contenu
-#     absent, pas grisé ») ; Attaquer → choix de cible parmi les ennemis
+#   • activation du camp joueur → attend l'input : Attaquer / Défendre /
+#     COMPÉTENCES (chantier 16 — un bouton par compétence du combattant,
+#     grisé « (n) » en recharge, absent s'il n'en a pas) / Objet (chantier 7 —
+#     n'existe que si l'inventaire de run est non vide) ; Attaquer, une
+#     compétence ciblée ou un objet ciblé → choix de cible parmi les ennemis
 #     vivants (boutons ou clic sur la carte ennemie) ;
 #   • activations ennemies : auto-résolues (IA du moteur), séquencées par de
 #     courtes pauses pour rester lisibles.
@@ -105,9 +107,14 @@ var _bandeau_tour: Label
 var _btn_attaquer: Button
 var _btn_defendre: Button
 var _btn_objet: Button = null          # créé SEULEMENT si inventaire non vide
+# Compétences (chantier 16) : boutons recréés à chaque tour joueur — absents
+# si le combattant n'en a pas ; GRISÉS avec compteur pendant la recharge
+# (état temporaire d'un contenu possédé — ≠ contenu absent).
+var _btns_competences: Array[Button] = []
 var _rangee_boutons: HBoxContainer
 var _rangee_cibles: HBoxContainer
 var _objet_en_attente: ConsommableData = null   # objet ciblé en attente de cible
+var _competence_en_attente: CompetenceCtbData = null   # idem pour une compétence
 var _fx: Control               # couche des textes flottants (plein écran)
 var _voile: ColorRect          # fondu de transition + écran d'issue
 var _voile_contenu: VBoxContainer
@@ -408,7 +415,7 @@ func _boucle() -> void:
 		_marquer_actif(c)
 		if c.est_joueur():
 			_bandeau_tour.text = Translations.T("ctb.a_toi") % CarteCombattantCtb.nom_ui(c.data)
-			_montrer_actions(true)
+			_montrer_actions(true, c)
 			await _action_choisie
 			if not is_inside_tree():
 				return
@@ -428,10 +435,29 @@ func _boucle() -> void:
 
 # ─── Actions du joueur ───────────────────────────────────────
 
-func _montrer_actions(on: bool) -> void:
+func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 	_btn_attaquer.visible = on
 	_btn_defendre.visible = on
 	_objet_en_attente = null
+	_competence_en_attente = null
+	# Compétences (chantier 16) : un bouton par compétence du combattant
+	# actif — recréés à chaque tour (le cooldown a pu bouger), grisés « (n) »
+	# en recharge, ABSENTS si le combattant n'en a pas.
+	for b in _btns_competences:
+		_rangee_boutons.remove_child(b)
+		b.queue_free()
+	_btns_competences.clear()
+	if on and acteur != null:
+		for comp: CompetenceCtbData in acteur.data.competences:
+			var nom := Translations.resource_name(comp, comp.id)
+			var prete := acteur.competence_prete(comp)
+			var b := ExpeStyle.bouton(
+					nom if prete else "%s (%d)" % [nom, acteur.cooldown_restant(comp)],
+					UIColors.CYBER_ACCENT_2)
+			b.disabled = not prete
+			b.pressed.connect(_sur_competence.bind(comp))
+			_rangee_boutons.add_child(b)
+			_btns_competences.append(b)
 	# Bouton Objet : n'existe que si l'inventaire de run est non vide
 	# (« contenu absent, pas grisé ») — retiré immédiatement sinon.
 	if _btn_objet != null:
@@ -453,11 +479,30 @@ func _sur_attaquer() -> void:
 	if not _btn_attaquer.visible:
 		return   # pas d'activation joueur ouverte (press programmatique hors tour)
 	_objet_en_attente = null
+	_competence_en_attente = null
 	var vivants: Array[CtbCombattant] = _ennemis_vivants()
 	if vivants.size() <= 1:
 		_valider_action({"type": Enums.ActionCtb.ATTAQUER,
 				"cible": vivants[0] if vivants.size() == 1 else null})
 		return
+	_montrer_choix_cibles(vivants)
+
+# Compétence (chantier 16) : sans cible requise → validée direct (soin) ;
+# sinon même rangée de choix de cible que l'attaque et l'objet.
+func _sur_competence(comp: CompetenceCtbData) -> void:
+	if not _btn_attaquer.visible:
+		return
+	_objet_en_attente = null
+	_competence_en_attente = null
+	if not comp.cible_requise():
+		_valider_action({"type": Enums.ActionCtb.COMPETENCE, "competence": comp})
+		return
+	var vivants: Array[CtbCombattant] = _ennemis_vivants()
+	if vivants.size() <= 1:
+		_valider_action({"type": Enums.ActionCtb.COMPETENCE, "competence": comp,
+				"cible": vivants[0] if vivants.size() == 1 else null})
+		return
+	_competence_en_attente = comp
 	_montrer_choix_cibles(vivants)
 
 # Rangée de choix de cible (attaque OU objet ciblé — _objet_en_attente) :
@@ -475,6 +520,7 @@ func _montrer_choix_cibles(vivants: Array[CtbCombattant]) -> void:
 			UIColors.CYBER_TEXTE_MUTED, 13, Vector2(0, 34))
 	annuler.pressed.connect(func() -> void:
 		_objet_en_attente = null
+		_competence_en_attente = null
 		UIHelpers.clear_children_now(_rangee_cibles)
 		_mettre_cibles_en_avant(false))
 	_rangee_cibles.add_child(annuler)
@@ -529,6 +575,10 @@ func _sur_objet_choisi(objet: ConsommableData) -> void:
 func _sur_cible_cliquee(cible: CtbCombattant) -> void:
 	if not _btn_attaquer.visible or not cible.est_vivant():
 		return
+	if _competence_en_attente != null:
+		_valider_action({"type": Enums.ActionCtb.COMPETENCE,
+				"competence": _competence_en_attente, "cible": cible})
+		return
 	if _objet_en_attente != null:
 		_valider_action({"type": Enums.ActionCtb.OBJET, "objet": _objet_en_attente,
 				"cible": cible})
@@ -543,6 +593,7 @@ func _valider_action(action: Dictionary) -> void:
 			and sur_objet_utilise.is_valid():
 		sur_objet_utilise.call(action["objet"])
 	_objet_en_attente = null
+	_competence_en_attente = null
 	_action_en_attente = action
 	_action_choisie.emit()
 
@@ -705,6 +756,17 @@ func _sur_evenement(e: Dictionary) -> void:
 		"defense":
 			_flotter(e["combattant"] as CtbCombattant,
 					Translations.T("ctb.garde_pill"), 15, UIColors.SHIELD, false)
+		"competence":
+			# Annonce du lancement (chantier 16) — les dégâts éventuels
+			# arrivent par l'événement « attaque » standard juste après.
+			var comp := e["competence"] as CompetenceCtbData
+			_flotter(e["utilisateur"] as CtbCombattant,
+					"✦ %s" % Translations.resource_name(comp, comp.id), 14,
+					UIColors.CYBER_ACCENT_2, false)
+		"soin":
+			_flotter(e["cible"] as CtbCombattant,
+					"+%d" % int(roundf(float(e["soin"]))), 18,
+					UIColors.HEAL_COLOR, true)
 		"objet":
 			# Consommable (chantier 7) : dégâts (Bombe) ou soin (Nano).
 			if e.has("degats"):

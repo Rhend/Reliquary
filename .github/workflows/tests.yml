@@ -96,3 +96,6 @@ jobs:
 
       - name: TestMecaniquesBiomes (mécaniques fortes de biome en CTB — chantier 15)
         run: $GODOT --headless --path . res://tests/TestMecaniquesBiomes.tscn
+
+      - name: TestCompetences (compétences du héros en CTB — chantier 16)
+        run: $GODOT --headless --path . res://tests/TestCompetences.tscn

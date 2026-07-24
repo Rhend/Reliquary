@@ -25,6 +25,11 @@ extends Resource
 @export var crit_chance:     float = 0.05
 @export var crit_multiplier: float = 1.8
 
+# Compétences du combattant (chantier 16) — vide pour la quasi-totalité du
+# bestiaire. Le héros reçoit sa dotation via CtbPont (transitoire, jamais
+# écrite dans un .tres du bestiaire) ; l'IA actée ne les joue pas.
+@export var competences: Array[CompetenceCtbData] = []
+
 # Nom pour le JOURNAL DE DEV du moteur (log de vérification, pas une UI).
 # Toute UI finale passera par Translations (hors scope chantier 1).
 func nom_journal() -> String:

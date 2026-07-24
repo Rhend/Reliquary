@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CompetenceCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CompetenceCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "comp_frappe_lourde"
+nom_affichage_fr = "Frappe lourde"
+nom_affichage_en = "Heavy Strike"
+lore_fr = "Tout le poids de la reconstruction dans un seul coup."
+lore_en = "The whole weight of reconstruction in a single blow."
+effet = 0
+valeur = 1.6
+cooldown = 3

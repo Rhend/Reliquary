@@ -65,6 +65,11 @@
 class_name CtbPont
 extends RefCounted
 
+# Dotation de compétences du héros (chantier 16) — data-driven, appliquée au
+# combattant transitoire à chaque construction.
+const DOTATION_COMPETENCES: DotationCompetencesData = \
+		preload("res://data/progression/competences_heros.tres")
+
 # Combattant CTB transitoire depuis une entité du bestiaire (id GameData).
 # Retourne null (avec erreur console) si l'entité est inconnue ou sans stats.
 static func combattant_depuis_entite(entity_id: String) -> CombattantCtbData:
@@ -125,4 +130,8 @@ static func combattant_depuis_heros() -> CombattantCtbData:
 			ForgeSystem.get_stat_bonus("atb_pct")], "vit")
 	d.crit_chance = float(stats.get("crit_chance", Balance.CRIT_CHANCE)) + crit_pct
 	d.crit_multiplier = float(stats.get("crit_multiplier", Balance.CRIT_MULTIPLIER))
+	# Compétences (chantier 16) : dotation data-driven du héros, attachée au
+	# combattant TRANSITOIRE (jamais persistée) — l'UI de combat les propose,
+	# le moteur gère les cooldowns.
+	d.competences = DOTATION_COMPETENCES.competences.duplicate()
 	return d

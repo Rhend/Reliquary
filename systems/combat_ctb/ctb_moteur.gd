@@ -157,6 +157,11 @@ func activer_suivant() -> CtbCombattant:
 		c.en_defense = false
 		_log("    🛡 %s baisse sa garde" % c.nom_journal())
 		evenement.emit({"type": "defense_fin", "combattant": c})
+	# Cooldowns de compétences (chantier 16) : décrément à l'OUVERTURE de
+	# l'activation du porteur — une compétence à cooldown N revient à sa
+	# N-ième activation suivante.
+	for cid: String in c.cooldowns:
+		c.cooldowns[cid] = maxi(int(c.cooldowns[cid]) - 1, 0)
 	_tick_statuts(c, Enums.TimingStatut.DEBUT_ACTIVATION)
 	if termine:
 		return null
@@ -183,10 +188,10 @@ func jouer(action: Dictionary) -> void:
 			evenement.emit({"type": "defense", "combattant": c})
 		Enums.ActionCtb.OBJET:
 			_resoudre_objet(c, action)
+		Enums.ActionCtb.COMPETENCE:
+			_resoudre_competence(c, action)
 		_:
-			# Compétence : prévue par l'architecture, sans contenu
-			# (« non découvert = absent ») — l'activation est perdue.
-			_log("    %s tente une action non implémentée" % c.nom_journal())
+			_log("    %s tente une action inconnue" % c.nom_journal())
 	if termine:
 		return
 	_tick_statuts(c, Enums.TimingStatut.FIN_ACTIVATION)
@@ -308,7 +313,10 @@ func _tick_statuts(c: CtbCombattant, timing: Enums.TimingStatut) -> void:
 # × (1 − réduction Défendre) si la cible est en garde, arrondi entier,
 # plancher MIN_DAMAGE (appliqué APRÈS Défendre : un coup inflige toujours ≥ 1).
 # Stats finales = StatStacker (additif).
-func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant) -> void:
+# `mult` (chantier 16) : multiplicateur de compétence (Frappe lourde) —
+# appliqué à la base mitigée, AVANT le crit (une frappe lourde critique
+# multiplie les deux : c'est le contrat).
+func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant, mult: float = 1.0) -> void:
 	var cb := cible
 	if cb == null or not cb.est_vivant():
 		cb = _premiere_cible(att)
@@ -318,7 +326,7 @@ func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant) -> void:
 	# Clamp [0;1] au moment du JET uniquement (arbitrage 06/07) : la donnée
 	# reste non clampée (un excès de crit_chance est visible dans les stats).
 	var is_crit := rng.randf() < clampf(att.stat_finale("crit_chance"), 0.0, 1.0)
-	var brut := Balance.mitigated_damage(att.stat_finale("atk"), cb.stat_finale("def"))
+	var brut := Balance.mitigated_damage(att.stat_finale("atk"), cb.stat_finale("def")) * mult
 	if is_crit:
 		brut *= att.stat_finale("crit_multiplier")
 	# Règle de Lieu (chantier 15) : multiplicateur par camp attaquant
@@ -390,6 +398,40 @@ func _resoudre_objet(c: CtbCombattant, action: Dictionary) -> void:
 					int(roundf(c.pv)), int(roundf(pv_max))])
 			evenement.emit({"type": "objet", "objet": objet, "utilisateur": c,
 					"cible": c, "soin": c.pv - avant})
+
+# ─── Résolution d'une compétence (chantier 16) ───────────────
+
+# action : {"type": COMPETENCE, "competence": CompetenceCtbData, "cible":
+# CtbCombattant (ATTAQUE_MULT ; null → première cible vivante)}. La
+# compétence doit appartenir au combattant et être PRÊTE (cooldown ≤ 0) —
+# sinon l'activation est perdue (journalisé : l'UI ne propose que le légal,
+# ce chemin ne protège que contre un appel programmatique fautif).
+func _resoudre_competence(c: CtbCombattant, action: Dictionary) -> void:
+	var comp := action.get("competence") as CompetenceCtbData
+	if comp == null or not c.data.competences.has(comp):
+		_log("    %s tente une compétence qu'il ne possède pas (activation perdue)"
+				% c.nom_journal())
+		return
+	if not c.competence_prete(comp):
+		_log("    %s : %s en recharge (%d activation(s)) — activation perdue" % [
+				c.nom_journal(), comp.nom_journal(), c.cooldown_restant(comp)])
+		return
+	c.cooldowns[comp.id] = comp.cooldown
+	_log("    ✦ %s lance %s" % [c.nom_journal(), comp.nom_journal()])
+	evenement.emit({"type": "competence", "utilisateur": c, "competence": comp})
+	match comp.effet:
+		Enums.EffetCompetence.ATTAQUE_MULT:
+			# Pipeline d'attaque COMPLET (mitigation, crit, règles de Lieu,
+			# Défendre, plancher) × valeur — événement « attaque » standard.
+			_resoudre_attaque(c, action.get("cible") as CtbCombattant, comp.valeur)
+		Enums.EffetCompetence.SOIN_PCT_PV_MAX:
+			var pv_max := c.stat_finale("pv_max")
+			var avant := c.pv
+			c.pv = minf(c.pv + comp.valeur * pv_max, pv_max)
+			_log("    ➕ %s : +%d PV (PV %d / %d)" % [comp.nom_journal(),
+					int(roundf(c.pv - avant)), int(roundf(c.pv)), int(roundf(pv_max))])
+			evenement.emit({"type": "soin", "utilisateur": c, "cible": c,
+					"soin": c.pv - avant, "competence": comp})
 
 # ─── Fins de combat ──────────────────────────────────────────
 

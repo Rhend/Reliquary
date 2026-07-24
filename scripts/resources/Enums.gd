@@ -69,13 +69,19 @@ enum CampCtb {
 # Types d'action d'une activation. ATTAQUER (chantier 1) et DEFENDRE
 # (chantier 5 : dégâts d'attaque subis réduits jusqu'à la prochaine activation
 # du défenseur, valeur dans data/combat_ctb/config_ctb.tres) sont fonctionnels ;
-# COMPETENCE et OBJET sont prévus par l'architecture mais sans contenu —
-# aucun bouton ne doit apparaître tant que le contenu n'existe pas.
+# OBJET (chantier 7) = consommable de run ; COMPETENCE (chantier 16) =
+# CompetenceCtbData du combattant, cooldown en ACTIVATIONS du lanceur.
 enum ActionCtb {
 	ATTAQUER,
 	DEFENDRE,
 	COMPETENCE,
 	OBJET,
+}
+
+# Effet typé d'une compétence de combat (chantier 16 — action COMPETENCE).
+enum EffetCompetence {
+	ATTAQUE_MULT    = 0,  # attaque normale (pipeline complet) × multiplicateur
+	SOIN_PCT_PV_MAX = 1,  # rend (valeur × pv_max finale) au lanceur, clampé
 }
 
 # Timing du tick d'un statut DoT, relatif à l'ACTIVATION de la cible :

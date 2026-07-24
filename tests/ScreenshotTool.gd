@@ -375,7 +375,12 @@ func _shoot_combat() -> void:
 	var m := CtbMoteur.new()
 	m.rng.seed = 1337
 	m.malus_horloge_initiale_joueur = 1.5
-	var av := m.ajouter(load("res://data/combat_ctb/avatar.tres"), Enums.CampCtb.JOUEUR)
+	# Dotation de compétences (chantier 16) sur une COPIE de l'avatar factice
+	# (la ressource partagée ne doit pas être mutée par l'outil).
+	var av_data := (load("res://data/combat_ctb/avatar.tres") as CombattantCtbData) \
+			.duplicate() as CombattantCtbData
+	av_data.competences = CtbPont.DOTATION_COMPETENCES.competences.duplicate()
+	var av := m.ajouter(av_data, Enums.CampCtb.JOUEUR)
 	m.ajouter(load("res://data/combat_ctb/ennemi_rapide.tres"), Enums.CampCtb.ADVERSE)
 	m.ajouter(load("res://data/combat_ctb/ennemi_moyen.tres"), Enums.CampCtb.ADVERSE)
 	m.ajouter(load("res://data/combat_ctb/ennemi_lent.tres"), Enums.CampCtb.ADVERSE)

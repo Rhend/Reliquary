@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CompetenceCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CompetenceCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "comp_second_souffle"
+nom_affichage_fr = "Second souffle"
+nom_affichage_en = "Second Wind"
+lore_fr = "Les systèmes de R-XXX se réamorcent. Pas encore fini."
+lore_en = "R-XXX's systems reboot. Not done yet."
+effet = 1
+valeur = 0.25
+cooldown = 4

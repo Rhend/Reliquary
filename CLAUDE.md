@@ -101,7 +101,21 @@ et `statut_on_hit_camp` (jet seulement si règle — séquences seedées sans
 règle intactes) ; réglages `data/expedition/mecaniques_biomes.tres`
 (`MecaniquesBiomesData`) appliqués par ExpeRun à chaque combat ; annonce à
 l'intro de combat + ligne au panneau de lancement. BiomeMechanics (ancienne
-boucle) n'est PAS réutilisé. Le camp joueur en expédition
+boucle) n'est PAS réutilisé.
+CHANTIER 16 (compétences, acté 07/2026) : l'action COMPETENCE est RÉELLE —
+`CompetenceCtbData` portées par le COMBATTANT (`CombattantCtbData.
+competences` ; l'IA ne les joue jamais → runs auto/simulateur inchangés),
+cooldown en ACTIVATIONS du lanceur (posé à l'usage, décrément à l'ouverture
+de ses activations), effets typés `Enums.EffetCompetence` (ATTAQUE_MULT =
+pipeline d'attaque complet × valeur — déclenche le zoom-duel ;
+SOIN_PCT_PV_MAX = gestion des PV persistants, clampé). Dotation du héros
+data-driven `data/progression/competences_heros.tres` (Frappe lourde ×1.6
+cd 3, Second souffle 25 % cd 4 — provisoires), appliquée par CtbPont au
+transitoire. UI : un bouton par compétence du combattant actif, GRISÉ
+« (n) » en recharge (état temporaire ≠ contenu absent), absent sans
+compétence ; ciblage partagé avec Attaquer/Objet ; événements
+`competence`/`soin`. Outil : `tools/SimulateurEquilibrage.tscn` (N runs
+auto par Lieu × palier → rapport — SIM_RUNS/SIM_POLITIQUE/SIM_HEROS). Le camp joueur en expédition
 = VRAI héros (ch.4 : `CtbPont.combattant_depuis_heros()`, stats effectives
 équipement compris, transitoire construit au lancement) ; le sandbox a une
 checkbox Héros réel / avatar factice (`avatar.tres`, conservé pour les
@@ -207,6 +221,7 @@ godot --headless --path . res://tests/TestEquipementDepart.tscn # équipement de
 godot --headless --path . res://tests/TestHoloPicking.tscn      # picking des zones d'expédition sur la HoloMap (70)
 godot --headless --path . res://tests/TestButin.tscn            # butin de matériaux d'expédition (23)
 godot --headless --path . res://tests/TestMecaniquesBiomes.tscn # mécaniques fortes de biome en CTB (21)
+godot --headless --path . res://tests/TestCompetences.tscn      # compétences du héros en CTB (21)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
