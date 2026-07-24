@@ -6,8 +6,15 @@
 # en fond purement COSMÉTIQUE (BiomeBackground scindé en diagonale — CONSERVÉ
 # à la demande de Rhend, la peau cyberpunk du chantier 10 habille le chrome
 # par-dessus : panneaux opaques, tokens UIColors.CYBER_*, ExpeStyle). Scène de
-# bataille : SOL + emplacements des futurs sprites (placeholder : boules de
-# lumière EnergyBoule). DA finale hors scope (Christophe).
+# bataille : SOL + emplacements des sprites — le personnage principal est le
+# sprite Spine RÉEL de Christophe (SpriteSpinePersonnage : Idle en boucle,
+# Attack sur son action ; retombe sur le placeholder si le runtime
+# spine-godot manque) ; les adversaires restent des boules de lumière
+# (EnergyBoule) en attendant leurs assets. L'attaque du JOUEUR déclenche un
+# ZOOM-DUEL façon Darkest Dungeon : les deux personnages glissent au centre
+# de l'écran face à face, punch-in fort (crit = plus marqué), puis retour —
+# activations ennemies SANS effet de caméra ; seule la scène zoome, le
+# chrome UI reste fixe. DA finale hors scope (Christophe).
 #
 # Pilote un CtbMoteur DÉJÀ démarré, en pull-based :
 #   • activation du camp joueur → attend l'input (Attaquer / Défendre —
@@ -39,6 +46,20 @@ signal fermee(recap: Dictionary)
 const N_FILE := 6              # activations prédites affichées (proposition actée)
 const BANDE_VS_PX := 80.0      # largeur de la découpe diagonale des deux fonds
 
+# Zoom-DUEL sur l'attaque du JOUEUR uniquement (recette Darkest Dungeon 1,
+# resserrée — retour Rhend) : l'attaquant et sa cible GLISSENT au centre de
+# l'écran face à face, comme pour un coup final, pendant que la scène
+# punch-in fort ; tenue le temps du coup, puis chacun regagne son
+# emplacement. Les activations ennemies n'ont AUCUN effet de caméra. Seule
+# la scène (_couche_scene) bouge — le chrome UI reste fixe.
+const DUEL_ZOOM := 1.40
+const DUEL_ZOOM_CRIT := 1.55       # un crit frappe plus fort → caméra aussi
+const DUEL_ECART_PX := 120.0       # distance des deux pieds au centre (face à face)
+const DUEL_FOCUS_HAUT_PX := 60.0   # remonte le pivot des pieds vers les torses
+const DUEL_DUREE_IN := 0.14
+const DUEL_TENUE := 0.55
+const DUEL_DUREE_OUT := 0.30
+
 var moteur: CtbMoteur
 var embuscade := false
 var facteur_delais := 1.0
@@ -63,8 +84,12 @@ const SOL_PAS := Vector2(64, 46)   # décalage diagonal entre emplacements
 const ORBE_TAILLE := Vector2(64, 64)
 
 var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
+var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
+var _duel_tween: Tween = null
+var _duel_restaure: Array = []      # paires [CanvasItem, position d'origine]
 var _sol: Control = null       # scène : sol + emplacements des futurs sprites
 var _orbes: Dictionary = {}    # CtbCombattant → EnergyBoule (placeholder sprite)
+var _sprites: Dictionary = {}  # CtbCombattant → SpriteSpinePersonnage (sprite RÉEL)
 var _pieds: Dictionary = {}    # CtbCombattant → point d'appui au sol (dessin)
 var _file_box: HBoxContainer
 var _bandeau_tour: Label
@@ -103,20 +128,27 @@ func _construire() -> void:
 	# BiomeBackground — placeholder du Lieu, purement cosmétique). RESTAURÉ à
 	# la demande de Rhend après la passe cyberpunk : les biomes restent
 	# visibles, la peau habille le chrome PAR-DESSUS (panneaux opaques).
+	# Conteneur ZOOMABLE de la scène de bataille (fonds + diagonale + sol +
+	# sprites) : le zoom d'attaque façon Darkest Dungeon ne scale que lui —
+	# le chrome UI (file, cartes, actions, FX) reste fixe par-dessus.
+	_couche_scene = Control.new()
+	_couche_scene.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_couche_scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_couche_scene)
 	var fond_joueur := BiomeBackground.new()
 	fond_joueur.apply_preset("city")
 	fond_joueur.set_split(1, BANDE_VS_PX)
-	add_child(fond_joueur)
+	_couche_scene.add_child(fond_joueur)
 	var fond_adverse := BiomeBackground.new()
 	fond_adverse.apply_preset("forest")
 	fond_adverse.set_split(2, BANDE_VS_PX)
-	add_child(fond_adverse)
+	_couche_scene.add_child(fond_adverse)
 	var seam := Control.new()
 	seam.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	seam.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	seam.draw.connect(_dessiner_diagonale.bind(seam))
 	seam.resized.connect(seam.queue_redraw)
-	add_child(seam)
+	_couche_scene.add_child(seam)
 
 	# Scène de bataille : SOL + emplacements des futurs sprites de personnages
 	# (placeholder : boules de lumière — retour Rhend, chantier 10).
@@ -125,8 +157,18 @@ func _construire() -> void:
 	_sol.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_sol.draw.connect(_dessiner_sol)
 	_sol.resized.connect(_placer_orbes)
-	add_child(_sol)
+	_couche_scene.add_child(_sol)
 	for cb in moteur.combattants:
+		# Personnage principal : sprite Spine RÉEL (DA Christophe, Idle en
+		# boucle + Attack sur son action) quand le runtime spine-godot et
+		# les assets sont là — sinon placeholder EnergyBoule, comme les
+		# adversaires (leurs sprites n'existent pas encore).
+		if cb == moteur.avatar():
+			var sprite := SpriteSpinePersonnage.creer()
+			if sprite != null:
+				_sprites[cb] = sprite
+				_sol.add_child(sprite)
+				continue
 		var orbe := EnergyBoule.new()
 		orbe.accent = ExpeStyle.accent_camp(cb.est_joueur())
 		orbe.size = ORBE_TAILLE
@@ -264,7 +306,7 @@ func _dessiner_diagonale(seam: Control) -> void:
 # placeholder : boules de lumière (EnergyBoule) aux accents de camp.
 func _placer_orbes() -> void:
 	# `resized` peut tirer PENDANT add_child(_sol), avant la création des orbes.
-	if _sol == null or _sol.size.x <= 0.0 or _orbes.is_empty():
+	if _sol == null or _sol.size.x <= 0.0 or (_orbes.is_empty() and _sprites.is_empty()):
 		return
 	_pieds.clear()
 	for camp_joueur in [true, false]:
@@ -279,8 +321,13 @@ func _placer_orbes() -> void:
 			var pied := Vector2(base_x + dir * t * SOL_PAS.x,
 					_sol.size.y * SOL_Y_FRAC + t * SOL_PAS.y)
 			_pieds[membres[i]] = pied
-			var orbe: EnergyBoule = _orbes[membres[i]]
-			orbe.position = pied - Vector2(ORBE_TAILLE.x * 0.5, ORBE_TAILLE.y - 10.0)
+			var orbe: EnergyBoule = _orbes.get(membres[i])
+			if orbe != null:
+				orbe.position = pied - Vector2(ORBE_TAILLE.x * 0.5, ORBE_TAILLE.y - 10.0)
+			# Sprite Spine : origine du squelette = pieds → position = appui sol.
+			var sprite: SpriteSpinePersonnage = _sprites.get(membres[i])
+			if sprite != null:
+				sprite.position = pied
 	_sol.queue_redraw()
 
 # Sol de la scène : ligne d'horizon + bande dégradée, et ellipse
@@ -302,10 +349,15 @@ func _dessiner_sol() -> void:
 		_sol.draw_arc(Vector2.ZERO, 34.0, 0.0, TAU, 40, Color(accent, 0.65), 2.0)
 		_sol.draw_set_transform(Vector2.ZERO)
 
-# Un personnage mort disparaît de la scène (l'ellipse d'emplacement reste).
+# Un personnage mort disparaît de la scène (l'ellipse d'emplacement reste) ;
+# un sprite Spine joue son animation Death et TIENT la pose (pas de fondu) —
+# idempotent, couvre tous les chemins de mort (attaque, DoT).
 func _rafraichir_orbes() -> void:
 	for cb: CtbCombattant in _orbes:
 		(_orbes[cb] as EnergyBoule).modulate.a = 1.0 if cb.est_vivant() else 0.10
+	for cb: CtbCombattant in _sprites:
+		if not cb.est_vivant():
+			(_sprites[cb] as SpriteSpinePersonnage).jouer_mort()
 
 # ─── Boucle de combat (pull-based, asynchrone) ───────────────
 
@@ -504,14 +556,98 @@ func _marquer_actif(c: CtbCombattant) -> void:
 
 # ─── Retours visuels (signal structuré du moteur) ────────────
 
+# Nœud de scène d'un combattant : sprite Spine s'il existe, sinon son orbe.
+func _noeud_bataille(cb: CtbCombattant) -> CanvasItem:
+	if _sprites.has(cb):
+		return _sprites[cb]
+	return _orbes.get(cb)
+
+# Position du nœud pour poser ses PIEDS sur `pied` (le sprite Spine a son
+# origine aux pieds ; l'orbe est un Control ancré en haut-gauche).
+func _pos_depuis_pied(cb: CtbCombattant, pied: Vector2) -> Vector2:
+	if _sprites.has(cb):
+		return pied
+	return pied - Vector2(ORBE_TAILLE.x * 0.5, ORBE_TAILLE.y - 10.0)
+
+# Coupe net un duel en cours : chacun regagne instantanément son
+# emplacement, la scène redevient nette — un nouveau duel repart de zéro.
+func _duel_interrompre() -> void:
+	if _duel_tween != null and _duel_tween.is_valid():
+		_duel_tween.kill()
+	_duel_tween = null
+	for paire: Array in _duel_restaure:
+		(paire[0] as CanvasItem).position = paire[1]
+	_duel_restaure.clear()
+	if _couche_scene != null:
+		_couche_scene.scale = Vector2.ONE
+
+# Zoom-DUEL (attaque du joueur seulement — voir les constantes DUEL_*) :
+# glissement simultané des deux personnages vers le centre + punch-in de la
+# scène, tenue le temps du coup, puis retour aux emplacements. Crit = zoom
+# plus marqué.
+func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool) -> void:
+	if facteur_delais <= 0.0 or _couche_scene == null or _sol == null:
+		return   # tests headless : aucun délai, aucun tween
+	if not _pieds.has(att) or not _pieds.has(cible):
+		return
+	_duel_interrompre()
+	var noeud_att := _noeud_bataille(att)
+	var noeud_cib := _noeud_bataille(cible)
+	if noeud_att == null or noeud_cib == null:
+		return
+	var centre := Vector2(_sol.size.x * 0.5, _sol.size.y * SOL_Y_FRAC)
+	# Le joueur vient de gauche, sa cible lui fait face à droite.
+	var pos_att := _pos_depuis_pied(att, centre + Vector2(-DUEL_ECART_PX * 0.5, 0.0))
+	var pos_cib := _pos_depuis_pied(cible, centre + Vector2(DUEL_ECART_PX * 0.5, 0.0))
+	_duel_restaure = [[noeud_att, noeud_att.position], [noeud_cib, noeud_cib.position]]
+	_couche_scene.pivot_offset = centre - Vector2(0.0, DUEL_FOCUS_HAUT_PX)
+	var zoom := DUEL_ZOOM_CRIT if crit else DUEL_ZOOM
+	var f := facteur_delais
+	_duel_tween = create_tween()
+	_duel_tween.tween_property(_couche_scene, "scale", Vector2.ONE * zoom,
+			DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_duel_tween.parallel().tween_property(noeud_att, "position", pos_att,
+			DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_duel_tween.parallel().tween_property(noeud_cib, "position", pos_cib,
+			DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_duel_tween.tween_interval(DUEL_TENUE * f)
+	_duel_tween.tween_property(_couche_scene, "scale", Vector2.ONE,
+			DUEL_DUREE_OUT * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_duel_tween.parallel().tween_property(noeud_att, "position",
+			_duel_restaure[0][1] as Vector2, DUEL_DUREE_OUT * f)\
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_duel_tween.parallel().tween_property(noeud_cib, "position",
+			_duel_restaure[1][1] as Vector2, DUEL_DUREE_OUT * f)\
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_duel_tween.finished.connect(func() -> void:
+		_duel_restaure.clear()
+		_duel_tween = null)
+
 func _sur_evenement(e: Dictionary) -> void:
 	if not is_inside_tree():
 		return
 	match str(e.get("type", "")):
 		"attaque":
+			# Sprites Spine : l'attaquant joue Attack_CaC, la cible joue Hit
+			# (ou Death si le coup tue — jouer_mort est prioritaire et
+			# verrouille les animations suivantes).
+			var sprite_att: SpriteSpinePersonnage = _sprites.get(e["attaquant"])
+			if sprite_att != null:
+				sprite_att.jouer_attaque()
 			var cible := e["cible"] as CtbCombattant
+			var sprite_cible: SpriteSpinePersonnage = _sprites.get(cible)
+			if sprite_cible != null:
+				if bool(e["mort"]):
+					sprite_cible.jouer_mort()
+				else:
+					sprite_cible.jouer_hit()
 			var degats := int(e["degats"])
 			var crit := bool(e["crit"])
+			# Mise en scène de duel UNIQUEMENT sur l'attaque du joueur —
+			# les activations ennemies restent sobres (retour Rhend).
+			var attaquant := e["attaquant"] as CtbCombattant
+			if attaquant.est_joueur():
+				_duel_attaque(attaquant, cible, crit)
 			var couleur: Color
 			if cible.est_joueur():
 				couleur = UIColors.DMG_HEAVY_ENEMY if crit else UIColors.DMG_BY_ENEMY

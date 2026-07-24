@@ -396,6 +396,11 @@ func _shoot_combat() -> void:
 	ui._btn_attaquer.pressed.emit()   # 3 ennemis vivants → rangée de cibles
 	await get_tree().create_timer(0.2).timeout
 	await _capture("res://tests/_shot_ctb_cibles.png")
+	# Attaque validée → capture PENDANT la tenue du zoom de bataille (recette
+	# Darkest Dungeon : punch-in vers le duo attaquant/cible, chrome UI fixe).
+	ui._sur_cible_cliquee(m.combattants[2])
+	await get_tree().create_timer(0.30).timeout
+	await _capture("res://tests/_shot_ctb_zoom.png")
 	ui.queue_free()
 	# Issue de bataille : combat court gagné en un coup.
 	var m2 := CtbMoteur.new()
