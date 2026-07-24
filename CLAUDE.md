@@ -102,6 +102,21 @@ règle intactes) ; réglages `data/expedition/mecaniques_biomes.tres`
 (`MecaniquesBiomesData`) appliqués par ExpeRun à chaque combat ; annonce à
 l'intro de combat + ligne au panneau de lancement. BiomeMechanics (ancienne
 boucle) n'est PAS réutilisé.
+CHANTIER 17 (Lieux secondaires, acté 07/2026) : Collines / Ville Fantôme /
+Cimetière EXISTENT (`data/biomes/`, `est_decouvert=false`) et sont RÉVÉLÉS
+par l'ouverture des voies 2-4 (`data/progression/voies.tres`
+(`VoiesConfigData`), appliqué par `GameData.ouvrir_voie_suivante` — flag
+persisté, reculé par le Game Over avec le compteur ; VoiesPanel ANNONCE le
+Lieu avant l'ouverture). Identité héritée de la branche parente (arbre
+Forêt→Collines, Montagne→Ville Fantôme, Marécage→Cimetière —
+`biome_secondaire_id` + mécanique forte héritée, provisoire) ; ressources
+de butin propres (dent_gobelin/defense_sanglier, herbe_magique/ectoplasme,
+os_corail/relique_funeraire) ; slots Ceinture/Bouclier/Talisman (donnée
+prête, hook gelé) ; ennemis = pool_defaut (statu quo VS), Lieutenants déjà
+mappés. Les 4 zones `biome_montagne` du gabarit ont été DIFFÉRENCIÉES par
+leur décor (cimetière→Cimetière, usine→Ville Fantôme, casse→Collines, bloc
+central reste Montagne — cellules I13/I49/AZ15 de la feuille Carte,
+instantané re-baké).
 CHANTIER 16 (compétences, acté 07/2026) : l'action COMPETENCE est RÉELLE —
 `CompetenceCtbData` portées par le COMBATTANT (`CombattantCtbData.
 competences` ; l'IA ne les joue jamais → runs auto/simulateur inchangés),
@@ -222,6 +237,7 @@ godot --headless --path . res://tests/TestHoloPicking.tscn      # picking des zo
 godot --headless --path . res://tests/TestButin.tscn            # butin de matériaux d'expédition (23)
 godot --headless --path . res://tests/TestMecaniquesBiomes.tscn # mécaniques fortes de biome en CTB (21)
 godot --headless --path . res://tests/TestCompetences.tscn      # compétences du héros en CTB (21)
+godot --headless --path . res://tests/TestLieuxSecondaires.tscn # Lieux secondaires révélés par les voies (50)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30

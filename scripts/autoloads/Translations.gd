@@ -369,6 +369,8 @@ const STRINGS: Dictionary = {
 		"voies.verrouillee":      "ouvrez d'abord la voie précédente",
 		"voies.restauree":        "Quartier restauré — contenu à venir",
 		"voies.atelier_restaure": "Atelier restauré — la Forge est ouverte",
+		"voies.nom_lieu":         "Accès : %s",
+		"voies.lieu_revele":      "District révélé sur la HoloMap — expéditions ouvertes",
 		"voies.restaurer_btn":    "Restaurer la voie",
 		"forge.scelle":           "L'Atelier est scellé. Restaurez la voie 1 (panneau VOIES) avec un Sceau de Lieutenant.",
 
@@ -829,6 +831,8 @@ const STRINGS: Dictionary = {
 		"voies.suivante_hint":    "1 free Seal required — destroy a Lieutenant (Assault)",
 		"voies.verrouillee":      "open the previous path first",
 		"voies.restauree":        "District restored — content to come",
+		"voies.nom_lieu":         "Access: %s",
+		"voies.lieu_revele":      "District revealed on the HoloMap — expeditions open",
 		"voies.atelier_restaure": "Workshop restored — the Forge is open",
 		"voies.restaurer_btn":    "Restore the path",
 		"forge.scelle":           "The Workshop is sealed. Restore path 1 (PATHS panel) with a Lieutenant Seal.",

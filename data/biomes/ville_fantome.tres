@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="BiomeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/BiomeData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "biome_ville_fantome"
+nom_affichage_fr = "Ville Fantôme"
+nom_affichage_en = "Ghost Town"
+lore_fr = "L'usine s'est tue un matin et le quartier entier a retenu son souffle. Les machines attendent encore la releve qui n'est jamais venue."
+lore_en = "The factory went silent one morning and the whole district held its breath. The machines still wait for a shift that never came."
+maitrise_actuelle = 0
+xp_maitrise_actuelle = 0
+xp_maitrise_palier_suivant = 6000
+slot_equipement_associe = 4
+biome_secondaire_id = ""
+est_decouvert = false
+mecanique_forte_id = "endurcissement"
+ressource_frequente_id = "res_herbe_magique"
+ressource_rare_id = "res_ectoplasme"

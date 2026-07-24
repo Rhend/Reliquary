@@ -32,13 +32,16 @@ func get_biome_entity_pools(biome_id: String) -> Dictionary:
 	var biome = GameData.get_entity(biome_id)
 	var creatures: Array = []
 	for slot in ["creature_surface", "creature_profondeur", "creature_unique"]:
-		var c := biome.get(slot, {}) as Dictionary
-		if not c.is_empty():
+		# Un biome peut n'avoir AUCUNE créature propre (Lieux secondaires du
+		# chantier 17 : pool d'ennemis par défaut) — la clé existe alors avec
+		# la valeur null, que `as Dictionary` ne sait pas caster.
+		var c = biome.get(slot)
+		if c is Dictionary and not (c as Dictionary).is_empty():
 			creatures.append(c)
 	return {
 		"creatures":    creatures,
-		"traps":        biome.get("pieges",           []),
-		"benedictions": biome.get("benedictions",     []),
+		"traps":        biome.get("pieges", []) if biome.get("pieges") != null else [],
+		"benedictions": biome.get("benedictions", []) if biome.get("benedictions") != null else [],
 	}
 
 # Nombre d'entités découvertes parmi une liste de Dictionaries (issues du pool biome).

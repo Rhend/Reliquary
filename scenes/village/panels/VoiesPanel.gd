@@ -56,10 +56,17 @@ static func build(host: Village) -> void:
 		host.rp_content.add_child(_carte_voie(numero))
 
 # Nom affiché d'une voie : la 1 est l'Atelier (contenu fixe connu), les
-# suivantes restent des quartiers scellés génériques (session narration).
+# voies 2-4 ANNONCENT le Lieu qu'elles révèlent (chantier 17 — « le joueur
+# voit ce qu'il débloque avant de valider »), les suivantes restent des
+# quartiers scellés génériques (session narration).
 static func _nom_voie(numero: int) -> String:
 	if numero == GameData.VOIE_ATELIER:
 		return Translations.T("voies.nom_atelier")
+	var lieu_id := GameData.VOIES_CONFIG.lieu_pour_voie(numero)
+	if lieu_id != "":
+		var lieu := GameData.get_entity(lieu_id)
+		if not lieu.is_empty():
+			return Translations.T("voies.nom_lieu") % Translations.entity_name(lieu, lieu_id)
 	return Translations.T("voies.nom_generique")
 
 # Carte d'une voie : numéro + état (restaurée / SUIVANTE ouvrable — mise en
@@ -94,9 +101,12 @@ static func _carte_voie(numero: int) -> Control:
 	titre_row.add_child(nom)
 
 	if ouverte:
-		vb.add_child(UIHelpers.label(Translations.T("voies.atelier_restaure")
-				if numero == GameData.VOIE_ATELIER
-				else Translations.T("voies.restauree"), 11, accent))
+		var texte_ouverte := Translations.T("voies.restauree")
+		if numero == GameData.VOIE_ATELIER:
+			texte_ouverte = Translations.T("voies.atelier_restaure")
+		elif GameData.VOIES_CONFIG.lieu_pour_voie(numero) != "":
+			texte_ouverte = Translations.T("voies.lieu_revele")
+		vb.add_child(UIHelpers.label(texte_ouverte, 11, accent))
 	elif suivante:
 		if ouvrable:
 			# Action manuelle « prêt → clic » : 1 Sceau libre → la voie s'ouvre.

@@ -676,13 +676,30 @@ func atelier_ouvert() -> bool:
 func peut_ouvrir_voie_suivante() -> bool:
 	return nb_voies_ouvertes() < NB_VOIES and sceaux_libres() >= 1
 
+# Contenu des voies (chantier 17) : voies 2-4 révèlent un LIEU secondaire
+# sur la HoloMap (data-driven — voie 1 = Atelier, câblé en dur ch.13).
+const VOIES_CONFIG: VoiesConfigData = preload("res://data/progression/voies.tres")
+
 # Ouvre la voie SUIVANTE (action MANUELLE du joueur : « prêt → clic ») —
 # ordre fixe 1→6, exige 1 Sceau libre (interchangeable). Persisté avec la
 # partie ; émet voie_ouverte(numero) (déclencheur de sauvegarde + UI).
+# Chantier 17 : si la voie porte un Lieu (VOIES_CONFIG), il est DÉCOUVERT
+# (est_decouvert persisté avec la partie — le Game Over recule le flag avec
+# le compteur de voies, cohérent). La règle « non découvert = absent »
+# s'arrête ici : le Lieu apparaît sur la carte à la prochaine ouverture.
 func ouvrir_voie_suivante() -> bool:
 	if not peut_ouvrir_voie_suivante():
 		return false
 	player["voies_ouvertes"] = nb_voies_ouvertes() + 1
+	var lieu_id := VOIES_CONFIG.lieu_pour_voie(nb_voies_ouvertes())
+	if lieu_id != "":
+		var lieu := get_entity(lieu_id)
+		if lieu.is_empty():
+			push_warning("GameData: voie %d — Lieu « %s » introuvable (rien révélé)"
+					% [nb_voies_ouvertes(), lieu_id])
+		elif not bool(lieu.get("est_decouvert", false)):
+			lieu["est_decouvert"] = true
+			EventBus.entity_discovered.emit(lieu_id)
 	EventBus.voie_ouverte.emit(nb_voies_ouvertes())
 	return true
 

@@ -99,3 +99,6 @@ jobs:
 
       - name: TestCompetences (compétences du héros en CTB — chantier 16)
         run: $GODOT --headless --path . res://tests/TestCompetences.tscn
+
+      - name: TestLieuxSecondaires (Lieux révélés par les voies — chantier 17)
+        run: $GODOT --headless --path . res://tests/TestLieuxSecondaires.tscn
