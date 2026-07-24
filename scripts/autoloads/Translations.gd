@@ -305,6 +305,12 @@ const STRINGS: Dictionary = {
 		"ctb.crit_float":     "%d CRIT !",
 		"ctb.combat_titre":   "⚔  COMBAT",
 		"ctb.recompenses":    "+%d XP   ·   +%d Euren",
+		"ctb.recompenses_butin": "⛏ %s",
+		"ctb.mecanique_lieu": "Mécanique du Lieu : %s",
+		"meca.ambush":          "Embuscade",
+		"meca.poison":          "Empoisonnement",
+		"meca.endurcissement":  "Endurcissement",
+		"expe.lancement_mecanique": "⚠ Mécanique du Lieu, active en profondeur : %s",
 		"ctb.entete_heros":   "Nv %d · XP %d/%d · Euren (run) %d · Modules (run) %d",
 		"ctb.objet":          "🧪  Objet",
 		"ctb.choisir_objet":  "Choisir l'objet :",
@@ -335,6 +341,7 @@ const STRINGS: Dictionary = {
 		"expe.recap_xp":            "XP de niveau gagnée : %d",
 		"expe.recap_euren":         "Euren crédité : %d",
 		"expe.recap_modules":       "Modules crédités : %d",
+		"expe.recap_butin":         "Butin : %s",
 		"expe.recap_purge":         "Purgé en fin de run : %d affixe(s), %d consommable(s)",
 		"expe.retour_btn":          "⌂  RETOUR AU QG",
 
@@ -759,6 +766,12 @@ const STRINGS: Dictionary = {
 		"ctb.crit_float":     "%d CRIT!",
 		"ctb.combat_titre":   "⚔  BATTLE",
 		"ctb.recompenses":    "+%d XP   ·   +%d Euren",
+		"ctb.recompenses_butin": "⛏ %s",
+		"ctb.mecanique_lieu": "District mechanic: %s",
+		"meca.ambush":          "Ambush",
+		"meca.poison":          "Poisoning",
+		"meca.endurcissement":  "Hardening",
+		"expe.lancement_mecanique": "⚠ District mechanic, active in depth: %s",
 		"ctb.entete_heros":   "Lv %d · XP %d/%d · Euren (run) %d · Modules (run) %d",
 		"ctb.objet":          "🧪  Item",
 		"ctb.choisir_objet":  "Choose an item:",
@@ -789,6 +802,7 @@ const STRINGS: Dictionary = {
 		"expe.recap_xp":            "Level XP earned: %d",
 		"expe.recap_euren":         "Euren credited: %d",
 		"expe.recap_modules":       "Modules credited: %d",
+		"expe.recap_butin":         "Loot: %s",
 		"expe.recap_purge":         "Purged at run's end: %d affix(es), %d consumable(s)",
 		"expe.retour_btn":          "⌂  BACK TO HQ",
 
@@ -988,6 +1002,15 @@ func resource_name(res: Resource, fallback: String = "?") -> String:
 		return str(fr)
 	var rid = res.get("id")
 	return str(rid) if rid != null and not str(rid).is_empty() else fallback
+
+# « Fourrure ×5, Venin ×1 » — noms localisés d'un dict {id d'entité → qté}
+# (butin d'expédition, coûts…). Ordre du dict conservé.
+func noms_quantites(quantites: Dictionary) -> String:
+	var morceaux: PackedStringArray = []
+	for id: String in quantites:
+		morceaux.append("%s ×%d" % [
+				entity_name(GameData.get_entity(id), id), int(quantites[id])])
+	return ", ".join(morceaux)
 
 # Nom d'affichage localisé d'une entité (dict GameData ou entrée de pool),
 # au palier de Maîtrise COURANT de l'entité. TOUJOURS passer par ici pour

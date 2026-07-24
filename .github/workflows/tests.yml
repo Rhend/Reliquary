@@ -90,3 +90,9 @@ jobs:
 
       - name: TestHoloPicking (picking des zones d'expédition sur la carte holo)
         run: $GODOT --headless --path . res://tests/TestHoloPicking.tscn
+
+      - name: TestButin (butin de matériaux d'expédition — chantier 14)
+        run: $GODOT --headless --path . res://tests/TestButin.tscn
+
+      - name: TestMecaniquesBiomes (mécaniques fortes de biome en CTB — chantier 15)
+        run: $GODOT --headless --path . res://tests/TestMecaniquesBiomes.tscn

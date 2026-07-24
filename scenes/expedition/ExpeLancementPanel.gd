@@ -105,6 +105,17 @@ func _ready() -> void:
 		rangee.add_child(b)
 		_boutons_palier.append(b)
 
+	# Mécanique forte du Lieu (chantier 15) : affichée SEULEMENT si le biome
+	# en a une (contenu absent, pas grisé) — le joueur choisit son palier en
+	# sachant ce qui l'attend en profondeur (Enceinte/Noyau/Assaut).
+	var meca := str(GameData.get_entity(lieu_id).get("mecanique_forte_id", ""))
+	if meca != "":
+		var lbl_meca := ExpeStyle.label_mono(
+				Translations.T("expe.lancement_mecanique")
+				% Translations.T("meca." + meca), 13, UIColors.CYBER_ACCENT_2)
+		lbl_meca.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vb.add_child(lbl_meca)
+
 	# Marqueurs de complétion des strates (chantier 11, placeholder acté) :
 	# ◆ = complétée jusqu'au bout (fin du 3e étage), ◇ = pas encore.
 	var marqueurs: PackedStringArray = []

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MecaniquesBiomesData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/MecaniquesBiomesData.gd" id="1"]
+[ext_resource type="Resource" path="res://data/combat_ctb/statut_poison.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+paliers_actifs = ["palier_enceinte", "palier_noyau", "palier_assaut"]
+poison_statut = ExtResource("2")
+poison_chance = 0.35
+endurcissement_mult = 0.8

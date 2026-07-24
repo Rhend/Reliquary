@@ -65,6 +65,11 @@ extends RefCounted
 
 # Config Euren globale (pas un paramètre d'expédition — monnaie commune).
 const CONFIG_EUREN: EurenConfigData = preload("res://data/progression/euren.tres")
+# Butin de matériaux (chantier 14) — défaut versionné, remplaçable (tests).
+const CONFIG_BUTIN_DEFAUT: ButinConfigData = preload("res://data/expedition/butin.tres")
+# Mécaniques fortes de biome (chantier 15) — défaut versionné, remplaçable.
+const CONFIG_MECAS_DEFAUT: MecaniquesBiomesData = \
+		preload("res://data/expedition/mecaniques_biomes.tres")
 # Contenu des nœuds Bénédiction/Piège/Coffre (chantier 7) — défaut versionné.
 const CONFIG_NOEUDS_DEFAUT: ExpeNoeudsConfigData = \
 		preload("res://data/expedition/config_noeuds.tres")
@@ -109,6 +114,22 @@ var dernier_combat_recompenses: Dictionary = {}   # {xp, euren} du dernier comba
 var modules_accumules := 0
 var modules_credites := 0
 
+# Butin de matériaux (chantier 14) : ressources fréquente/rare du BIOME du
+# Lieu (BiomeData — la rare EST l'ingrédient des keystones de Forge),
+# quantités/chances par palier (cfg_butin). Accumulé pendant la run, crédité
+# à la SORTIE seulement (mêmes rails que l'Euren — défaite = rien).
+# RNG DÉDIÉ (dérivé de la graine) : les tirages de butin ne décalent JAMAIS
+# la séquence du rng principal (cartes/rencontres des runs seedées intactes).
+var cfg_butin: ButinConfigData = CONFIG_BUTIN_DEFAUT
+var butin_accumule: Dictionary = {}      # res_id → int (visible, non crédité)
+var butin_credite: Dictionary = {}       # réellement crédité à la sortie
+var rng_butin := RandomNumberGenerator.new()
+
+# Mécaniques fortes (chantier 15) : le palier de profondeur est le GATE —
+# Périphérie sans mécanique, Enceinte/Noyau/Assaut avec (config). Appliquées
+# à CHAQUE combat via les hooks génériques du moteur (qui ignore les biomes).
+var cfg_mecaniques: MecaniquesBiomesData = CONFIG_MECAS_DEFAUT
+
 # Nœuds réels (chantier 7) — remplaçable AVANT demarrer() (tests).
 var cfg_noeuds: ExpeNoeudsConfigData = CONFIG_NOEUDS_DEFAUT
 
@@ -142,6 +163,7 @@ func _init(cfg: ExpeCarteConfigData, p: PalierProfondeurData, lieu: String, grai
 	cfg_combat = combat_cfg
 	if graine != 0:
 		rng.seed = graine
+		rng_butin.seed = graine ^ 0xB071   # flux indépendant, même reproductibilité
 
 # ─── Cycle de vie ────────────────────────────────────────────
 
@@ -406,6 +428,23 @@ func _lancer_combat(nd: ExpeNoeud, embuscade: bool) -> void:
 	av.pv = minf(pv_avatar, av.stat_finale("pv_max"))
 	if embuscade:
 		m.malus_horloge_initiale_joueur = cfg_combat.malus_horloge_embuscade
+	# Mécanique forte du Lieu (chantier 15) — hooks génériques du moteur.
+	var meca := mecanique_active()
+	match meca:
+		"endurcissement":
+			m.modif_degats_camp[Enums.CampCtb.JOUEUR] = cfg_mecaniques.endurcissement_mult
+		"poison":
+			if cfg_mecaniques.poison_statut != null:
+				m.statut_on_hit_camp[Enums.CampCtb.ADVERSE] = {
+					"statut": cfg_mecaniques.poison_statut,
+					"chance": cfg_mecaniques.poison_chance,
+				}
+		"ambush":
+			# TOUS les combats du Lieu partent en initiative retardée (les
+			# nœuds « ? » gardent leur malus — même valeur, idempotent).
+			m.malus_horloge_initiale_joueur = cfg_combat.malus_horloge_embuscade
+	if meca != "":
+		_log("  ⚠ Mécanique du Lieu active : %s (%s)" % [meca, palier.id])
 	var noms: PackedStringArray = []
 	if boss:
 		Alarme.appliquer(m.ajouter(lieutenant, Enums.CampCtb.ADVERSE))
@@ -432,7 +471,16 @@ func _lancer_combat(nd: ExpeNoeud, embuscade: bool) -> void:
 	m.demarrer()
 	combat_demarre.emit(m, {"noeud_id": nd.id, "etage": etage, "embuscade": embuscade,
 			"lieu_id": lieu_id, "palier_id": palier.id,
-			"multiplicateur": palier.multiplicateur})
+			"multiplicateur": palier.multiplicateur,
+			"mecanique": mecanique_active()})
+
+# Mécanique forte du Lieu active pour CETTE run ("" si aucune : biome sans
+# mécanique, palier Périphérie, ou config absente). Publique : le panneau de
+# lancement l'affiche pour le choix de palier.
+func mecanique_active() -> String:
+	if cfg_mecaniques == null or not cfg_mecaniques.active_pour(palier.id):
+		return ""
+	return str(GameData.get_entity(lieu_id).get("mecanique_forte_id", ""))
 
 # Fin du combat du nœud : PV sortants mémorisés, vaincus cumulés pour le
 # recap. Victoire → le nœud est résolu, la run reprend ; défaite → fin
@@ -465,6 +513,12 @@ func _fin_combat(recap: Dictionary, nd: ExpeNoeud, embuscade: bool) -> void:
 				lieutenant.nom_journal(),
 				" (PREMIER kill : slot d'Alarme rempli)" if _premier_kill_lieutenant else " (re-kill)",
 				GameData.nb_lieutenants_vaincus(), GameData.NB_SLOTS_ALARME])
+		# Butin GARANTI du boss (chantier 14) : la ressource rare du Lieu
+		# (= l'ingrédient des keystones de Forge) tombe à CHAQUE kill de
+		# Lieutenant — l'assaut rejouable est la source fiable d'ingrédients.
+		var rare: String = _ressources_du_lieu()["rare"]
+		if rare != "":
+			_ajouter_butin(rare, cfg_butin.qte_rare_boss)
 		_finaliser_noeud(nd, {"combat": {
 			"embuscade":       embuscade,
 			"nb_activations":  recap["nb_activations"],
@@ -521,6 +575,8 @@ func pv_max_effectif() -> float:
 
 # Coffre (nœud direct ou « ? ») : 1-2 consommables (pondération config) dans
 # l'inventaire de run. Cap config (0 = illimité) : l'excédent est PERDU.
+# Chantier 14 : le Coffre livre AUSSI un paquet de ressource fréquente du
+# Lieu (bornes par palier — accumulé, crédité à la sortie).
 func _resoudre_coffre(nd: ExpeNoeud) -> void:
 	var obtenus: Array[ConsommableData] = []
 	var perdus := 0
@@ -535,6 +591,14 @@ func _resoudre_coffre(nd: ExpeNoeud) -> void:
 			inventaire.append(c)
 			_conso_obtenus.append(c)
 			obtenus.append(c)
+	var butin_coffre: Dictionary = {}
+	var res := _ressources_du_lieu()
+	var bornes: Vector2i = cfg_butin.coffre_frequente(palier.id)
+	if res["freq"] != "" and bornes.y > 0:
+		var q := rng_butin.randi_range(bornes.x, bornes.y)
+		if q > 0:
+			butin_coffre[res["freq"]] = q
+			_ajouter_butin(res["freq"], q)
 	var noms: PackedStringArray = []
 	for c in obtenus:
 		noms.append(c.nom_journal())
@@ -545,7 +609,7 @@ func _resoudre_coffre(nd: ExpeNoeud) -> void:
 	var ids: Array[String] = []
 	for c in obtenus:
 		ids.append(c.id)
-	_finaliser_noeud(nd, {"contenu": {"consommable_ids": ids}})
+	_finaliser_noeud(nd, {"contenu": {"consommable_ids": ids, "butin": butin_coffre}})
 
 # Nombre de consommables d'un Coffre — tirage pondéré data-driven.
 func _tirer_nb_consommables() -> int:
@@ -593,6 +657,44 @@ func _crediter_victoire(vaincus: Array) -> void:
 		euren_accumule += float(rec["euren"])
 		_log("  ◈ +%d Euren (run : %d — crédité à la sortie)" % [
 				int(roundf(rec["euren"])), int(roundf(euren_accumule))])
+	# Butin de matériaux (chantier 14) : tiré par ennemi vaincu, accumulé.
+	var butin := _butin_pour_victoire(vaincus)
+	if not butin.is_empty():
+		rec["butin"] = butin
+		for rid: String in butin:
+			_ajouter_butin(rid, int(butin[rid]))
+
+# Butin d'une victoire : par ennemi vaincu DU BESTIAIRE, quantité de
+# ressource fréquente du Lieu (bornes du palier) + jet de rare (chance du
+# palier). Tirages au rng_butin DÉDIÉ. {} si le biome n'a pas de ressources.
+func _butin_pour_victoire(vaincus: Array) -> Dictionary:
+	var res := _ressources_du_lieu()
+	var out: Dictionary = {}
+	var bornes: Vector2i = cfg_butin.qte_frequente(palier.id)
+	var chance := cfg_butin.chance_rare(palier.id)
+	for d: CombattantCtbData in vaincus:
+		if GameData.get_entity(d.id).is_empty():
+			continue   # hors bestiaire (combattant de test) → rien
+		if res["freq"] != "" and bornes.y > 0:
+			var q := rng_butin.randi_range(bornes.x, bornes.y)
+			if q > 0:
+				out[res["freq"]] = int(out.get(res["freq"], 0)) + q
+		if res["rare"] != "" and chance > 0.0 and rng_butin.randf() < chance:
+			out[res["rare"]] = int(out.get(res["rare"], 0)) + cfg_butin.qte_rare
+	return out
+
+# Ressources {freq, rare} du BIOME du Lieu de la run ("" si absentes).
+func _ressources_du_lieu() -> Dictionary:
+	var biome := GameData.get_entity(lieu_id)
+	return {"freq": str(biome.get("ressource_frequente_id", "")),
+			"rare": str(biome.get("ressource_rare_id", ""))}
+
+func _ajouter_butin(res_id: String, qte: int) -> void:
+	if res_id == "" or qte <= 0:
+		return
+	butin_accumule[res_id] = int(butin_accumule.get(res_id, 0)) + qte
+	_log("  ⛏ +%d %s (run : %d — crédité à la sortie)" % [
+			qte, res_id, int(butin_accumule[res_id])])
 
 # {xp, euren} pour une liste de vaincus (CombattantCtbData). xp_reward est lu
 # TEL QUEL au palier de Maîtrise courant de la créature (bestiaire,
@@ -645,6 +747,14 @@ func _terminer(extraction: bool) -> void:
 		ProgressionHeros.crediter_modules(modules_credites)
 		_log("◧ Modules crédités : %d (total : %d)" % [
 				modules_credites, ProgressionHeros.modules()])
+	# Butin de matériaux (chantier 14) : mêmes rails — sortie seulement.
+	# resources_changed (via add_resource) est déjà un déclencheur de
+	# sauvegarde : le butin est flushé au retour comme l'Euren.
+	if not defaite and not butin_accumule.is_empty():
+		butin_credite = butin_accumule.duplicate()
+		for rid: String in butin_credite:
+			GameData.add_resource(rid, int(butin_credite[rid]))
+		_log("⛏ Butin crédité : %s" % str(butin_credite))
 	# Complétion de STRATE (chantier 11) : seule une expédition normale bouclée
 	# jusqu'au bout (fin du dernier étage) compte — l'extraction anticipée et
 	# la défaite non ; un assaut est HORS strates (palier dédié « Assaut »).
@@ -690,6 +800,9 @@ func _recap(extraction: bool) -> Dictionary:
 		# Modules (chantier 12) — mêmes rails que l'Euren :
 		"modules_gagnes":       modules_accumules,  # +1 par première Fin d'étage
 		"modules_credites":     modules_credites,   # réellement crédités (0 si défaite)
+		# Butin de matériaux (chantier 14) — mêmes rails (res_id → qté) :
+		"butin_gagne":          butin_accumule.duplicate(),
+		"butin_credite":        butin_credite.duplicate(),
 		# Nœuds réels (chantier 7) — ids, à titre d'information (tout est purgé) :
 		"affixes":              affixes.map(func(a: AffixeData) -> String: return a.id),
 		"consommables_obtenus": _conso_obtenus.map(

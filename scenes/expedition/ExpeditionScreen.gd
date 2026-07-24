@@ -196,7 +196,7 @@ func _traiter_combat() -> void:
 	if combat_auto:
 		run.combat_en_cours.derouler_auto()
 		return
-	_combat_ui = CombatCtbUi.pour_run(run, bool(_combat_data.get("embuscade", false)),
+	_combat_ui = CombatCtbUi.pour_run(run, _combat_data,
 			func() -> void:
 				_combat_ui = null
 				_rafraichir())
@@ -344,8 +344,13 @@ func _afficher_recap(recap: Dictionary) -> void:
 		Translations.T("expe.recap_xp") % int(roundf(float(recap.get("xp_gagnee", 0.0)))),
 		Translations.T("expe.recap_euren") % int(roundf(float(recap.get("euren_credite", 0.0)))),
 		Translations.T("expe.recap_modules") % int(recap.get("modules_credites", 0)),
-		Translations.T("expe.recap_purge") % [nb_affixes, maxi(nb_conso, 0)],
 	]
+	# Butin de matériaux (chantier 14) : ligne SEULEMENT s'il y en a (contenu
+	# absent, pas de « Butin : rien »). Noms via Translations (jamais d'id brut).
+	var butin: Dictionary = recap.get("butin_credite", {})
+	if not butin.is_empty():
+		lignes.append(Translations.T("expe.recap_butin") % Translations.noms_quantites(butin))
+	lignes.append(Translations.T("expe.recap_purge") % [nb_affixes, maxi(nb_conso, 0)])
 	for l in lignes:
 		var lbl := ExpeStyle.label_mono(l, 13, UIColors.CYBER_TEXTE)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

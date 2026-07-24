@@ -66,6 +66,10 @@ const DUEL_DUREE_OUT := 0.30
 
 var moteur: CtbMoteur
 var embuscade := false
+# Mécanique forte du Lieu à ANNONCER à l'intro ("" = rien — chantier 15).
+# L'écran reste générique : c'est un id de clé Translations (« meca.<id> »),
+# fourni par l'appelant ; l'effet lui-même vit dans le moteur (hooks).
+var annonce_mecanique := ""
 var facteur_delais := 1.0
 # Récompenses du combat pour l'écran d'issue (chantier 6) : Callable SANS
 # argument retournant {xp, euren} (ou {}) — fournie par l'appelant (le
@@ -119,9 +123,11 @@ func _init(m: CtbMoteur, avec_embuscade: bool = false) -> void:
 # récompenses, inventaire, consommation, libération à la fermeture (câblage
 # identique jeu réel / sandbox : UN point de vérité). L'écran lui-même reste
 # générique : le contrat n'est fait QUE des Callables déjà publics.
+# `data` = payload de combat_demarre (embuscade, mécanique de Lieu…) ;
 # `sur_fermee` est appelée après libération (rafraîchissement chez l'appelant).
-static func pour_run(run: ExpeRun, avec_embuscade: bool, sur_fermee: Callable) -> CombatCtbUi:
-	var ui := CombatCtbUi.new(run.combat_en_cours, avec_embuscade)
+static func pour_run(run: ExpeRun, data: Dictionary, sur_fermee: Callable) -> CombatCtbUi:
+	var ui := CombatCtbUi.new(run.combat_en_cours, bool(data.get("embuscade", false)))
+	ui.annonce_mecanique = str(data.get("mecanique", ""))
 	ui.recompenses_fournisseur = func() -> Dictionary:
 		return run.dernier_combat_recompenses
 	ui.inventaire_fournisseur = func() -> Array:
@@ -736,7 +742,15 @@ func _intro() -> void:
 				UIColors.MECH_AMBUSH.lightened(0.35))
 		sous.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_voile_contenu.add_child(sous)
-	await _pause(1.1 if embuscade else 0.7)
+	# Mécanique forte du Lieu (chantier 15) : annonce à l'ouverture — le
+	# joueur sait sous quelle règle ce combat se joue.
+	if annonce_mecanique != "":
+		var meca := ExpeStyle.label_mono(Translations.T("ctb.mecanique_lieu")
+				% Translations.T("meca." + annonce_mecanique), 15,
+				UIColors.CYBER_ACCENT_2)
+		meca.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_voile_contenu.add_child(meca)
+	await _pause(1.1 if embuscade or annonce_mecanique != "" else 0.7)
 	if not is_inside_tree():
 		return
 	if facteur_delais > 0.0:
@@ -782,6 +796,15 @@ func _outro() -> void:
 					16, UIColors.CYBER_BUTIN)
 			recomp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			_voile_contenu.add_child(recomp)
+		# Butin de matériaux du combat (chantier 14) — ligne SEULEMENT s'il
+		# y en a. L'écran reste générique : `butin` = dict {id → qté} fourni
+		# par l'appelant, noms résolus par Translations.
+		var butin: Dictionary = rec.get("butin", {})
+		if not butin.is_empty():
+			var lb := ExpeStyle.label_mono(Translations.T("ctb.recompenses_butin")
+					% Translations.noms_quantites(butin), 14, UIColors.CYBER_BUTIN)
+			lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_voile_contenu.add_child(lb)
 	var invite := ExpeStyle.label_mono(Translations.T("ctb.continuer"), 13,
 			UIColors.CYBER_TEXTE_MUTED)
 	invite.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

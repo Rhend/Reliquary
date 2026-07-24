@@ -228,7 +228,7 @@ func _traiter_combat() -> void:
 		return
 	# Câblage récompenses/inventaire/consommation : fabrique partagée avec le
 	# jeu réel (CombatCtbUi.pour_run — un seul point de vérité).
-	_combat_ui = CombatCtbUi.pour_run(run, bool(_combat_data.get("embuscade", false)),
+	_combat_ui = CombatCtbUi.pour_run(run, _combat_data,
 			func() -> void:
 				_combat_ui = null
 				_rafraichir())

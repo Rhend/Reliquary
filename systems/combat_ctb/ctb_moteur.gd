@@ -82,6 +82,17 @@ var config: ConfigCtbData = CONFIG_DEFAUT
 # Embuscade (attaque surprise) : multiplie la PREMIÈRE horloge de chaque
 # combattant du camp JOUEUR (1.0 = pas de malus). À poser AVANT demarrer().
 var malus_horloge_initiale_joueur := 1.0
+# ─── Règles de Lieu (chantier 15) — hooks GÉNÉRIQUES data-driven, posés par
+# l'appelant (ExpeRun) AVANT demarrer(). Le moteur ne connaît aucun biome :
+# les mécaniques fortes (endurcissement, poison…) ne sont que des réglages.
+# Multiplicateur des dégâts d'ATTAQUE infligés, par camp ATTAQUANT — appliqué
+# entre le critique et Défendre (ordre contractuel) : {Enums.CampCtb: float}.
+var modif_degats_camp: Dictionary = {}
+# Statut posé sur la CIBLE à chaque attaque réussie d'un camp (cible vivante,
+# jet via le rng du moteur — AUCUN tirage si le camp n'a pas de règle, les
+# suites seedées existantes restent exactes) :
+# {Enums.CampCtb: {"statut": StatutCtbData, "chance": float}}.
+var statut_on_hit_camp: Dictionary = {}
 var combattants: Array[CtbCombattant] = []
 var rng := RandomNumberGenerator.new()   # seedable → tests déterministes
 var journal: PackedStringArray = []
@@ -310,6 +321,10 @@ func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant) -> void:
 	var brut := Balance.mitigated_damage(att.stat_finale("atk"), cb.stat_finale("def"))
 	if is_crit:
 		brut *= att.stat_finale("crit_multiplier")
+	# Règle de Lieu (chantier 15) : multiplicateur par camp attaquant
+	# (endurcissement Montagne = ×0.8 sur le camp joueur). Contractuel :
+	# APRÈS le crit, AVANT Défendre.
+	brut *= float(modif_degats_camp.get(att.camp, 1.0))
 	if cb.en_defense:
 		brut *= 1.0 - config.defendre_reduction_degats
 	var degats := int(roundf(maxf(brut, Balance.MIN_DAMAGE)))
@@ -324,6 +339,13 @@ func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant) -> void:
 	evenement.emit({"type": "attaque", "attaquant": att, "cible": cb,
 			"degats": degats, "crit": is_crit, "garde": cb.en_defense,
 			"mort": not cb.est_vivant()})
+	# Règle de Lieu (chantier 15) : statut on-hit du camp attaquant (poison
+	# Marécage sur le héros). Jet SEULEMENT si une règle existe (le rng des
+	# suites seedées sans règle n'est jamais consommé) ; cible vivante.
+	var regle_statut: Dictionary = statut_on_hit_camp.get(att.camp, {})
+	if not regle_statut.is_empty() and cb.est_vivant() \
+			and rng.randf() < float(regle_statut.get("chance", 0.0)):
+		appliquer_statut(cb, regle_statut["statut"] as StatutCtbData, att)
 	_verifier_fin()
 
 # ─── Résolution d'un objet (consommable de run — chantier 7) ─

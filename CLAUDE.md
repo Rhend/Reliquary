@@ -82,8 +82,26 @@ chargé pour ses utilitaires (drops de biome, zones, résumé de cycle) et
 `_resolve_victory` / `_resolve_unique_victory` sont conservés pour
 réintégration future. L'XP de niveau et l'Euren sont RÉELS depuis le
 chantier 6 (XP créditée à chaque victoire, Euren à la sortie), TOUS les
-nœuds sont réels depuis le chantier 7 (affixes de run, consommables — drops
-d'équipement/matériaux non designés, à venir). Le camp joueur en expédition
+nœuds sont réels depuis le chantier 7 (affixes de run, consommables).
+CHANTIER 14 (butin, acté 07/2026) : les expéditions droppent des MATÉRIAUX —
+ressources fréquente/rare du BIOME du Lieu (BiomeData), par victoire (bornes
+et chances PAR PALIER de profondeur, `data/expedition/butin.tres`), par
+coffre (paquet fréquent) et boss d'assaut (rare GARANTIE ×2 à chaque kill —
+source fiable d'ingrédients de Forge : la rare EST l'ingrédient des
+keystones). Accumulé dans la run (RNG dédié `rng_butin`, dérivé de la
+graine), crédité à la SORTIE seulement (rails Euren — défaite = rien),
+lignes recap + écran d'issue via `Translations.noms_quantites`. AUCUN drop
+d'équipement (une seule voie de progression d'objet : la Forge).
+CHANTIER 15 (mécaniques fortes, acté 07/2026) : les mécaniques de biome
+(`mecanique_forte_id` : ambush/poison/endurcissement) sont ACTIVES en
+combat CTB, gate = PALIER de profondeur (Enceinte/Noyau/Assaut — le tier de
+biome, ancien gate, est gelé ch.12 ; la Périphérie reste sans mécanique).
+Moteur : hooks GÉNÉRIQUES `modif_degats_camp` (après crit, avant Défendre)
+et `statut_on_hit_camp` (jet seulement si règle — séquences seedées sans
+règle intactes) ; réglages `data/expedition/mecaniques_biomes.tres`
+(`MecaniquesBiomesData`) appliqués par ExpeRun à chaque combat ; annonce à
+l'intro de combat + ligne au panneau de lancement. BiomeMechanics (ancienne
+boucle) n'est PAS réutilisé. Le camp joueur en expédition
 = VRAI héros (ch.4 : `CtbPont.combattant_depuis_heros()`, stats effectives
 équipement compris, transitoire construit au lancement) ; le sandbox a une
 checkbox Héros réel / avatar factice (`avatar.tres`, conservé pour les
@@ -187,6 +205,8 @@ godot --headless --path . res://tests/TestEconomieQG.tscn       # économie du Q
 godot --headless --path . res://tests/TestVillageBuildings.tscn # bâtiments : coûts Euren+Modules, bonus (55)
 godot --headless --path . res://tests/TestEquipementDepart.tscn # équipement de départ Commun + pont CTB (27)
 godot --headless --path . res://tests/TestHoloPicking.tscn      # picking des zones d'expédition sur la HoloMap (70)
+godot --headless --path . res://tests/TestButin.tscn            # butin de matériaux d'expédition (23)
+godot --headless --path . res://tests/TestMecaniquesBiomes.tscn # mécaniques fortes de biome en CTB (21)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
