@@ -124,20 +124,32 @@ func _test_ecran_complet() -> void:
 			"garde visible (ou déjà expirée à sa prochaine activation)")
 	await _frames(4)
 	print("\n[TEST] Écran de combat — combat complet joué à la main")
-	# Jouer jusqu'à la victoire : Attaquer, cible = premier bouton nominatif.
+	# Jouer jusqu'à la victoire : Attaquer, cible = clic sur l'ennemi (le
+	# ciblage se fait À LA SOURIS — scène ou carte ; plus de boutons
+	# nominatifs, retour Rhend 07/2026). La carte relaie `cliquee`.
 	var garde_fou := 0
+	var ciblage_verifie := false
 	while not m.termine and garde_fou < 400:
 		garde_fou += 1
 		if ui._btn_attaquer.visible:
 			ui._btn_attaquer.pressed.emit()
 			await _frames(1)
-			# Plusieurs ennemis vivants → rangée de cibles : presser la première.
-			var cibles: Array = []
-			_boutons(ui._rangee_cibles, cibles)
-			for b: Button in cibles:
-				if b.text != Translations.T("ctb.annuler"):
-					b.pressed.emit()
-					break
+			# Plusieurs ennemis vivants → mode ciblage : cliquer le premier.
+			if ui._ciblage_actif:
+				if not ciblage_verifie:
+					ciblage_verifie = true
+					var restes: Array = []
+					_boutons(ui._rangee_cibles, restes)
+					_assert(restes.size() == 1
+							and restes[0].text == Translations.T("ctb.annuler"),
+							"mode ciblage : Annuler seul — plus de boutons nominatifs")
+					_assert(ui._zones_cible.values().any(func(z: Control) -> bool:
+							return z.mouse_filter == Control.MOUSE_FILTER_STOP),
+							"zones de clic de la scène ACTIVES en mode ciblage")
+				for cb in m.combattants:
+					if not cb.est_joueur() and cb.est_vivant():
+						(ui._cartes[cb] as CarteCombattantCtb).cliquee.emit(cb)
+						break
 		await _frames(2)
 	_assert(m.termine and m.victoire_joueur,
 			"combat complet joué via l'UI jusqu'à la VICTOIRE", "activations=%d" % m.nb_activations)

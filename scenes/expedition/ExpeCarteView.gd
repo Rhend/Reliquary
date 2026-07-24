@@ -1,16 +1,26 @@
 # ============================================================
 # ExpeCarteView — Vue de la carte de nœuds d'une expédition (Rework Combat,
-# chantier 8, peau cyberpunk + navigation par chemin au chantier 10).
+# chantier 8, peau cyberpunk + navigation par chemin au chantier 10 ;
+# brouillard « hack » + hiérarchie visuelle 07/2026, retour Rhend).
 # PARTAGÉE entre l'écran de jeu réel (ExpeditionScreen) et le sandbox dev
 # (SandboxExpe) — un seul point de vérité pour le dessin et la navigation.
 #
-# Vue PASSIVE : elle dessine l'état de la run (brouillard réel : un nœud non
-# découvert n'est PAS dessiné) et émet l'INTENTION de déplacement
-# (`deplacement_demande`) — l'HÔTE valide (ExpeRun.chemin_vers) et joue le
-# trajet. Navigation par chemin (chantier 10) : clic possible sur N'IMPORTE
-# QUEL nœud découvert ATTEIGNABLE (chemin de nœuds résolus — cf. ExpeRun) ;
-# un nœud visible mais inaccessible est affiché ATTÉNUÉ et n'est pas
-# cliquable (curseur normal). Flèches clavier = voisin adjacent (inchangé).
+# BROUILLARD DE GUERRE « HACK » : la TOPOLOGIE ENTIÈRE de l'étage est
+# affichée d'emblée (positions + liaisons — les distances se lisent tout de
+# suite), mais seuls les nœuds DÉCOUVERTS (les N+1 des nœuds résolus — la
+# sémantique d'ExpeRun) montrent leur nature. Au-delà : nœud CHIFFRÉ —
+# petit, éteint, glyphe hexadécimal qui défile (déchiffrement en cours),
+# liaison en pointillés. Rien de chiffré n'est cliquable — le CONTRAT
+# d'entrée est inchangé (clic = nœud découvert ATTEIGNABLE uniquement).
+#
+# HIÉRARCHIE (du plus au moins saillant) : position COURANTE (réticule
+# hexagonal animé) → destinations ATTEIGNABLES (glyphe plein, halo pulsé,
+# étiquette pleine) → découverts inaccessibles (atténués) → résolus
+# (éteints, ✓) → chiffrés (fantômes). Légende compacte en pied de carte.
+#
+# Vue PASSIVE : émet l'INTENTION de déplacement (`deplacement_demande`) —
+# l'HÔTE valide (ExpeRun.chemin_vers) et joue le trajet séquencé.
+# Flèches clavier = voisin adjacent (inchangé).
 #
 # Style : 100 % tokens UIColors.CYBER_* + ExpeStyle (peau intérimaire).
 # ============================================================
@@ -22,17 +32,29 @@ signal deplacement_demande(nid: int)
 # Séquencement du trajet multi-nœuds (utilisé par les hôtes — un seul point).
 const DELAI_PAS := 0.12
 
-const RAYON_NOEUD := 16.0
-const RAYON_CLIC  := 22.0
-const MARGE       := 40.0
-const PAS_GRILLE  := 48.0
+const RAYON_NOEUD    := 16.0
+const RAYON_RESOLU   := 13.0
+const RAYON_CHIFFRE  := 10.0
+const RAYON_CLIC     := 22.0
+const MARGE          := 40.0
+const PAS_GRILLE     := 48.0
+const GLYPHES_HEX    := "0123456789ABCDEF"   # défilement des nœuds chiffrés
 
 var run: ExpeRun = null
 
 var _atteignables: Dictionary = {}   # nid → true (recalculé à chaque rafraichir)
+var _t := 0.0                        # horloge des animations (pulse, défilement)
 
 func _ready() -> void:
 	focus_mode = Control.FOCUS_ALL
+
+# Animations sobres (halo pulsé, glyphes chiffrés, réticule) : redessin
+# piloté par le temps — coupé quand la vue est cachée (combat par-dessus).
+func _process(dt: float) -> void:
+	if run == null or not is_visible_in_tree():
+		return
+	_t += dt
+	queue_redraw()
 
 func rafraichir() -> void:
 	_atteignables = run.atteignables() if run != null else {}
@@ -50,7 +72,19 @@ static func couleur_noeud(type: int) -> Color:
 		Enums.TypeNoeud.BOSS:      return UIColors.CYBER_DANGER
 	return Color.WHITE
 
-# ─── Rendu (brouillard réel : non découvert = pas dessiné) ───
+# Glyphe d'un type de nœud — la SYMBOLIQUE se lit sans étiquette (le texte
+# la confirme). Un seul point de vérité, réutilisable par une future légende.
+static func glyphe_noeud(type: int) -> String:
+	match type:
+		Enums.TypeNoeud.ENTREE:    return "◇"
+		Enums.TypeNoeud.COMBAT:    return "▲"
+		Enums.TypeNoeud.MYSTERE:   return "?"
+		Enums.TypeNoeud.COFFRE:    return "◆"
+		Enums.TypeNoeud.FIN_ETAGE: return "◎"
+		Enums.TypeNoeud.BOSS:      return "☠"
+	return ""
+
+# ─── Rendu (brouillard « hack » : chiffré = fantôme, jamais cliquable) ───
 
 func _pos_ecran(p: Vector2) -> Vector2:
 	return Vector2(
@@ -71,34 +105,99 @@ func _draw() -> void:
 	if run == null:
 		return
 	var mono := ExpeStyle.police_mono()
-	# Arêtes : uniquement entre deux nœuds découverts.
-	for nd in run.noeuds_visibles():
+
+	# ── Liaisons : TOUTES tracées (la topologie se lit d'emblée). Décodée
+	# (deux nœuds découverts) = pleine ; sinon = pointillés fantômes.
+	for nd in run.carte.noeuds:
 		for v in nd.voisins:
+			if v <= nd.id:
+				continue
 			var nv := run.carte.noeud(v)
-			if nv.decouvert and v > nd.id:
-				draw_line(_pos_ecran(nd.pos), _pos_ecran(nv.pos), UIColors.CYBER_ARETE, 2.0)
-	# Nœuds découverts (les autres N'EXISTENT PAS à l'écran).
+			var a := _pos_ecran(nd.pos)
+			var b := _pos_ecran(nv.pos)
+			if nd.decouvert and nv.decouvert:
+				draw_line(a, b, UIColors.CYBER_ARETE, 2.0)
+			else:
+				draw_dashed_line(a, b, UIColors.CYBER_ARETE_CHIFFREE, 1.0, 7.0)
+
+	# ── Nœuds CHIFFRÉS (au-delà des N+1) : fantômes au glyphe hexa défilant.
+	for nd in run.carte.noeuds:
+		if nd.decouvert:
+			continue
+		var pe := _pos_ecran(nd.pos)
+		var col := UIColors.CYBER_CHIFFRE
+		draw_circle(pe, RAYON_CHIFFRE, Color(UIColors.CYBER_BG_PANEL, 0.85))
+		draw_arc(pe, RAYON_CHIFFRE, 0.0, TAU, 24, col, 1.0)
+		# Défilement pseudo-aléatoire déterministe (id + temps) — le « flux
+		# chiffré » vit sans consommer aucun RNG de jeu.
+		var glyphe := GLYPHES_HEX[(nd.id * 7 + int(_t * 5.0)) % GLYPHES_HEX.length()]
+		draw_string(mono, pe + Vector2(-RAYON_CHIFFRE, 4.0), glyphe,
+				HORIZONTAL_ALIGNMENT_CENTER, RAYON_CHIFFRE * 2.0, 11, col)
+
+	# ── Nœuds DÉCOUVERTS : hiérarchie accessible > inaccessible > résolu.
 	for nd in run.noeuds_visibles():
 		var pe := _pos_ecran(nd.pos)
 		var col := couleur_noeud(nd.type)
 		var accessible: bool = _atteignables.has(nd.id) or nd.id == run.position_joueur
-		if nd.resolu and nd.type != Enums.TypeNoeud.FIN_ETAGE:
+		var resolu_inerte: bool = nd.resolu and nd.type != Enums.TypeNoeud.FIN_ETAGE
+		var rayon := RAYON_RESOLU if resolu_inerte else RAYON_NOEUD
+		if resolu_inerte:
 			col = col.darkened(0.55)   # inerte
 		if not accessible:
 			col.a = 0.35   # visible mais INACCESSIBLE (aucun chemin résolu)
-		draw_circle(pe, RAYON_NOEUD, Color(UIColors.CYBER_BG_PANEL_2, col.a))
-		draw_arc(pe, RAYON_NOEUD, 0.0, TAU, 32, col, 2.0)
-		draw_circle(pe, RAYON_NOEUD * 0.45, col)
-		# Halo fin des destinations atteignables NON résolues (invitation).
+		draw_circle(pe, rayon, Color(UIColors.CYBER_BG_PANEL_2, maxf(col.a, 0.85)))
+		draw_arc(pe, rayon, 0.0, TAU, 32, col, 2.0)
+		# Glyphe du type au centre — la nature du nœud se lit d'un coup d'œil.
+		var g := "✓" if resolu_inerte else glyphe_noeud(nd.type)
+		draw_string(mono, pe + Vector2(-rayon, 5.0), g,
+				HORIZONTAL_ALIGNMENT_CENTER, rayon * 2.0, 13,
+				col.lightened(0.35) if accessible else col)
+		# Halo PULSÉ des destinations atteignables non résolues (invitation).
 		if accessible and not nd.resolu and nd.id != run.position_joueur:
-			draw_arc(pe, RAYON_NOEUD + 4.0, 0.0, TAU, 32, Color(col, 0.35), 1.0)
-		draw_string(mono, pe + Vector2(-14, 34), _etiquette(nd),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
-				Color(UIColors.CYBER_TEXTE, 1.0 if accessible else 0.45))
-	# Marqueur joueur (accent).
+			var pulse := 0.5 + 0.5 * sin(_t * 3.0 + float(nd.id))
+			draw_arc(pe, rayon + 4.0 + pulse * 2.0, 0.0, TAU, 32,
+					Color(col, 0.25 + 0.25 * pulse), 1.0)
+		var etiquette := _etiquette(nd)
+		if etiquette != "":
+			draw_string(mono, pe + Vector2(-60.0, rayon + 16.0), etiquette,
+					HORIZONTAL_ALIGNMENT_CENTER, 120.0, 12,
+					Color(UIColors.CYBER_TEXTE, 1.0 if accessible else 0.45)
+					if not resolu_inerte else Color(UIColors.CYBER_TEXTE_MUTED, 0.55))
+
+	# ── Position courante : réticule hexagonal + balayage rotatif.
 	var pj := _pos_ecran(run.carte.noeud(run.position_joueur).pos)
-	draw_arc(pj, RAYON_CLIC, 0.0, TAU, 32, UIColors.CYBER_ACCENT, 2.5)
-	draw_arc(pj, RAYON_CLIC + 4.0, 0.0, TAU, 32, Color(UIColors.CYBER_ACCENT, 0.30), 1.0)
+	var pts := PackedVector2Array()
+	for i in 7:
+		var ang := TAU * float(i) / 6.0 - TAU / 12.0
+		pts.append(pj + Vector2(cos(ang), sin(ang)) * RAYON_CLIC)
+	draw_polyline(pts, UIColors.CYBER_ACCENT, 2.5)
+	draw_arc(pj, RAYON_CLIC + 5.0, _t * 1.8, _t * 1.8 + TAU * 0.28, 18,
+			Color(UIColors.CYBER_ACCENT, 0.55), 1.5)
+	draw_arc(pj, RAYON_CLIC + 5.0, _t * 1.8 + TAU * 0.5, _t * 1.8 + TAU * 0.78, 18,
+			Color(UIColors.CYBER_ACCENT, 0.55), 1.5)
+
+	_dessiner_legende(mono)
+
+# Légende compacte en pied de carte : les 3 états qui guident la lecture
+# (position, destination accessible, secteur chiffré) — jamais perplexe.
+func _dessiner_legende(mono: Font) -> void:
+	var yl := size.y - 14.0
+	var xl := 14.0
+	draw_arc(Vector2(xl + 5.0, yl - 4.0), 5.0, 0.0, TAU, 16, UIColors.CYBER_ACCENT, 1.5)
+	xl += 14.0
+	xl = _texte_legende(mono, xl, yl, Translations.T("expe.legende_position"))
+	draw_circle(Vector2(xl + 5.0, yl - 4.0), 4.0, UIColors.CYBER_NOEUD_FIN)
+	xl += 14.0
+	xl = _texte_legende(mono, xl, yl, Translations.T("expe.legende_accessible"))
+	draw_string(mono, Vector2(xl, yl), GLYPHES_HEX[int(_t * 5.0) % 16],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, UIColors.CYBER_CHIFFRE)
+	xl += 12.0
+	_texte_legende(mono, xl, yl, Translations.T("expe.legende_chiffre"))
+
+func _texte_legende(mono: Font, xl: float, yl: float, texte: String) -> float:
+	draw_string(mono, Vector2(xl, yl), texte, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+			UIColors.CYBER_TEXTE_MUTED)
+	return xl + mono.get_string_size(texte, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 18.0
 
 func _etiquette(nd: ExpeNoeud) -> String:
 	match nd.type:

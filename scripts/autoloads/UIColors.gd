@@ -133,19 +133,27 @@ const CYBER_OK          := Color(0.30, 0.95, 0.60)     # positif (extraction, so
 const CYBER_BUTIN       := Color(0.98, 0.80, 0.28)     # butin/coffre (or, cf. SELECTION_GOLD)
 const CYBER_TEXTE       := Color(0.80, 0.90, 0.96)     # texte principal froid
 const CYBER_TEXTE_MUTED := Color(0.40, 0.52, 0.62)     # texte secondaire
-const CYBER_GRILLE      := Color(0.12, 0.86, 0.95, 0.05)  # grille de fond de la carte
-const CYBER_ARETE       := Color(0.12, 0.86, 0.95, 0.30)  # arêtes de la carte de nœuds
+const CYBER_GRILLE      := Color(0.12, 0.86, 0.95, 0.08)  # grille de fond de la carte
+const CYBER_ARETE       := Color(0.12, 0.86, 0.95, 0.45)  # arêtes DÉCODÉES de la carte
 
 # Scène de combat : bande de SOL sous les emplacements de personnages
 # (placeholder en attendant les sprites — chantier 10, retour Rhend).
 const CYBER_SOL := Color(0.10, 0.32, 0.44, 0.35)
 
 # Nœuds de la carte d'expédition (types) — la Fin d'étage reprend l'accent.
+# COHÉRENCE d'ensemble (retour Rhend, 07/2026) : un nœud Combat est MAGENTA,
+# le même langage que le camp adverse à l'écran de combat (CYBER_ACCENT_2).
 const CYBER_NOEUD_ENTREE  := Color(0.42, 0.50, 0.60)
-const CYBER_NOEUD_COMBAT  := Color(0.95, 0.42, 0.30)
-const CYBER_NOEUD_MYSTERE := Color(0.68, 0.44, 0.96)
+const CYBER_NOEUD_COMBAT  := CYBER_ACCENT_2
+const CYBER_NOEUD_MYSTERE := Color(0.60, 0.48, 1.0)
 const CYBER_NOEUD_COFFRE  := CYBER_BUTIN
 const CYBER_NOEUD_FIN     := CYBER_ACCENT
+
+# Brouillard de guerre « hack » de la carte d'expédition (07/2026) : la
+# TOPOLOGIE entière est visible (positions + liaisons) mais un nœud au-delà
+# des voisins N+1 est CHIFFRÉ — glyphe hexa qui défile, teinte éteinte.
+const CYBER_CHIFFRE        := Color(0.12, 0.86, 0.95, 0.50)  # nœud non décodé
+const CYBER_ARETE_CHIFFREE := Color(0.12, 0.86, 0.95, 0.16)  # liaison non décodée
 
 # ───────────────────────────────────────────────────────────
 #  Fonctions utilitaires (logique conditionnelle)

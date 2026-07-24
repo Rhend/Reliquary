@@ -98,6 +98,12 @@ var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
 var _duel_tween: Tween = null
 var _duel_restaure: Array = []      # paires [CanvasItem, position d'origine]
 var _duel_acteurs: Array = []       # [attaquant, cible] du duel en cours
+# Ciblage À LA SOURIS dans la scène (retour Rhend 07/2026) : une zone de
+# clic invisible par ennemi, ACTIVE seulement en mode ciblage — l'ennemi se
+# choisit en le cliquant (scène ou carte), plus de rangée de boutons nominatifs.
+var _zones_cible: Dictionary = {}   # CtbCombattant → Control (zone de clic)
+var _cible_survolee: CtbCombattant = null
+var _ciblage_actif := false
 var _sol: Control = null       # scène : sol + emplacements des futurs sprites
 var _orbes: Dictionary = {}    # CtbCombattant → EnergyBoule (placeholder sprite)
 var _sprites: Dictionary = {}  # CtbCombattant → SpriteSpinePersonnage (sprite RÉEL)
@@ -213,6 +219,20 @@ func _construire() -> void:
 		# Placeholder de sprite, pas un élément interactif (EnergyBoule est
 		# cliquable par défaut au Village) : souris ignorée.
 		orbe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Zones de CLIC des ennemis (ciblage à la souris) : invisibles, posées
+	# sur l'emplacement du personnage, dormantes hors mode ciblage.
+	for cb in moteur.combattants:
+		if cb.est_joueur():
+			continue
+		var zone := Control.new()
+		zone.size = Vector2(96, 116)
+		zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		zone.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		zone.gui_input.connect(_sur_zone_input.bind(cb))
+		zone.mouse_entered.connect(_sur_zone_survol.bind(cb, true))
+		zone.mouse_exited.connect(_sur_zone_survol.bind(cb, false))
+		_sol.add_child(zone)
+		_zones_cible[cb] = zone
 	_placer_orbes()
 
 	# Colonne générale : file d'initiative / arène / barre d'actions.
@@ -363,6 +383,9 @@ func _placer_orbes() -> void:
 			var noeud := _noeud_bataille(membres[i])
 			if noeud != null:
 				noeud.position = _pos_depuis_pied(membres[i], pied)
+			var zone: Control = _zones_cible.get(membres[i])
+			if zone != null:
+				zone.position = pied - Vector2(zone.size.x * 0.5, zone.size.y - 12.0)
 	_sol.queue_redraw()
 
 # Sol de la scène : ligne d'horizon + bande dégradée, et ellipse
@@ -383,6 +406,28 @@ func _dessiner_sol() -> void:
 		_sol.draw_circle(Vector2.ZERO, 34.0, Color(UIColors.CYBER_BG, 0.55))
 		_sol.draw_arc(Vector2.ZERO, 34.0, 0.0, TAU, 40, Color(accent, 0.65), 2.0)
 		_sol.draw_set_transform(Vector2.ZERO)
+	# Mode ciblage (retour Rhend 07/2026) : l'ennemi se choisit à la souris
+	# dans la scène — anneau OR discret sur chaque cible possible, réticule
+	# marqué + chevron sur la cible survolée (même or que les cartes :
+	# un seul langage « ciblable » dans tout l'écran).
+	if _ciblage_actif:
+		for cb: CtbCombattant in _zones_cible:
+			if not cb.est_vivant() or not _pieds.has(cb):
+				continue
+			var pied: Vector2 = _pieds[cb]
+			var fort := cb == _cible_survolee
+			_sol.draw_set_transform(pied, 0.0, Vector2(1.0, 0.38))
+			_sol.draw_arc(Vector2.ZERO, 40.0, 0.0, TAU, 40,
+					Color(UIColors.SELECTION_GOLD, 0.90 if fort else 0.35),
+					2.5 if fort else 1.0)
+			if fort:
+				_sol.draw_arc(Vector2.ZERO, 46.0, 0.0, TAU, 40,
+						Color(UIColors.SELECTION_GOLD, 0.35), 1.0)
+			_sol.draw_set_transform(Vector2.ZERO)
+			if fort:
+				_sol.draw_string(ExpeStyle.police_mono(),
+						pied + Vector2(-8.0, -76.0), "▼",
+						HORIZONTAL_ALIGNMENT_CENTER, 16.0, 14, UIColors.SELECTION_GOLD)
 
 # Un personnage mort disparaît de la scène (l'ellipse d'emplacement reste) ;
 # un sprite Spine joue son animation Death et TIENT la pose (pas de fondu) —
@@ -505,17 +550,16 @@ func _sur_competence(comp: CompetenceCtbData) -> void:
 	_competence_en_attente = comp
 	_montrer_choix_cibles(vivants)
 
-# Rangée de choix de cible (attaque OU objet ciblé — _objet_en_attente) :
-# boutons nominatifs + cartes ennemies cliquables + Annuler.
-func _montrer_choix_cibles(vivants: Array[CtbCombattant]) -> void:
+# Mode ciblage (attaque, compétence ou objet ciblé) : l'ennemi se choisit
+# À LA SOURIS — clic sur son personnage DANS LA SCÈNE (zone + réticule or)
+# ou sur sa carte. Plus de boutons nominatifs (retour Rhend 07/2026) :
+# seule l'invite et Annuler restent dans la rangée du bas.
+func _montrer_choix_cibles(_vivants: Array[CtbCombattant]) -> void:
 	UIHelpers.clear_children_now(_rangee_cibles)
-	_rangee_cibles.add_child(ExpeStyle.label_mono(
-			Translations.T("ctb.choisir_cible"), 12, UIColors.CYBER_TEXTE_MUTED))
-	for cb in vivants:
-		var b := ExpeStyle.bouton(CarteCombattantCtb.nom_ui(cb.data),
-				UIColors.CYBER_ACCENT_2, 13, Vector2(0, 34))
-		b.pressed.connect(_sur_cible_cliquee.bind(cb))
-		_rangee_cibles.add_child(b)
+	var invite := ExpeStyle.label_mono(
+			Translations.T("ctb.choisir_cible"), 12, UIColors.SELECTION_GOLD)
+	invite.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_rangee_cibles.add_child(invite)
 	var annuler := ExpeStyle.bouton(Translations.T("ctb.annuler"),
 			UIColors.CYBER_TEXTE_MUTED, 13, Vector2(0, 34))
 	annuler.pressed.connect(func() -> void:
@@ -598,9 +642,33 @@ func _valider_action(action: Dictionary) -> void:
 	_action_choisie.emit()
 
 func _mettre_cibles_en_avant(on: bool) -> void:
+	_ciblage_actif = on
 	for cb: CtbCombattant in _cartes:
 		(_cartes[cb] as CarteCombattantCtb).marquer_ciblable(
 				on and not cb.est_joueur() and cb.est_vivant())
+	# Zones de clic de la scène : ACTIVES seulement en mode ciblage (le reste
+	# du temps la scène est purement décorative — souris ignorée).
+	for cb: CtbCombattant in _zones_cible:
+		(_zones_cible[cb] as Control).mouse_filter = Control.MOUSE_FILTER_STOP \
+				if on and cb.est_vivant() else Control.MOUSE_FILTER_IGNORE
+	if not on:
+		_cible_survolee = null
+	if _sol != null:
+		_sol.queue_redraw()
+
+# Zone de clic d'un ennemi : clic gauche = choisir cette cible (mêmes gardes
+# que le clic sur la carte — _sur_cible_cliquee ignore hors mode ciblage).
+func _sur_zone_input(ev: InputEvent, cb: CtbCombattant) -> void:
+	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+		_sur_cible_cliquee(cb)
+
+func _sur_zone_survol(cb: CtbCombattant, actif: bool) -> void:
+	if actif:
+		_cible_survolee = cb
+	elif _cible_survolee == cb:
+		_cible_survolee = null
+	if _sol != null:
+		_sol.queue_redraw()
 
 func _ennemis_vivants() -> Array[CtbCombattant]:
 	var out: Array[CtbCombattant] = []
