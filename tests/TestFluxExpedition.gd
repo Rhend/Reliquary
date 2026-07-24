@@ -194,10 +194,32 @@ func _test_lieu_vers_lancement() -> void:
 	_assert(panneau != null and is_instance_valid(panneau),
 			"le clic Lieu ouvre le panneau de lancement")
 	_assert(panneau.lieu_id == "biome_foret", "destination = le Lieu cliqué")
-	_assert(panneau._boutons_palier.size() == 3, "3 paliers de profondeur proposés")
+	# Progression verrouillée (retour Rhend 07/2026) : partie neuve → seule
+	# la Périphérie est proposée ; chaque strate complétée (3 étages) ouvre
+	# la suivante. Palier verrouillé = ABSENT (pas grisé) + indice 🔒.
+	_assert(panneau._boutons_palier.size() == 1,
+			"partie neuve : seul le palier Périphérie est proposé")
 	_assert(panneau._palier_idx == 0, "Périphérie présélectionnée")
 	_assert(village.adv_selected_biome_id == "biome_foret",
 			"le biome du panneau Expéditions suit la destination")
+	panneau.annuler()
+	await get_tree().process_frame
+	GameData.marquer_strate_completee("biome_foret", "palier_peripherie")
+	village._holo_cache.lieu_selectionne.emit("biome_foret")
+	await get_tree().process_frame
+	panneau = village._expe_lancement
+	_assert(panneau._boutons_palier.size() == 2,
+			"Périphérie complétée → l'Enceinte s'ajoute (le Noyau reste absent)")
+	GameData.marquer_strate_completee("biome_foret", "palier_enceinte")
+	panneau.annuler()
+	await get_tree().process_frame
+	village._holo_cache.lieu_selectionne.emit("biome_foret")
+	await get_tree().process_frame
+	panneau = village._expe_lancement
+	_assert(panneau._boutons_palier.size() == 3,
+			"Enceinte complétée → les 3 paliers sont proposés")
+	# Remise à neuf : la suite du flux repart d'une partie vierge.
+	GameData.player["expe_completions"] = {}
 
 	# Annuler referme le modal, la carte reste ouverte.
 	var btn_annuler := _bouton_texte(panneau, Translations.T("expe.annuler_btn"))
@@ -213,6 +235,8 @@ func _test_lieu_vers_lancement() -> void:
 
 func _test_lancement_vers_expedition() -> void:
 	print("\n[TEST 3] PARTIR → ExpeditionScreen (vrai héros, pool destination)")
+	# Progression verrouillée : l'Enceinte exige la Périphérie complétée.
+	GameData.marquer_strate_completee("biome_foret", "palier_peripherie")
 	village._holo_cache.lieu_selectionne.emit("biome_foret")
 	await get_tree().process_frame
 	var panneau: ExpeLancementPanel = village._expe_lancement

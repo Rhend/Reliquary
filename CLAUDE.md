@@ -66,8 +66,12 @@ aux nœuds d'expédition free-roam depuis le chantier 3 (sandbox
 `scenes/expedition/SandboxExpe.tscn` — ExpeRun reçoit avatar + pool + config
 combat à la construction). Depuis le CHANTIER 8, l'expédition est BRANCHÉE AU
 JEU RÉEL : « Partir en expédition » (panneau ou hub) ouvre la HoloMap, un clic
-sur un Lieu ouvre le panneau de lancement (palier de profondeur — toujours sans
-effet mécanique), et la run se joue dans `ExpeditionScreen` avec persistance
+sur un Lieu ouvre le panneau de lancement (palier de profondeur — effets réels
+depuis les ch.14/15 : butin et mécaniques fortes par palier ; PROGRESSION
+VERROUILLÉE 07/2026 : un palier n'est PROPOSÉ que si la strate précédente du
+Lieu est complétée — les 3 étages bouclés, `GameData.strate_completee`,
+extraction/défaite ne comptent pas ; palier verrouillé = ABSENT, jamais grisé,
+avec l'indice 🔒 de déblocage), et la run se joue dans `ExpeditionScreen` avec persistance
 ACTIVE (XP/Euren déclenchent la sauvegarde — écritures SUSPENDUES pendant la
 run depuis le ch.9, flushées à la sortie). Retour au QG à toute sortie
 normale ; DÉFAITE (ch.9) = GAME OVER : message « R-XXX est détruit... »

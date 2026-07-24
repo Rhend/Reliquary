@@ -36,6 +36,9 @@ var lieu_id := ""
 
 var _palier_idx := 0
 var _boutons_palier: Array[Button] = []
+# Paliers réellement PROPOSÉS (progression verrouillée : préfixe de PALIERS
+# s'arrêtant au premier dont la strate précédente n'est pas complétée).
+var _paliers_proposes: Array[PalierProfondeurData] = []
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -86,14 +89,24 @@ func _ready() -> void:
 	lbl_palier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(lbl_palier)
 
-	# Choix du palier : 3 boutons radio (groupe), Périphérie présélectionnée.
+	# Choix du palier : boutons radio (groupe), Périphérie présélectionnée.
+	# PROGRESSION VERROUILLÉE (retour Rhend 07/2026) : un palier n'est
+	# proposé que si la strate PRÉCÉDENTE du Lieu est COMPLÉTÉE (les 3
+	# étages bouclés — GameData.strate_completee, extraction/défaite ne
+	# comptent pas, règle ch.11). Palier verrouillé = ABSENT, jamais grisé ;
+	# l'indice « 🔒 » sous la rangée annonce comment débloquer le suivant.
+	var deverrouilles: Array[PalierProfondeurData] = []
+	for i in PALIERS.size():
+		if i > 0 and not GameData.strate_completee(lieu_id, PALIERS[i - 1].id):
+			break   # ordre strict : le premier verrouillé arrête l'échelle
+		deverrouilles.append(PALIERS[i])
 	var rangee := HBoxContainer.new()
 	rangee.alignment = BoxContainer.ALIGNMENT_CENTER
 	rangee.add_theme_constant_override("separation", 10)
 	vb.add_child(rangee)
 	var groupe := ButtonGroup.new()
-	for i in PALIERS.size():
-		var p := PALIERS[i]
+	for i in deverrouilles.size():
+		var p := deverrouilles[i]
 		var b := ExpeStyle.bouton("%s (×%.1f)" % [Translations.resource_name(p),
 				p.multiplicateur], UIColors.CYBER_ACCENT, 15, Vector2(0, 44))
 		b.toggle_mode = true
@@ -104,6 +117,17 @@ func _ready() -> void:
 				_palier_idx = i)
 		rangee.add_child(b)
 		_boutons_palier.append(b)
+	_paliers_proposes = deverrouilles
+	if deverrouilles.size() < PALIERS.size():
+		var prochain := PALIERS[deverrouilles.size()]
+		var requis := PALIERS[deverrouilles.size() - 1]
+		var lbl_verrou := ExpeStyle.label_mono(
+				Translations.T("expe.palier_verrouille") % [
+					Translations.resource_name(prochain),
+					Translations.resource_name(requis)],
+				12, UIColors.CYBER_TEXTE_MUTED)
+		lbl_verrou.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vb.add_child(lbl_verrou)
 
 	# Mécanique forte du Lieu (chantier 15) : affichée SEULEMENT si le biome
 	# en a une (contenu absent, pas grisé) — le joueur choisit son palier en
@@ -150,7 +174,7 @@ func _ready() -> void:
 
 	var btn_partir := ExpeStyle.bouton(Translations.T("expe.partir_btn"),
 			UIColors.CYBER_ACCENT, 19, Vector2(240, 54))
-	btn_partir.pressed.connect(func() -> void: lancer.emit(PALIERS[_palier_idx]))
+	btn_partir.pressed.connect(func() -> void: lancer.emit(_paliers_proposes[_palier_idx]))
 	actions.add_child(btn_partir)
 
 	var btn_annuler := ExpeStyle.bouton(Translations.T("expe.annuler_btn"),
