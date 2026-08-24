@@ -997,6 +997,11 @@ func start_selected_expedition() -> void:
 # y sont posés en pins/zones cliquables (lus de la feuille « Lieux »). Un clic
 # sélectionne le biome dans le panneau (rail existant adv_selected_biome_id).
 func open_expedition_map() -> void:
+	# Le QG passe la main : un panneau resté ouvert continuerait de vivre
+	# derrière la carte (hub réduit + hex sélectionné) et réapparaîtrait tel
+	# quel au retour. Vaut pour les trois entrées (hex CARTE, bouton « Carte »
+	# et « Partir en expédition ») — no-op si aucun panneau n'est ouvert.
+	_close_panel()
 	if not is_instance_valid(_holo_cache):
 		# Préchargement pas encore passé (clic très précoce) : build à l'instant,
 		# visible — l'intro se joue dans le _ready de l'overlay, rien à réveiller.

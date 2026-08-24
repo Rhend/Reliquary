@@ -170,14 +170,34 @@ func _jouer_etage(screen: ExpeditionScreen) -> void:
 
 func _test_qg_vers_holomap() -> void:
 	print("[TEST 1] QG → « Partir en expédition » ouvre la HoloMap")
+	# Village ÉCLOS : sans ça la partie neuve démarre sur la BirthSequence et le
+	# hub (donc les panneaux) n'existe pas. Un joueur qui atteint la HoloMap a
+	# forcément éclos — c'est l'état réaliste pour ce flux.
+	GameData.village["eclos"] = true
 	village = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
 	add_child(village)   # enfant du nœud de test (la racine est occupée pendant _ready)
 	await get_tree().process_frame
 	await get_tree().process_frame
 
 	_assert(SaveManager.est_chargee(), "SaveManager.load_save() a tourné (Village)")
+
+	# Régression : partir de la carte alors qu'un panneau du QG est ouvert
+	# laissait ce panneau vivre derrière l'overlay (hub réduit + hex
+	# sélectionné), et il réapparaissait tel quel au retour de la carte.
+	village._open_panel("adventure")
+	await get_tree().process_frame
+	_assert(village._rp_root != null and village._active_panel_id == "adventure",
+			"pré-requis : un panneau du QG est bien ouvert")
+
 	village.start_selected_expedition()
 	await get_tree().process_frame
+	_assert(village._active_panel_id == "",
+			"ouvrir la carte ferme le panneau du QG (plus d'hex sélectionné)")
+	# La fermeture glisse (0,25 s) avant de libérer le panneau.
+	await get_tree().create_timer(0.45).timeout
+	_assert(village._rp_root == null,
+			"le panneau du QG est libéré, pas juste masqué derrière la carte")
+
 	_assert(village._holo_overlay != null and is_instance_valid(village._holo_overlay),
 			"start_selected_expedition ouvre la carte holo")
 	_assert(village._holo_overlay is HoloMap3DOverlay, "l'overlay est la HoloMap 3D")
