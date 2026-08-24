@@ -14,7 +14,7 @@ name: tests
 on: [push, pull_request]
 
 env:
-  GODOT_VERSION: 4.6.3
+  GODOT_VERSION: 4.7.2
 
 jobs:
   tests:

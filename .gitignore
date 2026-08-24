@@ -23,6 +23,11 @@ tools/inspect_glb_out.txt
 Carte Holo/~$*.xlsx
 Carte Holo/*_old.xlsx
 
+# Résidus de copie Windows du GDExtension Spine (l'éditeur duplique le .dll au
+# chargement ; un fichier resté verrouillé bloque la copie suivante → l'extension
+# ne charge plus et Relic retombe sur son placeholder). Le vrai .dll est versionné.
+bin/**/~*
+
 # OS
 .DS_Store
 Thumbs.db
