@@ -102,3 +102,6 @@ jobs:
 
       - name: TestLieuxSecondaires (Lieux révélés par les voies — chantier 17)
         run: $GODOT --headless --path . res://tests/TestLieuxSecondaires.tscn
+
+      - name: TestShowRoom (vitrine des assets Spine — registre + aller-retour QG)
+        run: $GODOT --headless --path . res://tests/TestShowRoom.tscn

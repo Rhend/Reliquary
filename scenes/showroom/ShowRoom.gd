@@ -64,6 +64,12 @@ const DECOR_SOL_FRAC := 0.688
 
 enum Mode { LIBRE, COMBAT }
 
+# Scène à recharger en sortant. Posée par l'appelant AVANT le changement de
+# scène (cf. Village._ouvrir_showroom) ; vide quand la vitrine est lancée
+# seule (F6 / ligne de commande), auquel cas Échap quitte pour de bon.
+# `static` : survit au changement de scène, contrairement à un membre.
+static var scene_retour := ""
+
 var _registre: SpinePersonnagesData
 var _ennemis: Array[Dictionary] = []
 var _heros: Dictionary = {}
@@ -293,7 +299,8 @@ func _rafraichir_hud() -> void:
 		_titre.text = "SHOWROOM — héros + %d monstre(s) × %d paliers" % [
 				_ennemis.size(), NB_PALIERS]
 		_hud.text = "[Tab] mode combat    [glisser] déplacer    [molette] zoom    [R] recadrer\n" \
-				+ "une rangée par personnage · monstres : paliers Commun → Légendaire"
+				+ "une rangée par personnage · monstres : paliers Commun → Légendaire" \
+				+ ("    —    [Échap] retour au QG" if scene_retour != "" else "")
 
 # Libellé de l'apparence courante du héros — « — » s'il n'en a qu'une (Relic
 # aujourd'hui) : afficher « Défaut » laisserait croire qu'il y a un choix.
@@ -301,6 +308,16 @@ func _nom_apparence_heros() -> String:
 	if _heros_apparences.size() <= 1:
 		return str(_heros.get("nom", "?"))
 	return str(_heros_apparences[_idx_heros].get("nom", "?"))
+
+# Retour à la scène d'origine si la vitrine a été ouverte depuis le jeu,
+# sinon fermeture (elle est alors la scène racine).
+func _sortir() -> void:
+	if scene_retour == "":
+		get_tree().quit()
+		return
+	var cible := scene_retour
+	scene_retour = ""   # la prochaine ouverture repose sa propre destination
+	get_tree().change_scene_to_file(cible)
 
 # ─── Entrées ─────────────────────────────────────────────────
 
@@ -334,7 +351,7 @@ func _touche(code: int) -> void:
 			if _mode == Mode.LIBRE:
 				_cadrer_tout()
 		KEY_ESCAPE:
-			get_tree().quit()
+			_sortir()
 		KEY_LEFT, KEY_RIGHT:
 			if _mode == Mode.COMBAT and not _ennemis.is_empty():
 				var pas := 1 if code == KEY_RIGHT else -1

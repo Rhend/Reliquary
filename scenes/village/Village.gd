@@ -170,6 +170,10 @@ var _alarme_a_annoncer := false   # 6/6 pendant la run → annonce différée au
 # ⚠ Modifie réellement GameData.village (peut finir dans la sauvegarde).
 # Mettre à false avant une release.
 const DEBUG_TIER_BUTTONS := false
+# Raccourci dev vers la vitrine des assets Spine (scenes/showroom/) : bouton
+# discret en haut à gauche du hub. À passer à false avant release — la
+# ShowRoom est un outil d'atelier, pas du contenu de jeu.
+const DEBUG_SHOWROOM_BTN := true
 var _debug_tier_lbl: Label = null
 
 # ─── Init ─────────────────────────────────────────────────────
@@ -276,6 +280,7 @@ func _build_ui() -> void:
 		_build_hub()
 
 	_build_fullscreen_btn()
+	_build_showroom_btn()
 	_build_debug_tier_buttons()
 
 # ─── Hub hexagonal ────────────────────────────────────────────
@@ -1325,6 +1330,35 @@ func _build_fullscreen_btn() -> void:
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
 	btn.pressed.connect(_toggle_settings_overlay)
 	add_child(btn)
+
+# ─── DEBUG : accès à la ShowRoom ──────────────────────────────
+# La vitrine remplace la scène courante (elle a sa propre caméra et ses
+# propres entrées) ; elle sait revenir ici grâce à ShowRoom.scene_retour.
+func _build_showroom_btn() -> void:
+	if not DEBUG_SHOWROOM_BTN:
+		return
+	var btn := Button.new()
+	btn.text = "ShowRoom"
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.anchor_left = 0.0; btn.anchor_right  = 0.0
+	btn.anchor_top  = 0.0; btn.anchor_bottom = 0.0
+	btn.offset_left = 8;   btn.offset_right  = 92
+	btn.offset_top  = 6;   btn.offset_bottom = 30
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.add_theme_font_size_override("font_size", 11)
+	btn.add_theme_color_override("font_color", UIColors.TEXT_MUTED)
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
+	btn.add_theme_stylebox_override("normal", UIHelpers.card_style(UIColors.TEXT_MUTED, 0.06, 0.30, 1, 4))
+	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(UIColors.TEXT_MUTED, 0.15, 0.50, 1, 4))
+	btn.pressed.connect(_ouvrir_showroom)
+	add_child(btn)
+
+func _ouvrir_showroom() -> void:
+	# Écrit avant de quitter la scène : la ShowRoom n'écrit jamais la
+	# sauvegarde, mais le QG peut avoir des gains en attente de debounce.
+	SaveManager.sauvegarder_maintenant()
+	ShowRoom.scene_retour = "res://scenes/village/village.tscn"
+	get_tree().change_scene_to_file("res://scenes/showroom/ShowRoom.tscn")
 
 # ─── DEBUG : boutons Tier − / Tier + ──────────────────────────
 # Petite barre en bas à gauche pour prévisualiser l'évolution visuelle
