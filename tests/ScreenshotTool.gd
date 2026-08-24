@@ -742,6 +742,15 @@ func _shoot_showroom() -> void:
 	_vp.add_child(salle)
 	await get_tree().create_timer(0.6).timeout   # laisse jouer l'Idle
 	await _capture("res://tests/_shot_showroom_libre.png")
+	# Niveau « Jour » : vérifie que les étiquettes restent lisibles quand le
+	# fond s'éclaircit (les couleurs d'UI sont pensées pour du sombre).
+	salle._idx_lumiere = 2
+	salle._appliquer_lumiere()
+	salle._rafraichir_hud()
+	await get_tree().create_timer(0.3).timeout
+	await _capture("res://tests/_shot_showroom_libre_jour.png")
+	salle._idx_lumiere = ShowRoom.LUMIERE_DEFAUT
+	salle._appliquer_lumiere()
 	salle._mode = ShowRoom.Mode.COMBAT
 	salle._appliquer_mode()
 	await get_tree().create_timer(0.6).timeout

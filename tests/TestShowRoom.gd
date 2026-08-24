@@ -34,6 +34,7 @@ func _run_all() -> void:
 	_test_registre()
 	_test_apparences()
 	await _test_aller_retour_qg()
+	await _test_lumiere()
 
 # ─── 1. Le registre pointe sur des assets réels ─────────────
 
@@ -121,6 +122,62 @@ func _test_aller_retour_qg() -> void:
 	_assert(ShowRoom.scene_retour != "", "destination de retour posée par le QG")
 	salle.free()
 	ShowRoom.scene_retour = ""
+
+# ─── 4. Éclairage ───────────────────────────────────────────
+# Le fond d'origine (quasi noir) noyait les paliers Commun, gris foncé.
+# On garde deux garde-fous : la vitrine ne redémarre pas dans le noir, et
+# elle n'éclaire JAMAIS les personnages — sinon on juge un rendu faussé.
+
+func _test_lumiere() -> void:
+	print("\n[TEST 4] Éclairage : fond réglable, assets jamais modulés")
+	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
+	ShowRoom.scene_retour = ""
+	add_child(salle)
+	await get_tree().process_frame
+
+	var defaut: Color = ShowRoom.NIVEAUX_LUMIERE[ShowRoom.LUMIERE_DEFAUT]["fond"]
+	var nuit: Color = ShowRoom.NIVEAUX_LUMIERE[0]["fond"]
+	_assert(defaut.get_luminance() > nuit.get_luminance(),
+			"le niveau par défaut est plus clair que « Nuit » (on voit les Communs)")
+	_assert(salle._fond_neutre.color.is_equal_approx(defaut),
+			"le fond appliqué est bien celui du niveau par défaut")
+
+	# Le cycle passe par tous les niveaux et boucle.
+	var vus: Array[String] = []
+	for i in ShowRoom.NIVEAUX_LUMIERE.size():
+		vus.append(salle._nom_lumiere())
+		salle._touche(KEY_B)
+	_assert(vus.size() == ShowRoom.NIVEAUX_LUMIERE.size() and vus[0] == "Studio",
+			"[B] parcourt les %d niveaux" % ShowRoom.NIVEAUX_LUMIERE.size())
+	_assert(salle._idx_lumiere == ShowRoom.LUMIERE_DEFAUT, "[B] boucle sur le premier niveau")
+
+	# Contraste : sur fond clair, les textes doivent s'assombrir, sinon ils
+	# blanchissent (le HUD était illisible en « Jour » au premier essai).
+	var i_clair := -1
+	for i in ShowRoom.NIVEAUX_LUMIERE.size():
+		if (ShowRoom.NIVEAUX_LUMIERE[i]["fond"] as Color).get_luminance() > ShowRoom.SEUIL_FOND_CLAIR:
+			i_clair = i
+			break
+	_assert(i_clair >= 0, "au moins un niveau clair est proposé")
+	if i_clair >= 0:
+		salle._idx_lumiere = i_clair
+		_assert(salle._fond_clair(), "ce niveau est bien détecté comme clair")
+		var base := UIColors.TEXT_HEADER
+		_assert(ShowRoom._lisible(base, true).get_luminance() < base.get_luminance(),
+				"texte assombri sur fond clair")
+		_assert(ShowRoom._lisible(base, false).is_equal_approx(base),
+				"texte inchangé sur fond sombre")
+
+	# Le voile n'existe qu'en combat et ne touche que le décor.
+	salle._mode = ShowRoom.Mode.COMBAT
+	salle._idx_lumiere = ShowRoom.NIVEAUX_LUMIERE.size() - 1
+	salle._appliquer_mode()
+	_assert(salle._voile.visible and salle._voile.color.a > 0.0,
+			"mode combat : le voile éclaircit le décor")
+	for sprite in salle._duel.get_children():
+		_assert((sprite as Node2D).modulate.is_equal_approx(Color.WHITE),
+				"le personnage n'est PAS modulé (couleurs d'origine préservées)")
+	salle.free()
 
 # ─── Helpers & rapport ──────────────────────────────────────
 

@@ -62,6 +62,24 @@ const SOL_X_ADVERSE := 0.66
 # le décor, ou bouger SOL_Y_FRAC).
 const DECOR_SOL_FRAC := 0.688
 
+# ─── Éclairage de la vitrine ─────────────────────────────────
+# RÈGLE : on éclaire le DÉCOR, jamais les personnages. Moduler les sprites
+# fausserait ce qu'on vient juger (couleurs, contraste, lisibilité) — un asset
+# doit se défendre tel quel. Le niveau agit donc sur le fond en mode libre, et
+# sur un voile posé PAR-DESSUS le décor en mode combat.
+#
+# Plusieurs niveaux parce qu'un asset doit tenir sur fond sombre ET clair :
+# les silhouettes noires disparaissent sur l'un, les pièces claires sur l'autre.
+const NIVEAUX_LUMIERE: Array[Dictionary] = [
+	{"nom": "Nuit",   "fond": Color(0.043, 0.051, 0.075), "voile": 0.00},
+	{"nom": "Studio", "fond": Color(0.180, 0.196, 0.235), "voile": 0.10},
+	{"nom": "Jour",   "fond": Color(0.545, 0.573, 0.620), "voile": 0.22},
+	{"nom": "Blanc",  "fond": Color(0.855, 0.871, 0.898), "voile": 0.34},
+]
+# Démarre en « Studio » : le fond quasi noir d'origine noyait les paliers
+# Commun, qui sont gris foncé — on n'y voyait rien.
+const LUMIERE_DEFAUT := 1
+
 enum Mode { LIBRE, COMBAT }
 
 # Scène à recharger en sortant. Posée par l'appelant AVANT le changement de
@@ -78,15 +96,20 @@ var _mode: int = Mode.LIBRE
 var _idx_monstre := 0
 var _idx_palier := 0
 var _idx_heros := 0   # apparence du héros (1 seule tant que Relic n'a que « default »)
+var _idx_lumiere := LUMIERE_DEFAUT
 
 var _monde: Node2D            # sprites du mode LIBRE (espace monde)
 var _duel: Node2D             # sprites du mode COMBAT
 var _cam: Camera2D
 var _fond_neutre: ColorRect
 var _decor: Control
+var _voile: ColorRect         # brume claire PAR-DESSUS le décor (mode combat)
 var _hud: Label
 var _titre: Label
 var _repere: Node2D           # lignes de sol du mode LIBRE
+# Étiquettes du mode libre + leur couleur d'origine : sur fond clair il faut
+# les réassombrir, et on ne peut pas partir de la couleur déjà modifiée.
+var _labels_libre: Array[Dictionary] = []
 
 func _ready() -> void:
 	_registre = load(REGISTRE) as SpinePersonnagesData
@@ -112,7 +135,6 @@ func _construire() -> void:
 	add_child(fond_layer)
 
 	_fond_neutre = ColorRect.new()
-	_fond_neutre.color = UIColors.BG_DARK
 	_fond_neutre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_fond_neutre.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fond_layer.add_child(_fond_neutre)
@@ -123,6 +145,15 @@ func _construire() -> void:
 	_decor.visible = false
 	fond_layer.add_child(_decor)
 	_construire_decor()
+
+	# Voile : posé APRÈS le décor donc au-dessus. Lever les noirs par-dessus
+	# est fiable partout, là où un modulate > 1 dépend du rendu (GL Compatibility).
+	_voile = ColorRect.new()
+	_voile.color = Color(0.78, 0.82, 0.90, 0.0)
+	_voile.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_voile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_voile.visible = false
+	fond_layer.add_child(_voile)
 
 	# Monde (mode LIBRE) : repère de sol dessous, sprites dessus.
 	_repere = Node2D.new()
@@ -147,6 +178,10 @@ func _construire() -> void:
 	_hud = UIHelpers.label("", 12, UIColors.TEXT_MUTED)
 	_hud.position = Vector2(16, VUE.y - 78)
 	hud_layer.add_child(_hud)
+
+	# Pose le niveau d'entrée même si la vitrine reste vide (registre absent) :
+	# sinon le ColorRect garderait sa couleur par défaut.
+	_appliquer_lumiere()
 
 func _construire_decor() -> void:
 	# Cale le SOL du décor sur celui du combat, sans laisser de vide au cadre.
@@ -194,6 +229,7 @@ func _peupler_libre() -> void:
 		var nom := UIHelpers.label(str(e.get("nom", "?")), 16, UIColors.TEXT_HEADER)
 		nom.position = Vector2(-MARGE_G, y - 40.0)
 		_monde.add_child(nom)
+		_labels_libre.append({"node": nom, "base": UIColors.TEXT_HEADER})
 		var apparences := SpinePersonnagesData.apparences(e)
 		for k in apparences.size():
 			var ap := apparences[k]
@@ -215,15 +251,52 @@ func _peupler_libre() -> void:
 			var lbl := UIHelpers.label(str(ap.get("nom", "?")), 12, teinte)
 			lbl.position = Vector2(k * COL_PAS - 44.0, y + 8.0)
 			_monde.add_child(lbl)
-	_repere.queue_redraw()
+			_labels_libre.append({"node": lbl, "base": teinte})
+	_appliquer_lumiere()
 
 func _dessiner_reperes() -> void:
 	var rangees := _rangees()
+	# Un trait blanc translucide disparaît sur fond clair : on l'inverse.
+	var teinte := Color(0, 0, 0, 0.20) if _fond_clair() else Color(1, 1, 1, 0.14)
 	for i in rangees.size():
 		var y := i * RANG_PAS
 		var cols: int = maxi(1, SpinePersonnagesData.apparences(rangees[i]).size())
 		_repere.draw_line(Vector2(-MARGE_G, y), Vector2((cols - 1) * COL_PAS + 120.0, y),
-				Color(1, 1, 1, 0.14), 2.0)
+				teinte, 2.0)
+
+# ─── Éclairage ───────────────────────────────────────────────
+
+# Seuil BAS (0,35 et non 0,5) : dès qu'on quitte les fonds franchement sombres,
+# du texte clair devient pénible bien avant que le fond soit « clair » au sens
+# strict. Un gris moyen se lit mieux avec du texte sombre.
+const SEUIL_FOND_CLAIR := 0.35
+
+func _fond_clair() -> bool:
+	return (NIVEAUX_LUMIERE[_idx_lumiere]["fond"] as Color).get_luminance() > SEUIL_FOND_CLAIR
+
+# Applique le niveau courant : fond du mode libre, voile du mode combat, et
+# lisibilité des textes qui se posent dessus.
+func _appliquer_lumiere() -> void:
+	var niveau := NIVEAUX_LUMIERE[_idx_lumiere]
+	_fond_neutre.color = niveau["fond"]
+	_voile.color.a = float(niveau["voile"])
+	# Le HUD n'est sur fond clair qu'en mode libre : en combat il repose sur le
+	# décor city, qui reste sombre quel que soit le niveau.
+	var hud_sur_clair: bool = _fond_clair() and _mode == Mode.LIBRE
+	_titre.add_theme_color_override("font_color", _lisible(UIColors.TEXT_HEADER, hud_sur_clair))
+	_hud.add_theme_color_override("font_color", _lisible(UIColors.TEXT_MUTED, hud_sur_clair))
+	for entree in _labels_libre:
+		var lbl: Label = entree["node"]
+		if is_instance_valid(lbl):
+			lbl.add_theme_color_override("font_color",
+					_lisible(entree["base"] as Color, _fond_clair()))
+	_repere.queue_redraw()
+
+# Les couleurs de l'UI sont pensées pour un fond sombre : telles quelles, elles
+# blanchissent sur fond clair. On les assombrit sans toucher à leur teinte, pour
+# que les couleurs de rareté restent reconnaissables.
+static func _lisible(base: Color, sur_fond_clair: bool) -> Color:
+	return base.darkened(0.70) if sur_fond_clair else base
 
 # ─── Mode COMBAT : duel au cadrage réel ──────────────────────
 
@@ -266,6 +339,8 @@ func _appliquer_mode() -> void:
 	_duel.visible = combat
 	_decor.visible = combat
 	_fond_neutre.visible = not combat
+	_voile.visible = combat
+	_appliquer_lumiere()
 	if combat:
 		_peupler_duel()
 		# Cadrage figé, identique au jeu : caméra centrée sur la vue de réf.
@@ -291,16 +366,19 @@ func _rafraichir_hud() -> void:
 		var e := _ennemis[_idx_monstre]
 		_titre.text = "COMBAT — %s  ·  %s   vs   %s" % [str(e.get("nom", "?")),
 				GameData.get_tier_name(_idx_palier), _nom_apparence_heros()]
-		_hud.text = "[Tab] mode libre    [←/→] monstre    [↑/↓] palier    [H] héros\n" \
+		_hud.text = "[Tab] mode libre    [←/→] monstre    [↑/↓] palier    [H] héros    [B] lumière : %s\n" % _nom_lumiere() \
 				+ "cadrage réel : sol %.2f · joueur %.2f · adverse %.2f · %d px" % [
 				SOL_Y_FRAC, SOL_X_JOUEUR, SOL_X_ADVERSE,
 				int(SpriteSpinePersonnage.HAUTEUR_CIBLE_PX)]
 	else:
 		_titre.text = "SHOWROOM — héros + %d monstre(s) × %d paliers" % [
 				_ennemis.size(), NB_PALIERS]
-		_hud.text = "[Tab] mode combat    [glisser] déplacer    [molette] zoom    [R] recadrer\n" \
+		_hud.text = "[Tab] mode combat    [glisser] déplacer    [molette] zoom    [R] recadrer    [B] lumière : %s\n" % _nom_lumiere() \
 				+ "une rangée par personnage · monstres : paliers Commun → Légendaire" \
 				+ ("    —    [Échap] retour au QG" if scene_retour != "" else "")
+
+func _nom_lumiere() -> String:
+	return str(NIVEAUX_LUMIERE[_idx_lumiere]["nom"])
 
 # Libellé de l'apparence courante du héros — « — » s'il n'en a qu'une (Relic
 # aujourd'hui) : afficher « Défaut » laisserait croire qu'il y a un choix.
@@ -364,6 +442,12 @@ func _touche(code: int) -> void:
 				_idx_palier = wrapi(_idx_palier + pas, 0, NB_PALIERS)
 				_peupler_duel()
 				_rafraichir_hud()
+		KEY_B:
+			# Vaut dans LES DEUX modes : un asset doit tenir sur fond sombre
+			# comme sur fond clair.
+			_idx_lumiere = wrapi(_idx_lumiere + 1, 0, NIVEAUX_LUMIERE.size())
+			_appliquer_lumiere()
+			_rafraichir_hud()
 		KEY_H:
 			# Sans effet tant que le héros n'a qu'une apparence — la touche
 			# existe pour le jour où les skins masculine/féminine arrivent.
