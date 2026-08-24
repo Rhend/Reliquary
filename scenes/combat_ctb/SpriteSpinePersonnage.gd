@@ -35,28 +35,41 @@ const HAUTEUR_SOURCE_DEFAUT := 2770.0   # secours si l'API height est absente
 var _spine: Node = null   # SpineSprite — jamais typé (extension optionnelle)
 var _mort := false        # Death jouée : plus aucune autre animation
 
-static func disponible() -> bool:
+static func disponible(chemin_skel: String = CHEMIN_SKEL,
+		chemin_atlas: String = CHEMIN_ATLAS) -> bool:
 	return ClassDB.class_exists("SpineSprite") \
 			and ClassDB.class_exists("SpineSkeletonDataResource") \
-			and ResourceLoader.exists(CHEMIN_SKEL) \
-			and ResourceLoader.exists(CHEMIN_ATLAS)
+			and ResourceLoader.exists(chemin_skel) \
+			and ResourceLoader.exists(chemin_atlas)
 
 # Fabrique : null si le runtime spine-godot ou les assets manquent —
 # l'appelant retombe alors sur son placeholder, sans erreur.
-static func creer() -> SpriteSpinePersonnage:
-	if not disponible():
+#
+# Les paramètres par défaut visent Relic (héros) : tous les appelants
+# historiques restent inchangés. Les ENNEMIS de Christophe partagent le même
+# contrat d'animation (Idle/Attack_CaC/Hit/Death) mais portent leurs PALIERS
+# en SKINS Spine (« FlameBot_Nv1 » … « _Nv5 ») — d'où `skin`, qui vaut ""
+# pour un squelette sans variante (Relic).
+static func creer(chemin_skel: String = CHEMIN_SKEL,
+		chemin_atlas: String = CHEMIN_ATLAS,
+		skin: String = "",
+		hauteur_cible_px: float = HAUTEUR_CIBLE_PX) -> SpriteSpinePersonnage:
+	if not disponible(chemin_skel, chemin_atlas):
 		return null
 	var noeud := SpriteSpinePersonnage.new()
-	if noeud._construire_spine():
+	if noeud._construire_spine(chemin_skel, chemin_atlas, skin, hauteur_cible_px):
 		return noeud
 	noeud.free()
 	return null
 
-func _construire_spine() -> bool:
-	var skel: Resource = load(CHEMIN_SKEL)
-	var atlas: Resource = load(CHEMIN_ATLAS)
+func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
+		chemin_atlas: String = CHEMIN_ATLAS,
+		skin: String = "",
+		hauteur_cible_px: float = HAUTEUR_CIBLE_PX) -> bool:
+	var skel: Resource = load(chemin_skel)
+	var atlas: Resource = load(chemin_atlas)
 	if skel == null or atlas == null:
-		push_warning("SpriteSpinePersonnage : assets Spine illisibles (%s)" % CHEMIN_SKEL)
+		push_warning("SpriteSpinePersonnage : assets Spine illisibles (%s)" % chemin_skel)
 		return false
 	var donnees := ClassDB.instantiate("SpineSkeletonDataResource") as Resource
 	if donnees == null:
@@ -65,7 +78,7 @@ func _construire_spine() -> bool:
 	donnees.skeleton_file_res = skel
 	donnees.atlas_res = atlas
 	if not bool(donnees.call("is_skeleton_data_loaded")):
-		push_warning("SpriteSpinePersonnage : données Spine invalides (%s)" % CHEMIN_SKEL)
+		push_warning("SpriteSpinePersonnage : données Spine invalides (%s)" % chemin_skel)
 		return false
 	_spine = ClassDB.instantiate("SpineSprite") as Node
 	if _spine == null:
@@ -73,15 +86,31 @@ func _construire_spine() -> bool:
 		return false
 	_spine.set("skeleton_data_res", donnees)
 	add_child(_spine)
-	# Échelle : hauteur native du squelette → HAUTEUR_CIBLE_PX à l'écran.
+	# Skin de palier (ennemis) : posée AVANT la 1re animation pour que la
+	# pose de repos s'affiche d'emblée avec les bons attachements.
+	if skin != "":
+		definir_skin(skin)
+	# Échelle : hauteur native du squelette → hauteur_cible_px à l'écran.
 	var hauteur := HAUTEUR_SOURCE_DEFAUT
 	if donnees.has_method("get_height"):
 		var h := float(donnees.call("get_height"))
 		if h > 0.0:
 			hauteur = h
-	_spine.set("scale", Vector2.ONE * (HAUTEUR_CIBLE_PX / hauteur))
+	_spine.set("scale", Vector2.ONE * (hauteur_cible_px / hauteur))
 	_jouer(ANIM_IDLE, true)
 	return true
+
+# Change la skin (= le palier, pour les ennemis) sur un sprite déjà construit.
+# set_skin seul ne suffit pas : les attachements du squelette doivent être
+# re-résolus (set_slots_to_setup_pose) sinon la pose garde l'ancienne apparence.
+func definir_skin(nom: String) -> void:
+	if _spine == null:
+		return
+	var squelette: Object = _spine.call("get_skeleton")
+	if squelette == null:
+		return
+	squelette.call("set_skin_by_name", nom)
+	squelette.call("set_slots_to_setup_pose")
 
 # Attaque one-shot, retour Idle enchaîné (file d'animations Spine, piste 0).
 func jouer_attaque() -> void:

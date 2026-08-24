@@ -38,6 +38,7 @@ func _ready() -> void:
 		"holo_lieux": await _shoot_holo_lieux()
 		"holo_prop": await _shoot_holo_prop()
 		"holo_pins": await _shoot_holo_pins()
+		"showroom":  await _shoot_showroom()
 		"expe":      await _shoot_expe()
 		"flux":      await _shoot_flux()
 		"combat":    await _shoot_combat()
@@ -734,6 +735,24 @@ func _shoot_maxtier_village() -> void:
 	village._rebuild_hub()
 	await get_tree().create_timer(1.2).timeout
 	_capture("res://tests/_shot_maxtier_village.png")
+
+# ── Vitrine des assets Spine (ShowRoom) : les deux modes ────
+func _shoot_showroom() -> void:
+	var salle: Node2D = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
+	_vp.add_child(salle)
+	await get_tree().create_timer(0.6).timeout   # laisse jouer l'Idle
+	await _capture("res://tests/_shot_showroom_libre.png")
+	salle._mode = ShowRoom.Mode.COMBAT
+	salle._appliquer_mode()
+	await get_tree().create_timer(0.6).timeout
+	await _capture("res://tests/_shot_showroom_combat.png")
+	# Deuxième monstre, palier Légendaire : vérifie la commutation de skin.
+	salle._idx_monstre = 1
+	salle._idx_palier = 4
+	salle._peupler_duel()
+	salle._rafraichir_hud()
+	await get_tree().create_timer(0.6).timeout
+	await _capture("res://tests/_shot_showroom_combat_leg.png")
 
 func _capture(path: String) -> void:
 	await RenderingServer.frame_post_draw

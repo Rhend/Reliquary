@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="SpinePersonnagesData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/SpinePersonnagesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+personnages = [{
+"id": "relic",
+"nom": "Relic (héros)",
+"skel": "res://assets/personnages/relic/Relic.skel",
+"atlas": "res://assets/personnages/relic/Relic.atlas",
+"prefixe_skin": "",
+"ennemi": false
+}, {
+"id": "flamebot",
+"nom": "FlameBot",
+"skel": "res://assets/personnages/ennemis/flamebot/FlameBot.skel",
+"atlas": "res://assets/personnages/ennemis/flamebot/FlameBot.atlas",
+"prefixe_skin": "FlameBot_Nv",
+"ennemi": true
+}, {
+"id": "workbot",
+"nom": "WorkBot",
+"skel": "res://assets/personnages/ennemis/workbot/WorkBot.skel",
+"atlas": "res://assets/personnages/ennemis/workbot/WorkBot.atlas",
+"prefixe_skin": "WorkBot_Nv",
+"ennemi": true
+}]
