@@ -134,6 +134,75 @@ static func _add_upgrade_card(host: Village, building_id: String) -> void:
 	host.rp_content.add_child(card)
 
 # ═══════════════════════════════════════════════════════════
+#  Carte COMPACTE (achat en ligne hors du panneau de bâtiment)
+# ═══════════════════════════════════════════════════════════
+# Rend un bâtiment en UNE carte autonome — nom + pilule de palier, effets du
+# palier courant, puis coût et bouton Améliorer. Contrairement à build(), écrit
+# dans le Control retourné et non dans host.rp_content : l'appelant la place où
+# il veut (cf. AdventurePanel, section « quartier »).
+#
+# Toute la logique d'état/coût/effets reste ICI — un seul rendu de bâtiment dans
+# le projet, quel que soit le point d'entrée.
+static func compact_card(building_id: String, icon: String = "") -> Control:
+	var b := GameData.get_entity(building_id)
+	if b.is_empty():
+		return Control.new()
+	var tier := VillageBuildings.building_tier(building_id)
+	var tcolor := _tier_color(tier)
+
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.add_theme_stylebox_override("panel", UIHelpers.card_style(tcolor, 0.06, 0.30, 1, 6))
+	var m := UIHelpers.margin_of(9)
+	card.add_child(m)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 5)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	m.add_child(vb)
+
+	# En-tête : icône + nom + palier.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 7)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if icon != "":
+		row.add_child(UIHelpers.label(icon, 15, tcolor))
+	var name_lbl := UIHelpers.label(Translations.entity_name(b, building_id), 14,
+			tcolor.lerp(Color.WHITE, 0.30))
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(name_lbl)
+	row.add_child(_tier_pill(tier))
+	vb.add_child(row)
+
+	# Bâtiment gelé (ex. Couturier) : aucune action possible, on s'arrête là.
+	if b.get("gele", false):
+		vb.add_child(UIHelpers.label(Translations.T("building.frozen"), 10, UIColors.TEXT_MUTED))
+		return card
+
+	# Effets déjà actifs (silencieux si le bâtiment est encore Délabré).
+	var actifs := VillageBuildings.building_effects(building_id, tier)
+	for ch in actifs:
+		vb.add_child(_effect_label(ch, actifs[ch], UIColors.LOG_VICTORY))
+
+	if tier >= Balance.BUILDING_MAX_TIER:
+		vb.add_child(UIHelpers.label(Translations.T("building.max_rank"), 10, UIColors.TIER_LEGENDAIRE))
+		return card
+
+	# Palier suivant : ce qu'il apporte, ce qu'il coûte, et le bouton.
+	var next_tier := tier + 1
+	var nc := UIColors.tier_color(next_tier)
+	vb.add_child(UIHelpers.label(
+			Translations.T("building.upgrade.title") % GameData.get_tier_name(next_tier), 11,
+			nc.lerp(Color.WHITE, 0.25)))
+	var gained: Array = (b.get("bonus_par_palier", {}) as Dictionary).get(next_tier, [])
+	for effect in gained:
+		vb.add_child(_effect_label(str(effect.get("channel", "")), float(effect.get("value", 0.0)), nc))
+	vb.add_child(_cost_block(VillageBuildings.building_cost(building_id)))
+	vb.add_child(_action_btn(Translations.T("building.upgrade.btn"),
+			VillageBuildings.can_upgrade_building(building_id),
+			func() -> void: VillageBuildings.upgrade_building(building_id)))
+	return card
+
+# ═══════════════════════════════════════════════════════════
 #  Helpers
 # ═══════════════════════════════════════════════════════════
 

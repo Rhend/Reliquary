@@ -59,7 +59,6 @@ const TIER_0_COLOR := UIColors.VILLAGE_NASCENT
 const MENU_ITEMS: Array = [
 	["HÉROS",       "👤", 0, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  0, "_go_adventure", "adventure" ],
-	["CARTE",       "🗺", 0, "_go_map",       "map"       ],
 	["FORGE",       "🔨", 0, "_go_forge",     "forge"     ],
 	["VOIES",       "🔒", 0, "_go_voies",     "voies"     ],
 	["SANCTUAIRE",  "✦",  2, "_go_sanctuary", "sanctuary" ],
@@ -1462,15 +1461,12 @@ func _hex_tooltip(panel_id: String) -> String:
 
 # ─── Navigation → panneaux ────────────────────────────────────
 func _go_hero()       -> void: _open_panel("hero")
-# Hex « Expéditions » (chantier 12, point ouvert 23 refermé) : rouvre le
-# PANNEAU Expéditions (consultation des biomes + Évoluer créatures — «
-# Évoluer biomes » est supprimé, les Lieux n'évoluent plus). Le départ en
-# expédition reste sur la HoloMap : gros bouton « Partir en expédition » du
-# panneau, ou hex « Carte » (accès direct conservé).
+# Hex « Expéditions » : PORTE UNIQUE de tout ce qui touche à l'expédition.
+# L'hex « Carte » a été SUPPRIMÉ (07/2026) — il doublonnait le bouton de départ
+# du panneau, soit trois chemins vers la même HoloMap. Le panneau porte
+# désormais, dans l'ordre : départ (→ HoloMap), description, quartier
+# (bâtiments achetables en ligne) puis bestiaire.
 func _go_adventure()  -> void: _open_panel("adventure")
-# « Carte » n'est pas un panneau mais un overlay : on ouvre directement la carte
-# holo 3D depuis le hub (raccourci — plus besoin de passer par les Expéditions).
-func _go_map()        -> void: open_expedition_map()
 func _go_forge()     -> void: _open_panel("forge")
 func _go_voies()     -> void: _open_panel("voies")
 func _go_sanctuary() -> void: _open_panel("sanctuary")
@@ -1520,8 +1516,11 @@ func _update_badges() -> void:
 		item.queue_redraw()
 
 # Refresh du panneau forge ou héro si ouvert, après un drop de ressources ou une forge.
+# « adventure » en fait partie depuis 07/2026 : il affiche les bâtiments du
+# quartier EN LIGNE (coûts Euren/Modules + bouton Améliorer), qui doivent suivre
+# les soldes et le palier atteint — comme le ferait un BuildingPanel ouvert.
 func _on_resources_changed_refresh() -> void:
-	if _active_panel_id == "forge" or _active_panel_id == "hero" \
+	if _active_panel_id in ["forge", "hero", "adventure"] \
 			or VillageBuildings.building_for_room(_active_panel_id) != "":
 		_refresh_active_panel()
 	_update_badges()

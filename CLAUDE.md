@@ -159,6 +159,21 @@ est supprimé. « Évoluer biomes » est SUPPRIMÉ (les Lieux n'évoluent plus �
 décision actée) ; le panneau Expéditions est REBRANCHÉ (hex EXPÉDITIONS →
 panneau, consultation + Évoluer créatures ; hex CARTE → HoloMap directe ;
 le départ en expédition reste sur la HoloMap).
+⚠ SUPERSÉDÉ 07/2026 — EXPÉDITIONS = PORTE UNIQUE : l'hex CARTE est
+SUPPRIMÉ (`MENU_ITEMS`, `_go_map`, clés `menu.map`/`hex_tt.map`) — il
+doublonnait le bouton de départ du panneau, soit trois chemins vers la
+même HoloMap. L'hex EXPÉDITIONS ouvre le panneau, qui porte dans
+l'ordre : bouton de départ (SEUL accès à la HoloMap) + sous-titre
+`adv.start_sub`, description `adv.desc`, section QUARTIER, section
+BIOMES. Le QUARTIER s'achète EN LIGNE dans le panneau via
+`BuildingPanel.compact_card(building_id, icone)` (rendu de bâtiment
+UNIQUE du projet : nom, palier, effets, coût Euren/Modules, bouton
+Améliorer) ; les pièces sont lues de `Village.DISTRICTS["adventure"]`,
+donc ajouter une pièce suffit à la faire apparaître. Le mini-hub spatial
+(boule d'énergie → District → pièce → `BuildingPanel.build`) est
+CONSERVÉ et partage le même état (`VillageBuildings`) : deux chemins,
+une seule source de vérité. `_on_resources_changed_refresh` inclut
+« adventure » (sinon les coûts affichés ne suivraient pas les soldes).
 CHANTIER 13 (supersède deux arbitrages du ch.12, acté 06/07/2026) :
 l'ÉQUIPEMENT COMPLET Commun est présent dès la PARTIE NEUVE (dotation
 data-driven `data/progression/equipement_depart.tres`, appliquée par

@@ -41,7 +41,6 @@ const STRINGS: Dictionary = {
 		# ── Menu items (MENU_ITEMS labels) ────────────────────
 		"menu.hero":      "HÉROS",
 		"menu.adventure": "EXPÉDITIONS",
-		"menu.map":       "CARTE",
 		"menu.forge":     "FORGE",
 		"menu.voies":     "VOIES",
 		"menu.sanctuary": "SANCTUAIRE",
@@ -50,8 +49,7 @@ const STRINGS: Dictionary = {
 
 		# ── Tooltips hexagones ────────────────────────────────
 		"hex_tt.hero":      "Votre héros et ses passifs.\nConsultez ses équipements et sa progression.",
-		"hex_tt.adventure": "Partez en expédition.\nChoisissez un biome et affrontez ses créatures.",
-		"hex_tt.map":       "Carte holographique 3D.\nExplorez le secteur et sélectionnez un biome découvert.",
+		"hex_tt.adventure": "Partez en expédition.\nOuvrez la carte, gérez le quartier et consultez les biomes.",
 		"hex_tt.forge":     "Le Forgeron.\nAméliorez vos équipements avec les ingrédients récoltés.",
 		"hex_tt.voies":     "Les six voies scellées de la ville.\nLe Sceau d'un Lieutenant détruit restaure son quartier.",
 		"hex_tt.sanctuary": "Sanctuaire des Évolutions.\nFaites évoluer vos entités au rang supérieur.",
@@ -201,9 +199,11 @@ const STRINGS: Dictionary = {
 		# ── AdventurePanel ───────────────────────────────────
 		"adv.running.expedition": "Expédition en cours",
 		"adv.start_btn":          "⚔   PARTIR EN EXPÉDITION",
-		"adv.map_btn":            "🗺   CARTE",
+		"adv.start_sub":          "Destination et palier se choisissent sur la carte.",
+		"adv.desc":              "Le secteur s'étend au-delà des murs. Chaque expédition rapporte de l'Euren, des matériaux et des Modules — et laisse une trace : l'Alarme monte à chaque Lieutenant abattu.",
 		"adv.map_title":          "CARTE DES EXPÉDITIONS",
 		"adv.map_hint":           "Sélectionnez un secteur découvert",
+		"adv.section.quartier":   "◆  QUARTIER DES EXPÉDITIONS",
 		"adv.section.biomes":     "◆  BIOMES DISPONIBLES",
 		"adv.entities_count":     "Entités %d/%d",
 		"adv.cat.creature":       "Créature",
@@ -509,7 +509,6 @@ const STRINGS: Dictionary = {
 		# ── Menu items ────────────────────────────────────────
 		"menu.hero":      "HERO",
 		"menu.adventure": "EXPEDITIONS",
-		"menu.map":       "MAP",
 		"menu.forge":     "FORGE",
 		"menu.voies":     "PATHS",
 		"menu.sanctuary": "SANCTUARY",
@@ -518,8 +517,7 @@ const STRINGS: Dictionary = {
 
 		# ── Tooltips hexagones ────────────────────────────────
 		"hex_tt.hero":      "Your hero and their passives.\nCheck equipment and progression.",
-		"hex_tt.adventure": "Go on an expedition.\nChoose a biome and face its creatures.",
-		"hex_tt.map":       "3D holographic map.\nExplore the sector and select a discovered biome.",
+		"hex_tt.adventure": "Go on an expedition.\nOpen the map, manage the district and review biomes.",
 		"hex_tt.forge":     "The Blacksmith.\nUpgrade your gear using collected ingredients.",
 		"hex_tt.voies":     "The six sealed paths of the city.\nA destroyed Lieutenant's Seal restores their district.",
 		"hex_tt.sanctuary": "Evolution Sanctuary.\nEvolve your entities to the next rank.",
@@ -668,9 +666,11 @@ const STRINGS: Dictionary = {
 		# ── AdventurePanel ───────────────────────────────────
 		"adv.running.expedition": "Expedition in progress",
 		"adv.start_btn":          "⚔   START EXPEDITION",
-		"adv.map_btn":            "🗺   MAP",
+		"adv.start_sub":          "Destination and depth are chosen on the map.",
+		"adv.desc":              "The sector stretches beyond the walls. Every expedition brings back Euren, materials and Modules — and leaves a trace: the Alarm rises with each Lieutenant felled.",
 		"adv.map_title":          "EXPEDITION MAP",
 		"adv.map_hint":           "Select a discovered sector",
+		"adv.section.quartier":   "◆  EXPEDITION DISTRICT",
 		"adv.section.biomes":     "◆  AVAILABLE BIOMES",
 		"adv.entities_count":     "Entities %d/%d",
 		"adv.cat.creature":       "Creature",

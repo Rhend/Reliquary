@@ -45,7 +45,8 @@ static func build(host: Village) -> void:
 	# Destination et palier se choisissent SUR LA CARTE (flux acté 06/07/2026) :
 	# le bouton est disponible qu'un biome soit sélectionné ou non (la sélection
 	# du panneau ne sert plus qu'à la consultation). Volontairement plus imposant
-	# que les cartes alentour : c'est l'action principale du panneau.
+	# que les cartes alentour : c'est l'action principale du panneau — et depuis
+	# la suppression de l'hex CARTE (07/2026), le SEUL accès à la HoloMap.
 	var btn := Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size   = Vector2(0, 64)
@@ -62,35 +63,35 @@ static func build(host: Village) -> void:
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UIHelpers.add_hover_feedback(btn)
 	# Pulsation continue pour attirer l'œil (même procédé que le bouton Forger).
+	# create_tween() EXIGE un nœud déjà dans l'arbre (il rend null sinon) : le
+	# bouton est donc ajouté AVANT d'être animé.
 	btn.resized.connect(func() -> void: btn.pivot_offset = btn.size * 0.5)
+	host.rp_content.add_child(btn)
 	var pulse := btn.create_tween()
 	pulse.set_loops()
 	pulse.tween_property(btn, "scale", Vector2(1.02, 1.02), 0.7) \
 			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 	pulse.tween_property(btn, "scale", Vector2.ONE, 0.7) \
 			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-	host.rp_content.add_child(btn)
 
-	# ── Bouton Carte : ouvre la carte holographique des expéditions ──
-	# Sélecteur de biome alternatif, plus immersif que l'accordéon. Toujours
-	# disponible (même biome non sélectionné) ; masqué pendant une expédition.
-	var map_btn := Button.new()
-	map_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map_btn.custom_minimum_size   = Vector2(0, 40)
-	map_btn.visible = not AdventureSystem.is_running
-	map_btn.text = Translations.T("adv.map_btn")
-	map_btn.add_theme_font_size_override("font_size", 15)
-	map_btn.add_theme_color_override("font_color", tcolor.lightened(0.25))
-	map_btn.add_theme_color_override("font_hover_color", Color.WHITE)
-	map_btn.add_theme_stylebox_override("normal", UIHelpers.card_style(tcolor, 0.08, 0.45, 1, 6))
-	map_btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(tcolor, 0.20, 0.90, 2, 6))
-	map_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	map_btn.pressed.connect(host.open_expedition_map)
-	UIHelpers.add_hover_feedback(map_btn)
-	host.rp_content.add_child(map_btn)
+	# Sous-titre du bouton : dire OÙ se choisissent destination et palier, sinon
+	# « partir » sans rien avoir sélectionné dans le panneau reste opaque.
+	var sub := UIHelpers.label(Translations.T("adv.start_sub"), 10, UIColors.TEXT_MUTED)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.visible = not AdventureSystem.is_running
+	host.rp_content.add_child(sub)
 
 	# ── Séparateur ────────────────────────────────────────────
 	host.rp_content.add_child(HSeparator.new())
+
+	# ── Description du lieu (ce que sont les expéditions) ─────
+	var desc := UIHelpers.label(Translations.T("adv.desc"), 11, UIColors.TEXT_MUTED)
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	host.rp_content.add_child(desc)
+
+	# ── Quartier des Expéditions : achat EN LIGNE ─────────────
+	_build_quartier_section(host, tcolor)
 
 	# ── Liste des biomes (accordéon) ──────────────────────────
 	var biomes_sec  := UIHelpers.collapsible_section(Translations.T("adv.section.biomes"), tcolor, true, host.panel_ui_state())
@@ -146,6 +147,28 @@ static func build(host: Village) -> void:
 				glow.visible = true
 		)
 		biomes_body.add_child(wrapper)
+
+# ── Quartier des Expéditions (07/2026) ────────────────────────
+# Les bâtiments du quartier s'achètent ICI, en ligne — le mini-hub spatial
+# (boule d'énergie → District → pièce → BuildingPanel) reste en place et
+# partage le MÊME état : deux chemins, une seule source de vérité
+# (VillageBuildings). Les pièces sont lues de Village.DISTRICTS pour que
+# l'ajout d'une pièce au quartier suffise à la faire apparaître ici.
+static func _build_quartier_section(host: Village, tcolor: Color) -> void:
+	var def: Dictionary = Village.DISTRICTS.get("adventure", {})
+	var rooms: Array = def.get("rooms", [])
+	if rooms.is_empty():
+		return
+	var sec := UIHelpers.collapsible_section(Translations.T("adv.section.quartier"),
+			tcolor, true, host.panel_ui_state())
+	host.rp_content.add_child(sec["wrapper"])
+	var body := sec["body"] as VBoxContainer
+	body.add_theme_constant_override("separation", 6)
+	for room: Array in rooms:
+		var bid := VillageBuildings.building_for_room(str(room[0]))
+		if bid == "":
+			continue
+		body.add_child(BuildingPanel.compact_card(bid, str(room[1])))
 
 # Construit la carte accordéon d'un biome avec ses catégories (créatures, pièges, etc.).
 # Retourne { wrapper, panel, section, arrow } pour que build() connecte le gui_input.

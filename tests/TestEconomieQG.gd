@@ -49,6 +49,7 @@ func _run_all() -> void:
 	_test_atelier_scelle()
 	_test_panneau_voies()
 	_test_panneau_expeditions()
+	_test_expeditions_porte_unique()
 
 # ─── Helpers ────────────────────────────────────────────────
 
@@ -195,6 +196,17 @@ func _contient_label(racine: Node, texte: String) -> bool:
 		if n is Label and texte in (n as Label).text:
 			return true
 		if _contient_label(n, texte):
+			return true
+	return false
+
+# Un Button du sous-arbre CONTIENT-il `texte` ? Les en-têtes de section repliable
+# sont des Buttons dont le texte porte un chevron accolé (« TITRE  ▼  ») : ni
+# _contient_label (mauvais type) ni _compter_boutons (égalité stricte) ne les voit.
+func _contient_bouton_partiel(racine: Node, texte: String) -> bool:
+	for n in racine.get_children():
+		if n is Button and texte in (n as Button).text:
+			return true
+		if _contient_bouton_partiel(n, texte):
 			return true
 	return false
 
@@ -513,6 +525,46 @@ func _test_panneau_expeditions() -> void:
 	creature["xp_maitrise_actuelle"] = c_xp_avant
 	if not etait_connue:
 		GameData.player["bestiary"].erase(cid)
+
+# ─── 12. EXPÉDITIONS = porte unique (07/2026) ───────────────
+# L'hex CARTE est supprimé : le panneau Expéditions porte le départ vers la
+# HoloMap, la description, ET l'achat des bâtiments du quartier en ligne.
+
+func _test_expeditions_porte_unique() -> void:
+	print("\n[TEST 12] Expéditions : porte unique (carte + description + quartier)")
+	_reset_etat()
+
+	# L'hex CARTE ne doit plus exister nulle part dans le menu du hub.
+	var ids: Array = Village.MENU_ITEMS.map(func(d: Array) -> String: return str(d[4]))
+	_assert(not ("map" in ids), "hex CARTE supprimé de MENU_ITEMS")
+	_assert("adventure" in ids, "hex EXPÉDITIONS toujours présent")
+	_assert(Translations.T("menu.map") == "menu.map",
+			"clé i18n menu.map retirée (FR comme EN)")
+
+	var v := Village.new()
+	v.rp_content = VBoxContainer.new()
+	AdventurePanel.build(v)
+
+	_assert(_compter_boutons(v.rp_content, Translations.T("adv.start_btn")) == 1,
+			"un SEUL bouton de départ vers la carte (le doublon « CARTE » a sauté)")
+	_assert(_contient_label(v.rp_content, Translations.T("adv.desc")),
+			"texte de description présent")
+	_assert(_contient_bouton_partiel(v.rp_content, Translations.T("adv.section.quartier")),
+			"section « quartier des expéditions » présente")
+
+	# Une carte de bâtiment par pièce du quartier, avec son bouton Améliorer :
+	# l'achat se fait ICI, sans passer par le mini-hub spatial.
+	var rooms: Array = (Village.DISTRICTS["adventure"] as Dictionary)["rooms"]
+	for room: Array in rooms:
+		var bid := VillageBuildings.building_for_room(str(room[0]))
+		var b := GameData.get_entity(bid)
+		_assert(_contient_label(v.rp_content, Translations.entity_name(b, bid)),
+				"bâtiment « %s » listé dans le panneau" % bid)
+	_assert(_compter_boutons(v.rp_content, Translations.T("building.upgrade.btn")) == rooms.size(),
+			"un bouton Améliorer par bâtiment du quartier (%d)" % rooms.size())
+
+	v.rp_content.free()
+	v.free()
 
 # ─── Rapport final ──────────────────────────────────────────
 
