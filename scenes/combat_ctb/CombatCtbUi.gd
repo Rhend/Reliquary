@@ -147,7 +147,7 @@ static func pour_run(run: ExpeRun, data: Dictionary, sur_fermee: Callable) -> Co
 		return run.inventaire
 	ui.sur_objet_utilise = func(objet: ConsommableData) -> void:
 		run.consommer(objet)
-	ui.fermee.connect(func(_recap: Dictionary) -> void:
+	ui.fermee.connect(func(_r: Dictionary) -> void:
 		ui.queue_free()
 		sur_fermee.call())
 	return ui

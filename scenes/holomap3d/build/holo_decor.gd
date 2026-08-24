@@ -506,6 +506,7 @@ static func parkings(h) -> void:
 				# ALLÉE de circulation : bords + flèche (sens alterné une allée sur deux).
 				n += HoloMesh3D.line(s, c + av * (-hc) + bv * (-hc), c + av * hc + bv * (-hc), col)
 				n += HoloMesh3D.line(s, c + av * (-hc) + bv * hc,    c + av * hc + bv * hc,    col)
+				@warning_ignore("integer_division")
 				var sgn := 1.0 if (((row - 1) / 3) % 2 == 0) else -1.0
 				var tip: Vector3 = c + av * (sgn * h.taille_cellule * 0.30)
 				n += HoloMesh3D.line(s, c - av * (sgn * h.taille_cellule * 0.12), tip, col)   # hampe
@@ -637,6 +638,7 @@ static func _toit_sheds_neon(h, bb: Rect2i, haut: float, col: Color, s: SurfaceT
 	var y1 := float(bb.position.y + bb.size.y - 1) + 0.5
 	var span_x := bb.size.x >= bb.size.y
 	var longn: int = bb.size.x if span_x else bb.size.y
+	@warning_ignore("integer_division")
 	var nb := clampi(int(longn / 2), 2, 7)
 	var th: float = h.unite_maison * 0.6
 	var n := 0
@@ -1346,7 +1348,9 @@ static func _cote_entree(h, cells: Array) -> Dictionary:
 	var horiz := best_d.y != 0
 	best.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return (a.x < b.x) if horiz else (a.y < b.y))
-	return {"cell": best[best.size() / 2], "dir": best_d}
+	@warning_ignore("integer_division")
+	var milieu := best.size() / 2
+	return {"cell": best[milieu], "dir": best_d}
 
 # Entrée principale : ATRIUM vitré sur le côté d'entrée (montants serrés + linteau)
 # coiffé d'un AUVENT débordant vers le trottoir sur béquilles obliques, et tapis

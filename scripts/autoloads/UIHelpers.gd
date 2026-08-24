@@ -155,23 +155,23 @@ static func tier_halo_burst(host: Control, center: Vector2, color: Color,
 	# Anneau : creux au centre, crête à mi-rayon, éteint au bord.
 	var tex := radial_glow_tex(128, [0.0, 0.5, 1.0], [0.0, 0.85, 0.0])
 	var d := final_radius * 2.0
-	var tr := TextureRect.new()
-	tr.texture        = tex
-	tr.expand_mode    = TextureRect.EXPAND_IGNORE_SIZE
-	tr.stretch_mode   = TextureRect.STRETCH_SCALE
-	tr.size           = Vector2(d, d)
-	tr.pivot_offset   = Vector2(d, d) * 0.5
-	tr.position       = center - Vector2(d, d) * 0.5
-	tr.modulate       = Color(color.r, color.g, color.b, 0.95)
-	tr.mouse_filter   = Control.MOUSE_FILTER_IGNORE
-	host.add_child(tr)
+	var anneau := TextureRect.new()
+	anneau.texture        = tex
+	anneau.expand_mode    = TextureRect.EXPAND_IGNORE_SIZE
+	anneau.stretch_mode   = TextureRect.STRETCH_SCALE
+	anneau.size           = Vector2(d, d)
+	anneau.pivot_offset   = Vector2(d, d) * 0.5
+	anneau.position       = center - Vector2(d, d) * 0.5
+	anneau.modulate       = Color(color.r, color.g, color.b, 0.95)
+	anneau.mouse_filter   = Control.MOUSE_FILTER_IGNORE
+	host.add_child(anneau)
 
-	tr.scale = Vector2(0.25, 0.25)
+	anneau.scale = Vector2(0.25, 0.25)
 	var tw := host.create_tween().set_parallel(true)
-	tw.tween_property(tr, "scale", Vector2(1.0, 1.0), 0.55) \
+	tw.tween_property(anneau, "scale", Vector2(1.0, 1.0), 0.55) \
 			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_property(tr, "modulate:a", 0.0, 0.55).set_ease(Tween.EASE_IN)
-	host.get_tree().create_timer(0.7).timeout.connect(tr.queue_free)
+	tw.tween_property(anneau, "modulate:a", 0.0, 0.55).set_ease(Tween.EASE_IN)
+	host.get_tree().create_timer(0.7).timeout.connect(anneau.queue_free)
 
 # ═══════════════════════════════════════════════════════════
 #  Composants

@@ -122,21 +122,23 @@ static func _aretes_surface(arr: Array, xf: Transform3D, dest: PackedVector3Arra
 			idx[i] = i
 	var soude := {}                    # position quantifiée → id soudé
 	var pos := PackedVector3Array()    # id soudé → position (transform composée)
-	var remap := PackedInt32Array()
-	remap.resize(verts.size())
+	var vers_soude := PackedInt32Array()   # id de sommet brut → id soudé
+	vers_soude.resize(verts.size())
 	for i in verts.size():
 		var p := xf * verts[i]
 		var k := Vector3i((p * QUANT).round())
 		if not soude.has(k):
 			soude[k] = pos.size()
 			pos.append(p)
-		remap[i] = soude[k]
+		vers_soude[i] = soude[k]
 	# etat[arête] = normale de la 1re face rencontrée, puis verdict "dure"/"plate".
 	var etat := {}
-	for t in idx.size() / 3:
-		var a := remap[idx[t * 3]]
-		var b := remap[idx[t * 3 + 1]]
-		var c := remap[idx[t * 3 + 2]]
+	@warning_ignore("integer_division")
+	var nb_tris := idx.size() / 3
+	for t in nb_tris:
+		var a := vers_soude[idx[t * 3]]
+		var b := vers_soude[idx[t * 3 + 1]]
+		var c := vers_soude[idx[t * 3 + 2]]
 		if a == b or b == c or a == c:
 			continue
 		var nrm := (pos[b] - pos[a]).cross(pos[c] - pos[a])

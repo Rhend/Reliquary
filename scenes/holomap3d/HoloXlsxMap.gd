@@ -783,8 +783,9 @@ func _finaliser_bloc(cells: Array, honorer_forme: bool = true) -> Dictionary:
 			var hf := _parse_hauteur_forme(texte_case[c])
 			if hf.x > h:
 				h = hf.x
-			if honorer_forme and int(hf.y) != Forme.BOITE:
-				f = int(hf.y)
+			var fc := int(hf.y) as Forme
+			if honorer_forme and fc != Forme.BOITE:
+				f = fc
 	if h <= 0.0:
 		h = hauteur_defaut_m
 	return {
@@ -1046,6 +1047,7 @@ func _alt_proche(a: float, cible: float) -> bool:
 
 # Centre (cellule entière) d'une bbox → repère de pose d'une croix rouge.
 func _centre_cell(bb: Rect2i) -> Vector2i:
+	@warning_ignore("integer_division")
 	return bb.position + Vector2i(bb.size.x / 2, bb.size.y / 2)
 
 # ─── Helpers ──────────────────────────────────────────────────
@@ -1078,16 +1080,16 @@ func _parse_hauteur_forme(txt: String) -> Vector3:
 	var reconnu := 1.0 if (num != "" or lettre_ok) else 0.0
 	return Vector3(h, forme, reconnu)
 
-# Plus grand rectangle de cases de type `t` contenant `seed` (essaie horizontal-
+# Plus grand rectangle de cases de type `t` contenant `depart` (essaie horizontal-
 # d'abord et vertical-d'abord, garde la plus grande aire). Sert à centrer une tour
 # orpheline sur son plan d'eau (le code « 9c » est posé sur le bassin du lac).
-func _rect_local(seed: Vector2i, t: int) -> Rect2i:
-	var r1 := _rect_dir(seed, t, true)
-	var r2 := _rect_dir(seed, t, false)
+func _rect_local(depart: Vector2i, t: int) -> Rect2i:
+	var r1 := _rect_dir(depart, t, true)
+	var r2 := _rect_dir(depart, t, false)
 	return r1 if r1.get_area() >= r2.get_area() else r2
 
-func _rect_dir(seed: Vector2i, t: int, horiz_dabord: bool) -> Rect2i:
-	var x0 := seed.x; var x1 := seed.x; var y0 := seed.y; var y1 := seed.y
+func _rect_dir(depart: Vector2i, t: int, horiz_dabord: bool) -> Rect2i:
+	var x0 := depart.x; var x1 := depart.x; var y0 := depart.y; var y1 := depart.y
 	if horiz_dabord:
 		while _est_type(x0 - 1, y0, t): x0 -= 1
 		while _est_type(x1 + 1, y0, t): x1 += 1

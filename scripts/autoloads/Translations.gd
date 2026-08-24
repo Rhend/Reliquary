@@ -1047,9 +1047,9 @@ func entity_name_at(entity: Dictionary, tier: int, fallback: String = "?") -> St
 		var t := tier
 		while t >= 0:
 			if per_tier.has(t):
-				var n := str(per_tier[t])
-				if not n.is_empty():
-					return n
+				var nom_palier := str(per_tier[t])
+				if not nom_palier.is_empty():
+					return nom_palier
 			t -= 1
 	if lang == "en":
 		var en := str(entity.get("nom_affichage_en", ""))

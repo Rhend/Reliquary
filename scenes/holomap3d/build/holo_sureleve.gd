@@ -56,7 +56,6 @@ static func passerelles(h) -> void:
 	var n := 0
 	var nf := 0
 	var hw: float = h.taille_cellule * 0.5
-	var ep: float = h.taille_cellule * 0.06
 	var rail_h: float = h.taille_cellule * 0.34
 	for pa: Dictionary in h._excel.passerelles:
 		var alt: float = h._hauteur_monde(pa["altitude_m"])
@@ -287,6 +286,7 @@ static func telepheriques(h) -> void:
 # du bâtiment dessous s'il y en a un (point haut sur toit).
 static func _station_point(h, st: Dictionary) -> Vector3:
 	var bb: Rect2i = st["bbox"]
+	@warning_ignore("integer_division")
 	var cell := Vector2i(bb.position.x + bb.size.x / 2, bb.position.y + bb.size.y / 2)
 	var alt_m: float = st["altitude_m"]
 	var b: Dictionary = h._excel.bati_sous(cell)

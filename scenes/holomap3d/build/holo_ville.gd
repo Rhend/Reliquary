@@ -676,15 +676,16 @@ static func _bati_pont(h, pont: Dictionary, col: Color, s: SurfaceTool, sf: Surf
 # les deux sens → la circulation suit la rampe. Renvoie le nb de voitures.
 static func _semer_pont_trafic(h, st: SurfaceTool, centers: Array, ep: float, rng: RandomNumberGenerator) -> int:
 	var nb: int = centers.size() - 1
+	@warning_ignore("integer_division")
 	var iu := clampi(roundi(0.4 * float(nb)), 1, nb / 2)
 	var dy := Vector3(0, ep + h.taille_cellule * 0.03, 0)   # roule SUR le tablier
 	var troncons := [
 		[centers[0], centers[iu]], [centers[iu], centers[nb - iu]], [centers[nb - iu], centers[nb]]]
 	var carlen: float = h.taille_cellule * 0.5
 	var ncar := 0
-	for tr: Array in troncons:
-		var a: Vector3 = tr[0] + dy
-		var b: Vector3 = tr[1] + dy
+	for tron: Array in troncons:
+		var a: Vector3 = tron[0] + dy
+		var b: Vector3 = tron[1] + dy
 		if a.distance_to(b) < 0.05:
 			continue
 		Geo.semer_voitures(st, a, b - a, carlen, rng, h.couleur_voiture_aller, 1, 1.0)

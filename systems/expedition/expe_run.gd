@@ -538,13 +538,13 @@ func _fin_combat(recap: Dictionary, nd: ExpeNoeud, embuscade: bool) -> void:
 # run, l'active jusqu'à la fin de l'expédition, annonce (journal + payload
 # "contenu" pour la popup placeholder de l'appelant).
 func _resoudre_affixe(nd: ExpeNoeud, positif: bool) -> void:
-	var pool: Array[AffixeData] = cfg_noeuds.affixes_positifs if positif \
+	var pool_affixes: Array[AffixeData] = cfg_noeuds.affixes_positifs if positif \
 			else cfg_noeuds.affixes_negatifs
-	if pool.is_empty():
+	if pool_affixes.is_empty():
 		_log("  ⚠ Pool d'affixes %s vide — nœud sans effet" % ("positif" if positif else "négatif"))
 		_finaliser_noeud(nd)
 		return
-	var affixe: AffixeData = pool[rng.randi_range(0, pool.size() - 1)]
+	var affixe: AffixeData = pool_affixes[rng.randi_range(0, pool_affixes.size() - 1)]
 	ajouter_affixe(affixe)
 	_log("  %s %s : %s (%s) — jusqu'à la fin de l'expédition" % [
 			"✨ Bénédiction" if positif else "☒ Piège subi",
