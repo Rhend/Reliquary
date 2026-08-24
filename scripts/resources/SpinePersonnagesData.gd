@@ -10,8 +10,14 @@
 #   • animations « Idle », « Attack_CaC », « Hit », « Death » ;
 #   • PALIERS portés par des SKINS Spine nommées <prefixe_skin><n>, n = 1..5,
 #     dans l'ordre Commun(0) → Peu Commun(1) → Rare(2) → Épique(3) →
-#     Légendaire(4). Un personnage SANS variante (le héros) laisse
-#     `prefixe_skin` vide : il n'a qu'une apparence.
+#     Légendaire(4).
+#
+# Un personnage peut aussi porter des variantes NOMMÉES plutôt que des paliers
+# (`variantes` : liste explicite de {skin, nom}) — c'est la forme prévue pour
+# les versions masculine / féminine du héros. Au 24/08/2026 Christophe ne les a
+# PAS livrées : Relic n'expose que la skin « default », donc l'entrée reste
+# sans `prefixe_skin` ni `variantes` et n'a qu'une apparence. Les brancher =
+# remplir `variantes` dans le .tres, aucun code à toucher.
 #
 # Header .tres requis :
 #   [gd_resource type="Resource" script_class="SpinePersonnagesData" ...]
@@ -53,3 +59,30 @@ static func skin_pour_palier(entree: Dictionary, palier: int) -> String:
 	if prefixe == "":
 		return ""
 	return "%s%d" % [prefixe, palier + 1]   # Nv1 = Commun
+
+# Apparences d'une entrée, dans l'ordre d'affichage. Trois formes, du plus
+# spécifique au plus général — un appelant n'a jamais à savoir laquelle :
+#   • `variantes` rempli   → liste nommée (héros masculin / féminin) ;
+#   • `prefixe_skin` rempli → les 5 paliers Commun → Légendaire (ennemis) ;
+#   • ni l'un ni l'autre    → une apparence unique, sans skin à poser.
+# Chaque élément : {"skin": String, "nom": String, "palier": int} — `palier`
+# vaut -1 hors échelle de rareté (l'appelant colore alors en neutre).
+static func apparences(entree: Dictionary) -> Array[Dictionary]:
+	var sortie: Array[Dictionary] = []
+	var nommees: Array = entree.get("variantes", [])
+	if not nommees.is_empty():
+		for v in nommees:
+			sortie.append({"skin": str((v as Dictionary).get("skin", "")),
+					"nom": str((v as Dictionary).get("nom", "?")), "palier": -1})
+		return sortie
+	if str(entree.get("prefixe_skin", "")) != "":
+		for t in NB_PALIERS:
+			sortie.append({"skin": skin_pour_palier(entree, t),
+					"nom": GameData.get_tier_name(t), "palier": t})
+		return sortie
+	sortie.append({"skin": "", "nom": str(entree.get("nom", "?")), "palier": -1})
+	return sortie
+
+# Paliers de rareté portés par les exports d'ennemis : Commun(0) → Légendaire(4).
+# Unique(5) est hors échelle créature (Balance.ENTITY_MAX_TIER).
+const NB_PALIERS := 5

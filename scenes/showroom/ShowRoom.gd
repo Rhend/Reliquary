@@ -42,7 +42,7 @@ const DECOR_COUCHES: Array[String] = [
 
 # Paliers montrés : Commun(0) → Légendaire(4). Unique(5) est hors échelle
 # créature (Balance.ENTITY_MAX_TIER), et les exports n'ont que 5 skins.
-const NB_PALIERS := 5
+const NB_PALIERS := SpinePersonnagesData.NB_PALIERS
 
 # ─── Mise en page du mode LIBRE ──────────────────────────────
 const COL_PAS := 320.0     # écart horizontal entre deux paliers
@@ -66,9 +66,12 @@ enum Mode { LIBRE, COMBAT }
 
 var _registre: SpinePersonnagesData
 var _ennemis: Array[Dictionary] = []
+var _heros: Dictionary = {}
+var _heros_apparences: Array[Dictionary] = []
 var _mode: int = Mode.LIBRE
 var _idx_monstre := 0
 var _idx_palier := 0
+var _idx_heros := 0   # apparence du héros (1 seule tant que Relic n'a que « default »)
 
 var _monde: Node2D            # sprites du mode LIBRE (espace monde)
 var _duel: Node2D             # sprites du mode COMBAT
@@ -83,8 +86,11 @@ func _ready() -> void:
 	_registre = load(REGISTRE) as SpinePersonnagesData
 	if _registre != null:
 		_ennemis = _registre.ennemis()
+		_heros = _registre.heros()
+		if not _heros.is_empty():
+			_heros_apparences = SpinePersonnagesData.apparences(_heros)
 	_construire()
-	if _ennemis.is_empty() or not SpriteSpinePersonnage.disponible():
+	if _registre == null or not SpriteSpinePersonnage.disponible():
 		_titre.text = "AUCUN ASSET SPINE DISPONIBLE\n" \
 				+ "(GDExtension bin/ absent, ou registre vide)"
 		return
@@ -162,32 +168,55 @@ func _construire_decor() -> void:
 
 # ─── Mode LIBRE : une rangée par monstre ─────────────────────
 
+# Rangées affichées : le HÉROS d'abord (c'est le mètre étalon — on juge la
+# taille des monstres par rapport à lui), puis les ennemis dans l'ordre du
+# registre. Chaque rangée montre les apparences de l'entrée : 5 paliers pour
+# un ennemi, autant de variantes nommées que le héros en expose (une seule
+# aujourd'hui, deux le jour où les skins M/F arrivent).
+func _rangees() -> Array[Dictionary]:
+	var sortie: Array[Dictionary] = []
+	if not _heros.is_empty():
+		sortie.append(_heros)
+	sortie.append_array(_ennemis)
+	return sortie
+
 func _peupler_libre() -> void:
-	for i in _ennemis.size():
-		var e := _ennemis[i]
+	var rangees := _rangees()
+	for i in rangees.size():
+		var e := rangees[i]
 		var y := i * RANG_PAS
 		var nom := UIHelpers.label(str(e.get("nom", "?")), 16, UIColors.TEXT_HEADER)
 		nom.position = Vector2(-MARGE_G, y - 40.0)
 		_monde.add_child(nom)
-		for t in NB_PALIERS:
+		var apparences := SpinePersonnagesData.apparences(e)
+		for k in apparences.size():
+			var ap := apparences[k]
 			var sprite := SpriteSpinePersonnage.creer(str(e.get("skel", "")),
-					str(e.get("atlas", "")),
-					SpinePersonnagesData.skin_pour_palier(e, t))
+					str(e.get("atlas", "")), str(ap.get("skin", "")))
 			if sprite == null:
 				continue
-			sprite.position = Vector2(t * COL_PAS, y)
+			sprite.position = Vector2(k * COL_PAS, y)
 			_monde.add_child(sprite)
-			# Étiquette de palier SOUS les pieds (l'origine du squelette est
-			# au sol : tout le sprite est au-dessus de `position`).
-			var lbl := UIHelpers.label(GameData.get_tier_name(t), 12, UIColors.tier_color(t))
-			lbl.position = Vector2(t * COL_PAS - 44.0, y + 8.0)
+			# Étiquette SOUS les pieds (l'origine du squelette est au sol :
+			# tout le sprite est au-dessus de `position`). Couleur de rareté
+			# quand c'en est un, neutre pour une variante nommée.
+			# Apparence unique et sans nom propre → l'étiquette répéterait le
+			# nom de la rangée : on s'en passe.
+			if apparences.size() == 1 and str(ap.get("skin", "")) == "":
+				continue
+			var palier := int(ap.get("palier", -1))
+			var teinte: Color = UIColors.tier_color(palier) if palier >= 0 else UIColors.TEXT_MUTED
+			var lbl := UIHelpers.label(str(ap.get("nom", "?")), 12, teinte)
+			lbl.position = Vector2(k * COL_PAS - 44.0, y + 8.0)
 			_monde.add_child(lbl)
 	_repere.queue_redraw()
 
 func _dessiner_reperes() -> void:
-	for i in _ennemis.size():
+	var rangees := _rangees()
+	for i in rangees.size():
 		var y := i * RANG_PAS
-		_repere.draw_line(Vector2(-MARGE_G, y), Vector2(NB_PALIERS * COL_PAS, y),
+		var cols: int = maxi(1, SpinePersonnagesData.apparences(rangees[i]).size())
+		_repere.draw_line(Vector2(-MARGE_G, y), Vector2((cols - 1) * COL_PAS + 120.0, y),
 				Color(1, 1, 1, 0.14), 2.0)
 
 # ─── Mode COMBAT : duel au cadrage réel ──────────────────────
@@ -199,15 +228,20 @@ func _peupler_duel() -> void:
 		return
 	var sol_y := VUE.y * SOL_Y_FRAC
 
-	# Vis-à-vis : le héros du registre, à l'emplacement du camp joueur.
-	var h := _registre.heros()
-	if not h.is_empty():
-		var relic := SpriteSpinePersonnage.creer(str(h.get("skel", "")),
-				str(h.get("atlas", "")), SpinePersonnagesData.skin_pour_palier(h, 0))
+	# Vis-à-vis : le héros, à l'emplacement du camp joueur, dans l'apparence
+	# courante (une seule tant que Relic n'expose que « default »).
+	if not _heros.is_empty():
+		var skin_h := ""
+		if _idx_heros < _heros_apparences.size():
+			skin_h = str(_heros_apparences[_idx_heros].get("skin", ""))
+		var relic := SpriteSpinePersonnage.creer(str(_heros.get("skel", "")),
+				str(_heros.get("atlas", "")), skin_h)
 		if relic != null:
 			relic.position = Vector2(VUE.x * SOL_X_JOUEUR, sol_y)
 			_duel.add_child(relic)
 
+	if _ennemis.is_empty():
+		return
 	var e := _ennemis[_idx_monstre]
 	var mob := SpriteSpinePersonnage.creer(str(e.get("skel", "")), str(e.get("atlas", "")),
 			SpinePersonnagesData.skin_pour_palier(e, _idx_palier))
@@ -239,26 +273,34 @@ func _appliquer_mode() -> void:
 func _cadrer_tout() -> void:
 	const PAD := 80.0   # sinon le nom du monstre affleure le bord gauche
 	var largeur := MARGE_G + NB_PALIERS * COL_PAS + PAD
-	var hauteur := maxf(RANG_PAS, _ennemis.size() * RANG_PAS)
+	var hauteur := maxf(RANG_PAS, _rangees().size() * RANG_PAS)
 	_cam.position = Vector2(largeur * 0.5 - MARGE_G - PAD * 0.5,
 			hauteur * 0.5 - RANG_PAS * 0.5)
 	_cam.zoom = Vector2.ONE * minf(VUE.x / largeur, VUE.y / (hauteur + 200.0))
 
 func _rafraichir_hud() -> void:
-	if _ennemis.is_empty():
-		return
 	if _mode == Mode.COMBAT:
+		if _ennemis.is_empty():
+			return
 		var e := _ennemis[_idx_monstre]
-		_titre.text = "COMBAT — %s  ·  %s" % [str(e.get("nom", "?")),
-				GameData.get_tier_name(_idx_palier)]
-		_hud.text = "[Tab] mode libre    [←/→] monstre    [↑/↓] palier\n" \
+		_titre.text = "COMBAT — %s  ·  %s   vs   %s" % [str(e.get("nom", "?")),
+				GameData.get_tier_name(_idx_palier), _nom_apparence_heros()]
+		_hud.text = "[Tab] mode libre    [←/→] monstre    [↑/↓] palier    [H] héros\n" \
 				+ "cadrage réel : sol %.2f · joueur %.2f · adverse %.2f · %d px" % [
 				SOL_Y_FRAC, SOL_X_JOUEUR, SOL_X_ADVERSE,
 				int(SpriteSpinePersonnage.HAUTEUR_CIBLE_PX)]
 	else:
-		_titre.text = "SHOWROOM — %d monstre(s) × %d paliers" % [_ennemis.size(), NB_PALIERS]
+		_titre.text = "SHOWROOM — héros + %d monstre(s) × %d paliers" % [
+				_ennemis.size(), NB_PALIERS]
 		_hud.text = "[Tab] mode combat    [glisser] déplacer    [molette] zoom    [R] recadrer\n" \
-				+ "une rangée par monstre · paliers de gauche à droite (Commun → Légendaire)"
+				+ "une rangée par personnage · monstres : paliers Commun → Légendaire"
+
+# Libellé de l'apparence courante du héros — « — » s'il n'en a qu'une (Relic
+# aujourd'hui) : afficher « Défaut » laisserait croire qu'il y a un choix.
+func _nom_apparence_heros() -> String:
+	if _heros_apparences.size() <= 1:
+		return str(_heros.get("nom", "?"))
+	return str(_heros_apparences[_idx_heros].get("nom", "?"))
 
 # ─── Entrées ─────────────────────────────────────────────────
 
@@ -303,5 +345,12 @@ func _touche(code: int) -> void:
 			if _mode == Mode.COMBAT:
 				var pas := 1 if code == KEY_DOWN else -1
 				_idx_palier = wrapi(_idx_palier + pas, 0, NB_PALIERS)
+				_peupler_duel()
+				_rafraichir_hud()
+		KEY_H:
+			# Sans effet tant que le héros n'a qu'une apparence — la touche
+			# existe pour le jour où les skins masculine/féminine arrivent.
+			if _mode == Mode.COMBAT and _heros_apparences.size() > 1:
+				_idx_heros = wrapi(_idx_heros + 1, 0, _heros_apparences.size())
 				_peupler_duel()
 				_rafraichir_hud()

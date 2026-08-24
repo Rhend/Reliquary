@@ -4,12 +4,19 @@
 
 [resource]
 script = ExtResource("1")
+; Relic n'expose qu'une skin « default » (vérifié 24/08/2026) : `variantes` est
+; vide, il s'affiche en une seule apparence. Le jour où Christophe livre les
+; versions masculine / féminine, il suffit de les nommer ici — la ShowRoom les
+; montrera sans modification de code :
+;   "variantes": [{"skin": "Relic_M", "nom": "Masculin"},
+;                 {"skin": "Relic_F", "nom": "Féminin"}]
 personnages = [{
 "id": "relic",
 "nom": "Relic (héros)",
 "skel": "res://assets/personnages/relic/Relic.skel",
 "atlas": "res://assets/personnages/relic/Relic.atlas",
 "prefixe_skin": "",
+"variantes": [],
 "ennemi": false
 }, {
 "id": "flamebot",
