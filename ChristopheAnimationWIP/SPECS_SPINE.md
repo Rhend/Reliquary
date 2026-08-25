@@ -1,4 +1,4 @@
-# 🦴 Intégrer un export Spine dans IdleEvolution
+# 🦴 Intégrer un export Spine dans Reliquary
 
 Fiche pour **Christophe**.
 But : un export qui rentre dans le jeu **direct**, sans qu'on ait à le réparer.
