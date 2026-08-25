@@ -22,6 +22,13 @@ script = ExtResource("1")
 ; deux chevelures à la fois. Hair_1 est le socle par défaut ; le jour où
 ; le joueur choisit sa coiffure, elles deviennent un axe à part entière
 ; (les `cosmetiques` sont déjà pris par les accessoires de visage).
+;
+; VÊTEMENT — même trajectoire annoncée par Christophe (25/08/2026) :
+; « Men_Random_Level_Clothing_1 » est dans `skins_base` parce qu'il est SEUL.
+; Dès qu'un « _Clothing_2 » est livré, la famille devient EXCLUSIVE comme les
+; coiffures et les visages, et sort de `skins_base`. Trois familles alternatives
+; pour un seul axe `cosmetiques` : c'est ce jour-là qu'il faudra trancher entre
+; plusieurs axes indépendants et un produit cartésien de jeux nommés.
 personnages = [{
 "id": "relic",
 "nom": "Relic (héros)",
