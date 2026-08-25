@@ -127,7 +127,7 @@ func _test_aller_retour_qg() -> void:
 	salle._appliquer_mode()
 	_assert(salle._duel.get_child_count() >= 1, "mode combat : le duel est peuplé")
 	_assert(salle._decor.visible and not salle._fond_neutre.visible,
-			"mode combat : décor city affiché, fond neutre masqué")
+			"mode combat : fond scindé affiché, fond neutre masqué")
 
 	# Cycle de palier et de monstre : la commutation ne doit pas vider la scène.
 	salle._idx_palier = SpinePersonnagesData.NB_PALIERS - 1

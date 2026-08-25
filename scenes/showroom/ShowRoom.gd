@@ -11,8 +11,11 @@
 #               (Commun → Légendaire). Caméra pan/zoom libre.
 #   • COMBAT  — cadrage RÉEL d'une bataille : le monstre courant à
 #               l'emplacement adverse, Relic à l'emplacement joueur, même
-#               sol / mêmes ancrages / même hauteur cible que CombatCtbUi,
-#               sur le décor city. Sert à juger la lisibilité en situation.
+#               fond scindé (`CombatFondScinde` — décor Christophe côté
+#               joueur, biome placeholder côté adverse), même sol / mêmes
+#               ancrages / même hauteur cible que CombatCtbUi — présentation
+#               PARTAGÉE (pas un décor à part). Sert à juger la lisibilité
+#               en situation.
 #
 # Le contenu vient du registre data/personnages/spine_personnages.tres :
 # un monstre livré = une entrée, il apparaît ici sans toucher ce fichier.
@@ -32,21 +35,6 @@ class_name ShowRoom
 extends Node2D
 
 const REGISTRE := SpinePersonnagesData.CHEMIN
-const DECOR_DIR := "res://assets/background/city/"
-# Couches du décor, du plan le PLUS LOINTAIN au plus proche (les fichiers sont
-# pré-calés sur un même canevas 4770×2655 : un simple empilement suffit).
-const DECOR_COUCHES: Array[String] = [
-	"Background_City_Plan_Fond.png",
-	"Background_City_Plan_Fond_2.png",
-	"Background_City_Plan_5_Immeuble_01.png",
-	"Background_City_Plan_5_Immeuble_02.png",
-	"Background_City_Plan_4_Immeuble_01.png",
-	"Background_City_Plan_4_Immeuble_01_Neon.png",
-	"Background_City_Plan_4_Immeuble_02.png",
-	"Background_City_Plan_3_Immeuble_01.png",
-	"Background_City_Plan_3_Immeuble_01_Neon.png",
-	"Background_City_Plan_2_Sol.png",
-]
 
 # Paliers montrés : Commun(0) → Légendaire(4). Unique(5) est hors échelle
 # créature (Balance.ENTITY_MAX_TIER), et les exports n'ont que 5 skins.
@@ -62,13 +50,6 @@ const VUE := Vector2(1280, 720)     # taille de référence du projet
 const SOL_Y_FRAC := 0.60
 const SOL_X_JOUEUR := 0.34
 const SOL_X_ADVERSE := 0.66
-# Hauteur du SOL DANS le décor city, en fraction de l'image cadrée. Mesurée sur
-# la livraison de Christophe : le trottoir commence plus bas que le sol du
-# combat (0.60), donc le décor est REMONTÉ pour que les pieds y posent
-# vraiment — sans ça les personnages flottent. À réajuster si le décor change ;
-# c'est aussi l'arbitrage qui se posera à l'intégration en combat réel (bouger
-# le décor, ou bouger SOL_Y_FRAC).
-const DECOR_SOL_FRAC := 0.688
 
 # ─── Éclairage de la vitrine ─────────────────────────────────
 # RÈGLE : on éclaire le DÉCOR, jamais les personnages. Moduler les sprites
@@ -111,7 +92,8 @@ var _monde: Node2D            # sprites du mode LIBRE (espace monde)
 var _duel: Node2D             # sprites du mode COMBAT
 var _cam: Camera2D
 var _fond_neutre: ColorRect
-var _decor: Control
+var _decor: Control            # fond scindé (mode combat) : biomes + diagonale + sol
+var _sol_combat: Control       # ligne d'horizon + emplacements, dessinés dans _decor
 var _voile: ColorRect         # brume claire PAR-DESSUS le décor (mode combat)
 var _hud: Label
 var _titre: Label
@@ -152,7 +134,7 @@ func _construire() -> void:
 	_decor.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_decor.visible = false
 	fond_layer.add_child(_decor)
-	_construire_decor()
+	_construire_fond_combat()
 
 	# Voile : posé APRÈS le décor donc au-dessus. Lever les noirs par-dessus
 	# est fiable partout, là où un modulate > 1 dépend du rendu (GL Compatibility).
@@ -191,29 +173,36 @@ func _construire() -> void:
 	# sinon le ColorRect garderait sa couleur par défaut.
 	_appliquer_lumiere()
 
-func _construire_decor() -> void:
-	# Cale le SOL du décor sur celui du combat, sans laisser de vide au cadre.
-	# Décaler seul ne suffit pas : remonter le décor découvre le bas de l'écran.
-	# On cherche donc la hauteur H telle que le sol tombe sur SOL_Y_FRAC ET que
-	# le rectangle déborde des deux côtés — les deux contraintes donnent chacune
-	# une hauteur minimale, on garde la plus grande (le surplus est rogné par
-	# STRETCH_KEEP_ASPECT_COVERED, comportement voulu pour un fond).
-	var h := maxf(VUE.y * SOL_Y_FRAC / DECOR_SOL_FRAC,
-			VUE.y * (1.0 - SOL_Y_FRAC) / (1.0 - DECOR_SOL_FRAC))
-	var haut := VUE.y * SOL_Y_FRAC - DECOR_SOL_FRAC * h
-	_decor.offset_top = haut
-	_decor.offset_bottom = haut + h - VUE.y
-	for nom in DECOR_COUCHES:
-		var chemin := DECOR_DIR + nom
-		if not ResourceLoader.exists(chemin):
-			continue   # couche non livrée : on empile ce qui existe
-		var couche := TextureRect.new()
-		couche.texture = load(chemin)
-		couche.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		couche.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		couche.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		couche.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_decor.add_child(couche)
+# Fond scindé du mode COMBAT — REPRIS À L'IDENTIQUE de CombatCtbUi via
+# `CombatFondScinde` (SOURCE PARTAGÉE, pas une copie) : la vitrine doit juger
+# les personnages sur la présentation RÉELLE du combat, pas sur un décor à
+# part — et les deux ne peuvent plus diverger puisqu'ils appellent le même code.
+func _construire_fond_combat() -> void:
+	CombatFondScinde.construire(_decor, SOL_Y_FRAC, CombatCtbUi.BANDE_VS_PX)
+	_sol_combat = Control.new()
+	_sol_combat.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_sol_combat.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sol_combat.draw.connect(_dessiner_sol_combat)
+	_sol_combat.resized.connect(_sol_combat.queue_redraw)
+	_decor.add_child(_sol_combat)
+
+# Ligne d'horizon + bande dégradée + emplacement (ellipse) sous chaque
+# personnage — copie de CombatCtbUi._dessiner_sol, réduite aux deux
+# emplacements fixes de la vitrine (joueur / adverse, toujours 1 vs 1 ici).
+func _dessiner_sol_combat() -> void:
+	var w := VUE.x
+	var y := VUE.y * SOL_Y_FRAC
+	_sol_combat.draw_line(Vector2(0, y), Vector2(w, y), UIColors.CYBER_SOL, 2.0)
+	for i in 3:
+		_sol_combat.draw_rect(Rect2(0.0, y + float(i) * 16.0, w, 16.0),
+				Color(UIColors.CYBER_SOL, UIColors.CYBER_SOL.a * (0.45 - 0.13 * float(i))))
+	for camp_joueur in [true, false]:
+		var x := w * (SOL_X_JOUEUR if camp_joueur else SOL_X_ADVERSE)
+		var accent := ExpeStyle.accent_camp(camp_joueur)
+		_sol_combat.draw_set_transform(Vector2(x, y), 0.0, Vector2(1.0, 0.38))
+		_sol_combat.draw_circle(Vector2.ZERO, 34.0, Color(UIColors.CYBER_BG, 0.55))
+		_sol_combat.draw_arc(Vector2.ZERO, 34.0, 0.0, TAU, 40, Color(accent, 0.65), 2.0)
+		_sol_combat.draw_set_transform(Vector2.ZERO)
 
 # ─── Mode LIBRE : une rangée par monstre ─────────────────────
 

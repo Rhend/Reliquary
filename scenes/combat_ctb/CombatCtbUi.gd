@@ -2,10 +2,12 @@
 # CombatCtbUi — Écran de combat CTB JOUABLE (Rework Combat, chantier 5).
 #
 # Écran scindé (référence Advanced Wars) : camp joueur à gauche, camp adverse
-# à droite (jusqu'à 3 combattants par camp — architecture N-vs-N actée), Lieu
-# en fond purement COSMÉTIQUE (BiomeBackground scindé en diagonale — CONSERVÉ
-# à la demande de Rhend, la peau cyberpunk du chantier 10 habille le chrome
-# par-dessus : panneaux opaques, tokens UIColors.CYBER_*, ExpeStyle). Scène de
+# à droite (jusqu'à 3 combattants par camp — architecture N-vs-N actée), fond
+# scindé en diagonale purement COSMÉTIQUE (`CombatFondScinde` — décor RÉEL de
+# Christophe côté joueur, biome placeholder `BiomeBackground` côté adverse,
+# le Lieu n'ayant pas encore son propre art — CONSERVÉ à la demande de Rhend,
+# la peau cyberpunk du chantier 10 habille le chrome par-dessus : panneaux
+# opaques, tokens UIColors.CYBER_*, ExpeStyle). Scène de
 # bataille : SOL + emplacements des sprites — le personnage principal est le
 # sprite Spine RÉEL de Christophe (SpriteSpinePersonnage : Idle en boucle,
 # Attack_CaC ou Attack_Shoot selon le GESTE de l'action ; retombe sur le
@@ -168,10 +170,11 @@ func _ready() -> void:
 # ─── Construction (100 % code — règle projet) ────────────────
 
 func _construire() -> void:
-	# Fond scindé : ambiance Ville côté joueur, biome côté adverse (presets
-	# BiomeBackground — placeholder du Lieu, purement cosmétique). RESTAURÉ à
-	# la demande de Rhend après la passe cyberpunk : les biomes restent
-	# visibles, la peau habille le chrome PAR-DESSUS (panneaux opaques).
+	# Fond scindé : décor RÉEL de Christophe côté joueur, biome placeholder
+	# côté adverse (`CombatFondScinde`, PARTAGÉ avec la vitrine ShowRoom —
+	# une seule source, jamais deux copies qui divergent). RESTAURÉ à la
+	# demande de Rhend après la passe cyberpunk : le fond reste visible, la
+	# peau habille le chrome PAR-DESSUS (panneaux opaques).
 	# Conteneur ZOOMABLE de la scène de bataille (fonds + diagonale + sol +
 	# sprites) : le zoom d'attaque façon Darkest Dungeon ne scale que lui —
 	# le chrome UI (file, cartes, actions, FX) reste fixe par-dessus.
@@ -179,20 +182,7 @@ func _construire() -> void:
 	_couche_scene.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_couche_scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_couche_scene)
-	var fond_joueur := BiomeBackground.new()
-	fond_joueur.apply_preset("city")
-	fond_joueur.set_split(1, BANDE_VS_PX)
-	_couche_scene.add_child(fond_joueur)
-	var fond_adverse := BiomeBackground.new()
-	fond_adverse.apply_preset("forest")
-	fond_adverse.set_split(2, BANDE_VS_PX)
-	_couche_scene.add_child(fond_adverse)
-	var seam := Control.new()
-	seam.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	seam.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	seam.draw.connect(_dessiner_diagonale.bind(seam))
-	seam.resized.connect(seam.queue_redraw)
-	_couche_scene.add_child(seam)
+	CombatFondScinde.construire(_couche_scene, SOL_Y_FRAC, BANDE_VS_PX)
 
 	# Scène de bataille : SOL + emplacements des futurs sprites de personnages
 	# (placeholder : boules de lumière — retour Rhend, chantier 10).
@@ -346,19 +336,6 @@ func _colonne_camp(parent: Control, alignement: int) -> VBoxContainer:
 	marge.add_child(v)
 	parent.add_child(marge)
 	return v
-
-# Bande diagonale entre les deux fonds biome scindés — liseré double aux
-# accents de la peau (cyan/magenta), seule touche cyberpunk du fond.
-func _dessiner_diagonale(seam: Control) -> void:
-	var w := seam.size.x
-	var h := seam.size.y
-	if w <= 0.0 or h <= 0.0:
-		return
-	var xt := w * 0.5 + BANDE_VS_PX * 0.5
-	var xb := w * 0.5 - BANDE_VS_PX * 0.5
-	seam.draw_line(Vector2(xt, 0), Vector2(xb, h), Color(UIColors.CYBER_ACCENT, 0.55), 2.0)
-	seam.draw_line(Vector2(xt + 5, 0), Vector2(xb + 5, h),
-			Color(UIColors.CYBER_ACCENT_2, 0.35), 1.0)
 
 # ─── Scène de bataille : sol + emplacements (placeholder sprites) ──
 
