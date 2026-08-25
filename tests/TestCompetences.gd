@@ -31,6 +31,7 @@ func _ready() -> void:
 	_test_cooldown()
 	_test_garde_fous()
 	_test_dotation_heros()
+	_test_geste_attaque()
 	await _test_ui()
 	print("\n════════════════════════════════")
 	print("RÉSULTAT : %d OK, %d échec(s)" % [_nb_ok, _fail.size()])
@@ -151,10 +152,74 @@ func _test_dotation_heros() -> void:
 	var ids: Array[String] = []
 	for c: CompetenceCtbData in h.competences:
 		ids.append(c.id)
-	_check("dotation appliquée (frappe lourde + second souffle)",
-			ids.has("comp_frappe_lourde") and ids.has("comp_second_souffle"))
+	_check("dotation appliquée (frappe lourde + second souffle + tir de lame)",
+			ids.has("comp_frappe_lourde") and ids.has("comp_second_souffle")
+			and ids.has("comp_tir_de_lame"))
 	_check("le bestiaire reste sans compétence",
 			CtbPont.combattant_depuis_entite("creature_foret_surface").competences.is_empty())
+
+# ─── 5 bis. Geste d'attaque (Attack_Shoot, 07/2026) ─────────
+# Le geste est PUREMENT visuel : il voyage dans l'événement « attaque » pour
+# que l'UI choisisse l'animation et la mise en scène, et ne doit toucher à
+# aucun calcul du moteur.
+
+func _test_geste_attaque() -> void:
+	print("\n[5 bis] Geste d'attaque : relayé à l'UI, sans effet sur les dégâts")
+	_check("défaut d'une compétence = mêlée",
+			CompetenceCtbData.new().animation == Enums.AnimationAttaque.MELEE)
+
+	# Attaque de base : mêlée, toujours.
+	var m := _moteur(10.0, [])
+	var vus: Array[Dictionary] = []
+	m.evenement.connect(func(e: Dictionary) -> void: vus.append(e))
+	m.activer_suivant()
+	m.jouer({"type": Enums.ActionCtb.ATTAQUER, "cible": _ennemi_de(m)})
+	var att := _dernier_attaque(vus)
+	_check("l'attaque de base porte un geste", not att.is_empty())
+	_check("attaque de base = mêlée",
+			int(att.get("animation", -1)) == Enums.AnimationAttaque.MELEE)
+	var degats_melee := int(att.get("degats", 0))
+
+	# Même compétence, même graine, seul le geste change → mêmes dégâts.
+	var tir := _frappe(1.6, 0)
+	tir.animation = Enums.AnimationAttaque.DISTANCE
+	var m2 := _moteur(10.0, [tir])
+	var vus2: Array[Dictionary] = []
+	m2.evenement.connect(func(e: Dictionary) -> void: vus2.append(e))
+	m2.activer_suivant()
+	m2.jouer({"type": Enums.ActionCtb.COMPETENCE, "competence": tir,
+			"cible": _ennemi_de(m2)})
+	var att2 := _dernier_attaque(vus2)
+	_check("le geste de la compétence est relayé",
+			int(att2.get("animation", -1)) == Enums.AnimationAttaque.DISTANCE)
+
+	var melee := _frappe(1.6, 0)   # identique, geste par défaut
+	var m3 := _moteur(10.0, [melee])
+	var vus3: Array[Dictionary] = []
+	m3.evenement.connect(func(e: Dictionary) -> void: vus3.append(e))
+	m3.activer_suivant()
+	m3.jouer({"type": Enums.ActionCtb.COMPETENCE, "competence": melee,
+			"cible": _ennemi_de(m3)})
+	_check("le geste ne change AUCUN dégât",
+			int(att2.get("degats", -1)) == int(_dernier_attaque(vus3).get("degats", -2)))
+	_check("… et une compétence frappe bien plus fort qu'une attaque nue",
+			int(att2.get("degats", 0)) > degats_melee)
+
+	# La dotation réelle porte la compétence à distance : sans elle, le geste
+	# livré par Christophe n'aurait aucun déclencheur en jeu.
+	var comps := CtbPont.combattant_depuis_heros().competences
+	var tirs := comps.filter(func(c: CompetenceCtbData) -> bool:
+			return c.animation == Enums.AnimationAttaque.DISTANCE)
+	_check("le héros dispose d'au moins une compétence à distance", not tirs.is_empty())
+	if not tirs.is_empty():
+		_check("c'est bien une attaque (le geste n'a de sens que là)",
+				(tirs[0] as CompetenceCtbData).effet == Enums.EffetCompetence.ATTAQUE_MULT)
+
+func _dernier_attaque(vus: Array[Dictionary]) -> Dictionary:
+	for i in range(vus.size() - 1, -1, -1):
+		if str(vus[i].get("type", "")) == "attaque":
+			return vus[i]
+	return {}
 
 # ─── 6. Écran de combat : boutons ────────────────────────────
 

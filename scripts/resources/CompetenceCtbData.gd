@@ -24,6 +24,10 @@ extends Resource
 @export var effet: Enums.EffetCompetence = Enums.EffetCompetence.ATTAQUE_MULT
 # ATTAQUE_MULT : multiplicateur de dégâts ; SOIN_PCT_PV_MAX : fraction de PV max.
 @export var valeur: float = 1.5
+# GESTE de l'attaque (ATTAQUE_MULT uniquement) : purement visuel — il ne
+# change ni les dégâts ni le ciblage, seulement l'animation de l'attaquant et
+# la mise en scène (voir Enums.AnimationAttaque). Ignoré par les autres effets.
+@export var animation: Enums.AnimationAttaque = Enums.AnimationAttaque.MELEE
 # Cooldown en ACTIVATIONS du lanceur (0 = utilisable à chaque activation).
 @export var cooldown: int = 3
 

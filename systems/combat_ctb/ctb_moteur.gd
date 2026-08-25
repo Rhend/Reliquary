@@ -55,6 +55,8 @@
 #   • `evenement` — signal STRUCTURÉ pour l'UI (le journal texte reste la
 #     référence de dev) : {"type": "activation"|"attaque"|"defense"|
 #     "defense_fin"|"statut_pose"|"tick_statut", ...} — cf. points d'émission.
+#     « attaque » porte `animation` (Enums.AnimationAttaque) : le GESTE, pour
+#     l'UI seule — le moteur ne s'en sert jamais pour résoudre quoi que ce soit.
 #   • prevoir_ordre(n) — prédiction PURE (sans mutation) de l'ordre des n
 #     prochaines activations, horloges simulées à VIT courante. Exact tant que
 #     rien ne meurt et qu'aucune VIT ne change d'ici là (la file affichée se
@@ -316,7 +318,9 @@ func _tick_statuts(c: CtbCombattant, timing: Enums.TimingStatut) -> void:
 # `mult` (chantier 16) : multiplicateur de compétence (Frappe lourde) —
 # appliqué à la base mitigée, AVANT le crit (une frappe lourde critique
 # multiplie les deux : c'est le contrat).
-func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant, mult: float = 1.0) -> void:
+# `animation` : GESTE relayé tel quel à l'UI — aucune incidence sur le calcul.
+func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant, mult: float = 1.0,
+		animation: Enums.AnimationAttaque = Enums.AnimationAttaque.MELEE) -> void:
 	var cb := cible
 	if cb == null or not cb.est_vivant():
 		cb = _premiere_cible(att)
@@ -346,7 +350,7 @@ func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant, mult: float = 1
 		_log("    ☠ %s est vaincu" % cb.nom_journal())
 	evenement.emit({"type": "attaque", "attaquant": att, "cible": cb,
 			"degats": degats, "crit": is_crit, "garde": cb.en_defense,
-			"mort": not cb.est_vivant()})
+			"mort": not cb.est_vivant(), "animation": animation})
 	# Règle de Lieu (chantier 15) : statut on-hit du camp attaquant (poison
 	# Marécage sur le héros). Jet SEULEMENT si une règle existe (le rng des
 	# suites seedées sans règle n'est jamais consommé) ; cible vivante.
@@ -422,8 +426,10 @@ func _resoudre_competence(c: CtbCombattant, action: Dictionary) -> void:
 	match comp.effet:
 		Enums.EffetCompetence.ATTAQUE_MULT:
 			# Pipeline d'attaque COMPLET (mitigation, crit, règles de Lieu,
-			# Défendre, plancher) × valeur — événement « attaque » standard.
-			_resoudre_attaque(c, action.get("cible") as CtbCombattant, comp.valeur)
+			# Défendre, plancher) × valeur — événement « attaque » standard,
+			# qui relaie le GESTE déclaré par la compétence (mêlée ou tir).
+			_resoudre_attaque(c, action.get("cible") as CtbCombattant, comp.valeur,
+					comp.animation)
 		Enums.EffetCompetence.SOIN_PCT_PV_MAX:
 			var pv_max := c.stat_finale("pv_max")
 			var avant := c.pv

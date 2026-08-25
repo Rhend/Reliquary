@@ -268,8 +268,8 @@ func _test_costumes() -> void:
 		add_child(sbire)
 		_assert(not sbire.a_animation(SpriteSpinePersonnage.ANIM_ATTACK_SHOOT),
 				"l'ennemi ne la porte pas")
-		sbire.jouer_attaque_distance()   # doit être un no-op silencieux
-		_assert(true, "la demander à un ennemi ne casse rien")
+		sbire.jouer_attaque(true)   # doit retomber sur la mêlée, sans erreur
+		_assert(true, "un tir demandé à un ennemi retombe sur sa mêlée")
 		sbire.free()
 
 	# La vitrine : [V] fait défiler les accessoires sans se vider.

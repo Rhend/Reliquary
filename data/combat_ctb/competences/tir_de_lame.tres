@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CompetenceCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CompetenceCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "comp_tir_de_lame"
+nom_affichage_fr = "Tir de lame"
+nom_affichage_en = "Blade Shot"
+lore_fr = "L'arc de la lame part sans elle — il n'a pas besoin d'être à portée."
+lore_en = "The blade's arc leaves without it — it needs no reach."
+effet = 0
+valeur = 1.25
+cooldown = 2
+animation = 1

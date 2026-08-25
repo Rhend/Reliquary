@@ -50,6 +50,13 @@ extends Resource
 #   }
 @export var personnages: Array[Dictionary] = []
 
+# Chemin du registre — SOURCE UNIQUE : tout appelant passe par `charger()`
+# plutôt que de recopier le chemin (la ShowRoom comme l'écran de combat).
+const CHEMIN := "res://data/personnages/spine_personnages.tres"
+
+static func charger() -> SpinePersonnagesData:
+	return load(CHEMIN) as SpinePersonnagesData
+
 # Entrées ennemies, dans l'ordre du registre.
 func ennemis() -> Array[Dictionary]:
 	var sortie: Array[Dictionary] = []

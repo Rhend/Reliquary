@@ -31,7 +31,7 @@
 class_name ShowRoom
 extends Node2D
 
-const REGISTRE := "res://data/personnages/spine_personnages.tres"
+const REGISTRE := SpinePersonnagesData.CHEMIN
 const DECOR_DIR := "res://assets/background/city/"
 # Couches du décor, du plan le PLUS LOINTAIN au plus proche (les fichiers sont
 # pré-calés sur un même canevas 4770×2655 : un simple empilement suffit).
@@ -384,7 +384,7 @@ func _jouer_partout(anim: int) -> void:
 			match anim:
 				Anim.REPOS: sprite.reprendre_repos()
 				Anim.MELEE: sprite.jouer_attaque()
-				Anim.TIR:   sprite.jouer_attaque_distance()
+				Anim.TIR:   sprite.jouer_attaque(true)
 				Anim.HIT:   sprite.jouer_hit()
 				Anim.MORT:  sprite.jouer_mort()
 
@@ -443,7 +443,7 @@ func _rafraichir_hud() -> void:
 				+ ("    —    [Échap] retour au QG" if scene_retour != "" else "")
 
 # Rappel des animations livrées — une seule ligne, valable dans les deux modes.
-const LIGNE_ANIMS := "[I] repos  [A] mêlée  [T] tir  [X] coup reçu  [M] mort"
+const LIGNE_ANIMS := "[I] repos  [A] mêlée  [T] tir (mêlée si non livré)  [X] coup reçu  [M] mort"
 
 # Jeu d'accessoires « Random » courant — « visage : Visage 2 ». Sans jeu
 # déclaré, la touche n'a rien à faire : on le dit plutôt que d'afficher un

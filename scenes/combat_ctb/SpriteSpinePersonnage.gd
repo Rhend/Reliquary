@@ -77,6 +77,25 @@ static func creer(chemin_skel: String = CHEMIN_SKEL,
 	noeud.free()
 	return null
 
+# Fabrique du HÉROS pour le jeu réel. Passage OBLIGÉ par le registre : depuis
+# la livraison « costumes », toutes les pièces de Relic vivent dans des skins
+# nommées et sa skin « default » est VIDE — `creer()` sans apparence rendrait
+# un squelette invisible.
+# `niveau` = son palier d'ÉQUIPEMENT (1 = Commun, la dotation de départ du
+# chantier 13). Le brancher sur l'équipement réel du joueur se fait ICI, et
+# nulle part ailleurs.
+static func creer_heros(niveau: int = 1,
+		hauteur_cible_px: float = HAUTEUR_CIBLE_PX) -> SpriteSpinePersonnage:
+	var registre := SpinePersonnagesData.charger()
+	var entree: Dictionary = registre.heros() if registre != null else {}
+	var apparences: Array[Dictionary] = []
+	if not entree.is_empty():
+		apparences = SpinePersonnagesData.apparences(entree)
+	if apparences.is_empty():
+		return creer(CHEMIN_SKEL, CHEMIN_ATLAS, {}, hauteur_cible_px)
+	return creer(str(entree.get("skel", CHEMIN_SKEL)), str(entree.get("atlas", CHEMIN_ATLAS)),
+			apparences[clampi(niveau - 1, 0, apparences.size() - 1)], hauteur_cible_px)
+
 func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 		chemin_atlas: String = CHEMIN_ATLAS,
 		apparence: Dictionary = {},
@@ -217,12 +236,14 @@ func a_animation(nom: String) -> bool:
 	return nom in _animations
 
 # Attaque one-shot, retour Idle enchaîné (file d'animations Spine, piste 0).
-func jouer_attaque() -> void:
+# `a_distance` demande le geste de TIR (Attack_Shoot) : il RETOMBE sur la
+# mêlée quand l'export ne le porte pas — les ennemis n'ont pas Attack_Shoot,
+# et une action jouée doit toujours s'animer.
+func jouer_attaque(a_distance: bool = false) -> void:
+	if a_distance and a_animation(ANIM_ATTACK_SHOOT):
+		_one_shot_puis_idle(ANIM_ATTACK_SHOOT)
+		return
 	_one_shot_puis_idle(ANIM_ATTACK)
-
-# Attaque à distance — même mécanique (ignorée si l'export ne la porte pas).
-func jouer_attaque_distance() -> void:
-	_one_shot_puis_idle(ANIM_ATTACK_SHOOT)
 
 # Coup reçu : même mécanique (ignoré si la mort est déjà jouée).
 func jouer_hit() -> void:

@@ -1,9 +1,13 @@
-[gd_resource type="Resource" script_class="DotationCompetencesData" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="DotationCompetencesData" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/DotationCompetencesData.gd" id="1"]
 [ext_resource type="Resource" path="res://data/combat_ctb/competences/frappe_lourde.tres" id="2"]
 [ext_resource type="Resource" path="res://data/combat_ctb/competences/second_souffle.tres" id="3"]
+[ext_resource type="Resource" path="res://data/combat_ctb/competences/tir_de_lame.tres" id="4"]
 
 [resource]
 script = ExtResource("1")
-competences = [ExtResource("2"), ExtResource("3")]
+; « Tir de lame » (07/2026) est la compétence qui porte le GESTE À DISTANCE de
+; l'export Spine (Attack_Shoot) : moins fort que la Frappe lourde, mais plus
+; souvent disponible. Valeurs PROVISOIRES comme les deux autres, à calibrer.
+competences = [ExtResource("2"), ExtResource("3"), ExtResource("4")]

@@ -94,6 +94,17 @@ func _test_ecran_complet() -> void:
 	_assert(ui._btn_attaquer.visible and ui._btn_defendre.visible,
 			"activation joueur : boutons Attaquer et Défendre visibles (moteur en attente)")
 
+	# Le héros doit être VISIBLE. Depuis la livraison « costumes », l'export de
+	# Relic n'a plus de skin « default » : un sprite construit sans apparence
+	# se monte, s'anime et ne dessine RIEN — un test qui vérifie seulement la
+	# présence du nœud ne verrait pas la régression.
+	var sprite_heros: SpriteSpinePersonnage = ui._sprites.get(m.avatar())
+	if sprite_heros != null:
+		_assert(sprite_heros.porte_attachement("R_H_Idle_Torse", "R_H_Idle_Torse"),
+				"le sprite du héros porte une apparence (sinon il est invisible)")
+		_assert(sprite_heros.a_animation(SpriteSpinePersonnage.ANIM_ATTACK_SHOOT),
+				"le héros de combat porte le geste à distance (Attack_Shoot)")
+
 	# AUCUN bouton Objet / Compétence : contenu absent, pas grisé.
 	var tous: Array = []
 	_boutons(ui, tous)

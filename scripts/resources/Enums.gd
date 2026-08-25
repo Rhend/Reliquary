@@ -84,6 +84,16 @@ enum EffetCompetence {
 	SOIN_PCT_PV_MAX = 1,  # rend (valeur × pv_max finale) au lanceur, clampé
 }
 
+# GESTE d'une attaque — porté par l'événement « attaque », purement visuel :
+# aucun effet sur les dégâts, la portée ou le ciblage (le CTB n'a pas de
+# notion de distance). Il choisit l'animation Spine de l'attaquant et la mise
+# en scène : la MELEE fait converger les deux corps (zoom-duel), la DISTANCE
+# les laisse en place — on ne charge pas quelqu'un qu'on frappe de loin.
+enum AnimationAttaque {
+	MELEE    = 0,  # Attack_CaC
+	DISTANCE = 1,  # Attack_Shoot (retombe sur la mêlée si l'export ne l'a pas)
+}
+
 # Timing du tick d'un statut DoT, relatif à l'ACTIVATION de la cible :
 # Saignement tique au DÉBUT ; Poison et Brûlure tiquent à la FIN.
 enum TimingStatut {

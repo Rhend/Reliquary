@@ -1,8 +1,11 @@
 # Outil dev JETABLE-ISH : décrit le contrat Spine réel d'un export de
 # Christophe (animations, skins, slots, taille du squelette) — à lancer après
 # chaque livraison d'assets pour savoir ce que le code peut piloter.
-#   godot --headless --path . --script res://tools/inspect_spine_ennemis.gd
-extends SceneTree
+#   godot --headless --path . res://tools/inspect_spine_ennemis.tscn
+#
+# SCÈNE et pas `--script` : il lit les niveaux via SpriteSpinePersonnage, qui
+# dépend du registre, donc de GameData — un autoload que `--script` ne charge pas.
+extends Node
 
 const CIBLES: Array = [
 	["Relic",    "res://assets/personnages/relic/Relic.skel",             "res://assets/personnages/relic/Relic.atlas"],
@@ -10,14 +13,14 @@ const CIBLES: Array = [
 	["WorkBot",  "res://assets/personnages/ennemis/workbot/WorkBot.skel",   "res://assets/personnages/ennemis/workbot/WorkBot.atlas"],
 ]
 
-func _init() -> void:
+func _ready() -> void:
 	if not ClassDB.class_exists("SpineSkeletonDataResource"):
 		push_error("runtime spine-godot absent")
-		quit(1)
+		get_tree().quit(1)
 		return
 	for cible: Array in CIBLES:
 		_decrire(str(cible[0]), str(cible[1]), str(cible[2]))
-	quit(0)
+	get_tree().quit(0)
 
 func _decrire(nom: String, chemin_skel: String, chemin_atlas: String) -> void:
 	print("\n═══ ", nom, " ═══")

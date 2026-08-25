@@ -8,13 +8,15 @@
 # par-dessus : panneaux opaques, tokens UIColors.CYBER_*, ExpeStyle). Scène de
 # bataille : SOL + emplacements des sprites — le personnage principal est le
 # sprite Spine RÉEL de Christophe (SpriteSpinePersonnage : Idle en boucle,
-# Attack sur son action ; retombe sur le placeholder si le runtime
-# spine-godot manque) ; les adversaires restent des boules de lumière
-# (EnergyBoule) en attendant leurs assets. L'attaque du JOUEUR déclenche un
-# ZOOM-DUEL façon Darkest Dungeon : les deux personnages glissent au centre
-# de l'écran face à face, punch-in fort (crit = plus marqué), puis retour —
-# activations ennemies SANS effet de caméra ; seule la scène zoome, le
-# chrome UI reste fixe. DA finale hors scope (Christophe).
+# Attack_CaC ou Attack_Shoot selon le GESTE de l'action ; retombe sur le
+# placeholder si le runtime spine-godot manque) ; les adversaires restent des
+# boules de lumière (EnergyBoule) en attendant leurs assets. L'attaque du
+# JOUEUR déclenche un ZOOM-DUEL façon Darkest Dungeon : les deux personnages
+# glissent au centre de l'écran face à face, punch-in fort (crit = plus
+# marqué), puis retour — activations ennemies SANS effet de caméra ; seule la
+# scène zoome, le chrome UI reste fixe. Un TIR (compétence à distance) garde
+# le punch-in mais ne fait converger personne : il cadre le tireur et sa cible.
+# DA finale hors scope (Christophe).
 #
 # Pilote un CtbMoteur DÉJÀ démarré, en pull-based :
 #   • activation du camp joueur → attend l'input : Attaquer / Défendre /
@@ -206,7 +208,9 @@ func _construire() -> void:
 		# les assets sont là — sinon placeholder EnergyBoule, comme les
 		# adversaires (leurs sprites n'existent pas encore).
 		if cb == moteur.avatar():
-			var sprite := SpriteSpinePersonnage.creer()
+			# creer_heros() et pas creer() : l'apparence vient du registre —
+			# sans skin posée, l'export « costumes » de Relic est invisible.
+			var sprite := SpriteSpinePersonnage.creer_heros()
 			if sprite != null:
 				_sprites[cb] = sprite
 				_sol.add_child(sprite)
@@ -737,7 +741,11 @@ func _duel_interrompre() -> void:
 # glissement simultané des deux personnages vers le centre + punch-in de la
 # scène, tenue le temps du coup, puis retour aux emplacements. Crit = zoom
 # plus marqué.
-func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool) -> void:
+# `converger` = false (TIR) : personne ne bouge — charger l'adversaire
+# contredirait le geste — mais le punch-in reste, recentré sur la CIBLE :
+# c'est là que le coup arrive, et c'est ce qu'il faut regarder.
+func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
+		converger: bool = true) -> void:
 	if facteur_delais <= 0.0 or _couche_scene == null or _sol == null:
 		return   # tests headless : aucun délai, aucun tween
 	if not _pieds.has(att) or not _pieds.has(cible):
@@ -748,30 +756,39 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool) -> void
 	if noeud_att == null or noeud_cib == null:
 		return
 	var centre := Vector2(_sol.size.x * 0.5, _sol.size.y * SOL_Y_FRAC)
+	# Point regardé : le centre de l'écran en mêlée (les deux corps y viennent),
+	# le MILIEU du couple tireur/cible en tir — personne ne bouge, et pivoter
+	# sur la seule cible pousserait le tireur hors cadre quand elle est loin.
+	var foyer: Vector2 = centre if converger \
+			else ((_pieds[att] as Vector2) + (_pieds[cible] as Vector2)) * 0.5
 	# Le joueur vient de gauche, sa cible lui fait face à droite.
 	var pos_att := _pos_depuis_pied(att, centre + Vector2(-DUEL_ECART_PX * 0.5, 0.0))
 	var pos_cib := _pos_depuis_pied(cible, centre + Vector2(DUEL_ECART_PX * 0.5, 0.0))
-	_duel_restaure = [[noeud_att, noeud_att.position], [noeud_cib, noeud_cib.position]]
+	# Rien à restaurer sans convergence : les positions ne sont pas touchées.
+	_duel_restaure = [[noeud_att, noeud_att.position], [noeud_cib, noeud_cib.position]] \
+			if converger else []
 	_duel_acteurs = [att, cible]
-	_couche_scene.pivot_offset = centre - Vector2(0.0, DUEL_FOCUS_HAUT_PX)
+	_couche_scene.pivot_offset = foyer - Vector2(0.0, DUEL_FOCUS_HAUT_PX)
 	var zoom := DUEL_ZOOM_CRIT if crit else DUEL_ZOOM
 	var f := facteur_delais
 	_duel_tween = create_tween()
 	_duel_tween.tween_property(_couche_scene, "scale", Vector2.ONE * zoom,
 			DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_duel_tween.parallel().tween_property(noeud_att, "position", pos_att,
-			DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_duel_tween.parallel().tween_property(noeud_cib, "position", pos_cib,
-			DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	if converger:
+		_duel_tween.parallel().tween_property(noeud_att, "position", pos_att,
+				DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_duel_tween.parallel().tween_property(noeud_cib, "position", pos_cib,
+				DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_duel_tween.tween_interval(DUEL_TENUE * f)
 	_duel_tween.tween_property(_couche_scene, "scale", Vector2.ONE,
 			DUEL_DUREE_OUT * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_duel_tween.parallel().tween_property(noeud_att, "position",
-			_duel_restaure[0][1] as Vector2, DUEL_DUREE_OUT * f)\
-			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_duel_tween.parallel().tween_property(noeud_cib, "position",
-			_duel_restaure[1][1] as Vector2, DUEL_DUREE_OUT * f)\
-			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	if converger:
+		_duel_tween.parallel().tween_property(noeud_att, "position",
+				_duel_restaure[0][1] as Vector2, DUEL_DUREE_OUT * f)\
+				.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+		_duel_tween.parallel().tween_property(noeud_cib, "position",
+				_duel_restaure[1][1] as Vector2, DUEL_DUREE_OUT * f)\
+				.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	_duel_tween.finished.connect(func() -> void:
 		_duel_restaure.clear()
 		_duel_tween = null
@@ -783,12 +800,15 @@ func _sur_evenement(e: Dictionary) -> void:
 		return
 	match str(e.get("type", "")):
 		"attaque":
-			# Sprites Spine : l'attaquant joue Attack_CaC, la cible joue Hit
+			# Sprites Spine : l'attaquant joue son GESTE (Attack_CaC, ou
+			# Attack_Shoot quand la compétence est un tir), la cible joue Hit
 			# (ou Death si le coup tue — jouer_mort est prioritaire et
 			# verrouille les animations suivantes).
+			var a_distance: bool = int(e.get("animation",
+					Enums.AnimationAttaque.MELEE)) == Enums.AnimationAttaque.DISTANCE
 			var sprite_att: SpriteSpinePersonnage = _sprites.get(e["attaquant"])
 			if sprite_att != null:
-				sprite_att.jouer_attaque()
+				sprite_att.jouer_attaque(a_distance)
 			var cible := e["cible"] as CtbCombattant
 			var sprite_cible: SpriteSpinePersonnage = _sprites.get(cible)
 			if sprite_cible != null:
@@ -799,10 +819,11 @@ func _sur_evenement(e: Dictionary) -> void:
 			var degats := int(e["degats"])
 			var crit := bool(e["crit"])
 			# Mise en scène de duel UNIQUEMENT sur l'attaque du joueur —
-			# les activations ennemies restent sobres (retour Rhend).
+			# les activations ennemies restent sobres (retour Rhend). Un TIR
+			# ne fait converger personne : le zoom se recentre sur la cible.
 			var attaquant := e["attaquant"] as CtbCombattant
 			if attaquant.est_joueur():
-				_duel_attaque(attaquant, cible, crit)
+				_duel_attaque(attaquant, cible, crit, not a_distance)
 			var couleur: Color
 			if cible.est_joueur():
 				couleur = UIColors.DMG_HEAVY_ENEMY if crit else UIColors.DMG_BY_ENEMY
