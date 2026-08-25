@@ -44,10 +44,11 @@ const ANIM_HIT := "Hit"
 const ANIM_DEATH := "Death"
 # Marqueur de niveau d'équipement dans un nom de slot (cf. niveaux_du_slot).
 const MARQUEUR_NIVEAU := "_Nv"
-# Hauteur affichée à l'écran (px) — la source Spine fait ~2 800 px de haut,
-# l'échelle est déduite de la hauteur réelle du squelette au chargement.
+# Hauteur affichée à l'écran (px) — la source Spine fait ~2 800 unités de haut,
+# l'échelle est déduite de la hauteur MESURÉE du squelette au chargement
+# (voir _hauteur_source : la taille déclarée par l'export n'est pas fiable).
 const HAUTEUR_CIBLE_PX := 240.0
-const HAUTEUR_SOURCE_DEFAUT := 2770.0   # secours si l'API height est absente
+const HAUTEUR_SOURCE_DEFAUT := 2770.0   # dernier recours : ni mesure ni taille déclarée
 
 var _spine: Node = null   # SpineSprite — jamais typé (extension optionnelle)
 var _mort := false        # Death jouée : plus aucune autre animation
@@ -127,14 +128,29 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 	# attachements.
 	definir_apparence(apparence)
 	# Échelle : hauteur native du squelette → hauteur_cible_px à l'écran.
-	var hauteur := HAUTEUR_SOURCE_DEFAUT
-	if donnees.has_method("get_height"):
-		var h := float(donnees.call("get_height"))
-		if h > 0.0:
-			hauteur = h
-	_spine.set("scale", Vector2.ONE * (hauteur_cible_px / hauteur))
+	_spine.set("scale", Vector2.ONE * (hauteur_cible_px / _hauteur_source(donnees)))
 	_jouer(ANIM_IDLE, true)
 	return true
+
+# Hauteur NATIVE du squelette (unités Spine), dont se déduit l'échelle.
+# On MESURE la pose réelle (get_bounds, apparence déjà posée) plutôt que de
+# croire la taille DÉCLARÉE par l'export (get_height) : cette métadonnée est
+# perdue par un export mal réglé — la livraison « cheveux » du 25/08/2026
+# annonçait 573 pour un Relic qui en mesure 2917, soit un héros ~5× trop grand
+# devant les monstres. La mesure ne ment pas ; la métadonnée n'est plus qu'un
+# secours, et la constante le dernier recours. Sans incidence sur les ennemis
+# livrés : leur taille déclarée ÉGALE leur mesure (FlameBot 3028, WorkBot 2480).
+func _hauteur_source(donnees: Resource) -> float:
+	var squelette: Object = _spine.call("get_skeleton")
+	if squelette != null and squelette.has_method("get_bounds"):
+		var mesure := squelette.call("get_bounds") as Rect2
+		if mesure.size.y > 0.0:
+			return mesure.size.y
+	if donnees.has_method("get_height"):
+		var declaree := float(donnees.call("get_height"))
+		if declaree > 0.0:
+			return declaree
+	return HAUTEUR_SOURCE_DEFAUT
 
 # ─── Apparence ───────────────────────────────────────────────
 
@@ -227,6 +243,20 @@ func porte_attachement(nom_slot: String, nom_attachement: String) -> bool:
 	if squelette == null:
 		return false
 	return squelette.call("get_attachment_by_slot_name", nom_slot, nom_attachement) != null
+
+# Hauteur RÉELLEMENT rendue à l'écran (px) : la pose courante mesurée, puis
+# l'échelle posée au chargement. C'est le seul contrôle qui attrape un export
+# qui ment sur sa taille — un héros deux fois trop grand devant les monstres
+# est un bug de DONNÉE, invisible du code qui l'instancie. 0 sans runtime Spine.
+func hauteur_rendue_px() -> float:
+	if _spine == null:
+		return 0.0
+	var squelette: Object = _spine.call("get_skeleton")
+	if squelette == null or not squelette.has_method("get_bounds"):
+		return 0.0
+	var mesure := squelette.call("get_bounds") as Rect2
+	var echelle: Vector2 = _spine.get("scale")
+	return mesure.size.y * echelle.y
 
 # ─── Animations ──────────────────────────────────────────────
 

@@ -36,6 +36,7 @@ func _run_all() -> void:
 	await _test_aller_retour_qg()
 	await _test_lumiere()
 	await _test_costumes()
+	await _test_echelle()
 
 # ─── 1. Le registre pointe sur des assets réels ─────────────
 
@@ -288,6 +289,51 @@ func _test_costumes() -> void:
 		salle._touche(int(code))
 	_assert(salle._monde.get_child_count() > 0, "les touches d'animation laissent la vitrine debout")
 	salle.free()
+
+# ─── 6. Échelle : héros et monstres au même mètre ───────────
+#
+# La ShowRoom sert précisément à juger les tailles les unes par rapport aux
+# autres : un personnage hors d'échelle y est un bug de LIVRAISON. L'échelle
+# se déduit de la hauteur mesurée du squelette (SpriteSpinePersonnage.
+# _hauteur_source) — la taille DÉCLARÉE par l'export ne fait pas foi : la
+# livraison « cheveux » du 25/08/2026 annonçait 573 unités pour un Relic qui
+# en mesure 2917, et le héros sortait ~5× trop grand devant les monstres.
+#
+# TOLÉRANCE : la mesure porte sur la pose COURANTE, qui respire avec l'Idle —
+# on ne vérifie pas un pixel, on vérifie que tout le monde est au même mètre.
+
+const ECART_ECHELLE_MAX := 0.2   # ±20 % de la hauteur cible
+
+func _test_echelle() -> void:
+	print("\n[TEST 6] Échelle : tous les personnages au même mètre")
+	if not SpriteSpinePersonnage.disponible():
+		print("  (runtime spine-godot absent : échelle non mesurable)")
+		return
+	var cible := SpriteSpinePersonnage.HAUTEUR_CIBLE_PX
+	var marge := cible * ECART_ECHELLE_MAX
+	var reg := load(ShowRoom.REGISTRE) as SpinePersonnagesData
+	for p in reg.personnages:
+		var app := SpinePersonnagesData.apparences(p)
+		var sprite := SpriteSpinePersonnage.creer(str(p.get("skel", "")),
+				str(p.get("atlas", "")), app[0])
+		if sprite == null:
+			_assert(false, "%s : le sprite se construit" % p.get("id", "?"))
+			continue
+		add_child(sprite)
+		await get_tree().process_frame
+		var haut := sprite.hauteur_rendue_px()
+		_assert(absf(haut - cible) <= marge,
+				"%s : rendu à %.0f px (cible %.0f ± %.0f)" % [p.get("id", "?"), haut, cible, marge])
+		sprite.free()
+	# Le héros au dernier niveau d'équipement ne doit pas grandir non plus :
+	# les 6 costumes partagent un squelette, donc une échelle.
+	var nv6 := SpriteSpinePersonnage.creer_heros(6)
+	if nv6 != null:
+		add_child(nv6)
+		await get_tree().process_frame
+		_assert(absf(nv6.hauteur_rendue_px() - cible) <= marge,
+				"le héros Nv6 garde la taille du Nv1")
+		nv6.free()
 
 # ─── Helpers & rapport ──────────────────────────────────────
 

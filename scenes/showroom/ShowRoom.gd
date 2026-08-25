@@ -207,13 +207,13 @@ func _construire_decor() -> void:
 		var chemin := DECOR_DIR + nom
 		if not ResourceLoader.exists(chemin):
 			continue   # couche non livrée : on empile ce qui existe
-		var tr := TextureRect.new()
-		tr.texture = load(chemin)
-		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_decor.add_child(tr)
+		var couche := TextureRect.new()
+		couche.texture = load(chemin)
+		couche.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		couche.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		couche.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		couche.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_decor.add_child(couche)
 
 # ─── Mode LIBRE : une rangée par monstre ─────────────────────
 

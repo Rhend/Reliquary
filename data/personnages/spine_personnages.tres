@@ -15,6 +15,13 @@ script = ExtResource("1")
 ; la ShowRoom les montrera sans modification de code :
 ;   "variantes": [{"skin": "Relic_M", "nom": "Masculin"},
 ;                 {"skin": "Relic_F", "nom": "Féminin"}]
+;
+; CHEVEUX (livraison du 25/08/2026) : deux coiffures ALTERNATIVES,
+; « Men_Random_Level_Hair_1 » (slots …_Cheveux1_Nv1…6) et « …_Hair_2 »
+; (slots …_Cheveux2_Nv1…6). Elles sont exclusives — les cumuler poserait
+; deux chevelures à la fois. Hair_1 est le socle par défaut ; le jour où
+; le joueur choisit sa coiffure, elles deviennent un axe à part entière
+; (les `cosmetiques` sont déjà pris par les accessoires de visage).
 personnages = [{
 "id": "relic",
 "nom": "Relic (héros)",
@@ -22,7 +29,7 @@ personnages = [{
 "atlas": "res://assets/personnages/relic/Relic.atlas",
 "prefixe_skin": "",
 "variantes": [],
-"skins_base": ["Men_Global", "Men_Level", "Men_Level_Hit", "Men_Random_Level_Clothing_1"],
+"skins_base": ["Men_Global", "Men_Level", "Men_Level_Hit", "Men_Random_Level_Clothing_1", "Men_Random_Level_Hair_1"],
 "cosmetiques": [{
 "nom": "Visage 1",
 "skins": ["Men_Random_Face_Accessory_1"]

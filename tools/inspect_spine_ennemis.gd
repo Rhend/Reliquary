@@ -33,7 +33,11 @@ func _decrire(nom: String, chemin_skel: String, chemin_atlas: String) -> void:
 	if not bool(donnees.call("is_skeleton_data_loaded")):
 		print("  DONNÉES INVALIDES (atlas mal raccordé ?)")
 		return
-	print("  taille : %.0f x %.0f" % [donnees.call("get_width"), donnees.call("get_height")])
+	# Taille DÉCLARÉE par l'export : indicative seulement — elle ne fait PAS
+	# foi (un export mal réglé la perd, cf. Relic 25/08/2026 : 573 annoncés
+	# pour 2917 réels). L'échelle du jeu vient de la MESURE du squelette
+	# (SpriteSpinePersonnage._hauteur_source), gardée par TestShowRoom.
+	print("  taille déclarée : %.0f x %.0f" % [donnees.call("get_width"), donnees.call("get_height")])
 	var anims: Array = []
 	for a in donnees.call("get_animations"):
 		anims.append(str(a.call("get_name")))

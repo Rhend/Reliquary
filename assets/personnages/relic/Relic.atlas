@@ -1,4 +1,4 @@
-Test_Aniamtion.png
+Relic.png
 size:4096,4096
 filter:Linear,Linear
 pma:true
@@ -148,7 +148,7 @@ R_H_Idle_Visage_3_Nv1
 bounds:3691,2423,430,403
 rotate:90
 
-Test_Aniamtion_2.png
+Relic_2.png
 size:4096,4070
 filter:Linear,Linear
 pma:true
@@ -259,7 +259,7 @@ R_H_Idle_Visage_2
 bounds:1772,1042,311,218
 rotate:90
 
-Test_Aniamtion_3.png
+Relic_3.png
 size:4096,4095
 filter:Linear,Linear
 pma:true
@@ -352,7 +352,7 @@ R_H_Idle_Veste_Devant_1_Nv6
 bounds:3447,655,521,507
 rotate:90
 
-Test_Aniamtion_4.png
+Relic_4.png
 size:4096,4096
 filter:Linear,Linear
 pma:true
@@ -563,7 +563,7 @@ R_H_Idle_Visage_3_Nv3
 bounds:2043,7,430,403
 rotate:90
 
-Test_Aniamtion_5.png
+Relic_5.png
 size:3726,2630
 filter:Linear,Linear
 pma:true

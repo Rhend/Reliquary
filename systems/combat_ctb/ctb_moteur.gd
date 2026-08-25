@@ -429,7 +429,7 @@ func _resoudre_competence(c: CtbCombattant, action: Dictionary) -> void:
 			# Défendre, plancher) × valeur — événement « attaque » standard,
 			# qui relaie le GESTE déclaré par la compétence (mêlée ou tir).
 			_resoudre_attaque(c, action.get("cible") as CtbCombattant, comp.valeur,
-					comp.animation)
+					comp.animation as Enums.AnimationAttaque)
 		Enums.EffetCompetence.SOIN_PCT_PV_MAX:
 			var pv_max := c.stat_finale("pv_max")
 			var avant := c.pv
