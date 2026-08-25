@@ -164,7 +164,7 @@ visible dans cette pose est mesuré avec le corps : le personnage est mis à
 l'échelle en comptant l'effet, donc **dessiné plus petit**.
 
 ```
-   ✅ pose de repos = le perso        ❌ pose de repos = perso + VFX 2×
+   SANS VFX au repos                 AVEC VFX au repos
    ┌──────────┐                      ┌────────────────────┐
    │   ╭──╮   │  mesure = le corps   │  ✨    ╭──╮    ✨  │  mesure = tout
    │   │  │   │  → 240 px de perso   │  ✨    │  │    ✨  │  → ~130 px de perso
@@ -172,9 +172,21 @@ l'échelle en comptant l'effet, donc **dessiné plus petit**.
    └──────────┘                      └────────────────────┘
 ```
 
-Garde les effets **hors de la pose de repos** — ils apparaissent dans l'animation
-d'attaque, c'est leur place. Si un effet doit vraiment être posé au repos, dis-le,
-on le traitera au cas par cas.
+Par défaut, garde donc les effets **hors de la pose de repos** : ils apparaissent
+dans l'animation d'attaque, c'est leur place, et le personnage est mesuré juste.
+
+#### 🐉 Sauf quand l'effet fait partie du personnage — les boss
+
+Une aura permanente, des flammes qui ne s'éteignent jamais, un halo qui définit la
+silhouette : sur un boss, c'est du **dessin**, pas un effet ponctuel. C'est
+légitime, et ça ne remet rien en cause.
+
+> ✅ **Fais-le, et signale-le.** « Ce boss a une aura posée au repos » suffit.
+> Je règle alors sa hauteur **à la main** pour ce personnage-là, au lieu de laisser
+> la mesure automatique compter l'aura comme du corps.
+
+Ce que je dois éviter, ce n'est pas l'effet : c'est de le découvrir en voyant un
+boss deux fois trop petit sans comprendre pourquoi.
 
 > 📌 **À savoir** : aujourd'hui **tous** les personnages sont ramenés à la même
 > hauteur, héros comme monstres. Un petit rat et un colosse sortiraient de la même
@@ -186,9 +198,13 @@ on le traitera au cas par cas.
 
 ## 6️⃣ Les skins : deux conventions selon le personnage
 
-### 🤖 Un ENNEMI : une skin par palier de rareté
+### 🤖 Un ENNEMI : les 5 paliers de rareté, **deux formes possibles**
 
-Cinq paliers, cinq skins, nommées avec le nom du perso et le numéro :
+Un ennemi n'a qu'**un seul axe** à gérer : son palier de rareté, de Commun à
+Légendaire. Deux façons de le porter — les deux marchent, **dis-moi simplement
+laquelle tu as utilisée.**
+
+#### Forme A — une skin par palier *(FlameBot et WorkBot aujourd'hui)*
 
 | Skin | Palier en jeu |
 |---|---|
@@ -198,8 +214,31 @@ Cinq paliers, cinq skins, nommées avec le nom du perso et le numéro :
 | `FlameBot_Nv4` | Épique |
 | `FlameBot_Nv5` | Légendaire |
 
-C'est tout : le jeu pose **une** skin à la fois. C'est la convention la plus
-simple — garde-la pour tous les monstres.
+Le jeu pose **une** skin à la fois. C'est la forme la plus simple, garde-la tant
+que le monstre n'a pas besoin d'être découpé.
+
+#### Forme B — le personnage découpé, **un slot par pièce**
+
+Quand le monstre est découpé comme le héros, chaque pièce a **son slot**, suffixé
+par son palier :
+
+```
+WorkBot_Bras_D_Nv1   → le bras droit au palier 1 (Commun)
+WorkBot_Bras_D_Nv5   → le même bras au palier 5 (Légendaire)
+WorkBot_Tete_Nv4/5   → une tête partagée par les paliers 4 et 5
+WorkBot_Socle        → pas de suffixe = commun à tous les paliers
+```
+
+C'est **exactement le même contrat de suffixe** que le héros (juste en dessous),
+avec une différence qui simplifie tout :
+
+> Le héros **cumule** plusieurs familles (corps + équipement + coiffure + visage).
+> L'ennemi, lui, n'a que **les paliers**. Rien à empiler, rien d'exclusif :
+> **un seul axe.**
+
+⚠️ Attention au décompte : **5 paliers** pour un ennemi (`_Nv1` … `_Nv5`,
+Commun → Légendaire), contre **6 niveaux** d'équipement pour le héros
+(`_Nv1` … `_Nv6`). Le suffixe se lit pareil, l'échelle n'est pas la même.
 
 ### 🦸 LE HÉROS (Relic) : skins **cumulées** + niveaux portés par les **slots**
 
@@ -341,8 +380,8 @@ les monstres par rapport à lui.
 | ☐ | Animations présentes et bien orthographiées : `Idle`, `Attack_CaC`, `Hit`, `Death` (+ `Attack_Shoot` pour le héros) |
 | ☐ | `Death` finit sur une pose propre — elle reste à l'écran |
 | ☐ | Origine du squelette **entre les pieds, au sol** |
-| ☐ | Pas de VFX géant visible dans la pose de repos |
-| ☐ | Ennemi : skins `<Perso>_Nv1` … `_Nv5` |
+| ☐ | VFX visible dans la pose de repos : seulement si c'est **voulu** (boss) — et dans ce cas, **signalé** |
+| ☐ | Ennemi : les 5 paliers, en **skins** `<Perso>_Nv1` … `_Nv5` **ou** en **slots** `…_Nv1` … `_Nv5` — dis lequel |
 | ☐ | Héros : suffixes de slot `_Nv1` … `_Nv6`, sans faute de casse |
 | ☐ | Message de livraison : **ce qui est nouveau**, et si c'est cumulable ou exclusif |
 

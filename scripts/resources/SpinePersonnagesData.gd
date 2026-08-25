@@ -12,6 +12,20 @@
 #   • les ENNEMIS portent leurs PALIERS par des SKINS Spine nommées
 #     <prefixe_skin><n>, n = 1..5, dans l'ordre Commun(0) → Légendaire(4).
 #
+# ANNONCÉ PAR CHRISTOPHE (25/08/2026), pas encore livré — deux formes à
+# prévoir, toutes deux documentées dans ChristopheAnimationWIP/SPECS_SPINE.md :
+#   • ENNEMI DÉCOUPÉ : ses 5 paliers sur des SLOTS « …_Nv1 » … « _Nv5 »
+#     (« WorkBot_Bras_D_Nv1 ») au lieu de 5 skins. La route existe déjà —
+#     `niveaux: 5` au lieu de `prefixe_skin` — mais ⚠ la PURGE des autres
+#     paliers ne tourne QUE dans `SpriteSpinePersonnage._composer_skin`, donc
+#     seulement si l'entrée déclare des `skins` (`skins_base`). Un export dont
+#     toutes les pièces vivent dans la skin « default » sortirait avec les 5
+#     paliers EMPILÉS : c'est le point à traiter à la première livraison.
+#   • BOSS À VFX PERMANENT (aura posée dans la pose de repos) : la mesure
+#     automatique compterait l'aura comme du corps et le rendrait trop petit.
+#     `SpriteSpinePersonnage.creer()` prend déjà `hauteur_cible_px` ; il
+#     faudra la porter dans l'entrée du registre pour ces personnages-là.
+#
 # TROIS façons pour un personnage de porter plusieurs apparences, de la plus
 # spécifique à la plus générale — l'appelant n'a jamais à savoir laquelle :
 #   • `variantes`   — liste explicite {skin, nom} (forme prévue pour les
