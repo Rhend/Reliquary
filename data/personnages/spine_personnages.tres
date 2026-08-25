@@ -4,10 +4,15 @@
 
 [resource]
 script = ExtResource("1")
-; Relic n'expose qu'une skin « default » (vérifié 24/08/2026) : `variantes` est
-; vide, il s'affiche en une seule apparence. Le jour où Christophe livre les
-; versions masculine / féminine, il suffit de les nommer ici — la ShowRoom les
-; montrera sans modification de code :
+; Relic — livraison « costumes » du 24/08/2026. L'export n'a PAS une skin par
+; apparence : il empile un corps (Men_Global), les pièces d'équipement
+; (Men_Level + Men_Level_Hit) et un accessoire de visage « Random ». Ces skins
+; se CUMULENT (skins_base + un jeu de `cosmetiques`), et les 6 paliers
+; d'équipement sont portés par des SLOTS suffixés « _Nv1 » … « _Nv6 » — d'où
+; `niveaux: 6` (voir SpriteSpinePersonnage pour la purge de skin).
+; Les versions masculine / féminine ne sont pas livrées : `variantes` reste
+; vide. Le jour où Christophe les nomme, il suffit de les ajouter ici —
+; la ShowRoom les montrera sans modification de code :
 ;   "variantes": [{"skin": "Relic_M", "nom": "Masculin"},
 ;                 {"skin": "Relic_F", "nom": "Féminin"}]
 personnages = [{
@@ -17,6 +22,18 @@ personnages = [{
 "atlas": "res://assets/personnages/relic/Relic.atlas",
 "prefixe_skin": "",
 "variantes": [],
+"skins_base": ["Men_Global", "Men_Level", "Men_Level_Hit", "Men_Random_Level_Clothing_1"],
+"cosmetiques": [{
+"nom": "Visage 1",
+"skins": ["Men_Random_Face_Accessory_1"]
+}, {
+"nom": "Visage 2",
+"skins": ["Men_Random_Face_Accessory_2"]
+}, {
+"nom": "Visage 3",
+"skins": ["Men_Random_Level_Face_Accessory_3"]
+}],
+"niveaux": 6,
 "ennemi": false
 }, {
 "id": "flamebot",

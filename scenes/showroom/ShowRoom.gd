@@ -17,6 +17,14 @@
 # Le contenu vient du registre data/personnages/spine_personnages.tres :
 # un monstre livré = une entrée, il apparaît ici sans toucher ce fichier.
 #
+# Trois axes se règlent au clavier, parce que la livraison « costumes » de
+# Relic (24/08/2026) les a rendus réels :
+#   • le NIVEAU d'équipement — 6 costumes, une colonne chacun en mode libre,
+#     [H] en mode combat ;
+#   • l'ACCESSOIRE de visage — [V], indépendant du niveau, appliqué partout ;
+#   • l'ANIMATION — [I] repos, [A] mêlée, [T] tir, [X] coup reçu, [M] mort,
+#     jouée sur tous les sprites affichés d'un coup.
+#
 # Sans le GDExtension spine-godot (ou sans assets), la scène ne plante pas :
 # elle affiche un message d'absence — même contrat que CombatCtbUi.
 # ============================================================
@@ -95,7 +103,8 @@ var _heros_apparences: Array[Dictionary] = []
 var _mode: int = Mode.LIBRE
 var _idx_monstre := 0
 var _idx_palier := 0
-var _idx_heros := 0   # apparence du héros (1 seule tant que Relic n'a que « default »)
+var _idx_heros := 0        # apparence du héros = son niveau d'équipement (Nv1…Nv6)
+var _idx_cosmetique := 0   # jeu d'accessoires « Random » cumulé sur le héros
 var _idx_lumiere := LUMIERE_DEFAUT
 
 var _monde: Node2D            # sprites du mode LIBRE (espace monde)
@@ -116,8 +125,7 @@ func _ready() -> void:
 	if _registre != null:
 		_ennemis = _registre.ennemis()
 		_heros = _registre.heros()
-		if not _heros.is_empty():
-			_heros_apparences = SpinePersonnagesData.apparences(_heros)
+		_recalculer_apparences_heros()
 	_construire()
 	if _registre == null or not SpriteSpinePersonnage.disponible():
 		_titre.text = "AUCUN ASSET SPINE DISPONIBLE\n" \
@@ -211,9 +219,9 @@ func _construire_decor() -> void:
 
 # Rangées affichées : le HÉROS d'abord (c'est le mètre étalon — on juge la
 # taille des monstres par rapport à lui), puis les ennemis dans l'ordre du
-# registre. Chaque rangée montre les apparences de l'entrée : 5 paliers pour
-# un ennemi, autant de variantes nommées que le héros en expose (une seule
-# aujourd'hui, deux le jour où les skins M/F arrivent).
+# registre. Chaque rangée montre les apparences de l'entrée : 5 paliers de
+# rareté pour un ennemi, les 6 niveaux d'équipement pour Relic (et les
+# variantes nommées le jour où les skins M/F arrivent).
 func _rangees() -> Array[Dictionary]:
 	var sortie: Array[Dictionary] = []
 	if not _heros.is_empty():
@@ -221,7 +229,24 @@ func _rangees() -> Array[Dictionary]:
 	sortie.append_array(_ennemis)
 	return sortie
 
+# Apparences d'une entrée AU JEU COSMÉTIQUE COURANT — passage obligé de la
+# vitrine : sans lui, [V] ne changerait le visage que du héros en duel.
+func _apparences(entree: Dictionary) -> Array[Dictionary]:
+	return SpinePersonnagesData.apparences(entree, _idx_cosmetique)
+
+# Le héros pilote deux axes indépendants : son niveau d'équipement ([H]) et
+# son accessoire de visage ([V]). Changer le second reconstruit la liste, d'où
+# le reclampage du premier.
+func _recalculer_apparences_heros() -> void:
+	if _heros.is_empty():
+		_heros_apparences = []
+		return
+	_heros_apparences = _apparences(_heros)
+	_idx_heros = clampi(_idx_heros, 0, maxi(0, _heros_apparences.size() - 1))
+
 func _peupler_libre() -> void:
+	_vider(_monde)
+	_labels_libre.clear()
 	var rangees := _rangees()
 	for i in rangees.size():
 		var e := rangees[i]
@@ -230,11 +255,11 @@ func _peupler_libre() -> void:
 		nom.position = Vector2(-MARGE_G, y - 40.0)
 		_monde.add_child(nom)
 		_labels_libre.append({"node": nom, "base": UIColors.TEXT_HEADER})
-		var apparences := SpinePersonnagesData.apparences(e)
+		var apparences := _apparences(e)
 		for k in apparences.size():
 			var ap := apparences[k]
 			var sprite := SpriteSpinePersonnage.creer(str(e.get("skel", "")),
-					str(e.get("atlas", "")), str(ap.get("skin", "")))
+					str(e.get("atlas", "")), ap)
 			if sprite == null:
 				continue
 			sprite.position = Vector2(k * COL_PAS, y)
@@ -260,7 +285,7 @@ func _dessiner_reperes() -> void:
 	var teinte := Color(0, 0, 0, 0.20) if _fond_clair() else Color(1, 1, 1, 0.14)
 	for i in rangees.size():
 		var y := i * RANG_PAS
-		var cols: int = maxi(1, SpinePersonnagesData.apparences(rangees[i]).size())
+		var cols: int = maxi(1, _apparences(rangees[i]).size())
 		_repere.draw_line(Vector2(-MARGE_G, y), Vector2((cols - 1) * COL_PAS + 120.0, y),
 				teinte, 2.0)
 
@@ -301,8 +326,7 @@ static func _lisible(base: Color, sur_fond_clair: bool) -> Color:
 # ─── Mode COMBAT : duel au cadrage réel ──────────────────────
 
 func _peupler_duel() -> void:
-	for c in _duel.get_children():
-		c.queue_free()
+	_vider(_duel)
 	if _ennemis.is_empty():
 		return
 	var sol_y := VUE.y * SOL_Y_FRAC
@@ -310,11 +334,11 @@ func _peupler_duel() -> void:
 	# Vis-à-vis : le héros, à l'emplacement du camp joueur, dans l'apparence
 	# courante (une seule tant que Relic n'expose que « default »).
 	if not _heros.is_empty():
-		var skin_h := ""
+		var ap_h: Dictionary = {}
 		if _idx_heros < _heros_apparences.size():
-			skin_h = str(_heros_apparences[_idx_heros].get("skin", ""))
+			ap_h = _heros_apparences[_idx_heros]
 		var relic := SpriteSpinePersonnage.creer(str(_heros.get("skel", "")),
-				str(_heros.get("atlas", "")), skin_h)
+				str(_heros.get("atlas", "")), ap_h)
 		if relic != null:
 			relic.position = Vector2(VUE.x * SOL_X_JOUEUR, sol_y)
 			_duel.add_child(relic)
@@ -322,13 +346,47 @@ func _peupler_duel() -> void:
 	if _ennemis.is_empty():
 		return
 	var e := _ennemis[_idx_monstre]
+	var ap_mob := _apparences(e)
 	var mob := SpriteSpinePersonnage.creer(str(e.get("skel", "")), str(e.get("atlas", "")),
-			SpinePersonnagesData.skin_pour_palier(e, _idx_palier))
+			ap_mob[clampi(_idx_palier, 0, ap_mob.size() - 1)])
 	if mob != null:
 		# Miroir horizontal : l'ennemi fait face au camp joueur.
 		mob.scale = Vector2(-1.0, 1.0)
 		mob.position = Vector2(VUE.x * SOL_X_ADVERSE, sol_y)
 		_duel.add_child(mob)
+
+# Vide un porte-sprites : retiré de l'arbre AVANT queue_free, sinon les
+# anciens sprites restent visibles (et animables) jusqu'à la fin de la frame.
+func _vider(parent: Node) -> void:
+	for c in parent.get_children():
+		parent.remove_child(c)
+		c.queue_free()
+
+# ─── Animations à la demande ─────────────────────────────────
+# La livraison de Christophe porte 5 animations : les regarder est la moitié
+# du travail de la vitrine. La touche joue sur TOUS les sprites affichés —
+# en mode libre, les 6 costumes attaquent ensemble, ce qui rend les
+# différences de silhouette immédiatement lisibles.
+
+enum Anim { REPOS, MELEE, TIR, HIT, MORT }
+
+const TOUCHES_ANIM := {
+	KEY_I: Anim.REPOS, KEY_A: Anim.MELEE, KEY_T: Anim.TIR,
+	KEY_X: Anim.HIT, KEY_M: Anim.MORT,
+}
+
+func _jouer_partout(anim: int) -> void:
+	for parent: Node in [_monde, _duel]:
+		for c in parent.get_children():
+			var sprite := c as SpriteSpinePersonnage
+			if sprite == null:
+				continue
+			match anim:
+				Anim.REPOS: sprite.reprendre_repos()
+				Anim.MELEE: sprite.jouer_attaque()
+				Anim.TIR:   sprite.jouer_attaque_distance()
+				Anim.HIT:   sprite.jouer_hit()
+				Anim.MORT:  sprite.jouer_mort()
 
 # ─── Modes & caméra ──────────────────────────────────────────
 
@@ -353,7 +411,12 @@ func _appliquer_mode() -> void:
 # Recentre la caméra sur l'ensemble des rangées (état d'entrée du mode libre).
 func _cadrer_tout() -> void:
 	const PAD := 80.0   # sinon le nom du monstre affleure le bord gauche
-	var largeur := MARGE_G + NB_PALIERS * COL_PAS + PAD
+	# Largeur = la rangée la PLUS fournie : le héros porte 6 niveaux
+	# d'équipement là où les ennemis n'ont que 5 paliers.
+	var cols := 1
+	for r in _rangees():
+		cols = maxi(cols, _apparences(r).size())
+	var largeur := MARGE_G + cols * COL_PAS + PAD
 	var hauteur := maxf(RANG_PAS, _rangees().size() * RANG_PAS)
 	_cam.position = Vector2(largeur * 0.5 - MARGE_G - PAD * 0.5,
 			hauteur * 0.5 - RANG_PAS * 0.5)
@@ -366,22 +429,37 @@ func _rafraichir_hud() -> void:
 		var e := _ennemis[_idx_monstre]
 		_titre.text = "COMBAT — %s  ·  %s   vs   %s" % [str(e.get("nom", "?")),
 				GameData.get_tier_name(_idx_palier), _nom_apparence_heros()]
-		_hud.text = "[Tab] mode libre    [←/→] monstre    [↑/↓] palier    [H] héros    [B] lumière : %s\n" % _nom_lumiere() \
-				+ "cadrage réel : sol %.2f · joueur %.2f · adverse %.2f · %d px" % [
+		_hud.text = "[Tab] mode libre    [←/→] monstre    [↑/↓] palier    [H] niveau héros    [V] %s    [B] lumière : %s\n" % [
+				_nom_cosmetique(), _nom_lumiere()] \
+				+ LIGNE_ANIMS + "    —    cadrage réel : sol %.2f · joueur %.2f · adverse %.2f · %d px" % [
 				SOL_Y_FRAC, SOL_X_JOUEUR, SOL_X_ADVERSE,
 				int(SpriteSpinePersonnage.HAUTEUR_CIBLE_PX)]
 	else:
-		_titre.text = "SHOWROOM — héros + %d monstre(s) × %d paliers" % [
-				_ennemis.size(), NB_PALIERS]
-		_hud.text = "[Tab] mode combat    [glisser] déplacer    [molette] zoom    [R] recadrer    [B] lumière : %s\n" % _nom_lumiere() \
-				+ "une rangée par personnage · monstres : paliers Commun → Légendaire" \
+		_titre.text = "SHOWROOM — héros (%d niveaux) + %d monstre(s) × %d paliers" % [
+				_heros_apparences.size(), _ennemis.size(), NB_PALIERS]
+		_hud.text = "[Tab] mode combat    [glisser] déplacer    [molette] zoom    [R] recadrer    [V] %s    [B] lumière : %s\n" % [
+				_nom_cosmetique(), _nom_lumiere()] \
+				+ LIGNE_ANIMS \
 				+ ("    —    [Échap] retour au QG" if scene_retour != "" else "")
+
+# Rappel des animations livrées — une seule ligne, valable dans les deux modes.
+const LIGNE_ANIMS := "[I] repos  [A] mêlée  [T] tir  [X] coup reçu  [M] mort"
+
+# Jeu d'accessoires « Random » courant — « visage : Visage 2 ». Sans jeu
+# déclaré, la touche n'a rien à faire : on le dit plutôt que d'afficher un
+# libellé vide.
+func _nom_cosmetique() -> String:
+	var jeux := SpinePersonnagesData.cosmetiques(_heros)
+	if jeux.is_empty():
+		return "visage : —"
+	return "visage : %s" % str(jeux[clampi(_idx_cosmetique, 0, jeux.size() - 1)].get("nom", "?"))
 
 func _nom_lumiere() -> String:
 	return str(NIVEAUX_LUMIERE[_idx_lumiere]["nom"])
 
-# Libellé de l'apparence courante du héros — « — » s'il n'en a qu'une (Relic
-# aujourd'hui) : afficher « Défaut » laisserait croire qu'il y a un choix.
+# Libellé de l'apparence courante du héros (son niveau d'équipement) — le nom
+# du personnage s'il n'en a qu'une : afficher un libellé d'apparence
+# laisserait croire qu'il y a un choix.
 func _nom_apparence_heros() -> String:
 	if _heros_apparences.size() <= 1:
 		return str(_heros.get("nom", "?"))
@@ -449,9 +527,27 @@ func _touche(code: int) -> void:
 			_appliquer_lumiere()
 			_rafraichir_hud()
 		KEY_H:
-			# Sans effet tant que le héros n'a qu'une apparence — la touche
-			# existe pour le jour où les skins masculine/féminine arrivent.
+			# Niveau d'équipement du héros. Utile en COMBAT seulement : en
+			# mode libre, sa rangée montre déjà les 6 niveaux côte à côte.
 			if _mode == Mode.COMBAT and _heros_apparences.size() > 1:
 				_idx_heros = wrapi(_idx_heros + 1, 0, _heros_apparences.size())
 				_peupler_duel()
 				_rafraichir_hud()
+		KEY_V:
+			# Accessoire de visage « Random ». Il change TOUTE la vitrine :
+			# c'est un axe indépendant du niveau, on le juge sur les 6.
+			var jeux := SpinePersonnagesData.cosmetiques(_heros)
+			if jeux.size() > 1:
+				_idx_cosmetique = wrapi(_idx_cosmetique + 1, 0, jeux.size())
+				_recalculer_apparences_heros()
+				_repeupler()
+				_rafraichir_hud()
+		_:
+			if TOUCHES_ANIM.has(code):
+				_jouer_partout(int(TOUCHES_ANIM[code]))
+
+func _repeupler() -> void:
+	if _mode == Mode.COMBAT:
+		_peupler_duel()
+	else:
+		_peupler_libre()

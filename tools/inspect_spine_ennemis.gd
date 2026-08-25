@@ -39,6 +39,17 @@ func _decrire(nom: String, chemin_skel: String, chemin_atlas: String) -> void:
 	for s in donnees.call("get_skins"):
 		skins.append(str(s.call("get_name")))
 	print("  skins : ", skins)
-	# (get_default_skin / SpineSlotData.get_slot_name ne sont pas exposés par ce
-	# build du runtime — inutile d'insister, skins + animations suffisent.)
-	print("  slots : ", donnees.call("get_slots").size())
+	# Niveaux d'ÉQUIPEMENT : Relic ne les porte pas en skins mais en SLOTS
+	# suffixés « _Nv<n> » (cf. SpriteSpinePersonnage.niveaux_du_slot). Les
+	# lister ici évite de redécouvrir la structure à chaque livraison.
+	var slots: Array = donnees.call("get_slots")
+	var niveaux: Array[int] = []
+	for slot in slots:
+		for n in SpriteSpinePersonnage.niveaux_du_slot(str(slot.call("get_name"))):
+			if n not in niveaux:
+				niveaux.append(n)
+	niveaux.sort()
+	# (les ennemis ont aussi un slot par palier — mais leur palier se commute
+	# par la SKIN, on ne leur passe jamais de niveau à purger.)
+	print("  slots : ", slots.size(), " — suffixes « _Nv » trouvés : ",
+			niveaux if not niveaux.is_empty() else "aucun")

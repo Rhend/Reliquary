@@ -35,6 +35,7 @@ func _run_all() -> void:
 	_test_apparences()
 	await _test_aller_retour_qg()
 	await _test_lumiere()
+	await _test_costumes()
 
 # ─── 1. Le registre pointe sur des assets réels ─────────────
 
@@ -69,11 +70,32 @@ func _test_apparences() -> void:
 	_assert(int(ap_mob[0].get("palier", -1)) == 0, "1re apparence portée par le palier 0")
 	_assert(str(ap_mob[4].get("skin", "")).ends_with("Nv5"), "5e apparence = Nv5 (Légendaire)")
 
-	# Héros SANS variantes livrées : une seule apparence, sans skin à poser.
+	# Héros (livraison « costumes » du 24/08/2026) : ses paliers ne sont PAS
+	# des skins mais des SLOTS « _Nv<n> », posés sur une composition de skins.
 	var h := reg.heros()
 	var ap_h := SpinePersonnagesData.apparences(h)
-	_assert(ap_h.size() == 1, "héros sans variantes → une seule apparence")
-	_assert(str(ap_h[0].get("skin", "")) == "", "apparence unique → aucune skin posée")
+	_assert(ap_h.size() == 6, "héros → 6 niveaux d'équipement")
+	_assert(str(ap_h[0].get("skin", "")) == "",
+			"niveau porté par les slots, jamais par une skin nommée")
+	_assert(int(ap_h[0].get("niveau", 0)) == 1, "1er niveau = Nv1")
+	_assert(int(ap_h[0].get("palier", -1)) == 0, "Nv1 = palier Commun")
+	_assert(int(ap_h[5].get("palier", -1)) == 5, "Nv6 = palier Unique")
+	var skins_h := ap_h[0].get("skins", PackedStringArray()) as PackedStringArray
+	_assert(skins_h.size() >= 2, "les skins du héros sont CUMULÉES (corps + équipement + …)")
+	_assert("Men_Global" in skins_h, "le corps est de la partie")
+
+	# Accessoires « Random » : axe indépendant du niveau. Changer de jeu change
+	# la composition, pas le nombre de niveaux — sinon [V] déformerait la vitrine.
+	var jeux := SpinePersonnagesData.cosmetiques(h)
+	_assert(jeux.size() >= 2, "au moins 2 jeux cosmétiques déclarés")
+	var ap_h2 := SpinePersonnagesData.apparences(h, 1)
+	_assert(ap_h2.size() == ap_h.size(), "changer d'accessoire ne change pas le nombre de niveaux")
+	_assert((ap_h2[0].get("skins", PackedStringArray()) as PackedStringArray) != skins_h,
+			"changer d'accessoire change bien la composition de skins")
+	# Index hors bornes : la vitrine ne doit pas planter, elle borne.
+	_assert(not (SpinePersonnagesData.apparences(h, 99)[0].get("skins",
+			PackedStringArray()) as PackedStringArray).is_empty(),
+			"index de cosmétique hors bornes → borné, jamais d'apparence vide")
 
 	# Variantes NOMMÉES (forme prévue pour le héros M/F) : elles priment sur
 	# les paliers. Garde le contrat en place avant que Christophe ne livre.
@@ -179,7 +201,98 @@ func _test_lumiere() -> void:
 				"le personnage n'est PAS modulé (couleurs d'origine préservées)")
 	salle.free()
 
+# ─── 5. Costumes de Relic (livraison 24/08/2026) ────────────
+# Les 6 niveaux d'équipement ne sont pas des skins : chaque pièce a SON slot,
+# suffixé « _Nv<n> ». Poser un niveau = purger la skin composée des slots des
+# autres niveaux — sinon les 6 tenues s'empilent sur le personnage.
+
+func _test_costumes() -> void:
+	print("\n[TEST 5] Costumes : niveaux portés par les slots")
+
+	# Lecture du suffixe : Christophe mutualise une pièce quand elle ne change
+	# pas d'un niveau à l'autre, avec deux notations (« / » et « _ »).
+	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Tete_Nv3") == [3],
+			"« _Nv3 » → niveau 3")
+	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Pentalon_Nv4/5") == [4, 5],
+			"« _Nv4/5 » → niveaux 4 et 5")
+	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Manche_D_Nv1_2_3") == [1, 2, 3],
+			"« _Nv1_2_3 » → niveaux 1 à 3")
+	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Torse").is_empty(),
+			"slot sans marqueur → indépendant du niveau (toujours affiché)")
+	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Tete_Mort").is_empty(),
+			"slot de mort → jamais filtré par le niveau")
+
+	if not SpriteSpinePersonnage.disponible():
+		print("  (runtime spine-godot absent : purge réelle non vérifiable)")
+		return
+
+	# Purge réelle : au Nv1, les pièces du Nv6 ne doivent RIEN porter.
+	var reg := load(ShowRoom.REGISTRE) as SpinePersonnagesData
+	var h := reg.heros()
+	var ap := SpinePersonnagesData.apparences(h)
+	var nv1 := SpriteSpinePersonnage.creer(str(h.get("skel", "")), str(h.get("atlas", "")), ap[0])
+	var nv6 := SpriteSpinePersonnage.creer(str(h.get("skel", "")), str(h.get("atlas", "")), ap[5])
+	_assert(nv1 != null and nv6 != null, "les deux extrêmes se construisent")
+	if nv1 != null and nv6 != null:
+		add_child(nv1)
+		add_child(nv6)
+		await get_tree().process_frame
+		# Dans cet export, l'attachement d'un slot porte le nom du slot.
+		_assert(_porte(nv1, "R_H_Idle_Tete_Nv1"), "Nv1 : la tête Nv1 est portée")
+		_assert(not _porte(nv1, "R_H_Idle_Tete_Nv6"), "Nv1 : la tête Nv6 est purgée")
+		_assert(_porte(nv6, "R_H_Idle_Tete_Nv6"), "Nv6 : la tête Nv6 est portée")
+		_assert(not _porte(nv6, "R_H_Idle_Tete_Nv1"), "Nv6 : la tête Nv1 est purgée")
+		_assert(_porte(nv1, "R_H_Idle_Torse") and _porte(nv6, "R_H_Idle_Torse"),
+				"le corps commun reste porté aux deux")
+		# Animations : Attack_Shoot n'est livrée QUE pour le héros — la jouer
+		# sur un ennemi doit être sans effet, jamais une erreur de runtime.
+		_assert(nv1.a_animation(SpriteSpinePersonnage.ANIM_ATTACK_SHOOT),
+				"le héros porte l'attaque à distance")
+		# L'accessoire de visage doit changer le SQUELETTE, pas seulement la
+		# liste de skins : sans ça, [V] serait un libellé qui ne fait rien.
+		var visage2 := SpriteSpinePersonnage.creer(str(h.get("skel", "")),
+				str(h.get("atlas", "")), SpinePersonnagesData.apparences(h, 1)[0])
+		if visage2 != null:
+			add_child(visage2)
+			_assert(_porte(nv1, "R_H_Idle_Visage_1"), "jeu 1 : le visage 1 est porté")
+			_assert(not _porte(visage2, "R_H_Idle_Visage_1"), "jeu 2 : le visage 1 a disparu")
+			_assert(_porte(visage2, "R_H_Idle_Visage_2"), "jeu 2 : le visage 2 l'a remplacé")
+			visage2.free()
+		nv1.free()
+		nv6.free()
+
+	var mob := reg.ennemis()[0]
+	var sbire := SpriteSpinePersonnage.creer(str(mob.get("skel", "")), str(mob.get("atlas", "")),
+			SpinePersonnagesData.apparences(mob)[0])
+	if sbire != null:
+		add_child(sbire)
+		_assert(not sbire.a_animation(SpriteSpinePersonnage.ANIM_ATTACK_SHOOT),
+				"l'ennemi ne la porte pas")
+		sbire.jouer_attaque_distance()   # doit être un no-op silencieux
+		_assert(true, "la demander à un ennemi ne casse rien")
+		sbire.free()
+
+	# La vitrine : [V] fait défiler les accessoires sans se vider.
+	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
+	ShowRoom.scene_retour = ""
+	add_child(salle)
+	await get_tree().process_frame
+	var avant := salle._idx_cosmetique
+	salle._touche(KEY_V)
+	await get_tree().process_frame
+	_assert(salle._idx_cosmetique != avant, "[V] change de jeu d'accessoires")
+	_assert(salle._monde.get_child_count() > 0, "la vitrine est repeuplée, pas vidée")
+	_assert(salle._heros_apparences.size() == 6, "les 6 niveaux survivent au changement")
+	# Les touches d'animation ne doivent jamais planter, quel que soit le mode.
+	for code in ShowRoom.TOUCHES_ANIM.keys():
+		salle._touche(int(code))
+	_assert(salle._monde.get_child_count() > 0, "les touches d'animation laissent la vitrine debout")
+	salle.free()
+
 # ─── Helpers & rapport ──────────────────────────────────────
+
+func _porte(sprite: SpriteSpinePersonnage, nom_slot: String) -> bool:
+	return sprite.porte_attachement(nom_slot, nom_slot)
 
 func _assert(cond: bool, label: String) -> void:
 	_results.append({"ok": cond, "label": label})

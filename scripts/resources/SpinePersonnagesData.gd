@@ -7,17 +7,27 @@
 # Ajouter un monstre livré = une entrée ici, rien d'autre à toucher.
 #
 # Contrat d'export (vérifié par tools/inspect_spine_ennemis.gd) :
-#   • animations « Idle », « Attack_CaC », « Hit », « Death » ;
-#   • PALIERS portés par des SKINS Spine nommées <prefixe_skin><n>, n = 1..5,
-#     dans l'ordre Commun(0) → Peu Commun(1) → Rare(2) → Épique(3) →
-#     Légendaire(4).
+#   • animations « Idle », « Attack_CaC », « Hit », « Death » — plus
+#     « Attack_Shoot » pour Relic, qui a une attaque à distance ;
+#   • les ENNEMIS portent leurs PALIERS par des SKINS Spine nommées
+#     <prefixe_skin><n>, n = 1..5, dans l'ordre Commun(0) → Légendaire(4).
 #
-# Un personnage peut aussi porter des variantes NOMMÉES plutôt que des paliers
-# (`variantes` : liste explicite de {skin, nom}) — c'est la forme prévue pour
-# les versions masculine / féminine du héros. Au 24/08/2026 Christophe ne les a
-# PAS livrées : Relic n'expose que la skin « default », donc l'entrée reste
-# sans `prefixe_skin` ni `variantes` et n'a qu'une apparence. Les brancher =
-# remplir `variantes` dans le .tres, aucun code à toucher.
+# TROIS façons pour un personnage de porter plusieurs apparences, de la plus
+# spécifique à la plus générale — l'appelant n'a jamais à savoir laquelle :
+#   • `variantes`   — liste explicite {skin, nom} (forme prévue pour les
+#                     versions masculine / féminine du héros, non livrées) ;
+#   • `niveaux`     — n paliers d'ÉQUIPEMENT portés par des SLOTS suffixés
+#                     « _Nv<n> » (livraison Relic du 24/08/2026 : 6 niveaux,
+#                     cf. SpriteSpinePersonnage.niveaux_du_slot) ;
+#   • `prefixe_skin`— les 5 paliers de rareté en skins (ennemis) ;
+#   • rien de tout ça → une apparence unique, sans skin à poser.
+#
+# COMPOSITION DE SKINS (`skins_base` + `cosmetiques`) : Relic n'a pas une skin
+# par apparence mais un corps (« Men_Global »), un jeu de pièces d'équipement
+# (« Men_Level », « Men_Level_Hit ») et des accessoires « Random » mutuellement
+# exclusifs. Ces skins se CUMULENT — SpriteSpinePersonnage en fabrique une skin
+# composée. `skins_base` est toujours posé ; `cosmetiques` est une liste de jeux
+# alternatifs (un seul à la fois), que la ShowRoom fait défiler.
 #
 # Header .tres requis :
 #   [gd_resource type="Resource" script_class="SpinePersonnagesData" ...]
@@ -32,7 +42,10 @@ extends Resource
 #     "nom":          "FlameBot",                # libellé de vitrine (dev)
 #     "skel":         "res://…/FlameBot.skel",
 #     "atlas":        "res://…/FlameBot.atlas",
-#     "prefixe_skin": "FlameBot_Nv",             # "" si pas de variante
+#     "prefixe_skin": "FlameBot_Nv",             # "" si pas de skin de palier
+#     "skins_base":   [],                        # skins cumulées (Relic)
+#     "cosmetiques":  [],                        # [{nom, skins}] alternatifs
+#     "niveaux":      0,                         # paliers portés par les slots
 #     "ennemi":       true,
 #   }
 @export var personnages: Array[Dictionary] = []
@@ -60,29 +73,75 @@ static func skin_pour_palier(entree: Dictionary, palier: int) -> String:
 		return ""
 	return "%s%d" % [prefixe, palier + 1]   # Nv1 = Commun
 
-# Apparences d'une entrée, dans l'ordre d'affichage. Trois formes, du plus
-# spécifique au plus général — un appelant n'a jamais à savoir laquelle :
-#   • `variantes` rempli   → liste nommée (héros masculin / féminin) ;
-#   • `prefixe_skin` rempli → les 5 paliers Commun → Légendaire (ennemis) ;
-#   • ni l'un ni l'autre    → une apparence unique, sans skin à poser.
-# Chaque élément : {"skin": String, "nom": String, "palier": int} — `palier`
-# vaut -1 hors échelle de rareté (l'appelant colore alors en neutre).
-static func apparences(entree: Dictionary) -> Array[Dictionary]:
+# Jeux cosmétiques ALTERNATIFS d'une entrée (un seul posé à la fois) : les
+# accessoires « Random » de Christophe. Vide = le personnage n'en a pas.
+static func cosmetiques(entree: Dictionary) -> Array[Dictionary]:
 	var sortie: Array[Dictionary] = []
+	for c in entree.get("cosmetiques", []):
+		var jeu := c as Dictionary
+		sortie.append({"nom": str(jeu.get("nom", "?")), "skins": _liste(jeu.get("skins", []))})
+	return sortie
+
+# Apparences d'une entrée, dans l'ordre d'affichage — voir l'en-tête pour la
+# règle de priorité. `cosmetique` choisit le jeu d'accessoires cumulé (index
+# dans `cosmetiques`, borné : 0 quand le personnage n'en a pas).
+# Chaque élément : {"skin": String, "skins": PackedStringArray, "niveau": int,
+# "nom": String, "palier": int} — `palier` vaut -1 hors échelle de rareté
+# (l'appelant colore alors en neutre), `niveau` vaut 0 quand les slots
+# d'équipement ne sont pas filtrés.
+static func apparences(entree: Dictionary, cosmetique: int = 0) -> Array[Dictionary]:
+	var sortie: Array[Dictionary] = []
+	var base := skins_composees(entree, cosmetique)
+
 	var nommees: Array = entree.get("variantes", [])
 	if not nommees.is_empty():
 		for v in nommees:
-			sortie.append({"skin": str((v as Dictionary).get("skin", "")),
-					"nom": str((v as Dictionary).get("nom", "?")), "palier": -1})
+			sortie.append(_apparence(str((v as Dictionary).get("skin", "")), base, 0,
+					str((v as Dictionary).get("nom", "?")), -1))
 		return sortie
+
+	var nb_niveaux := int(entree.get("niveaux", 0))
+	if nb_niveaux > 0:
+		for n in range(1, nb_niveaux + 1):
+			# Nv1 = Commun, comme les skins de palier des ennemis. Au-delà de
+			# l'échelle de rareté (6 paliers), le niveau se nomme lui-même.
+			var palier: int = n - 1 if n <= NB_PALIERS_RARETE else -1
+			var nom: String = GameData.get_tier_name(palier) if palier >= 0 else "Nv %d" % n
+			sortie.append(_apparence("", base, n, nom, palier))
+		return sortie
+
 	if str(entree.get("prefixe_skin", "")) != "":
 		for t in NB_PALIERS:
-			sortie.append({"skin": skin_pour_palier(entree, t),
-					"nom": GameData.get_tier_name(t), "palier": t})
+			sortie.append(_apparence(skin_pour_palier(entree, t), base, 0,
+					GameData.get_tier_name(t), t))
 		return sortie
-	sortie.append({"skin": "", "nom": str(entree.get("nom", "?")), "palier": -1})
+
+	sortie.append(_apparence("", base, 0, str(entree.get("nom", "?")), -1))
+	return sortie
+
+# Skins CUMULÉES d'une entrée : le socle `skins_base` plus le jeu cosmétique
+# choisi. Vide pour un personnage qui n'en déclare pas (ennemis).
+static func skins_composees(entree: Dictionary, cosmetique: int = 0) -> PackedStringArray:
+	var sortie := _liste(entree.get("skins_base", []))
+	var jeux := cosmetiques(entree)
+	if not jeux.is_empty():
+		var jeu: Dictionary = jeux[clampi(cosmetique, 0, jeux.size() - 1)]
+		sortie.append_array(jeu["skins"] as PackedStringArray)
+	return sortie
+
+static func _apparence(skin: String, skins: PackedStringArray, niveau: int,
+		nom: String, palier: int) -> Dictionary:
+	return {"skin": skin, "skins": skins, "niveau": niveau, "nom": nom, "palier": palier}
+
+static func _liste(brut: Variant) -> PackedStringArray:
+	var sortie := PackedStringArray()
+	for v in (brut as Array):
+		sortie.append(str(v))
 	return sortie
 
 # Paliers de rareté portés par les exports d'ennemis : Commun(0) → Légendaire(4).
 # Unique(5) est hors échelle créature (Balance.ENTITY_MAX_TIER).
 const NB_PALIERS := 5
+# Échelle de rareté complète (Commun → Unique) : les niveaux d'ÉQUIPEMENT de
+# Relic vont jusqu'à 6, ils empruntent donc les noms de palier jusqu'à Unique.
+const NB_PALIERS_RARETE := 6
