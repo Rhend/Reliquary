@@ -16,7 +16,7 @@ extends Node
 # RESTAURÉS avant de quitter, échecs compris.
 # ============================================================
 
-const SAUV := "user://IdleEvolutionSave.json"
+const SAUV := SaveManager.SAVE_PATH
 const META := SaveManager.META_PATH
 # Protocole de protection (chantier 8, ÉTENDU au fichier méta au chantier 9).
 const FICHIERS_SAUV: Array[String] = [SAUV, SAUV + ".bak", META, META + ".bak"]

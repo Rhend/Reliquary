@@ -14,7 +14,7 @@ extends Node
 # puis restaurés avant de quitter, échecs compris.
 # ============================================================
 
-const SAUV := "user://IdleEvolutionSave.json"
+const SAUV := SaveManager.SAVE_PATH
 const META := SaveManager.META_PATH
 const FICHIERS: Array[String] = [SAUV, SAUV + ".bak", META, META + ".bak"]
 

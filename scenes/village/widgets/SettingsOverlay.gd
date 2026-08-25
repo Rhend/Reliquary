@@ -199,7 +199,7 @@ func _export_save() -> void:
 	fd.file_mode    = FileDialog.FILE_MODE_SAVE_FILE
 	fd.access       = FileDialog.ACCESS_FILESYSTEM
 	fd.filters      = PackedStringArray(["*.json ; Sauvegarde JSON"])
-	fd.current_file = "IdleEvolutionSave.json"
+	fd.current_file = "ReliquarySave.json"
 	add_child(fd)
 	fd.popup_centered(Vector2(700, 480))
 	fd.file_selected.connect(func(dest: String) -> void:

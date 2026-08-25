@@ -31,7 +31,7 @@ extends Node
 # La CI utilise le mode headless, déterministe.
 # ============================================================
 
-const SAUV := "user://IdleEvolutionSave.json"
+const SAUV := SaveManager.SAVE_PATH
 const META := SaveManager.META_PATH
 const FICHIERS_SAUV: Array[String] = [SAUV, SAUV + ".bak", META, META + ".bak"]
 

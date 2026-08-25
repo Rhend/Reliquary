@@ -20,7 +20,7 @@ extends Node
 # chantiers 8/9/11 : fichiers réels mis de côté (.avant_test) puis restaurés.
 # ============================================================
 
-const SAUV := "user://IdleEvolutionSave.json"
+const SAUV := SaveManager.SAVE_PATH
 const META := SaveManager.META_PATH
 const FICHIERS: Array[String] = [SAUV, SAUV + ".bak", META, META + ".bak"]
 

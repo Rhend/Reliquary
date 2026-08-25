@@ -467,7 +467,7 @@ const STRINGS: Dictionary = {
 		"settings.quit":          "⏻  Sauvegarder et quitter",
 
 		# ── Message d'accueil (WelcomeOverlay) ────────────────
-		"welcome.title": "Bienvenue dans IdleEvolution",
+		"welcome.title": "Bienvenue dans Reliquary",
 		"welcome.body": "Ici, [b]tout peut évoluer[/b] — vos alliés comme vos ennemis. C'est le cœur du jeu : chaque créature, chaque équipement, chaque biome grandit, mue et se transforme à mesure que vous avancez.\n\nCe que vous découvrez aujourd'hui est un [b]prototype[/b] (proof of concept) : les fondations d'une expérience que je veux rendre vraiment captivante.\n\nPour y arriver, j'ai besoin de votre regard. [b]Le moindre retour compte[/b] — ce qui vous plaît, ce qui vous perd, ce qui vous donne envie de continuer ou de tout lâcher. Jouez, explorez, et dites-moi tout.\n\nBonne évolution.",
 		"welcome.dont_show": "Je ne veux plus voir ce message",
 		"welcome.start": "Commencer l'aventure",
@@ -932,7 +932,7 @@ const STRINGS: Dictionary = {
 		"settings.quit":          "⏻  Save and quit",
 
 		# ── Message d'accueil (WelcomeOverlay) ────────────────
-		"welcome.title": "Welcome to IdleEvolution",
+		"welcome.title": "Welcome to Reliquary",
 		"welcome.body": "Here, [b]everything can evolve[/b] — your allies as much as your enemies. That's the heart of the game: every creature, every piece of gear, every biome grows, morphs and transforms as you progress.\n\nWhat you're discovering today is a [b]prototype[/b] (proof of concept): the foundations of an experience I want to make truly captivating.\n\nTo get there, I need your eyes on it. [b]Every bit of feedback matters[/b] — what you enjoy, what loses you, what makes you want to keep going or quit. Play, explore, and tell me everything.\n\nHappy evolving.",
 		"welcome.dont_show": "Don't show this message again",
 		"welcome.start": "Begin the adventure",

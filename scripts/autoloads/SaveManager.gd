@@ -29,7 +29,7 @@
 # ============================================================
 extends Node
 
-const SAVE_PATH     := "user://IdleEvolutionSave.json"
+const SAVE_PATH     := "user://ReliquarySave.json"
 const BACKUP_PATH   := SAVE_PATH + ".bak"      # avant-dernière sauvegarde valide
 const CORRUPT_PATH  := SAVE_PATH + ".corrupt"  # copie d'un fichier illisible (preuve)
 const SAVE_VER      := 14
@@ -350,7 +350,7 @@ func _is_version_supported(ver: int) -> bool:
 # Fichier MÉTA, SÉPARÉ de la sauvegarde de partie (règle actée 06/07/2026) :
 # le Game Over recharge la sauvegarde, le compteur ne doit JAMAIS reculer
 # avec elle. JSON minimal { version, reconstructions } ; absent → R-001.
-const META_PATH := "user://IdleEvolutionMeta.json"
+const META_PATH := "user://ReliquaryMeta.json"
 const META_VER := 1
 # Plafond D'AFFICHAGE : le nom reste R-999 au-delà (l'interne continue de
 # compter — au plus simple, la donnée n'est pas perdue si un usage vient).

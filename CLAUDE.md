@@ -1,4 +1,11 @@
-# IdleEvolution — Guide projet pour Claude Code
+# Reliquary — Guide projet pour Claude Code
+
+> ⚠ Le jeu s'appelle **Reliquary** depuis le 2026-08-25. Le DOSSIER local et le
+> dépôt GitHub s'appellent encore `IdleEvolution` (renommage non fait, sans
+> incidence sur le code). `project.godot:config/name` pilote `user://` : le
+> renommage a DÉPLACÉ le dossier de sauvegarde de `app_userdata/IdleEvolution/`
+> vers `app_userdata/Reliquary/` — les parties d'avant le renommage sont
+> orphelines, c'était la décision (aucune migration écrite).
 
 Idle RPG de complétion sous **Godot 4.7** (GL Compatibility), GDScript, 1280×720.
 Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `dev`.
@@ -52,7 +59,7 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
 | Hub hexagonal + panneaux JRPG (panneau `PANEL_FRACTION`, hub scalé `HUB_PANEL_SCALE`) | `scenes/village/Village.gd` |
 | Contenu des panneaux (statiques, `build(host)`) | `scenes/village/panels/` |
 | Alarme & assauts de Lieutenants (Rework ch.11) : 6 slots (un par Lieutenant détruit, PREMIER kill seulement — état dans `GameData.player.lieutenants_vaincus`), effets data-driven par niveau (`data/expedition/alarme.tres` : +5 % PV/ATK ennemis par slot + affixes permanents aux paliers 4/5/6), appliqués à la CRÉATION de chaque ennemi (ExpeRun, même endroit que le pont bestiaire — PV re-remplis au pv_max final) ; 6/6 → `EventBus.alarme_sonnee` (déclencheur Pyramide, message différé au retour QG — la 7ᵉ expédition est hors scope) ; jauge diégétique 6 slots sur la HoloMap (`HoloHud._jauge_alarme`, rouge = son métier). ASSAUT : débloqué par Lieu quand ses 3 strates sont complétées (`GameData.expe_completions`, marquées par ExpeRun à la COMPLÉTION seule — extraction/défaite non), option ABSENTE avant (jamais grisée, `ExpeLancementPanel`), expédition d'1 étage, Fin d'étage → nœud BOSS (Lieutenant du Lieu + 2 sbires du pool, `destinations.tres.lieutenants_par_lieu` — 6 placeholders), AUCUNE extraction, palier dédié `palier_assaut.tres` (hors strates), recap distinct, re-kill = récompenses normales sans re-slot | `scripts/autoloads/Alarme.gd` + `scripts/resources/AlarmeConfigData.gd` (config : `data/expedition/alarme.tres`, lieutenants : `data/expedition/lieutenants/`) |
-| Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) + sanction de mort (Rework ch.9) : flush de RÉFÉRENCE au lancement d'expédition puis écritures SUSPENDUES pendant la run (`suspendre_ecritures`/`reprendre_ecritures` — fermer la fenêtre en run ne sauve rien), `recharger()` (Game Over = ré-application de la dernière sauvegarde), compteur de reconstruction **R-XXX MÉTA-PERSISTANT** (`user://IdleEvolutionMeta.json`, séparé de la partie, init R-001, plafond d'affichage R-999, `nom_reconstruction()` = source UNIQUE du formatage, appliqué à l'entité hero → tous les affichages) | `scripts/autoloads/SaveManager.gd` |
+| Sauvegarde (debounce 2 s, flush à la fermeture, écriture atomique) + sanction de mort (Rework ch.9) : flush de RÉFÉRENCE au lancement d'expédition puis écritures SUSPENDUES pendant la run (`suspendre_ecritures`/`reprendre_ecritures` — fermer la fenêtre en run ne sauve rien), `recharger()` (Game Over = ré-application de la dernière sauvegarde), compteur de reconstruction **R-XXX MÉTA-PERSISTANT** (`user://ReliquaryMeta.json`, séparé de la partie, init R-001, plafond d'affichage R-999, `nom_reconstruction()` = source UNIQUE du formatage, appliqué à l'entité hero → tous les affichages) | `scripts/autoloads/SaveManager.gd` |
 | Quartiers / bâtiments + bonus de village (Chantier 4 ; ch.12 : coûts refondus en EUREN + MODULES — courbe unique data-driven `data/progression/couts_batiments.tres`, plus JAMAIS de ressource de biome ; ROUTES SUPPRIMÉES, quartiers de base ouverts d'emblée) | `scripts/systems/VillageBuildings.gd` |
 | Économie du QG (Rework ch.12 ; ordre fixe ch.13) : objets de Lieutenants (« Sceau », accordé au PREMIER kill dans `GameData.marquer_lieutenant_vaincu` — `player.objets_lieutenants` trace la provenance par Lieu, annulé par Game Over comme le slot d'Alarme) + 6 VOIES à ORDRE FIXE 1→6 (1 Sceau LIBRE interchangeable = 1 voie, ouverture MANUELLE `GameData.ouvrir_voie_suivante()`, compteur persisté `player.voies_ouvertes` int — VOIE 1 = Atelier/Forge, `atelier_ouvert()` déverrouille hex + panneau ; voies 2-6 placeholders vides) ; compteur « quartiers restaurés » source UNIQUE : `GameData.nb_voies_ouvertes()` (la DA s'y branchera). Équipement de DÉPART (ch.13) : `GameData.appliquer_equipement_depart()` sur partie neuve seulement (config `data/progression/equipement_depart.tres`). UI : hex VOIES du hub → `VoiesPanel` (Sceaux possédés/libres + 6 voies ordonnées, la suivante mise en avant) | `scripts/autoloads/GameData.gd` + `scenes/village/panels/VoiesPanel.gd` |
 | Forge : palier d'équipement (XP, sans ingrédient) + arbre de nœuds + bonus (Chantier 5) | `scripts/systems/ForgeSystem.gd` |
@@ -286,7 +293,7 @@ godot --headless --path . --quit-after 30
 
 ## Sauvegarde
 
-- `user://IdleEvolutionSave.json` (`%APPDATA%/Godot/app_userdata/IdleEvolution/`),
+- `user://ReliquarySave.json` (`%APPDATA%/Godot/app_userdata/Reliquary/`),
   `SAVE_VER = 14` (ch.13 : voies dict→compteur, migration v13→v14), versions acceptées 11+. À chaque écriture l'ancienne sauvegarde
   devient `.bak` (rechargé automatiquement si la principale est illisible) ; un
   fichier illisible est copié en `.corrupt` au lieu d'être écrasé en silence.
@@ -295,7 +302,7 @@ godot --headless --path . --quit-after 30
   passer par le Village ne peut plus détruire la progression du joueur.
 - Étendre : nouvelle donnée joueur → `GameData.player` (auto) ; nouveau flag d'entité
   → `SaveManager.PERSISTED_FLAGS` ; nouvel état système → `_save_systems()/_load_systems()`.
-- MÉTA-persistance (chantier 9) : `user://IdleEvolutionMeta.json` — compteur de
+- MÉTA-persistance (chantier 9) : `user://ReliquaryMeta.json` — compteur de
   reconstruction R-XXX, SÉPARÉ de la partie (le Game Over recharge la sauvegarde,
   le compteur ne recule jamais). Écrit à chaque incrément (atomique, .bak propre).
 - Ne JAMAIS écrire la sauvegarde dans un test : déconnecter les listeners de

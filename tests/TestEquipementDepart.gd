@@ -17,7 +17,7 @@ extends Node
 # est l'objet) — protocole : fichiers réels mis de côté puis restaurés.
 # ============================================================
 
-const SAUV := "user://IdleEvolutionSave.json"
+const SAUV := SaveManager.SAVE_PATH
 const META := SaveManager.META_PATH
 const FICHIERS: Array[String] = [SAUV, SAUV + ".bak", META, META + ".bak"]
 
