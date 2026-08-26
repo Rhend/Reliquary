@@ -53,6 +53,7 @@ const VUE := Vector2(1280, 720)     # taille de référence du projet
 const SOL_Y_FRAC := CombatCtbUi.SOL_Y_FRAC
 const SOL_X_JOUEUR := CombatCtbUi.SOL_X_JOUEUR
 const SOL_X_ADVERSE := CombatCtbUi.SOL_X_ADVERSE
+const BANDE_VS_PX := CombatCtbUi.BANDE_VS_PX
 
 # ─── Éclairage de la vitrine ─────────────────────────────────
 # RÈGLE : on éclaire le DÉCOR, jamais les personnages. Moduler les sprites
@@ -214,13 +215,20 @@ func _construire_fond_combat() -> void:
 # vitrine (joueur / adverse, toujours 1 vs 1 ici). PLUS d'ellipse
 # d'emplacement (26/08/2026) : elle datait de l'ère EnergyBoule (repère au
 # sol d'un placeholder sans silhouette propre) — superflue maintenant que
-# les monstres ont leurs propres sprites Spine posés dessus.
+# les monstres ont leurs propres sprites Spine posés dessus. Chrome arrêté
+# PILE sur la diagonale (`CombatFondScinde.x_frontiere`) : plein cadre, il
+# empiétait sur le biome adverse (signalé par Rhend, même correctif que
+# CombatCtbUi._dessiner_sol).
 func _dessiner_sol_combat() -> void:
 	var w := VUE.x
-	var y := VUE.y * SOL_Y_FRAC
-	_sol_combat.draw_line(Vector2(0, y), Vector2(w, y), UIColors.CYBER_SOL, 2.0)
+	var h := VUE.y
+	var y := h * SOL_Y_FRAC
+	var frontiere := CombatFondScinde.x_frontiere(y, h, w, BANDE_VS_PX)
+	_sol_combat.draw_line(Vector2(0, y), Vector2(frontiere, y), UIColors.CYBER_SOL, 2.0)
 	for i in 3:
-		_sol_combat.draw_rect(Rect2(0.0, y + float(i) * 16.0, w, 16.0),
+		var yi := y + float(i) * 16.0
+		_sol_combat.draw_rect(Rect2(0.0, yi,
+				CombatFondScinde.x_frontiere(yi, h, w, BANDE_VS_PX), 16.0),
 				Color(UIColors.CYBER_SOL, UIColors.CYBER_SOL.a * (0.45 - 0.13 * float(i))))
 
 # ─── Mode LIBRE : une rangée par monstre ─────────────────────

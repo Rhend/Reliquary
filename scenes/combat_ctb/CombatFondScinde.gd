@@ -42,6 +42,18 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	seam.resized.connect(seam.queue_redraw)
 	parent.add_child(seam)
 
+# Position X de la diagonale (côté héros) à une hauteur `y` donnée (0 = haut,
+# h = bas) — SOURCE UNIQUE de cette frontière. `CombatCtbUi._dessiner_sol` et
+# `ShowRoom._dessiner_sol_combat` s'en servent pour ne JAMAIS peindre leur
+# chrome de sol (ligne d'horizon + bande dégradée) au-delà, dans le biome
+# adverse : dessiné plein cadre, ce chrome empiétait sur le biome de droite
+# et donnait l'impression que son sol traversait la couture (26/08/2026,
+# signalé par Rhend).
+static func x_frontiere(y: float, h: float, w: float, bande_vs_px: float) -> float:
+	if h <= 0.0:
+		return w * 0.5
+	return w * 0.5 + bande_vs_px * (0.5 - y / h)
+
 # Bande diagonale entre le décor joueur et le placeholder adverse — même
 # tracé qu'avant le passage au décor réel (double liseré cyan/magenta).
 static func _dessiner_diagonale(seam: Control, bande_vs_px: float) -> void:
@@ -49,8 +61,8 @@ static func _dessiner_diagonale(seam: Control, bande_vs_px: float) -> void:
 	var h := seam.size.y
 	if w <= 0.0 or h <= 0.0:
 		return
-	var xt := w * 0.5 + bande_vs_px * 0.5
-	var xb := w * 0.5 - bande_vs_px * 0.5
+	var xt := x_frontiere(0.0, h, w, bande_vs_px)
+	var xb := x_frontiere(h, h, w, bande_vs_px)
 	seam.draw_line(Vector2(xt, 0), Vector2(xb, h), Color(UIColors.CYBER_ACCENT, 0.55), 2.0)
 	seam.draw_line(Vector2(xt + 5, 0), Vector2(xb + 5, h),
 			Color(UIColors.CYBER_ACCENT_2, 0.35), 1.0)

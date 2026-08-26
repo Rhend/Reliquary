@@ -738,8 +738,12 @@ func _shoot_maxtier_village() -> void:
 
 # ── Vitrine des assets Spine (ShowRoom) : les deux modes ────
 func _shoot_showroom() -> void:
-	var salle: Node2D = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
+	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
 	_vp.add_child(salle)
+	# La vitrine démarre désormais en mode COMBAT (26/08/2026) : mode LIBRE
+	# explicite pour les deux premières captures, qui doivent montrer ce mode.
+	salle._mode = ShowRoom.Mode.LIBRE
+	salle._appliquer_mode()
 	await get_tree().create_timer(0.6).timeout   # laisse jouer l'Idle
 	await _capture("res://tests/_shot_showroom_libre.png")
 	# Niveau « Jour » : vérifie que les étiquettes restent lisibles quand le
