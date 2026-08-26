@@ -24,6 +24,12 @@
 #    donc un RUBAN de copies jointives qu'on translate, et qui se replie sur
 #    lui-même (fmod) sans jamais montrer de couture.
 #
+# ⚠ Node2D + Sprite2D, PAS des Control/TextureRect. Godot arrondit la position
+# des Control au pixel entier (`gui/common/snap_controls_to_pixels`, vrai par
+# défaut) : à 3 px/s, le plan le plus lointain avançait d'un pixel toutes les
+# 0,33 s — un défilement visiblement saccadé. Les Node2D gardent une position
+# flottante, donc un glissement continu.
+#
 # Le SOL ne défile pas : les personnages y sont posés, le faire glisser sous
 # leurs pieds les ferait patiner. Les fonds de ciel non plus (rien à y voir
 # bouger, et ils doivent couvrir tout le cadre en permanence).
@@ -63,7 +69,7 @@ const PLANS: Array[Dictionary] = [
 
 # Nœud dont il faut compenser le zoom (le `_couche_scene` de CombatCtbUi).
 var _noeud_zoom: Control = null
-# Un élément par plan : {noeud, profondeur, vitesse, depart_x, boucle_px}.
+# Un élément par plan : {noeud, profondeur, vitesse, origine, boucle_px}.
 var _couches: Array[Dictionary] = []
 var _temps := 0.0
 
@@ -98,17 +104,23 @@ func _batir(larg: float, haut: float) -> void:
 		var texture: Texture2D = load(chemin)
 		if texture == null:
 			continue
-		var reduit := bool(plan["reduit"])
-		var cadre := _cadre(texture.get_size(), larg, haut, reduit)
+		var cadre := _cadre(texture.get_size(), larg, haut, bool(plan["reduit"]))
 		var vitesse := float(plan["vitesse"])
-		var noeud: Control = _ruban(texture, cadre, larg) if vitesse != 0.0 \
-				else _calque(texture, cadre)
+		# Une copie de plus que le strict nécessaire : pendant qu'une sort par
+		# la gauche, la suivante doit déjà couvrir la droite. Un plan fixe n'en
+		# a besoin que d'une.
+		var copies := 1
+		if vitesse != 0.0 and cadre.size.x > 0.0:
+			copies = maxi(int(ceil(larg / cadre.size.x)) + 1, 2)
+		var noeud := Node2D.new()
+		for i in copies:
+			noeud.add_child(_calque(texture, cadre.size, Vector2(cadre.size.x * i, 0.0)))
 		add_child(noeud)
 		_couches.append({
 			"noeud": noeud,
 			"profondeur": float(plan["profondeur"]),
 			"vitesse": vitesse,
-			"depart_x": cadre.position.x,
+			"origine": cadre.position,
 			# Longueur d'une boucle = la largeur d'une copie : au bout d'un
 			# glissement de cette longueur, le ruban est identique à lui-même.
 			"boucle_px": cadre.size.x,
@@ -134,35 +146,17 @@ static func _cadre(taille_texture: Vector2, larg: float, haut: float,
 	var pivot := Vector2(larg * 0.5, DECOR_SOL_FRAC * haut)
 	return Rect2(pivot + (origine - pivot) * REDUCTION_PLANS, taille * REDUCTION_PLANS)
 
-static func _calque(texture: Texture2D, cadre: Rect2) -> TextureRect:
-	var tr := TextureRect.new()
-	tr.texture = texture
-	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	# STRETCH_SCALE remplit EXACTEMENT le rectangle calculé, sans jamais rogner.
-	tr.stretch_mode = TextureRect.STRETCH_SCALE
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tr.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	tr.position = cadre.position
-	tr.size = cadre.size
-	return tr
-
-# Ruban de copies jointives, assez large pour couvrir l'écran quel que soit le
-# décalage du défilement. Une copie de plus que le strict nécessaire : pendant
-# qu'une sort par la gauche, la suivante doit déjà couvrir la droite.
-static func _ruban(texture: Texture2D, cadre: Rect2, larg: float) -> Control:
-	var ruban := Control.new()
-	ruban.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ruban.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	ruban.position = cadre.position
-	var copies := 2 if cadre.size.x <= 0.0 else int(ceil(larg / cadre.size.x)) + 1
-	for i in maxi(copies, 2):
-		var tr := _calque(texture, Rect2(Vector2(cadre.size.x * i, cadre.position.y),
-				cadre.size))
-		# Le ruban porte déjà l'origine du cadre : les copies s'alignent en
-		# local, sinon le décalage serait compté deux fois.
-		tr.position.y = 0.0
-		ruban.add_child(tr)
-	return ruban
+# Une copie d'un plan, posée à `decalage` dans le ruban. `centered = false` pour
+# que la position soit le coin haut-gauche, comme un Rect2.
+static func _calque(texture: Texture2D, taille: Vector2, decalage: Vector2) -> Sprite2D:
+	var sp := Sprite2D.new()
+	sp.texture = texture
+	sp.centered = false
+	sp.position = decalage
+	var source := texture.get_size()
+	if source.x > 0.0 and source.y > 0.0:
+		sp.scale = taille / source
+	return sp
 
 func _process(delta: float) -> void:
 	_temps += delta
@@ -174,16 +168,16 @@ func _process(delta: float) -> void:
 		# mais décalé verticalement pour caler le sol — d'où le retrait.
 		foyer = _noeud_zoom.pivot_offset - position
 	for couche in _couches:
-		var noeud: Control = couche["noeud"]
+		var noeud: Node2D = couche["noeud"]
+		var origine: Vector2 = couche["origine"]
 		var vitesse: float = couche["vitesse"]
-		if vitesse != 0.0:
-			var boucle: float = couche["boucle_px"]
-			if boucle > 0.0:
-				noeud.position.x = float(couche["depart_x"]) \
-						- fmod(_temps * vitesse, boucle)
+		var boucle: float = couche["boucle_px"]
+		if vitesse != 0.0 and boucle > 0.0:
+			origine.x -= fmod(_temps * vitesse, boucle)
 		# Compensation de profondeur : ramène l'échelle EFFECTIVE du plan à
 		# 1 + (zoom − 1) × profondeur, sachant que le parent applique déjà zoom.
-		var voulue := 1.0 + (zoom - 1.0) * float(couche["profondeur"])
-		noeud.scale = Vector2.ONE * (voulue / zoom)
-		# Le pivot est relatif au nœud : il suit donc le défilement.
-		noeud.pivot_offset = foyer - noeud.position
+		var echelle := (1.0 + (zoom - 1.0) * float(couche["profondeur"])) / zoom
+		# Homothétie de centre `foyer` : le contenu se réduit vers le point
+		# regardé, au lieu de glisser vers le coin du nœud.
+		noeud.position = foyer + (origine - foyer) * echelle
+		noeud.scale = Vector2.ONE * echelle

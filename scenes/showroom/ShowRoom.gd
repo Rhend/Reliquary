@@ -45,11 +45,14 @@ const COL_PAS := 320.0     # écart horizontal entre deux paliers
 const RANG_PAS := 360.0    # écart vertical entre deux monstres
 const MARGE_G := 260.0     # colonne de gauche : nom du monstre
 
-# ─── Cadrage COMBAT : repris tel quel de CombatCtbUi ─────────
+# ─── Cadrage COMBAT : LU de CombatCtbUi, jamais recopié ──────
+# La vitrine ne vaut que si elle montre le cadrage RÉEL. Ces valeurs étaient
+# dupliquées ici, ce qui laissait les deux écrans diverger en silence dès qu'on
+# bougeait un ancrage — c'est arrivé au recentrage du 26/08/2026.
 const VUE := Vector2(1280, 720)     # taille de référence du projet
-const SOL_Y_FRAC := 0.60
-const SOL_X_JOUEUR := 0.34
-const SOL_X_ADVERSE := 0.66
+const SOL_Y_FRAC := CombatCtbUi.SOL_Y_FRAC
+const SOL_X_JOUEUR := CombatCtbUi.SOL_X_JOUEUR
+const SOL_X_ADVERSE := CombatCtbUi.SOL_X_ADVERSE
 
 # ─── Éclairage de la vitrine ─────────────────────────────────
 # RÈGLE : on éclaire le DÉCOR, jamais les personnages. Moduler les sprites

@@ -92,8 +92,8 @@ var inventaire_fournisseur := Callable()
 var sur_objet_utilise := Callable()
 
 const SOL_Y_FRAC := 0.60           # hauteur du sol de la scène (fraction écran)
-const SOL_X_JOUEUR := 0.34         # ancrage des emplacements du camp joueur
-const SOL_X_ADVERSE := 0.66        # ancrage des emplacements du camp adverse
+const SOL_X_JOUEUR := 0.25         # ancrage des emplacements du camp joueur : CENTRE de sa moitié
+const SOL_X_ADVERSE := 0.75        # ancrage du camp adverse — miroir exact du joueur
 const SOL_PAS := Vector2(64, 46)   # décalage diagonal entre emplacements
 const ORBE_TAILLE := Vector2(64, 64)
 
