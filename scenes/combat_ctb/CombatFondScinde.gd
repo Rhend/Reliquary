@@ -40,6 +40,15 @@ const DECOR_COUCHES: Array[String] = [
 # sans ça les personnages flottent. À réajuster si le décor change.
 const DECOR_SOL_FRAC := 0.688
 
+# Réduction des plans d'IMMEUBLES pour dégager la vue d'ensemble (26/08/2026 —
+# 10 % en premier essai, valeur à affiner à l'œil). Ne touche NI le plan 2
+# (le sol : le rapetisser décrocherait les pieds des personnages du décor),
+# NI les fonds de ciel, qui doivent continuer de couvrir tout le cadre.
+# Les calques néon portent le même préfixe de plan que leur immeuble, donc
+# ils suivent leur bâtiment — sans quoi les enseignes se décaleraient.
+const PLANS_REDUITS: Array[String] = ["Plan_3", "Plan_4", "Plan_5"]
+const REDUCTION_PLANS := 0.9
+
 # `vue` = résolution de référence du projet (1280×720, fixe) : la math de
 # calage du sol est volontairement en unités ABSOLUES, pas la taille réelle
 # du nœud (souvent pas encore connue à la construction, avant le premier layout).
@@ -66,9 +75,23 @@ static func construire(parent: Control, sol_y_frac: float, bande_vs_px: float,
 		var couche := TextureRect.new()
 		couche.texture = load(chemin)
 		couche.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		couche.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		couche.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		couche.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if _plan_reduit(nom):
+			# On CALCULE le rectangle au lieu de scaler le nœud. Réduire
+			# l'échelle d'un TextureRect rétrécit aussi son cadre, et
+			# KEEP_ASPECT_COVERED RECOUPE sur ce cadre : les immeubles
+			# gagnaient une arête verticale franche de chaque côté. Ici on
+			# reproduit à la main le cadrage de COVERED, on le rapetisse
+			# autour de la ligne de sol, et STRETCH_SCALE remplit ce
+			# rectangle sans jamais rogner.
+			couche.stretch_mode = TextureRect.STRETCH_SCALE
+			couche.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			var cadre := _cadre_reduit(couche.texture.get_size(), vue.x, h)
+			couche.position = cadre.position
+			couche.size = cadre.size
+		else:
+			couche.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			couche.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		fond_joueur.add_child(couche)
 	parent.add_child(fond_joueur)
 
@@ -83,6 +106,29 @@ static func construire(parent: Control, sol_y_frac: float, bande_vs_px: float,
 	seam.draw.connect(_dessiner_diagonale.bind(seam, bande_vs_px))
 	seam.resized.connect(seam.queue_redraw)
 	parent.add_child(seam)
+
+# Rectangle d'un plan réduit, dans les coordonnées du décor (largeur `larg`,
+# hauteur `haut`). On refait d'abord le cadrage que KEEP_ASPECT_COVERED aurait
+# produit — l'image mise à l'échelle pour couvrir, centrée —, puis on le
+# rapetisse de REDUCTION_PLANS autour de la LIGNE DE SOL : les immeubles
+# gardent leur base posée au lieu de décoller. Détourés sur du transparent, ils
+# ne découvrent en rétrécissant que le ciel des plans de fond — l'effet voulu.
+static func _cadre_reduit(taille_texture: Vector2, larg: float, haut: float) -> Rect2:
+	if taille_texture.x <= 0.0 or taille_texture.y <= 0.0:
+		return Rect2(Vector2.ZERO, Vector2(larg, haut))
+	var couvre := maxf(larg / taille_texture.x, haut / taille_texture.y)
+	var taille := taille_texture * couvre
+	var origine := Vector2((larg - taille.x) * 0.5, (haut - taille.y) * 0.5)
+	var pivot := Vector2(larg * 0.5, DECOR_SOL_FRAC * haut)
+	return Rect2(pivot + (origine - pivot) * REDUCTION_PLANS, taille * REDUCTION_PLANS)
+
+# Ce calque appartient-il à un plan d'immeubles à réduire ? Test sur le nom de
+# FICHIER : c'est le numéro de plan que Christophe y inscrit qui fait foi.
+static func _plan_reduit(nom_fichier: String) -> bool:
+	for plan in PLANS_REDUITS:
+		if nom_fichier.find(plan) >= 0:
+			return true
+	return false
 
 # Bande diagonale entre le décor joueur et le placeholder adverse — même
 # tracé qu'avant le passage au décor réel (double liseré cyan/magenta).
