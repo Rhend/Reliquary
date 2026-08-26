@@ -316,11 +316,45 @@ func _test_costumes() -> void:
 
 const ECART_ECHELLE_MAX := 0.2   # ±20 % de la hauteur cible
 
+# La mesure d'échelle vient d'un BAKE (SilhouettesData) : les pixels réellement
+# dessinés, comptés hors ligne par tools/mesurer_silhouettes.tscn, parce que
+# compter des pixels exige un rendu et que les tests tournent en --headless.
+#
+# C'est le contrôle qui compte vraiment ici : un bake périmé ne casse rien de
+# visible, il rend juste un personnage à la mauvaise taille — exactement le mode
+# de panne silencieuse qui a coûté la livraison « cheveux ». On vérifie donc que
+# CHAQUE personnage du registre a sa mesure, et qu'elle correspond encore à son
+# squelette. Comme TestHoloXlsx pour l'instantané de la carte : l'asset et sa
+# donnée bakée ne peuvent pas diverger sans que la CI le dise.
+func _test_silhouettes_bakees() -> void:
+	var bakees := SilhouettesData.charger()
+	_assert(bakees != null, "le bake des silhouettes existe")
+	if bakees == null:
+		return
+	var reg := load(ShowRoom.REGISTRE) as SpinePersonnagesData
+	for p in reg.personnages:
+		var id := str(p.get("id", "?"))
+		var skel := str(p.get("skel", ""))
+		_assert(float((bakees.mesures.get(skel, {}) as Dictionary).get("hauteur", 0.0)) > 0.0,
+				"%s : silhouette bakée présente" % id)
+		var app := SpinePersonnagesData.apparences(p)
+		var sprite := SpriteSpinePersonnage.creer(skel, str(p.get("atlas", "")), app[0])
+		if sprite == null:
+			continue
+		add_child(sprite)
+		await get_tree().process_frame
+		# hauteur() rend 0.0 — et warne — quand les bornes ont bougé depuis le
+		# bake : c'est le signal « asset livré, re-bake oublié ».
+		_assert(bakees.hauteur(skel, sprite.bornes_corps()) > 0.0,
+				"%s : le bake correspond encore au squelette livré" % id)
+		sprite.free()
+
 func _test_echelle() -> void:
 	print("\n[TEST 6] Échelle : tous les personnages au même mètre")
 	if not SpriteSpinePersonnage.disponible():
 		print("  (runtime spine-godot absent : échelle non mesurable)")
 		return
+	await _test_silhouettes_bakees()
 	var cible := SpriteSpinePersonnage.HAUTEUR_CIBLE_PX
 	var marge := cible * ECART_ECHELLE_MAX
 	var reg := load(ShowRoom.REGISTRE) as SpinePersonnagesData
