@@ -54,6 +54,12 @@ const MOTIFS_HORS_MESURE := ["Sword", "VFX"]
 # (voir _hauteur_source : la taille déclarée par l'export n'est pas fiable).
 const HAUTEUR_CIBLE_PX := 276.0   # 240 + 15 % (26/08/2026 : héros et monstres jugés trop petits)
 const HAUTEUR_SOURCE_DEFAUT := 2770.0   # dernier recours : ni mesure ni taille déclarée
+# Fondu par défaut entre deux animations Spine consécutives (26/08/2026) :
+# sans lui, l'extension enchaîne Idle→Attaque→Idle (et →Hit, →Mort) en cut
+# sec (mix par défaut = 0). Une valeur courte adoucit l'ENTRÉE dans chaque
+# clip livré, sans en ajouter un seul — la pose finale de Mort reste TENUE
+# (aucune animation ne joue après elle : rien à en faire sortir en fondu).
+const DUREE_FONDU := 0.12
 
 var _spine: Node = null   # SpineSprite — jamais typé (extension optionnelle)
 var _mort := false        # Death jouée : plus aucune autre animation
@@ -122,6 +128,7 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 	if not bool(donnees.call("is_skeleton_data_loaded")):
 		push_warning("SpriteSpinePersonnage : données Spine invalides (%s)" % chemin_skel)
 		return false
+	donnees.set("default_mix", DUREE_FONDU)
 	_spine = ClassDB.instantiate("SpineSprite") as Node
 	if _spine == null:
 		push_warning("SpriteSpinePersonnage : SpineSprite non instanciable")

@@ -5,7 +5,7 @@
 # donner de la profondeur. Jusqu'ici ils n'étaient qu'empilés : un seul bloc,
 # une seule échelle, aucun bénéfice du découpage. Ce nœud leur rend leur rôle.
 #
-# DEUX effets, tous deux pilotés par `PLANS` :
+# TROIS effets, tous pilotés par `PLANS` :
 #
 #  • PROFONDEUR — pendant le zoom-duel, `CombatCtbUi` agrandit le bloc entier
 #    (`_couche_scene.scale`). Chaque plan COMPENSE ce zoom au prorata de sa
@@ -32,6 +32,15 @@
 #      ce n'est qu'un signal de vie visuelle, pas un second niveau de parallax.
 #      Un calque néon partage vitesse ET profondeur de SON immeuble, jamais de
 #      l'autre découpe du plan, sous peine de décrocher de sa façade.
+#
+#  • BRUME ATMOSPHÉRIQUE — chaque plan est teinté vers `HAZE_COLOR` au
+#    prorata de son ÉLOIGNEMENT (26/08/2026) : un plan lointain (profondeur
+#    proche de 0) se fond un peu dans l'air entre lui et la caméra, un plan
+#    proche (sol, profondeur 1) reste à sa couleur native. Perspective
+#    atmosphérique classique — le même principe que les silhouettes qui
+#    « perdent leurs bords » avec la distance dans `biome_background.gdshader`.
+#    Un calque néon reçoit la même teinte que son immeuble (même profondeur,
+#    déjà partagée pour la vitesse) : rien à faire de plus pour rester calé.
 #
 # ⚠ Node2D + Sprite2D, PAS des Control/TextureRect. Godot arrondit la position
 # des Control au pixel entier (`gui/common/snap_controls_to_pixels`, vrai par
@@ -69,6 +78,13 @@ const DECOR_SOL_FRAC := (SOL_HAUT_FRAC + SOL_BAS_FRAC) * 0.5
 
 # Réduction des plans d'IMMEUBLES pour dégager la vue d'ensemble (26/08/2026).
 const REDUCTION_PLANS := 0.9
+
+# Brume atmosphérique (26/08/2026) : teinte vers laquelle un plan lointain se
+# fond, et intensité MAX (au plan le plus lointain, profondeur 0 — le sol, à
+# profondeur 1, n'en reçoit aucune). Volontairement subtil : un signal de
+# profondeur de plus, pas un regrading complet de la palette de Christophe.
+const HAZE_COLOR := Color(0.55, 0.62, 0.74)
+const HAZE_MAX := 0.30
 
 # Les plans, du PLUS LOINTAIN au plus proche — l'ordre d'empilement.
 #   profondeur : réponse au zoom (0 = fixe, 1 = comme les personnages) ;
@@ -138,6 +154,7 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 		if vitesse != 0.0 and cadre.size.x > 0.0:
 			copies = maxi(int(ceil((larg - cadre.position.x) / cadre.size.x)) + 1, 2)
 		var noeud := Node2D.new()
+		noeud.modulate = _teinte_profondeur(float(plan["profondeur"]))
 		for i in copies:
 			noeud.add_child(_calque(texture, cadre.size, Vector2(cadre.size.x * i, 0.0)))
 		add_child(noeud)
@@ -181,6 +198,11 @@ static func _cadre(taille_texture: Vector2, larg: float, haut: float,
 	# autour des pieds les ferait avancer sur le trottoir.
 	var pivot := Vector2(centre_x, SOL_HAUT_FRAC * haut)
 	return Rect2(pivot + (origine - pivot) * REDUCTION_PLANS, taille * REDUCTION_PLANS)
+
+# Teinte de brume d'un plan selon son éloignement : intensité MAX à
+# profondeur 0 (le plus lointain), nulle à profondeur 1 (le sol).
+static func _teinte_profondeur(profondeur: float) -> Color:
+	return Color.WHITE.lerp(HAZE_COLOR, HAZE_MAX * (1.0 - clampf(profondeur, 0.0, 1.0)))
 
 # Une copie d'un plan, posée à `decalage` dans le ruban. `centered = false` pour
 # que la position soit le coin haut-gauche, comme un Rect2.
