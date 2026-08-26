@@ -119,7 +119,7 @@ static func apparences(entree: Dictionary, cosmetique: int = 0) -> Array[Diction
 		for v in nommees:
 			sortie.append(_apparence(str((v as Dictionary).get("skin", "")), base, 0,
 					str((v as Dictionary).get("nom", "?")), -1))
-		return sortie
+		return _avec_decalage(sortie, entree)
 
 	var nb_niveaux := int(entree.get("niveaux", 0))
 	if nb_niveaux > 0:
@@ -129,16 +129,16 @@ static func apparences(entree: Dictionary, cosmetique: int = 0) -> Array[Diction
 			var palier: int = n - 1 if n <= NB_PALIERS_RARETE else -1
 			var nom: String = GameData.get_tier_name(palier) if palier >= 0 else "Nv %d" % n
 			sortie.append(_apparence("", base, n, nom, palier))
-		return sortie
+		return _avec_decalage(sortie, entree)
 
 	if str(entree.get("prefixe_skin", "")) != "":
 		for t in NB_PALIERS:
 			sortie.append(_apparence(skin_pour_palier(entree, t), base, 0,
 					GameData.get_tier_name(t), t))
-		return sortie
+		return _avec_decalage(sortie, entree)
 
 	sortie.append(_apparence("", base, 0, str(entree.get("nom", "?")), -1))
-	return sortie
+	return _avec_decalage(sortie, entree)
 
 # Skins CUMULÉES d'une entrée : le socle `skins_base` plus le jeu cosmétique
 # choisi. Vide pour un personnage qui n'en déclare pas (ennemis).
@@ -149,6 +149,18 @@ static func skins_composees(entree: Dictionary, cosmetique: int = 0) -> PackedSt
 		var jeu: Dictionary = jeux[clampi(cosmetique, 0, jeux.size() - 1)]
 		sortie.append_array(jeu["skins"] as PackedStringArray)
 	return sortie
+
+# Reporte le recentrage visuel de l'entrée sur toutes ses apparences. Il ne
+# dépend ni du palier ni du costume : c'est la POSE qui penche, et elle est la
+# même partout. Les 6 niveaux de Relic partagent donc une seule valeur.
+static func _avec_decalage(apparences_: Array[Dictionary],
+		entree: Dictionary) -> Array[Dictionary]:
+	var dx := float(entree.get("decalage_x_px", 0.0))
+	if dx == 0.0:
+		return apparences_
+	for a in apparences_:
+		a["decalage_x_px"] = dx
+	return apparences_
 
 static func _apparence(skin: String, skins: PackedStringArray, niveau: int,
 		nom: String, palier: int) -> Dictionary:

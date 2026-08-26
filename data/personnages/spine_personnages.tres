@@ -47,6 +47,7 @@ personnages = [{
 "nom": "Visage 3",
 "skins": ["Men_Random_Level_Face_Accessory_3"]
 }],
+"decalage_x_px": 17.0,
 "niveaux": 6,
 "ennemi": false
 }, {

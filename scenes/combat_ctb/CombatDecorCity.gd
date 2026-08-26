@@ -59,7 +59,7 @@ const DECOR_SOL_FRAC := (SOL_HAUT_FRAC + SOL_BAS_FRAC) * 0.5
 # ciel devant, eux, rester assez grands pour couvrir.
 
 # Réduction des plans d'IMMEUBLES pour dégager la vue d'ensemble (26/08/2026).
-const REDUCTION_PLANS := 0.62
+const REDUCTION_PLANS := 0.9
 
 # Les plans, du PLUS LOINTAIN au plus proche — l'ordre d'empilement.
 #   profondeur : réponse au zoom (0 = fixe, 1 = comme les personnages) ;

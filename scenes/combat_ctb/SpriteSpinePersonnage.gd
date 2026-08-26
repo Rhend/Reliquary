@@ -138,6 +138,14 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 	# Échelle : hauteur native du squelette → hauteur_cible_px à l'écran.
 	_spine.set("scale", Vector2.ONE
 			* (hauteur_cible_px / _hauteur_source(donnees, apparence, chemin_skel)))
+	# Recentrage visuel : l'origine du squelette est entre les pieds, mais la
+	# masse DESSINÉE peut pencher — Relic a un pied en avant, ce qui décale sa
+	# silhouette de +17 px vers la droite à la taille de combat (mesuré). Sans
+	# ça il paraît décentré sur un décor qui, lui, est centré sur l'ancrage.
+	# Valeur donnée pour HAUTEUR_CIBLE_PX, remise à l'échelle demandée.
+	var dx := float(apparence.get("decalage_x_px", 0.0))
+	if dx != 0.0:
+		_spine.set("position", Vector2(-dx * hauteur_cible_px / HAUTEUR_CIBLE_PX, 0.0))
 	_jouer(ANIM_IDLE, true)
 	return true
 

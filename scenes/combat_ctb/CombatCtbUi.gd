@@ -91,10 +91,13 @@ var recompenses_fournisseur := Callable()
 var inventaire_fournisseur := Callable()
 var sur_objet_utilise := Callable()
 
-const SOL_Y_FRAC := 0.72           # ligne des pieds : MILIEU de la bande de sol du décor
+const SOL_Y_FRAC := 0.806          # ligne des pieds : MILIEU de la bande de sol du décor
 const SOL_X_JOUEUR := 0.25         # ancrage des emplacements du camp joueur : CENTRE de sa moitié
 const SOL_X_ADVERSE := 0.75        # ancrage du camp adverse — miroir exact du joueur
-const SOL_PAS := Vector2(64, 46)   # décalage diagonal entre emplacements
+# Pas diagonal entre emplacements. Y RÉDUIT (46 -> 22) le 26/08/2026 : les pieds
+# étant descendus au milieu du sol, un pas de 46 poussait le 3e ennemi (2 x 46)
+# sous la barre d'action, qui est du chrome dessiné PAR-DESSUS la scène.
+const SOL_PAS := Vector2(64, 22)
 const ORBE_TAILLE := Vector2(64, 64)
 
 var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
