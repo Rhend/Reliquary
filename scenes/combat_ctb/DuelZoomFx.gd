@@ -24,7 +24,14 @@ class_name DuelZoomFx
 
 const ZOOM := 1.40
 const ZOOM_CRIT := 1.55       # un crit frappe plus fort → caméra aussi
-const ECART_PX := 120.0       # distance des deux pieds au centre (face à face)
+# Distance TOTALE entre les deux pieds au centre (face à face) — chacun se
+# pose à ECART_PX/2 du foyer. 120 (valeur d'origine, calibrée à l'œil quand
+# l'adversaire n'était qu'un orbe EnergyBoule minuscule) faisait carrément se
+# chevaucher deux personnages Spine pleine taille (276 px de haut) une fois
+# les deux sprites réels affrontés dans la vitrine (27/08/2026, signalé par
+# Rhend) — les torses, sans même compter les armes, débordaient déjà de
+# 60 px de chaque côté du foyer.
+const ECART_PX := 240.0
 const FOCUS_HAUT_PX := 60.0   # remonte le pivot des pieds vers les torses
 const DUREE_IN := 0.14
 # Tenue calibrée pour qu'en COMBAT RÉEL le duel (in + tenue + out = 0.89 s)
