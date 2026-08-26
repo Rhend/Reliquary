@@ -44,15 +44,21 @@ const ANIM_HIT := "Hit"
 const ANIM_DEATH := "Death"
 # Marqueur de niveau d'équipement dans un nom de slot (cf. niveaux_du_slot).
 const MARQUEUR_NIVEAU := "_Nv"
+# Slots écartés de la MESURE d'échelle (cf. hors_mesure) : ils débordent le
+# personnage sans lui appartenir. L'épée levée au-dessus de la tête de Relic
+# occupait à elle seule la moitié du budget de hauteur, ce qui le rendait
+# visiblement plus petit que des monstres au corps monobloc.
+const MOTIFS_HORS_MESURE := ["Sword", "VFX"]
 # Hauteur affichée à l'écran (px) — la source Spine fait ~2 800 unités de haut,
 # l'échelle est déduite de la hauteur MESURÉE du squelette au chargement
 # (voir _hauteur_source : la taille déclarée par l'export n'est pas fiable).
-const HAUTEUR_CIBLE_PX := 240.0
+const HAUTEUR_CIBLE_PX := 276.0   # 240 + 15 % (26/08/2026 : héros et monstres jugés trop petits)
 const HAUTEUR_SOURCE_DEFAUT := 2770.0   # dernier recours : ni mesure ni taille déclarée
 
 var _spine: Node = null   # SpineSprite — jamais typé (extension optionnelle)
 var _mort := false        # Death jouée : plus aucune autre animation
 var _animations := PackedStringArray()   # ce que l'export sait vraiment jouer
+var _apparence: Dictionary = {}          # dernière apparence posée (mesure d'échelle)
 
 static func disponible(chemin_skel: String = CHEMIN_SKEL,
 		chemin_atlas: String = CHEMIN_ATLAS) -> bool:
@@ -128,7 +134,7 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 	# attachements.
 	definir_apparence(apparence)
 	# Échelle : hauteur native du squelette → hauteur_cible_px à l'écran.
-	_spine.set("scale", Vector2.ONE * (hauteur_cible_px / _hauteur_source(donnees)))
+	_spine.set("scale", Vector2.ONE * (hauteur_cible_px / _hauteur_source(donnees, apparence)))
 	_jouer(ANIM_IDLE, true)
 	return true
 
@@ -140,17 +146,67 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 # devant les monstres. La mesure ne ment pas ; la métadonnée n'est plus qu'un
 # secours, et la constante le dernier recours. Sans incidence sur les ennemis
 # livrés : leur taille déclarée ÉGALE leur mesure (FlameBot 3028, WorkBot 2480).
-func _hauteur_source(donnees: Resource) -> float:
-	var squelette: Object = _spine.call("get_skeleton")
-	if squelette != null and squelette.has_method("get_bounds"):
-		var mesure := squelette.call("get_bounds") as Rect2
-		if mesure.size.y > 0.0:
-			return mesure.size.y
+#
+# La mesure porte sur le CORPS SEUL : arme et VFX sont écartés (voir
+# _mesurer_corps). Sinon l'épée que Relic tient au-dessus de la tête mange le
+# budget de hauteur et le rapetisse devant des monstres qui, eux, n'ont pas
+# d'arme dans un slot séparé (FlameBot et WorkBot : 5 slots monobloc).
+func _hauteur_source(donnees: Resource, apparence: Dictionary = {}) -> float:
+	var mesure := _mesurer_corps(donnees, apparence)
+	if mesure > 0.0:
+		return mesure
 	if donnees.has_method("get_height"):
 		var declaree := float(donnees.call("get_height"))
 		if declaree > 0.0:
 			return declaree
 	return HAUTEUR_SOURCE_DEFAUT
+
+# Hauteur du CORPS (unités Spine), arme et VFX écartés. On pose une skin de
+# MESURE — la même que l'apparence demandée, purgée des slots exclus —, on
+# mesure, puis on remet l'apparence réelle. Rend 0.0 si la mesure est
+# impossible (pas de runtime, pas de skin) : l'appelant retombe alors sur la
+# taille déclarée par l'export.
+#
+# On passe par une skin plutôt que par un décrochage d'attachements sur le
+# squelette vivant : c'est le même chemin (new_skin / add_skin /
+# remove_attachment) que la purge des niveaux, déjà éprouvé ici.
+func _mesurer_corps(donnees: Resource, apparence: Dictionary) -> float:
+	var squelette: Object = _spine.call("get_skeleton")
+	if squelette == null or not squelette.has_method("get_bounds"):
+		return 0.0
+	var skins := _skins_demandees(apparence)
+	var mesure_posee := false
+	if not skins.is_empty():
+		var corps: Object = _composer_skin(skins, int(apparence.get("niveau", 0)))
+		if corps != null:
+			_purger_hors_mesure(corps, donnees)
+			squelette.call("set_skin", corps)
+			squelette.call("set_slots_to_setup_pose")
+			mesure_posee = true
+	var bornes := squelette.call("get_bounds") as Rect2
+	if mesure_posee:
+		definir_apparence(apparence)   # remet l'arme et les VFX
+	return bornes.size.y
+
+# Retire de la skin tout ce qui ne doit pas compter dans la mesure d'échelle.
+func _purger_hors_mesure(skin: Object, donnees: Resource) -> void:
+	var slots: Array = donnees.call("get_slots")
+	for i in slots.size():
+		if not hors_mesure(str((slots[i] as Object).call("get_name"))):
+			continue
+		for nom in skin.call("find_names_for_slot", i):
+			skin.call("remove_attachment", i, str(nom))
+
+# Ce slot compte-t-il dans la mesure d'échelle ? Test sur le NOM, insensible à
+# la casse : les exports de Christophe nomment l'arme « Sword » et les effets
+# « VFX » dans toutes les animations (R_H_Idle_Sword_Nv_3,
+# R_H_Attack_Shoot_Sword_VFX_Light…). Les ennemis livrés n'ont aucun slot de
+# ce genre (5 slots monobloc) : leur échelle est inchangée.
+static func hors_mesure(nom_slot: String) -> bool:
+	for motif in MOTIFS_HORS_MESURE:
+		if nom_slot.findn(motif) >= 0:
+			return true
+	return false
 
 # ─── Apparence ───────────────────────────────────────────────
 
@@ -168,6 +224,8 @@ func definir_apparence(apparence: Dictionary) -> void:
 	var niveau := int(apparence.get("niveau", 0))
 	if skins.is_empty():
 		return
+	# Retenue pour que hauteur_rendue_px() sache reconstruire la skin de mesure.
+	_apparence = apparence
 	if skins.size() == 1 and niveau <= 0:
 		squelette.call("set_skin_by_name", skins[0])
 	else:
@@ -244,19 +302,28 @@ func porte_attachement(nom_slot: String, nom_attachement: String) -> bool:
 		return false
 	return squelette.call("get_attachment_by_slot_name", nom_slot, nom_attachement) != null
 
-# Hauteur RÉELLEMENT rendue à l'écran (px) : la pose courante mesurée, puis
-# l'échelle posée au chargement. C'est le seul contrôle qui attrape un export
-# qui ment sur sa taille — un héros deux fois trop grand devant les monstres
-# est un bug de DONNÉE, invisible du code qui l'instancie. 0 sans runtime Spine.
+# Hauteur du CORPS RÉELLEMENT rendue à l'écran (px) : la pose courante mesurée,
+# puis l'échelle posée au chargement. C'est le seul contrôle qui attrape un
+# export qui ment sur sa taille — un héros deux fois trop grand devant les
+# monstres est un bug de DONNÉE, invisible du code qui l'instancie.
+# 0 sans runtime Spine.
+#
+# Mesure le CORPS, arme et VFX exclus, comme _hauteur_source : le garde-fou
+# doit contrôler exactement ce que l'échelle vise, sinon une épée plus longue
+# à la prochaine livraison le ferait passer au rouge sans que le personnage
+# ait changé de taille. Effet de bord : la pose est brièvement remise en
+# setup — sans conséquence, l'animation la réécrit à la frame suivante.
 func hauteur_rendue_px() -> float:
 	if _spine == null:
 		return 0.0
-	var squelette: Object = _spine.call("get_skeleton")
-	if squelette == null or not squelette.has_method("get_bounds"):
+	var donnees: Resource = _spine.get("skeleton_data_res")
+	if donnees == null:
 		return 0.0
-	var mesure := squelette.call("get_bounds") as Rect2
+	var corps := _mesurer_corps(donnees, _apparence)
+	if corps <= 0.0:
+		return 0.0
 	var echelle: Vector2 = _spine.get("scale")
-	return mesure.size.y * echelle.y
+	return corps * echelle.y
 
 # ─── Animations ──────────────────────────────────────────────
 

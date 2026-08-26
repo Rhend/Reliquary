@@ -218,6 +218,18 @@ func _test_costumes() -> void:
 			"« _Nv4/5 » → niveaux 4 et 5")
 	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Manche_D_Nv1_2_3") == [1, 2, 3],
 			"« _Nv1_2_3 » → niveaux 1 à 3")
+	# Livraison « rework au propre » du 26/08/2026 : la notation passe à
+	# « _Nv_<n> » (souligné après Nv), et une pièce commune à tous les niveaux
+	# les liste tous. Christophe a uniformisé le 26/08 (plus aucun « _Nv1 »
+	# sans souligné) ; les formes anciennes restent testées au-dessus, un vieil
+	# export ou une livraison d'ennemi pouvant encore les porter.
+
+	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Tete_Nv_4") == [4],
+			"« _Nv_4 » → niveau 4")
+	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Pentalon_Bassin_Nv_3_4") == [3, 4],
+			"« _Nv_3_4 » → niveaux 3 et 4")
+	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Veste_Torse_Nv_1_2_3_4_5_6") == [1, 2, 3, 4, 5, 6],
+			"la veste commune « _Nv_1_2_3_4_5_6 » → les 6 niveaux")
 	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Torse").is_empty(),
 			"slot sans marqueur → indépendant du niveau (toujours affiché)")
 	_assert(SpriteSpinePersonnage.niveaux_du_slot("R_H_Idle_Tete_Mort").is_empty(),
@@ -239,10 +251,10 @@ func _test_costumes() -> void:
 		add_child(nv6)
 		await get_tree().process_frame
 		# Dans cet export, l'attachement d'un slot porte le nom du slot.
-		_assert(_porte(nv1, "R_H_Idle_Tete_Nv1"), "Nv1 : la tête Nv1 est portée")
-		_assert(not _porte(nv1, "R_H_Idle_Tete_Nv6"), "Nv1 : la tête Nv6 est purgée")
-		_assert(_porte(nv6, "R_H_Idle_Tete_Nv6"), "Nv6 : la tête Nv6 est portée")
-		_assert(not _porte(nv6, "R_H_Idle_Tete_Nv1"), "Nv6 : la tête Nv1 est purgée")
+		_assert(_porte(nv1, "R_H_Idle_Tete_Nv_1"), "Nv1 : la tête Nv1 est portée")
+		_assert(not _porte(nv1, "R_H_Idle_Tete_Nv_6"), "Nv1 : la tête Nv6 est purgée")
+		_assert(_porte(nv6, "R_H_Idle_Tete_Nv_6"), "Nv6 : la tête Nv6 est portée")
+		_assert(not _porte(nv6, "R_H_Idle_Tete_Nv_1"), "Nv6 : la tête Nv1 est purgée")
 		_assert(_porte(nv1, "R_H_Idle_Torse") and _porte(nv6, "R_H_Idle_Torse"),
 				"le corps commun reste porté aux deux")
 		# Animations : Attack_Shoot n'est livrée QUE pour le héros — la jouer
