@@ -59,6 +59,7 @@ var _spine: Node = null   # SpineSprite — jamais typé (extension optionnelle)
 var _mort := false        # Death jouée : plus aucune autre animation
 var _animations := PackedStringArray()   # ce que l'export sait vraiment jouer
 var _apparence: Dictionary = {}          # dernière apparence posée (mesure d'échelle)
+var _chemin_skel := ""                   # clé de la silhouette bakée
 
 static func disponible(chemin_skel: String = CHEMIN_SKEL,
 		chemin_atlas: String = CHEMIN_ATLAS) -> bool:
@@ -126,6 +127,7 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 		push_warning("SpriteSpinePersonnage : SpineSprite non instanciable")
 		return false
 	_spine.set("skeleton_data_res", donnees)
+	_chemin_skel = chemin_skel
 	add_child(_spine)
 	for a in donnees.call("get_animations"):
 		_animations.append(str(a.call("get_name")))
@@ -134,7 +136,8 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 	# attachements.
 	definir_apparence(apparence)
 	# Échelle : hauteur native du squelette → hauteur_cible_px à l'écran.
-	_spine.set("scale", Vector2.ONE * (hauteur_cible_px / _hauteur_source(donnees, apparence)))
+	_spine.set("scale", Vector2.ONE
+			* (hauteur_cible_px / _hauteur_source(donnees, apparence, chemin_skel)))
 	_jouer(ANIM_IDLE, true)
 	return true
 
@@ -147,12 +150,27 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 # secours, et la constante le dernier recours. Sans incidence sur les ennemis
 # livrés : leur taille déclarée ÉGALE leur mesure (FlameBot 3028, WorkBot 2480).
 #
-# La mesure porte sur le CORPS SEUL : arme et VFX sont écartés (voir
-# _mesurer_corps). Sinon l'épée que Relic tient au-dessus de la tête mange le
-# budget de hauteur et le rapetisse devant des monstres qui, eux, n'ont pas
-# d'arme dans un slot séparé (FlameBot et WorkBot : 5 slots monobloc).
-func _hauteur_source(donnees: Resource, apparence: Dictionary = {}) -> float:
+# TROIS sources, de la plus fidèle à la plus grossière :
+#
+#  1. La SILHOUETTE bakée (SilhouettesData) — le nombre de pixels réellement
+#     dessinés, mesuré hors ligne par tools/mesurer_silhouettes.tscn. C'est la
+#     seule mesure qui corresponde à ce qu'on voit : les bornes comptent des
+#     régions d'atlas transparentes (le FlameBot y gagnait ~37 % de hauteur
+#     fantôme). Ignorée si elle est périmée — cf. SilhouettesData.hauteur.
+#  2. Les BORNES de la pose, arme et VFX écartés (_mesurer_corps) — repli quand
+#     rien n'est baké. Sinon l'épée que Relic tient au-dessus de la tête mange
+#     le budget de hauteur et le rapetisse devant des monstres au corps
+#     monobloc (FlameBot et WorkBot : 5 slots, aucune arme séparée).
+#  3. La taille DÉCLARÉE, puis la constante — derniers recours.
+func _hauteur_source(donnees: Resource, apparence: Dictionary = {},
+		chemin_skel: String = "") -> float:
 	var mesure := _mesurer_corps(donnees, apparence)
+	if chemin_skel != "":
+		var bakees := SilhouettesData.charger()
+		if bakees != null:
+			var silhouette := bakees.hauteur(chemin_skel, mesure)
+			if silhouette > 0.0:
+				return silhouette
 	if mesure > 0.0:
 		return mesure
 	if donnees.has_method("get_height"):
@@ -308,22 +326,54 @@ func porte_attachement(nom_slot: String, nom_attachement: String) -> bool:
 # monstres est un bug de DONNÉE, invisible du code qui l'instancie.
 # 0 sans runtime Spine.
 #
-# Mesure le CORPS, arme et VFX exclus, comme _hauteur_source : le garde-fou
-# doit contrôler exactement ce que l'échelle vise, sinon une épée plus longue
-# à la prochaine livraison le ferait passer au rouge sans que le personnage
-# ait changé de taille. Effet de bord : la pose est brièvement remise en
-# setup — sans conséquence, l'animation la réécrit à la frame suivante.
+# Mesure le CORPS par la MÊME source que l'échelle (_hauteur_source) : le
+# garde-fou doit contrôler exactement la grandeur qu'on régule. Mesurer les
+# bornes brutes le ferait virer au rouge à la prochaine épée plus longue, sans
+# que le personnage ait changé de taille. Effet de bord : la pose est
+# brièvement remise en setup — sans conséquence, l'animation la réécrit à la
+# frame suivante.
 func hauteur_rendue_px() -> float:
 	if _spine == null:
 		return 0.0
 	var donnees: Resource = _spine.get("skeleton_data_res")
 	if donnees == null:
 		return 0.0
-	var corps := _mesurer_corps(donnees, _apparence)
+	var corps := _hauteur_source(donnees, _apparence, _chemin_skel)
 	if corps <= 0.0:
 		return 0.0
 	var echelle: Vector2 = _spine.get("scale")
 	return corps * echelle.y
+
+# Bornes du CORPS (unités Spine), arme et VFX retirés — la grandeur que
+# SilhouettesData retient comme témoin d'obsolescence. Réservé à l'outil de
+# bake, qui doit écrire exactement ce que le runtime relira.
+func bornes_corps() -> float:
+	if _spine == null:
+		return 0.0
+	var donnees: Resource = _spine.get("skeleton_data_res")
+	return _mesurer_corps(donnees, _apparence) if donnees != null else 0.0
+
+# Pose la skin de MESURE (arme et VFX retirés) et l'y LAISSE. Réservé à l'outil
+# de bake, seul cas où l'on veut RENDRE le corps nu ; partout ailleurs la
+# mesure se fait et se défait dans _mesurer_corps. Rend false si l'apparence
+# n'est pas composable (ennemi à skin unique sans skins_base, pas de runtime).
+func poser_skin_mesure(apparence: Dictionary) -> bool:
+	if _spine == null:
+		return false
+	var donnees: Resource = _spine.get("skeleton_data_res")
+	var squelette: Object = _spine.call("get_skeleton")
+	if donnees == null or squelette == null:
+		return false
+	var skins := _skins_demandees(apparence)
+	if skins.is_empty():
+		return false
+	var corps: Object = _composer_skin(skins, int(apparence.get("niveau", 0)))
+	if corps == null:
+		return false
+	_purger_hors_mesure(corps, donnees)
+	squelette.call("set_skin", corps)
+	squelette.call("set_slots_to_setup_pose")
+	return true
 
 # ─── Animations ──────────────────────────────────────────────
 

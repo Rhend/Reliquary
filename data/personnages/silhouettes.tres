@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="SilhouettesData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/SilhouettesData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+mesures = {
+"res://assets/personnages/ennemis/flamebot/FlameBot.skel": {
+"bornes": 3028.0002,
+"hauteur": 2149.880209299982
+},
+"res://assets/personnages/ennemis/workbot/WorkBot.skel": {
+"bornes": 2480.041,
+"hauteur": 1880.6977664778838
+},
+"res://assets/personnages/relic/Relic.skel": {
+"bornes": 1881.0,
+"hauteur": 1790.085017071581
+}
+}

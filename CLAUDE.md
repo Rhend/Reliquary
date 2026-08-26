@@ -271,7 +271,7 @@ godot --headless --path . res://tests/TestButin.tscn            # butin de maté
 godot --headless --path . res://tests/TestMecaniquesBiomes.tscn # mécaniques fortes de biome en CTB (21)
 godot --headless --path . res://tests/TestCompetences.tscn      # compétences du héros en CTB + geste d'attaque (29)
 godot --headless --path . res://tests/TestLieuxSecondaires.tscn # Lieux secondaires révélés par les voies (50)
-godot --headless --path . res://tests/TestShowRoom.tscn         # vitrine Spine : registre, aller-retour QG, éclairage, costumes de Relic, échelle (72)
+godot --headless --path . res://tests/TestShowRoom.tscn         # vitrine Spine : registre, aller-retour QG, éclairage, costumes de Relic, échelle, bake des silhouettes (82)
 
 # Boot rapide sans erreur :
 godot --headless --path . --quit-after 30
@@ -282,6 +282,14 @@ godot --headless --path . --quit-after 30
   autre machine — lancer `godot --headless --path . --import` (ou Projet → Recharger
   le projet dans l'éditeur). Le cache `.godot/global_script_class_cache.cfg` est local
   et non versionné ; sans ça : « Parse Error: Could not find type … ».
+- **Après CHAQUE livraison d'asset Spine, RE-BAKER LES SILHOUETTES** :
+  `godot --path . res://tools/mesurer_silhouettes.tscn` (**sans** `--headless` : l'outil
+  doit RENDRE pour compter des pixels). L'échelle d'un personnage se déduit de sa
+  silhouette RÉELLE, bakée dans `data/personnages/silhouettes.tres` — `get_bounds`
+  compte des régions d'atlas transparentes (FlameBot : +41 %, WorkBot : +32 %) et
+  l'arme, ce qui mettait les personnages à des tailles différentes à l'écran.
+  TestShowRoom ÉCHOUE si un bake ne correspond plus à son squelette (mêmes rails
+  que TestHoloXlsx pour l'instantané de la carte).
 - TOUJOURS lancer TestScriptsLoad après un refactor : il détecte les identifiants
   disparus (constantes, signaux) dans tous les scripts, autoloads chargés.
 - `GameData._validate_entities()` warne au boot si un `.tres` est incomplet.
