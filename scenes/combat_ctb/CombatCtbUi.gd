@@ -182,7 +182,7 @@ func _construire() -> void:
 	_couche_scene.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_couche_scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_couche_scene)
-	CombatFondScinde.construire(_couche_scene, SOL_Y_FRAC, BANDE_VS_PX)
+	CombatFondScinde.construire(_couche_scene, SOL_Y_FRAC, SOL_X_JOUEUR, BANDE_VS_PX)
 
 	# Scène de bataille : SOL + emplacements des futurs sprites de personnages
 	# (placeholder : boules de lumière — retour Rhend, chantier 10).

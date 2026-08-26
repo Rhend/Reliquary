@@ -24,11 +24,11 @@ class_name CombatFondScinde
 # `vue` = résolution de référence du projet (1280×720, fixe) : la math de
 # calage du sol est volontairement en unités ABSOLUES, pas la taille réelle
 # du nœud (souvent pas encore connue à la construction, avant le premier layout).
-static func construire(parent: Control, sol_y_frac: float, bande_vs_px: float,
-		vue: Vector2 = Vector2(1280, 720)) -> void:
+static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
+		bande_vs_px: float, vue: Vector2 = Vector2(1280, 720)) -> void:
 	# Décor de ville : plans PARALLAXÉS et défilants (CombatDecorCity), pas
 	# un simple empilement — le découpage de Christophe est fait pour ça.
-	CombatDecorCity.construire(parent, sol_y_frac, vue)
+	CombatDecorCity.construire(parent, sol_y_frac, sol_x_frac, vue)
 
 	var fond_adverse := BiomeBackground.new()
 	fond_adverse.apply_preset("forest")

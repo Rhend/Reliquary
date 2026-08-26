@@ -181,7 +181,7 @@ func _construire() -> void:
 # les personnages sur la présentation RÉELLE du combat, pas sur un décor à
 # part — et les deux ne peuvent plus diverger puisqu'ils appellent le même code.
 func _construire_fond_combat() -> void:
-	CombatFondScinde.construire(_decor, SOL_Y_FRAC, CombatCtbUi.BANDE_VS_PX)
+	CombatFondScinde.construire(_decor, SOL_Y_FRAC, SOL_X_JOUEUR, CombatCtbUi.BANDE_VS_PX)
 	_sol_combat = Control.new()
 	_sol_combat.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_sol_combat.mouse_filter = Control.MOUSE_FILTER_IGNORE

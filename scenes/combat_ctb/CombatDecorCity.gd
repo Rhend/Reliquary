@@ -76,7 +76,7 @@ var _temps := 0.0
 # `vue` = résolution de référence du projet (1280×720, fixe) : la math de calage
 # du sol est volontairement en unités ABSOLUES, pas la taille réelle du nœud
 # (souvent pas encore connue à la construction, avant le premier layout).
-static func construire(parent: Control, sol_y_frac: float,
+static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 		vue: Vector2 = Vector2(1280, 720)) -> CombatDecorCity:
 	var decor := CombatDecorCity.new()
 	decor.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -92,11 +92,11 @@ static func construire(parent: Control, sol_y_frac: float,
 	var haut := vue.y * sol_y_frac - DECOR_SOL_FRAC * h
 	decor.offset_top = haut
 	decor.offset_bottom = haut + h - vue.y
-	decor._batir(vue.x, h)
+	decor._batir(vue.x, h, vue.x * sol_x_frac)
 	parent.add_child(decor)
 	return decor
 
-func _batir(larg: float, haut: float) -> void:
+func _batir(larg: float, haut: float, centre_x: float) -> void:
 	for plan in PLANS:
 		var chemin: String = DECOR_DIR + str(plan["f"])
 		if not ResourceLoader.exists(chemin):
@@ -104,14 +104,17 @@ func _batir(larg: float, haut: float) -> void:
 		var texture: Texture2D = load(chemin)
 		if texture == null:
 			continue
-		var cadre := _cadre(texture.get_size(), larg, haut, bool(plan["reduit"]))
+		var cadre := _cadre(texture.get_size(), larg, haut, bool(plan["reduit"]), centre_x)
 		var vitesse := float(plan["vitesse"])
-		# Une copie de plus que le strict nécessaire : pendant qu'une sort par
-		# la gauche, la suivante doit déjà couvrir la droite. Un plan fixe n'en
-		# a besoin que d'une.
+		# Assez de copies pour couvrir [0, larg] MÊME quand le ruban a glissé
+		# d'une tuile entière vers la gauche — d'où le « + 1 ». Le calcul part
+		# de l'origine du cadre et non de 0 : depuis le recentrage sur le camp
+		# joueur, cette origine est nettement plus à gauche, et compter sur la
+		# seule largeur d'écran laisserait un trou à droite. Un plan fixe n'a
+		# besoin que d'une copie.
 		var copies := 1
 		if vitesse != 0.0 and cadre.size.x > 0.0:
-			copies = maxi(int(ceil(larg / cadre.size.x)) + 1, 2)
+			copies = maxi(int(ceil((larg - cadre.position.x) / cadre.size.x)) + 1, 2)
 		var noeud := Node2D.new()
 		for i in copies:
 			noeud.add_child(_calque(texture, cadre.size, Vector2(cadre.size.x * i, 0.0)))
@@ -128,22 +131,30 @@ func _batir(larg: float, haut: float) -> void:
 
 # Rectangle d'un plan dans les coordonnées du décor. On reproduit à la main le
 # cadrage qu'aurait produit KEEP_ASPECT_COVERED — image mise à l'échelle pour
-# couvrir, centrée — puis, pour un plan réduit, on le rapetisse autour de la
-# LIGNE DE SOL : les immeubles gardent leur base posée au lieu de décoller.
+# couvrir — puis, pour un plan réduit, on le rapetisse autour de la LIGNE DE
+# SOL : les immeubles gardent leur base posée au lieu de décoller.
 #
 # On CALCULE plutôt que de scaler le nœud : réduire l'échelle d'un TextureRect
 # rétrécit aussi son rectangle, et COVERED recoupe dessus — ce qui donnait une
 # arête verticale franche de chaque côté de l'écran.
+#
+# `centre_x` = où doit tomber le MILIEU de l'image, et non le milieu de l'écran
+# (26/08/2026). Le décor est peint pour un plein cadre, mais la moitié droite
+# revient au biome adverse : centrer sur l'écran mettait le héros dans le bord
+# gauche de la ville. On le centre donc sur l'ancrage du camp joueur, ce qui
+# place le milieu de `Plan_2_Sol` juste sous ses pieds. Tous les plans partagent
+# ce centre — y compris comme pivot de réduction — sans quoi les immeubles
+# glisseraient latéralement par rapport à leur sol.
 static func _cadre(taille_texture: Vector2, larg: float, haut: float,
-		reduit: bool) -> Rect2:
+		reduit: bool, centre_x: float) -> Rect2:
 	if taille_texture.x <= 0.0 or taille_texture.y <= 0.0:
 		return Rect2(Vector2.ZERO, Vector2(larg, haut))
 	var couvre := maxf(larg / taille_texture.x, haut / taille_texture.y)
 	var taille := taille_texture * couvre
-	var origine := Vector2((larg - taille.x) * 0.5, (haut - taille.y) * 0.5)
+	var origine := Vector2(centre_x - taille.x * 0.5, (haut - taille.y) * 0.5)
 	if not reduit:
 		return Rect2(origine, taille)
-	var pivot := Vector2(larg * 0.5, DECOR_SOL_FRAC * haut)
+	var pivot := Vector2(centre_x, DECOR_SOL_FRAC * haut)
 	return Rect2(pivot + (origine - pivot) * REDUCTION_PLANS, taille * REDUCTION_PLANS)
 
 # Une copie d'un plan, posée à `decalage` dans le ruban. `centered = false` pour
