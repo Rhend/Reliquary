@@ -84,7 +84,7 @@ var _registre: SpinePersonnagesData
 var _ennemis: Array[Dictionary] = []
 var _heros: Dictionary = {}
 var _heros_apparences: Array[Dictionary] = []
-var _mode: int = Mode.LIBRE
+var _mode: int = Mode.COMBAT   # arrivée directe en mode combat (26/08/2026)
 var _idx_monstre := 0
 var _idx_palier := 0
 var _idx_heros := 0        # apparence du héros = son niveau d'équipement (Nv1…Nv6)
@@ -168,9 +168,29 @@ func _construire() -> void:
 	_titre = UIHelpers.label("", 18, UIColors.TEXT_HEADER)
 	_titre.position = Vector2(16, 12)
 	hud_layer.add_child(_titre)
-	_hud = UIHelpers.label("", 12, UIColors.TEXT_MUTED)
-	_hud.position = Vector2(16, VUE.y - 78)
-	hud_layer.add_child(_hud)
+
+	# Bandeau de raccourcis (bas) : REPREND le panneau de la barre d'actions du
+	# vrai combat — même style/mêmes marges (`ExpeStyle.style_panneau`,
+	# `UIColors.CYBER_ACCENT`), plein largeur, ancré en bas (26/08/2026). La
+	# vitrine n'a pas de boutons Attaquer/Défendre/Compétence/Objet à y poser :
+	# on y met le texte des raccourcis déjà écrit (`_rafraichir_hud`), pas de
+	# contenu nouveau.
+	var panneau_bas := PanelContainer.new()
+	panneau_bas.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	panneau_bas.offset_left = 0.0
+	panneau_bas.offset_right = 0.0
+	panneau_bas.offset_top = -60.0
+	panneau_bas.offset_bottom = 0.0
+	panneau_bas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style_bas := ExpeStyle.style_panneau(UIColors.CYBER_ACCENT, 0.90)
+	style_bas.set_content_margin_all(10)
+	panneau_bas.add_theme_stylebox_override("panel", style_bas)
+	hud_layer.add_child(panneau_bas)
+	_hud = ExpeStyle.label_mono("", 12, UIColors.CYBER_TEXTE_MUTED)
+	_hud.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hud.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panneau_bas.add_child(_hud)
 
 	# Pose le niveau d'entrée même si la vitrine reste vide (registre absent) :
 	# sinon le ColorRect garderait sa couleur par défaut.
@@ -189,9 +209,12 @@ func _construire_fond_combat() -> void:
 	_sol_combat.resized.connect(_sol_combat.queue_redraw)
 	_decor.add_child(_sol_combat)
 
-# Ligne d'horizon + bande dégradée + emplacement (ellipse) sous chaque
-# personnage — copie de CombatCtbUi._dessiner_sol, réduite aux deux
-# emplacements fixes de la vitrine (joueur / adverse, toujours 1 vs 1 ici).
+# Ligne d'horizon + bande dégradée sous les pieds — copie de la partie SOL de
+# CombatCtbUi._dessiner_sol, réduite aux deux emplacements fixes de la
+# vitrine (joueur / adverse, toujours 1 vs 1 ici). PLUS d'ellipse
+# d'emplacement (26/08/2026) : elle datait de l'ère EnergyBoule (repère au
+# sol d'un placeholder sans silhouette propre) — superflue maintenant que
+# les monstres ont leurs propres sprites Spine posés dessus.
 func _dessiner_sol_combat() -> void:
 	var w := VUE.x
 	var y := VUE.y * SOL_Y_FRAC
@@ -199,13 +222,6 @@ func _dessiner_sol_combat() -> void:
 	for i in 3:
 		_sol_combat.draw_rect(Rect2(0.0, y + float(i) * 16.0, w, 16.0),
 				Color(UIColors.CYBER_SOL, UIColors.CYBER_SOL.a * (0.45 - 0.13 * float(i))))
-	for camp_joueur in [true, false]:
-		var x := w * (SOL_X_JOUEUR if camp_joueur else SOL_X_ADVERSE)
-		var accent := ExpeStyle.accent_camp(camp_joueur)
-		_sol_combat.draw_set_transform(Vector2(x, y), 0.0, Vector2(1.0, 0.38))
-		_sol_combat.draw_circle(Vector2.ZERO, 34.0, Color(UIColors.CYBER_BG, 0.55))
-		_sol_combat.draw_arc(Vector2.ZERO, 34.0, 0.0, TAU, 40, Color(accent, 0.65), 2.0)
-		_sol_combat.draw_set_transform(Vector2.ZERO)
 
 # ─── Mode LIBRE : une rangée par monstre ─────────────────────
 
@@ -297,11 +313,12 @@ func _appliquer_lumiere() -> void:
 	var niveau := NIVEAUX_LUMIERE[_idx_lumiere]
 	_fond_neutre.color = niveau["fond"]
 	_voile.color.a = float(niveau["voile"])
-	# Le HUD n'est sur fond clair qu'en mode libre : en combat il repose sur le
-	# décor city, qui reste sombre quel que soit le niveau.
-	var hud_sur_clair: bool = _fond_clair() and _mode == Mode.LIBRE
-	_titre.add_theme_color_override("font_color", _lisible(UIColors.TEXT_HEADER, hud_sur_clair))
-	_hud.add_theme_color_override("font_color", _lisible(UIColors.TEXT_MUTED, hud_sur_clair))
+	# `_titre` seul repose directement sur le fond neutre en mode libre : sur un
+	# niveau clair il faut l'assombrir. `_hud` vit désormais dans un panneau à
+	# fond opaque (`panneau_bas`, CYBER_BG_PANEL) — toujours sombre quel que
+	# soit le niveau de lumière choisi, donc plus besoin de le réassombrir.
+	var titre_sur_clair: bool = _fond_clair() and _mode == Mode.LIBRE
+	_titre.add_theme_color_override("font_color", _lisible(UIColors.TEXT_HEADER, titre_sur_clair))
 	for entree in _labels_libre:
 		var lbl: Label = entree["node"]
 		if is_instance_valid(lbl):

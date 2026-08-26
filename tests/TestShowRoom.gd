@@ -121,9 +121,8 @@ func _test_aller_retour_qg() -> void:
 	add_child(salle)
 	await get_tree().process_frame
 	_assert(salle._rangees().size() >= 3, "vitrine peuplée : héros + ennemis")
-	_assert(salle._mode == ShowRoom.Mode.LIBRE, "démarre en mode libre")
+	_assert(salle._mode == ShowRoom.Mode.COMBAT, "démarre en mode combat (26/08/2026)")
 
-	salle._mode = ShowRoom.Mode.COMBAT
 	salle._appliquer_mode()
 	_assert(salle._duel.get_child_count() >= 1, "mode combat : le duel est peuplé")
 	_assert(salle._decor.visible and not salle._fond_neutre.visible,
@@ -285,11 +284,16 @@ func _test_costumes() -> void:
 		_assert(true, "un tir demandé à un ennemi retombe sur sa mêlée")
 		sbire.free()
 
-	# La vitrine : [V] fait défiler les accessoires sans se vider.
+	# La vitrine : [V] fait défiler les accessoires sans se vider. Mode LIBRE
+	# explicite : la vitrine démarre désormais en COMBAT (26/08/2026), et ce
+	# test porte sur le repeuplement de `_monde`, qui n'est repeuplé qu'en
+	# mode libre (`_repeupler`).
 	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
 	ShowRoom.scene_retour = ""
 	add_child(salle)
 	await get_tree().process_frame
+	salle._mode = ShowRoom.Mode.LIBRE
+	salle._appliquer_mode()
 	var avant := salle._idx_cosmetique
 	salle._touche(KEY_V)
 	await get_tree().process_frame
