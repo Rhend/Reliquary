@@ -23,6 +23,15 @@
 #    écart gauche/droite de 0.0003 — le raccord est fait pour boucler. On pose
 #    donc un RUBAN de copies jointives qu'on translate, et qui se replie sur
 #    lui-même (fmod) sans jamais montrer de couture.
+#      Quand un même niveau de plan porte PLUSIEURS découpes (deux immeubles
+#      livrés côte à côte sur le plan 5 ou le plan 4), elles défilent à des
+#      vitesses légèrement différentes l'une de l'autre (26/08/2026) : à
+#      vitesse identique, deux découpes du même plan glissent comme un seul
+#      bloc rigide et le fond a l'air mort. L'écart (±20 % autour de la
+#      vitesse du plan) reste discret — la profondeur, elle, ne change pas :
+#      ce n'est qu'un signal de vie visuelle, pas un second niveau de parallax.
+#      Un calque néon partage vitesse ET profondeur de SON immeuble, jamais de
+#      l'autre découpe du plan, sous peine de décrocher de sa façade.
 #
 # ⚠ Node2D + Sprite2D, PAS des Control/TextureRect. Godot arrondit la position
 # des Control au pixel entier (`gui/common/snap_controls_to_pixels`, vrai par
@@ -70,11 +79,11 @@ const REDUCTION_PLANS := 0.9
 const PLANS: Array[Dictionary] = [
 	{"f": "Background_City_Plan_Fond.png",               "profondeur": 0.00, "vitesse": 0.0,  "reduit": false},
 	{"f": "Background_City_Plan_Fond_2.png",             "profondeur": 0.08, "vitesse": 0.0,  "reduit": false},
-	{"f": "Background_City_Plan_5_Immeuble_01.png",      "profondeur": 0.25, "vitesse": 3.0,  "reduit": true},
-	{"f": "Background_City_Plan_5_Immeuble_02.png",      "profondeur": 0.25, "vitesse": 3.0,  "reduit": true},
-	{"f": "Background_City_Plan_4_Immeuble_01.png",      "profondeur": 0.45, "vitesse": 7.0,  "reduit": true},
-	{"f": "Background_City_Plan_4_Immeuble_01_Neon.png", "profondeur": 0.45, "vitesse": 7.0,  "reduit": true},
-	{"f": "Background_City_Plan_4_Immeuble_02.png",      "profondeur": 0.45, "vitesse": 7.0,  "reduit": true},
+	{"f": "Background_City_Plan_5_Immeuble_01.png",      "profondeur": 0.25, "vitesse": 2.4,  "reduit": true},
+	{"f": "Background_City_Plan_5_Immeuble_02.png",      "profondeur": 0.25, "vitesse": 3.6,  "reduit": true},
+	{"f": "Background_City_Plan_4_Immeuble_01.png",      "profondeur": 0.45, "vitesse": 5.6,  "reduit": true},
+	{"f": "Background_City_Plan_4_Immeuble_01_Neon.png", "profondeur": 0.45, "vitesse": 5.6,  "reduit": true},
+	{"f": "Background_City_Plan_4_Immeuble_02.png",      "profondeur": 0.45, "vitesse": 8.4,  "reduit": true},
 	{"f": "Background_City_Plan_3_Immeuble_01.png",      "profondeur": 0.70, "vitesse": 14.0, "reduit": true},
 	{"f": "Background_City_Plan_3_Immeuble_01_Neon.png", "profondeur": 0.70, "vitesse": 14.0, "reduit": true},
 	{"f": "Background_City_Plan_2_Sol.png",              "profondeur": 1.00, "vitesse": 0.0,  "reduit": false},
