@@ -94,6 +94,9 @@ var _idx_lumiere := LUMIERE_DEFAUT
 
 var _monde: Node2D            # sprites du mode LIBRE (espace monde)
 var _duel: Node2D             # sprites du mode COMBAT
+var _duel_heros: SpriteSpinePersonnage = null    # dans _duel, ou null
+var _duel_monstre: SpriteSpinePersonnage = null  # dans _duel, ou null
+var _duel_tween: Tween = null   # zoom-duel en cours ([A]/[T] en mode combat)
 var _cam: Camera2D
 var _fond_neutre: ColorRect
 var _decor: Control            # fond scindé (mode combat) : biomes + diagonale + sol
@@ -343,7 +346,10 @@ static func _lisible(base: Color, sur_fond_clair: bool) -> Color:
 # ─── Mode COMBAT : duel au cadrage réel ──────────────────────
 
 func _peupler_duel() -> void:
+	_zoom_duel_interrompre()   # sinon un tween en cours anime des nœuds sur le point d'être libérés
 	_vider(_duel)
+	_duel_heros = null
+	_duel_monstre = null
 	if _ennemis.is_empty():
 		return
 	var sol_y := VUE.y * SOL_Y_FRAC
@@ -359,6 +365,7 @@ func _peupler_duel() -> void:
 		if relic != null:
 			relic.position = Vector2(VUE.x * SOL_X_JOUEUR, sol_y)
 			_duel.add_child(relic)
+			_duel_heros = relic
 
 	if _ennemis.is_empty():
 		return
@@ -371,6 +378,72 @@ func _peupler_duel() -> void:
 		mob.scale = Vector2(-1.0, 1.0)
 		mob.position = Vector2(VUE.x * SOL_X_ADVERSE, sol_y)
 		_duel.add_child(mob)
+		_duel_monstre = mob
+
+# ─── Zoom-DUEL (mode combat) : la vraie mise en scène, pas une pâle copie ─
+#
+# [A]/[T] rejouent EXACTEMENT le zoom-duel de CombatCtbUi (`DuelZoomFx`,
+# SOURCE PARTAGÉE — mêmes constantes ZOOM/ECART/TENUE, jamais une recette à
+# part). La différence tient à la géographie de la vitrine, pas à l'effet :
+# le combat réel n'a qu'UN nœud à zoomer (`_couche_scene`, un Control qui
+# porte à la fois le décor ET les sprites) ; la vitrine a DEUX arbres
+# séparés — `_decor` (Control dans un CanvasLayer, hors caméra) pour le fond,
+# `_duel` (Node2D dans l'espace caméra) pour les personnages. La caméra de
+# combat étant figée à l'identité (zoom 1, centrée sur VUE), les deux espaces
+# coïncident pixel pour pixel : on peut donc zoomer les deux en parallèle
+# avec le même `foyer` et le même facteur, sans jamais les fusionner.
+func _zoom_duel(converger: bool) -> void:
+	if _duel_heros == null or _duel_monstre == null:
+		return
+	_zoom_duel_interrompre()
+	var centre := Vector2(VUE.x * 0.5, VUE.y * SOL_Y_FRAC)
+	# Même contrat que CombatCtbUi : mêlée → centre de l'écran (les deux corps
+	# y viennent) ; tir → milieu du couple, personne ne bouge.
+	var foyer: Vector2 = centre if converger \
+			else (_duel_heros.position + _duel_monstre.position) * 0.5
+	var origine_h := _duel_heros.position
+	var origine_m := _duel_monstre.position
+	var pos_h := centre + Vector2(-DuelZoomFx.ECART_PX * 0.5, 0.0)
+	var pos_m := centre + Vector2(DuelZoomFx.ECART_PX * 0.5, 0.0)
+	_decor.pivot_offset = foyer - Vector2(0.0, DuelZoomFx.FOCUS_HAUT_PX)
+	_duel_tween = create_tween()
+	_duel_tween.tween_method(_poser_zoom_scene.bind(foyer), 1.0, DuelZoomFx.ZOOM,
+			DuelZoomFx.DUREE_IN).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	if converger:
+		_duel_tween.parallel().tween_property(_duel_heros, "position", pos_h,
+				DuelZoomFx.DUREE_IN).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_duel_tween.parallel().tween_property(_duel_monstre, "position", pos_m,
+				DuelZoomFx.DUREE_IN).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_duel_tween.tween_interval(DuelZoomFx.TENUE)
+	_duel_tween.tween_method(_poser_zoom_scene.bind(foyer), DuelZoomFx.ZOOM, 1.0,
+			DuelZoomFx.DUREE_OUT).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	if converger:
+		_duel_tween.parallel().tween_property(_duel_heros, "position", origine_h,
+				DuelZoomFx.DUREE_OUT).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+		_duel_tween.parallel().tween_property(_duel_monstre, "position", origine_m,
+				DuelZoomFx.DUREE_OUT).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_duel_tween.finished.connect(func() -> void: _duel_tween = null)
+
+# Applique un zoom `s` autour de `foyer` aux DEUX espaces de coordonnées de
+# la vitrine : `_decor` (Control, pivot_offset natif) et `_duel` (Node2D,
+# sans pivot natif — position ET scale recalculées ensemble, même formule
+# que la compensation de profondeur de CombatDecorCity : position = foyer ×
+# (1 − s), en repartant d'une position de repos à l'origine (0,0)).
+func _poser_zoom_scene(s: float, foyer: Vector2) -> void:
+	_decor.scale = Vector2.ONE * s
+	_duel.scale = Vector2.ONE * s
+	_duel.position = foyer * (1.0 - s)
+
+# Coupe net un zoom-duel en cours : la scène redevient nette instantanément
+# (appelé avant de repeupler — un nouveau duel, ou un changement de monstre/
+# palier, ne doit pas hériter d'un tween qui animerait des nœuds libérés).
+func _zoom_duel_interrompre() -> void:
+	if _duel_tween != null and _duel_tween.is_valid():
+		_duel_tween.kill()
+	_duel_tween = null
+	_decor.scale = Vector2.ONE
+	_duel.scale = Vector2.ONE
+	_duel.position = Vector2.ZERO
 
 # Vide un porte-sprites : retiré de l'arbre AVANT queue_free, sinon les
 # anciens sprites restent visibles (et animables) jusqu'à la fin de la frame.
@@ -387,10 +460,22 @@ func _vider(parent: Node) -> void:
 
 enum Anim { REPOS, MELEE, TIR, HIT, MORT }
 
+# [A]/[T] n'y sont PLUS : en mode combat ils déclenchent la vraie mise en
+# scène (`_attaquer_combat`), pas juste une animation jouée « partout ».
 const TOUCHES_ANIM := {
-	KEY_I: Anim.REPOS, KEY_A: Anim.MELEE, KEY_T: Anim.TIR,
-	KEY_X: Anim.HIT, KEY_M: Anim.MORT,
+	KEY_I: Anim.REPOS, KEY_X: Anim.HIT, KEY_M: Anim.MORT,
 }
+
+# [A]/[T] en mode COMBAT (26/08/2026) : la vraie mise en scène d'un événement
+# d'attaque — le héros joue son geste, le monstre encaisse (Hit), la scène
+# rejoue le zoom-duel (`_zoom_duel`) — au lieu de « tout le monde joue
+# l'animation », qui n'a de sens qu'en mode libre (comparer les costumes).
+func _attaquer_combat(a_distance: bool) -> void:
+	if _duel_heros == null or _duel_monstre == null:
+		return
+	_duel_heros.jouer_attaque(a_distance)
+	_duel_monstre.jouer_hit()
+	_zoom_duel(not a_distance)
 
 func _jouer_partout(anim: int) -> void:
 	for parent: Node in [_monde, _duel]:
@@ -559,6 +644,14 @@ func _touche(code: int) -> void:
 				_recalculer_apparences_heros()
 				_repeupler()
 				_rafraichir_hud()
+		KEY_A, KEY_T:
+			# Mode combat : vraie mise en scène (geste + Hit + zoom-duel). Mode
+			# libre : pas de vis-à-vis possible, retombe sur « tout le monde
+			# joue l'animation » (comparer les costumes d'un coup).
+			if _mode == Mode.COMBAT:
+				_attaquer_combat(code == KEY_T)
+			else:
+				_jouer_partout(Anim.TIR if code == KEY_T else Anim.MELEE)
 		_:
 			if TOUCHES_ANIM.has(code):
 				_jouer_partout(int(TOUCHES_ANIM[code]))

@@ -134,6 +134,23 @@ func _test_aller_retour_qg() -> void:
 	salle._peupler_duel()
 	_assert(salle._duel.get_child_count() >= 1, "duel encore peuplé après changement de cible")
 
+	# Zoom-duel (26/08/2026) : [A]/[T] en mode combat rejouent la vraie mise
+	# en scène de CombatCtbUi (DuelZoomFx SOURCE PARTAGÉE), pas juste
+	# « tout le monde joue l'animation ».
+	salle._touche(KEY_A)
+	_assert(salle._duel_tween != null, "[A] en combat lance le zoom-duel")
+	await get_tree().create_timer(1.0).timeout   # in + tenue + out (0.89 s), laisse le tween finir
+	_assert(salle._duel_tween == null, "le zoom-duel retombe seul, sans intervention")
+	_assert(salle._decor.scale.is_equal_approx(Vector2.ONE),
+			"le décor (fond) a repris son échelle de repos")
+	_assert(salle._duel.scale.is_equal_approx(Vector2.ONE),
+			"le duel (personnages) a repris son échelle de repos")
+	salle._touche(KEY_T)
+	_assert(salle._duel_tween != null, "[T] en combat lance aussi le punch-in (sans convergence)")
+	salle._zoom_duel_interrompre()
+	_assert(salle._duel_tween == null and salle._duel.scale.is_equal_approx(Vector2.ONE),
+			"interruption : la scène redevient nette immédiatement")
+
 	salle._mode = ShowRoom.Mode.LIBRE
 	salle._appliquer_mode()
 	_assert(salle._fond_neutre.visible and not salle._decor.visible,

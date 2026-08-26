@@ -57,18 +57,9 @@ const BANDE_VS_PX := 80.0      # largeur de la découpe diagonale des deux fonds
 # l'écran face à face, comme pour un coup final, pendant que la scène
 # punch-in fort ; tenue le temps du coup, puis chacun regagne son
 # emplacement. Les activations ennemies n'ont AUCUN effet de caméra. Seule
-# la scène (_couche_scene) bouge — le chrome UI reste fixe.
-const DUEL_ZOOM := 1.40
-const DUEL_ZOOM_CRIT := 1.55       # un crit frappe plus fort → caméra aussi
-const DUEL_ECART_PX := 120.0       # distance des deux pieds au centre (face à face)
-const DUEL_FOCUS_HAUT_PX := 60.0   # remonte le pivot des pieds vers les torses
-const DUEL_DUREE_IN := 0.14
-# Tenue calibrée pour que le duel (in + tenue + out = 0.89 s) soit ENTIÈREMENT
-# retombé avant la première activation ennemie qui suit (pause post-action
-# 0.35 s + pause de bandeau 0.55 s = 0.90 s) — sinon le coup ennemi se
-# jouerait pendant le dé-zoom, contredisant « ennemis sans effet de caméra ».
-const DUEL_TENUE := 0.45
-const DUEL_DUREE_OUT := 0.30
+# la scène (_couche_scene) bouge — le chrome UI reste fixe. Recette et
+# constantes dans `DuelZoomFx` (26/08/2026, SOURCE PARTAGÉE avec la vitrine
+# ShowRoom — jamais une copie).
 
 var moteur: CtbMoteur
 var embuscade := false
@@ -724,7 +715,7 @@ func _duel_interrompre() -> void:
 		_duel_acteurs = []
 		_rafraichir_orbes()   # réapplique le fondu différé d'un vaincu du duel
 
-# Zoom-DUEL (attaque du joueur seulement — voir les constantes DUEL_*) :
+# Zoom-DUEL (attaque du joueur seulement — recette dans `DuelZoomFx`) :
 # glissement simultané des deux personnages vers le centre + punch-in de la
 # scène, tenue le temps du coup, puis retour aux emplacements. Crit = zoom
 # plus marqué.
@@ -749,38 +740,18 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
 	var foyer: Vector2 = centre if converger \
 			else ((_pieds[att] as Vector2) + (_pieds[cible] as Vector2)) * 0.5
 	# Le joueur vient de gauche, sa cible lui fait face à droite.
-	var pos_att := _pos_depuis_pied(att, centre + Vector2(-DUEL_ECART_PX * 0.5, 0.0))
-	var pos_cib := _pos_depuis_pied(cible, centre + Vector2(DUEL_ECART_PX * 0.5, 0.0))
+	var pos_att := _pos_depuis_pied(att, centre + Vector2(-DuelZoomFx.ECART_PX * 0.5, 0.0))
+	var pos_cib := _pos_depuis_pied(cible, centre + Vector2(DuelZoomFx.ECART_PX * 0.5, 0.0))
 	# Rien à restaurer sans convergence : les positions ne sont pas touchées.
 	_duel_restaure = [[noeud_att, noeud_att.position], [noeud_cib, noeud_cib.position]] \
 			if converger else []
 	_duel_acteurs = [att, cible]
-	_couche_scene.pivot_offset = foyer - Vector2(0.0, DUEL_FOCUS_HAUT_PX)
-	var zoom := DUEL_ZOOM_CRIT if crit else DUEL_ZOOM
-	var f := facteur_delais
-	_duel_tween = create_tween()
-	_duel_tween.tween_property(_couche_scene, "scale", Vector2.ONE * zoom,
-			DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	if converger:
-		_duel_tween.parallel().tween_property(noeud_att, "position", pos_att,
-				DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		_duel_tween.parallel().tween_property(noeud_cib, "position", pos_cib,
-				DUEL_DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_duel_tween.tween_interval(DUEL_TENUE * f)
-	_duel_tween.tween_property(_couche_scene, "scale", Vector2.ONE,
-			DUEL_DUREE_OUT * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	if converger:
-		_duel_tween.parallel().tween_property(noeud_att, "position",
-				_duel_restaure[0][1] as Vector2, DUEL_DUREE_OUT * f)\
-				.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-		_duel_tween.parallel().tween_property(noeud_cib, "position",
-				_duel_restaure[1][1] as Vector2, DUEL_DUREE_OUT * f)\
-				.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_duel_tween.finished.connect(func() -> void:
-		_duel_restaure.clear()
-		_duel_tween = null
-		_duel_acteurs = []
-		_rafraichir_orbes())   # fondu différé du vaincu, une fois le duel joué
+	_duel_tween = DuelZoomFx.jouer(_couche_scene, foyer, noeud_att, pos_att, noeud_cib, pos_cib,
+			crit, converger, facteur_delais, func() -> void:
+				_duel_restaure.clear()
+				_duel_tween = null
+				_duel_acteurs = []
+				_rafraichir_orbes())   # fondu différé du vaincu, une fois le duel joué
 
 func _sur_evenement(e: Dictionary) -> void:
 	if not is_inside_tree():
