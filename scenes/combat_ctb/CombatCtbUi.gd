@@ -91,7 +91,7 @@ var recompenses_fournisseur := Callable()
 var inventaire_fournisseur := Callable()
 var sur_objet_utilise := Callable()
 
-const SOL_Y_FRAC := 0.60           # hauteur du sol de la scène (fraction écran)
+const SOL_Y_FRAC := 0.72           # ligne des pieds : MILIEU de la bande de sol du décor
 const SOL_X_JOUEUR := 0.25         # ancrage des emplacements du camp joueur : CENTRE de sa moitié
 const SOL_X_ADVERSE := 0.75        # ancrage du camp adverse — miroir exact du joueur
 const SOL_PAS := Vector2(64, 46)   # décalage diagonal entre emplacements

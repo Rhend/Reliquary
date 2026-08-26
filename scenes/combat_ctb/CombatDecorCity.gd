@@ -39,14 +39,27 @@ extends Control
 
 const DECOR_DIR := "res://assets/background/city/"
 
-# Hauteur du SOL DANS le décor city, en fraction de l'image cadrée. Mesurée sur
-# la livraison de Christophe : le trottoir commence plus bas que le sol du
-# combat, donc le décor est REMONTÉ pour que les pieds y posent vraiment — sans
-# ça les personnages flottent. À réajuster si le décor change.
-const DECOR_SOL_FRAC := 0.688
+# Bande de SOL dans l'image, MESURÉE sur Background_City_Plan_2_Sol.png : son
+# contenu opaque occupe les lignes 1854 à 2654 sur 2655, soit le tiers bas.
+# Deux repères, et non un seul, parce qu'ils ne servent pas à la même chose.
+const SOL_HAUT_FRAC := 0.698   # arête ARRIÈRE du trottoir = base des immeubles
+const SOL_BAS_FRAC := 1.000    # bord bas de l'image
+
+# Où tombent les PIEDS des personnages : au MILIEU de la bande, pas sur son
+# arête arrière (26/08/2026). Poser les pieds sur SOL_HAUT_FRAC les mettait
+# tout au fond du trottoir, comme collés au pied des immeubles.
+const DECOR_SOL_FRAC := (SOL_HAUT_FRAC + SOL_BAS_FRAC) * 0.5
+
+# ⚠ Ce choix a un COÛT, et c'est lui qui fixe SOL_Y_FRAC côté combat : sous les
+# pieds il ne reste plus que la moitié BASSE de la bande (15 % de l'image) pour
+# couvrir tout le bas de l'écran. Plus les personnages sont haut, plus le décor
+# doit être agrandi pour y arriver (voir le `maxf` de construire) — d'où des
+# immeubles démesurés si on garde les pieds trop haut. `REDUCTION_PLANS` sert à
+# rattraper cet agrandissement sur les seuls plans d'immeubles, le sol et le
+# ciel devant, eux, rester assez grands pour couvrir.
 
 # Réduction des plans d'IMMEUBLES pour dégager la vue d'ensemble (26/08/2026).
-const REDUCTION_PLANS := 0.9
+const REDUCTION_PLANS := 0.62
 
 # Les plans, du PLUS LOINTAIN au plus proche — l'ordre d'empilement.
 #   profondeur : réponse au zoom (0 = fixe, 1 = comme les personnages) ;
@@ -154,7 +167,10 @@ static func _cadre(taille_texture: Vector2, larg: float, haut: float,
 	var origine := Vector2(centre_x - taille.x * 0.5, (haut - taille.y) * 0.5)
 	if not reduit:
 		return Rect2(origine, taille)
-	var pivot := Vector2(centre_x, DECOR_SOL_FRAC * haut)
+	# Pivot sur la BASE DES IMMEUBLES (arête arrière du trottoir), pas sur la
+	# ligne des pieds : c'est là que les façades touchent le sol. Rapetissir
+	# autour des pieds les ferait avancer sur le trottoir.
+	var pivot := Vector2(centre_x, SOL_HAUT_FRAC * haut)
 	return Rect2(pivot + (origine - pivot) * REDUCTION_PLANS, taille * REDUCTION_PLANS)
 
 # Une copie d'un plan, posée à `decalage` dans le ruban. `centered = false` pour
