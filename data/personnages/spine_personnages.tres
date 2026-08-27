@@ -29,6 +29,18 @@ script = ExtResource("1")
 ; coiffures et les visages, et sort de `skins_base`. Trois familles alternatives
 ; pour un seul axe `cosmetiques` : c'est ce jour-là qu'il faudra trancher entre
 ; plusieurs axes indépendants et un produit cartésien de jeux nommés.
+; SENS D'EXPORT (`regarde_a_droite`, 27/08/2026) — décrit L'ASSET, pas la mise
+; en scène. Christophe dessine CHAQUE CAMP PRÊT À L'EMPLOI : le héros tourné
+; vers la DROITE, les ennemis vers la GAUCHE. Posés à leurs ancrages (joueur à
+; gauche, adverse à droite), ils se font donc face SANS AUCUN MIROIR.
+;
+; ⚠ Se fier à l'ARME pour lire le sens est un piège : le FlameBot porte son
+; canon en travers du corps, pointé vers l'arrière-droite, alors que sa TÊTE
+; (masque en V, optiques) regarde à gauche. C'est le REGARD qui donne le sens.
+; Le miroir posé sur cette mauvaise lecture retournait les ennemis DOS à Relic.
+;
+; Le champ reste là pour le jour où une livraison arrivera dans l'autre sens :
+; une ligne à changer sur SON entrée, aucun code à toucher.
 personnages = [{
 "id": "relic",
 "nom": "Relic (héros)",
@@ -49,6 +61,7 @@ personnages = [{
 }],
 "decalage_x_px": 17.0,
 "niveaux": 6,
+"regarde_a_droite": true,
 "ennemi": false
 }, {
 "id": "flamebot",
@@ -56,6 +69,7 @@ personnages = [{
 "skel": "res://assets/personnages/ennemis/flamebot/FlameBot.skel",
 "atlas": "res://assets/personnages/ennemis/flamebot/FlameBot.atlas",
 "prefixe_skin": "FlameBot_Nv",
+"regarde_a_droite": false,
 "ennemi": true
 }, {
 "id": "workbot",
@@ -63,5 +77,6 @@ personnages = [{
 "skel": "res://assets/personnages/ennemis/workbot/WorkBot.skel",
 "atlas": "res://assets/personnages/ennemis/workbot/WorkBot.atlas",
 "prefixe_skin": "WorkBot_Nv",
+"regarde_a_droite": false,
 "ennemi": true
 }]

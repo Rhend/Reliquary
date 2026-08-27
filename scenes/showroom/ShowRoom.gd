@@ -363,6 +363,10 @@ func _peupler_duel() -> void:
 		var relic := SpriteSpinePersonnage.creer(str(_heros.get("skel", "")),
 				str(_heros.get("atlas", "")), ap_h)
 		if relic != null:
+			# Le camp joueur est à GAUCHE : le héros regarde vers la droite.
+			# Explicite même si l'export va déjà dans ce sens — le jour où une
+			# livraison arrive retournée, ça se corrige dans le registre.
+			relic.orienter(SpinePersonnagesData.echelle_x(_heros, true))
 			relic.position = Vector2(VUE.x * SOL_X_JOUEUR, sol_y)
 			_duel.add_child(relic)
 			_duel_heros = relic
@@ -374,8 +378,10 @@ func _peupler_duel() -> void:
 	var mob := SpriteSpinePersonnage.creer(str(e.get("skel", "")), str(e.get("atlas", "")),
 			ap_mob[clampi(_idx_palier, 0, ap_mob.size() - 1)])
 	if mob != null:
-		# Miroir horizontal : l'ennemi fait face au camp joueur.
-		mob.scale = Vector2(-1.0, 1.0)
+		# Le camp adverse est à DROITE : l'ennemi regarde vers la gauche. Le
+		# miroir n'est plus systématique — il dépend du sens d'export déclaré
+		# dans le registre, seul endroit qui sait comment l'asset a été livré.
+		mob.orienter(SpinePersonnagesData.echelle_x(e, false))
 		mob.position = Vector2(VUE.x * SOL_X_ADVERSE, sol_y)
 		_duel.add_child(mob)
 		_duel_monstre = mob

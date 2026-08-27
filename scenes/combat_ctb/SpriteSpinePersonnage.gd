@@ -327,6 +327,18 @@ static func niveaux_du_slot(nom_slot: String) -> Array[int]:
 # de vérifier la purge des niveaux sans regarder l'écran : la pièce d'un autre
 # niveau doit être ABSENTE de la skin, pas simplement cachée — une animation
 # saurait rallumer une pièce simplement décrochée du slot.
+# Oriente le personnage à l'écran. `signe` vient de
+# `SpinePersonnagesData.echelle_x(entree, doit_regarder_a_droite)` : le registre
+# sait vers où l'asset est exporté, l'appelant sait vers où il doit regarder.
+#
+# On ne touche QUE le signe de `scale.x`, jamais `scale` en entier : écraser
+# l'échelle effacerait une mise à la taille éventuellement posée par
+# l'appelant. Cette méthode remplace le `scale = Vector2(-1, 1)` qui était en
+# dur dans la ShowRoom et retournait aveuglément TOUT ennemi — un ennemi livré
+# tourné vers la gauche s'y serait retrouvé dos au héros, sans rien pour le dire.
+func orienter(signe: float) -> void:
+	scale.x = absf(scale.x) * (-1.0 if signe < 0.0 else 1.0)
+
 func porte_attachement(nom_slot: String, nom_attachement: String) -> bool:
 	if _spine == null:
 		return false

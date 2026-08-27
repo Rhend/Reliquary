@@ -61,6 +61,7 @@ extends Resource
 #     "cosmetiques":  [],                        # [{nom, skins}] alternatifs
 #     "niveaux":      0,                         # paliers portés par les slots
 #     "ennemi":       true,
+#     "regarde_a_droite": true,                  # SENS D'EXPORT (voir plus bas)
 #   }
 @export var personnages: Array[Dictionary] = []
 
@@ -78,6 +79,35 @@ func ennemis() -> Array[Dictionary]:
 		if bool(p.get("ennemi", false)):
 			sortie.append(p)
 	return sortie
+
+# ─── SENS D'EXPORT ──────────────────────────────────────────
+#
+# Le registre décrit L'ASSET tel qu'il a été livré ; c'est l'appelant qui décide
+# de la MISE EN SCÈNE. Cette séparation compte : « vers où regarde le sprite de
+# Christophe » est un fait constaté à l'intégration, « vers où il doit regarder
+# à l'écran » dépend du camp où on le pose, et les deux n'ont aucune raison de
+# vivre au même endroit.
+#
+# Constaté le 27/08/2026 sur la livraison courante : Christophe dessine CHAQUE
+# CAMP PRÊT À L'EMPLOI — Relic tourné vers la DROITE, FlameBot et WorkBot vers
+# la GAUCHE. Posés à leurs ancrages (joueur à gauche, adverse à droite), ils se
+# font donc face SANS AUCUN MIROIR : `echelle_x` rend +1 partout aujourd'hui.
+#
+# ⚠ Ne JAMAIS lire le sens sur l'ARME. Le FlameBot porte son canon en travers
+# du corps, pointé vers l'arrière-droite, alors que sa TÊTE (masque en V,
+# optiques) regarde à gauche. C'est cette confusion qui a fait poser un miroir
+# systématique sur les ennemis, lequel les retournait DOS à Relic — le bug que
+# Christophe a signalé. Le REGARD donne le sens, pas ce que le personnage tient.
+#
+# Le champ existe pour le jour où une livraison arrivera dans l'autre sens : une
+# ligne à changer sur SON entrée, aucun code à toucher, les autres ne bougent pas.
+static func regarde_a_droite(entree: Dictionary) -> bool:
+	return bool(entree.get("regarde_a_droite", true))
+
+# Signe à donner à `scale.x` pour qu'un personnage regarde du côté voulu.
+# Rend -1 quand le sens d'export et le sens voulu s'opposent, +1 sinon.
+static func echelle_x(entree: Dictionary, doit_regarder_a_droite: bool) -> float:
+	return 1.0 if regarde_a_droite(entree) == doit_regarder_a_droite else -1.0
 
 # Première entrée non ennemie = le héros (Relic) — le vis-à-vis du mode Combat.
 func heros() -> Dictionary:

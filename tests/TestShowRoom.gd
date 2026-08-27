@@ -37,6 +37,7 @@ func _run_all() -> void:
 	await _test_lumiere()
 	await _test_costumes()
 	await _test_echelle()
+	await _test_orientation()
 
 # ─── 1. Le registre pointe sur des assets réels ─────────────
 
@@ -401,6 +402,92 @@ func _test_echelle() -> void:
 		_assert(absf(nv6.hauteur_rendue_px() - cible) <= marge,
 				"le héros Nv6 garde la taille du Nv1")
 		nv6.free()
+
+# ─── 7. Sens d'export et mise en scène ──────────────────────
+#
+# Le miroir des ennemis était un `scale = Vector2(-1, 1)` EN DUR, appliqué à
+# tout ennemi sans distinction : un ennemi livré tourné vers la gauche s'y
+# serait retrouvé DOS au héros, sans rien pour le signaler. Il vient du registre
+# désormais, et c'est ce contrat que ce test garde — surtout le cas qu'on n'a
+# pas encore en magasin, l'ennemi exporté à gauche.
+func _test_orientation() -> void:
+	print("\n[TEST 7] Sens d'export des personnages")
+	var reg := load(ShowRoom.REGISTRE) as SpinePersonnagesData
+	if reg == null:
+		return
+
+	# Le défaut vaut « vers la droite » : une entrée qui ne dit rien reste
+	# lisible, et une livraison déjà intégrée ne change pas de comportement.
+	_assert(SpinePersonnagesData.regarde_a_droite({}),
+			"une entrée muette est réputée exportée vers la droite")
+	_assert(not SpinePersonnagesData.regarde_a_droite({"regarde_a_droite": false}),
+			"une entrée peut déclarer l'autre sens")
+
+	# La table de vérité complète : deux sens d'export × deux camps.
+	var droite := {"regarde_a_droite": true}
+	var gauche := {"regarde_a_droite": false}
+	_assert(SpinePersonnagesData.echelle_x(droite, true) > 0.0,
+			"exporté à droite, posé côté joueur → pas de miroir")
+	_assert(SpinePersonnagesData.echelle_x(droite, false) < 0.0,
+			"exporté à droite, posé côté adverse → miroir")
+	_assert(SpinePersonnagesData.echelle_x(gauche, false) > 0.0,
+			"exporté à gauche, posé côté adverse → PAS de miroir (cas des robots)")
+	_assert(SpinePersonnagesData.echelle_x(gauche, true) < 0.0,
+			"exporté à gauche, posé côté joueur → miroir")
+
+	# Chaque entrée livrée déclare son sens : c'est ce qui rend le champ utile
+	# comme documentation d'intégration, et pas seulement comme réglage.
+	for p in reg.personnages:
+		_assert(p.has("regarde_a_droite"),
+				"%s : le sens d'export est déclaré" % str(p.get("id", "?")))
+
+	# La livraison de Christophe est PRÊTE À L'EMPLOI : héros vers la droite,
+	# ennemis vers la gauche, donc aucun retournement à faire. Si cette
+	# assertion tombe, c'est qu'une livraison a changé de sens — et il faut
+	# corriger SON entrée, pas remettre un miroir systématique.
+	_assert(SpinePersonnagesData.regarde_a_droite(reg.heros()),
+			"le héros livré regarde vers la droite (vers le camp adverse)")
+	for e in reg.ennemis():
+		_assert(not SpinePersonnagesData.regarde_a_droite(e),
+				"%s : livré tourné vers la gauche (vers le camp joueur)"
+						% str(e.get("id", "?")))
+
+	if not SpriteSpinePersonnage.disponible():
+		print("  (runtime spine-godot absent : mise en scène non vérifiable)")
+		return
+
+	# Et la mise en scène réelle : héros face à l'ennemi, ennemi face au héros.
+	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
+	add_child(salle)
+	salle._mode = ShowRoom.Mode.COMBAT
+	salle._appliquer_mode()
+	await get_tree().process_frame
+	# Le signe posé doit être CELUI QUE LE REGISTRE CALCULE, et non un signe
+	# figé : c'est la seule formulation qui reste vraie si une livraison change
+	# de sens — l'ancienne version du test affirmait « l'ennemi est retourné »,
+	# ce qui figeait précisément le bug qu'on corrige ici.
+	if salle._duel_heros != null:
+		_assert(salle._duel_heros.scale.x
+					* SpinePersonnagesData.echelle_x(reg.heros(), true) > 0.0,
+				"en combat, le héros est orienté selon son sens d'export déclaré")
+	if salle._duel_monstre != null and not reg.ennemis().is_empty():
+		_assert(salle._duel_monstre.scale.x
+					* SpinePersonnagesData.echelle_x(reg.ennemis()[0], false) > 0.0,
+				"en combat, l'ennemi est orienté selon son sens d'export déclaré")
+		# Et le résultat concret sur la livraison actuelle : personne n'est retourné.
+		_assert(salle._duel_monstre.scale.x > 0.0,
+				"avec la livraison courante, l'ennemi fait face au héros sans miroir")
+	# `orienter` ne doit toucher que le SIGNE : une échelle posée par
+	# l'appelant survit, sinon retourner un sprite le remettrait à sa taille
+	# native sans prévenir.
+	if salle._duel_monstre != null:
+		var sprite: SpriteSpinePersonnage = salle._duel_monstre
+		sprite.scale = Vector2(0.5, 0.5)
+		sprite.orienter(-1.0)
+		_assert(is_equal_approx(absf(sprite.scale.x), 0.5)
+				and is_equal_approx(sprite.scale.y, 0.5),
+				"orienter() préserve la taille et ne change que le sens")
+	salle.queue_free()
 
 # ─── Helpers & rapport ──────────────────────────────────────
 
