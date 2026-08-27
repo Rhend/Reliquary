@@ -1,11 +1,14 @@
 # Reliquary — Guide projet pour Claude Code
 
-> ⚠ Le jeu s'appelle **Reliquary** depuis le 2026-08-25. Le DOSSIER local et le
-> dépôt GitHub s'appellent encore `IdleEvolution` (renommage non fait, sans
-> incidence sur le code). `project.godot:config/name` pilote `user://` : le
-> renommage a DÉPLACÉ le dossier de sauvegarde de `app_userdata/IdleEvolution/`
-> vers `app_userdata/Reliquary/` — les parties d'avant le renommage sont
-> orphelines, c'était la décision (aucune migration écrite).
+> Le jeu s'appelle **Reliquary** depuis le 2026-08-25, et le renommage est
+> TERMINÉ depuis le 2026-08-27 : dossier local, dépôt GitHub
+> (`Rhend/Reliquary`) et remote git portent tous ce nom.
+>
+> ⚠ Ce qui SUBSISTE de ce renommage : `project.godot:config/name` pilote
+> `user://`, donc le changement de nom a DÉPLACÉ le dossier de sauvegarde de
+> `app_userdata/IdleEvolution/` vers `app_userdata/Reliquary/`. Les parties
+> d'avant le 2026-08-25 sont orphelines — c'était la décision, aucune migration
+> n'a été écrite.
 
 Idle RPG de complétion sous **Godot 4.7** (GL Compatibility), GDScript, 1280×720.
 Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `dev`.
