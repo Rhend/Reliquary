@@ -363,25 +363,22 @@ func _placer_orbes() -> void:
 				zone.position = pied - Vector2(zone.size.x * 0.5, zone.size.y - 12.0)
 	_sol.queue_redraw()
 
-# Sol de la scène : ligne d'horizon + bande dégradée — réservées au camp
-# JOUEUR, arrêtées PILE sur la diagonale (`CombatFondScinde.x_frontiere`) :
-# le camp adverse a son propre décor (ville réelle vs biome placeholder), ce
-# chrome n'a rien à y faire — plein cadre, il empiétait sur le biome adverse
-# et son teal traversait la couture (26/08/2026). Ellipse d'emplacement sous
-# chaque personnage, DES DEUX camps (tokens CYBER_SOL / accents de camp).
+# Sol de la scène : ellipse d'emplacement sous chaque placeholder EnergyBoule
+# (repère au sol d'une boule de lumière sans silhouette propre) — RETIRÉE pour
+# tout combattant qui porte un vrai sprite Spine (27/08/2026, signalé par
+# Rhend). La ligne d'horizon + bande dégradée qui vivait ici avant (chrome
+# peint par-dessus le décor, pensé pour un sol sans art réel) est SUPPRIMÉE :
+# posée sur le vrai décor de ville, elle se lisait comme un trait diffus non
+# voulu en travers de tout le côté joueur, pile sous les pieds de Relic
+# (signalé par Rhend). Le décor réel (`CombatDecorCity`) porte déjà son
+# propre trottoir. Même correctif déjà appliqué à la ShowRoom (26 et
+# 27/08/2026).
 func _dessiner_sol() -> void:
-	var w := _sol.size.x
-	var h := _sol.size.y
-	if w <= 0.0:
+	if _sol.size.x <= 0.0:
 		return
-	var y := h * SOL_Y_FRAC
-	var frontiere := CombatFondScinde.x_frontiere(y, h, w, BANDE_VS_PX)
-	_sol.draw_line(Vector2(0, y), Vector2(frontiere, y), UIColors.CYBER_SOL, 2.0)
-	for i in 3:
-		var yi := y + float(i) * 16.0
-		_sol.draw_rect(Rect2(0.0, yi, CombatFondScinde.x_frontiere(yi, h, w, BANDE_VS_PX), 16.0),
-				Color(UIColors.CYBER_SOL, UIColors.CYBER_SOL.a * (0.45 - 0.13 * float(i))))
 	for cb: CtbCombattant in _pieds:
+		if _sprites.has(cb):
+			continue
 		var accent := ExpeStyle.accent_camp(cb.est_joueur())
 		var pied: Vector2 = _pieds[cb]
 		_sol.draw_set_transform(pied, 0.0, Vector2(1.0, 0.38))

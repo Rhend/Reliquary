@@ -100,10 +100,11 @@ var _duel_tween: Tween = null   # zoom-duel en cours ([A]/[T] en mode combat)
 var _cam: Camera2D
 var _fond_neutre: ColorRect
 var _decor: Control            # fond scindé (mode combat) : biomes + diagonale + sol
-var _sol_combat: Control       # ligne d'horizon + emplacements, dessinés dans _decor
 var _voile: ColorRect         # brume claire PAR-DESSUS le décor (mode combat)
 var _hud: Label
 var _titre: Label
+var _panneau_file: PanelContainer   # file d'initiative mockée (mode combat)
+var _file_box: HBoxContainer
 var _repere: Node2D           # lignes de sol du mode LIBRE
 # Étiquettes du mode libre + leur couleur d'origine : sur fond clair il faut
 # les réassombrir, et on ne peut pas partir de la couleur déjà modifiée.
@@ -173,6 +174,38 @@ func _construire() -> void:
 	_titre.position = Vector2(16, 12)
 	hud_layer.add_child(_titre)
 
+	# File d'initiative — MOCKUP du chrome réel de CombatCtbUi (même panneau,
+	# mêmes chips, mêmes couleurs de camp) : la vitrine n'a pas de CtbMoteur
+	# pour calculer un vrai `prevoir_ordre`, donc on alterne joueur/adverse sur
+	# N_FILE cases pour juger le rendu des deux blocs de couleur en situation.
+	# Visible en mode COMBAT seulement (_appliquer_mode).
+	_panneau_file = PanelContainer.new()
+	_panneau_file.anchor_left = 0.5; _panneau_file.anchor_right = 0.5
+	_panneau_file.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_panneau_file.offset_top = 12.0
+	_panneau_file.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_panneau_file.visible = false
+	var style_file := ExpeStyle.style_panneau(UIColors.CYBER_ACCENT, 1.0)
+	style_file.bg_color = UIColors.CYBER_BG
+	_panneau_file.add_theme_stylebox_override("panel", style_file)
+	hud_layer.add_child(_panneau_file)
+	var haut_file := VBoxContainer.new()
+	haut_file.add_theme_constant_override("separation", 2)
+	haut_file.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_panneau_file.add_child(haut_file)
+	var titre_file := ExpeStyle.label_mono(Translations.T("ctb.file_titre"), 11,
+			UIColors.CYBER_TEXTE_MUTED)
+	titre_file.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	haut_file.add_child(titre_file)
+	var centre_file := HBoxContainer.new()
+	centre_file.alignment = BoxContainer.ALIGNMENT_CENTER
+	centre_file.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	haut_file.add_child(centre_file)
+	_file_box = HBoxContainer.new()
+	_file_box.add_theme_constant_override("separation", 6)
+	_file_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	centre_file.add_child(_file_box)
+
 	# Bandeau de raccourcis (bas) : REPREND le panneau de la barre d'actions du
 	# vrai combat — même style/mêmes marges (`ExpeStyle.style_panneau`,
 	# `UIColors.CYBER_ACCENT`), plein largeur, ancré en bas (26/08/2026). La
@@ -206,33 +239,6 @@ func _construire() -> void:
 # part — et les deux ne peuvent plus diverger puisqu'ils appellent le même code.
 func _construire_fond_combat() -> void:
 	CombatFondScinde.construire(_decor, SOL_Y_FRAC, SOL_X_JOUEUR, CombatCtbUi.BANDE_VS_PX)
-	_sol_combat = Control.new()
-	_sol_combat.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_sol_combat.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sol_combat.draw.connect(_dessiner_sol_combat)
-	_sol_combat.resized.connect(_sol_combat.queue_redraw)
-	_decor.add_child(_sol_combat)
-
-# Ligne d'horizon + bande dégradée sous les pieds — copie de la partie SOL de
-# CombatCtbUi._dessiner_sol, réduite aux deux emplacements fixes de la
-# vitrine (joueur / adverse, toujours 1 vs 1 ici). PLUS d'ellipse
-# d'emplacement (26/08/2026) : elle datait de l'ère EnergyBoule (repère au
-# sol d'un placeholder sans silhouette propre) — superflue maintenant que
-# les monstres ont leurs propres sprites Spine posés dessus. Chrome arrêté
-# PILE sur la diagonale (`CombatFondScinde.x_frontiere`) : plein cadre, il
-# empiétait sur le biome adverse (signalé par Rhend, même correctif que
-# CombatCtbUi._dessiner_sol).
-func _dessiner_sol_combat() -> void:
-	var w := VUE.x
-	var h := VUE.y
-	var y := h * SOL_Y_FRAC
-	var frontiere := CombatFondScinde.x_frontiere(y, h, w, BANDE_VS_PX)
-	_sol_combat.draw_line(Vector2(0, y), Vector2(frontiere, y), UIColors.CYBER_SOL, 2.0)
-	for i in 3:
-		var yi := y + float(i) * 16.0
-		_sol_combat.draw_rect(Rect2(0.0, yi,
-				CombatFondScinde.x_frontiere(yi, h, w, BANDE_VS_PX), 16.0),
-				Color(UIColors.CYBER_SOL, UIColors.CYBER_SOL.a * (0.45 - 0.13 * float(i))))
 
 # ─── Mode LIBRE : une rangée par monstre ─────────────────────
 
@@ -386,6 +392,31 @@ func _peupler_duel() -> void:
 		_duel.add_child(mob)
 		_duel_monstre = mob
 
+	_rafraichir_file_combat()
+
+# File d'initiative mockée (voir _construire) : alterne joueur/adverse sur
+# CombatCtbUi.N_FILE cases avec les noms réellement affichés (héros à son
+# apparence courante, monstre courant) — juste l'ordre change d'un vrai
+# combat, jamais la couleur ni le style des blocs.
+func _rafraichir_file_combat() -> void:
+	if _file_box == null:
+		return
+	UIHelpers.clear_children_now(_file_box)
+	if _duel_heros == null or _duel_monstre == null:
+		return
+	var nom_h := _nom_apparence_heros()
+	var nom_m := str(_ennemis[_idx_monstre].get("nom", "?"))
+	for i in CombatCtbUi.N_FILE:
+		var est_joueur := i % 2 == 0
+		var couleur := ExpeStyle.accent_camp(est_joueur)
+		var chip := PanelContainer.new()
+		chip.add_theme_stylebox_override("panel", ExpeStyle.style_chip(couleur))
+		var m := UIHelpers.margin_of(4)
+		m.add_child(ExpeStyle.label_mono(nom_h if est_joueur else nom_m, 11,
+				couleur.lightened(0.35)))
+		chip.add_child(m)
+		_file_box.add_child(chip)
+
 # ─── Zoom-DUEL (mode combat) : la vraie mise en scène, pas une pâle copie ─
 #
 # [A]/[T] rejouent EXACTEMENT le zoom-duel de CombatCtbUi (`DuelZoomFx`,
@@ -506,6 +537,9 @@ func _appliquer_mode() -> void:
 	_decor.visible = combat
 	_fond_neutre.visible = not combat
 	_voile.visible = combat
+	# _panneau_file (mockup file d'initiative) reste MASQUÉ (demande Rhend,
+	# 27/08/2026) : il coiffait le haut du gap et cachait le point émetteur
+	# de la coupure holographique. Code conservé, juste jamais rendu visible.
 	_appliquer_lumiere()
 	if combat:
 		_peupler_duel()

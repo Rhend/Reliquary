@@ -16,8 +16,10 @@
 # Pas de clip explicite du décor joueur : le shader de `fond_adverse` se
 # découpe déjà tout seul sur la diagonale (alpha nul côté héros), donc le
 # décor raster — ajouté avant lui, en dessous — n'apparaît que là où le
-# placeholder adverse le laisse transparaître. Le liseré `seam` par-dessus
-# dessine la même double ligne diagonale que l'écran de combat.
+# placeholder adverse le laisse transparaître. `CombatCoupureHolo`, posé
+# par-dessus, peint la coupure holographique (vide + bordures animées) —
+# opaque sur toute sa largeur, elle masque le mince fondu résiduel des deux
+# décors autour de l'axe sans qu'il faille toucher à leur découpe.
 # ============================================================
 class_name CombatFondScinde
 
@@ -35,12 +37,7 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	fond_adverse.set_split(2, bande_vs_px)
 	parent.add_child(fond_adverse)
 
-	var seam := Control.new()
-	seam.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	seam.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	seam.draw.connect(_dessiner_diagonale.bind(seam, bande_vs_px))
-	seam.resized.connect(seam.queue_redraw)
-	parent.add_child(seam)
+	CombatCoupureHolo.construire(parent, bande_vs_px, vue)
 
 # Position X de la diagonale (côté héros) à une hauteur `y` donnée (0 = haut,
 # h = bas) — SOURCE UNIQUE de cette frontière. `CombatCtbUi._dessiner_sol` et
@@ -53,16 +50,3 @@ static func x_frontiere(y: float, h: float, w: float, bande_vs_px: float) -> flo
 	if h <= 0.0:
 		return w * 0.5
 	return w * 0.5 + bande_vs_px * (0.5 - y / h)
-
-# Bande diagonale entre le décor joueur et le placeholder adverse — même
-# tracé qu'avant le passage au décor réel (double liseré cyan/magenta).
-static func _dessiner_diagonale(seam: Control, bande_vs_px: float) -> void:
-	var w := seam.size.x
-	var h := seam.size.y
-	if w <= 0.0 or h <= 0.0:
-		return
-	var xt := x_frontiere(0.0, h, w, bande_vs_px)
-	var xb := x_frontiere(h, h, w, bande_vs_px)
-	seam.draw_line(Vector2(xt, 0), Vector2(xb, h), Color(UIColors.CYBER_ACCENT, 0.55), 2.0)
-	seam.draw_line(Vector2(xt + 5, 0), Vector2(xb + 5, h),
-			Color(UIColors.CYBER_ACCENT_2, 0.35), 1.0)
