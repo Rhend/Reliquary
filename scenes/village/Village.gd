@@ -169,7 +169,7 @@ var _alarme_a_annoncer := false   # 6/6 pendant la run → annonce différée au
 # du Village pour juger l'évolution visuelle du hub sans jouer.
 # ⚠ Modifie réellement GameData.village (peut finir dans la sauvegarde).
 # Mettre à false avant une release.
-const DEBUG_TIER_BUTTONS := false
+const DEBUG_TIER_BUTTONS := true
 # Raccourci dev vers la vitrine des assets Spine (scenes/showroom/) : bouton
 # discret en haut à gauche du hub. À passer à false avant release — la
 # ShowRoom est un outil d'atelier, pas du contenu de jeu.
