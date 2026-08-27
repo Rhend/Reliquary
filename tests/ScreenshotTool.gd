@@ -39,6 +39,7 @@ func _ready() -> void:
 		"holo_prop": await _shoot_holo_prop()
 		"holo_pins": await _shoot_holo_pins()
 		"showroom":  await _shoot_showroom()
+		"neons":     await _shoot_neons()
 		"expe":      await _shoot_expe()
 		"flux":      await _shoot_flux()
 		"combat":    await _shoot_combat()
@@ -767,11 +768,132 @@ func _shoot_showroom() -> void:
 	await get_tree().create_timer(0.6).timeout
 	await _capture("res://tests/_shot_showroom_combat_leg.png")
 
-func _capture(path: String) -> void:
+# ── Capture des enseignes néon vivantes ────────────────────
+# Le décor de ville SEUL (ni combattants ni HUD), à trois instants, en plein
+# cadre ET zoomé sur une enseigne. Le zoom est indispensable pour juger : à
+# l'échelle du décor, un point lumineux fait quelques pixels, et une capture
+# pleine ne dit pas s'il suit vraiment le tube ou s'il flotte à côté.
+func _shoot_neons() -> void:
+	var hote := Control.new()
+	hote.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_vp.add_child(hote)
+	var decor := CombatDecorCity.construire(hote,
+			CombatCtbUi.SOL_Y_FRAC, CombatCtbUi.SOL_X_JOUEUR)
+	await get_tree().process_frame
+	# La zone de zoom est demandée au décor lui-même plutôt que codée en dur :
+	# elle suit donc le cadrage réel, y compris après une relivraison.
+	# La VILLE est figée (les points, eux, gardent leur propre _process) : le
+	# témoin et les captures se superposent alors au pixel près, ce qui rend
+	# leur DIFFÉRENCE exploitable. Un décor qui défile de deux pixels entre
+	# deux prises noierait l'effet sous les arêtes d'immeubles.
+	# Un tour de _process AVANT de figer, sinon les plans restent à l'origine
+	# du nœud au lieu de leur cadrage calculé, et toute la ville est décalée.
+	decor._process(0.0)
+	decor.set_process(false)
+	var runners := _tous_les_runners(decor)
+	# Deux questions distinctes, deux séries. Le CALAGE (le point tombe-t-il sur
+	# le tube ?) se juge cycles neutralisés, sinon la moitié des enseignes est
+	# éteinte au moment de la prise. La PULSATION se juge ensuite, cycles remis.
+	for n: NeonRunners in runners:
+		for r: Dictionary in n._runners:
+			r["cycle_vrai"] = r["cycle"]
+			r["cycle"] = 0.0
+	var cibles := _viser_enseignes(decor, 5)
+	print("Néons : %d enseigne(s) visée(s) — %s" % [cibles.size(), cibles])
+
+	# TÉMOIN : le même décor, au même instant, sans les points. Sans lui on ne
+	# peut pas distinguer ce que l'effet ajoute de ce que Christophe a peint —
+	# c'est la première question qu'on se pose devant une capture.
+	for n: NeonRunners in runners:
+		n.visible = false
+	var temoin := await _capture("res://tests/_shot_neons_temoin.png")
+	for i in cibles.size():
+		_capture_zoom("res://tests/_shot_neons_calage%d_temoin.png" % i, cibles[i], 6)
+	for n: NeonRunners in runners:
+		n.visible = true
+
+	# ── Série CALAGE : chaque enseigne visée, grossie 6×, cycles neutralisés.
+	var avec := await _capture("res://tests/_shot_neons_calage.png")
+	for i in cibles.size():
+		_capture_zoom("res://tests/_shot_neons_calage%d.png" % i, cibles[i], 6)
+	_diff("res://tests/_shot_neons_diff.png", temoin, avec, 6.0)
+
+	# ── Série PULSATION : cycles rétablis, quatre instants espacés. Ce sont ces
+	# images-là qui disent si la ville respire ou si elle bat la mesure.
+	for n: NeonRunners in runners:
+		for r: Dictionary in n._runners:
+			r["cycle"] = r["cycle_vrai"]
+	for i in 4:
+		await get_tree().create_timer(2.2).timeout
+		await _capture("res://tests/_shot_neons_pulse_%d.png" % i)
+
+# Différence absolue amplifiée entre deux captures : la seule façon honnête de
+# voir où un effet additif discret dépose sa lumière.
+func _diff(path: String, a: Image, b: Image, gain: float) -> void:
+	var out := Image.create_empty(a.get_width(), a.get_height(), false, Image.FORMAT_RGB8)
+	var pics := 0
+	for y in a.get_height():
+		for x in a.get_width():
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			var d := Color(absf(cb.r - ca.r), absf(cb.g - ca.g), absf(cb.b - ca.b)) * gain
+			if d.r + d.g + d.b > 0.15:
+				pics += 1
+			out.set_pixel(x, y, Color(minf(d.r, 1.0), minf(d.g, 1.0), minf(d.b, 1.0)))
+	out.save_png(path)
+	print("Diff -> %s  (%d pixels touchés par l'effet)" % [path, pics])
+
+# Centres écran des `combien` plus grandes enseignes bien dans le cadre, de la
+# plus grande à la plus petite. Les positions viennent du décor lui-même, donc
+# elles suivent le cadrage réel — y compris après une relivraison.
+func _viser_enseignes(racine: Node, combien: int) -> Array:
+	var candidats: Array = []
+	for n: NeonRunners in _tous_les_runners(racine):
+		for r: Dictionary in n._runners:
+			var pts := r["points"] as PackedVector2Array
+			var centre := Vector2.ZERO
+			for p in pts:
+				centre += p
+			centre /= float(pts.size())
+			var ecran: Vector2 = n.get_global_transform() * centre
+			if ecran.x < 160.0 or ecran.x > 1120.0 or ecran.y < 90.0 or ecran.y > 630.0:
+				continue
+			candidats.append({"px": ecran, "lg": float(r["longueur"])})
+	candidats.sort_custom(func(a, b): return float(a["lg"]) > float(b["lg"]))
+	var sortie: Array = []
+	for c in candidats:
+		if sortie.size() >= combien:
+			break
+		sortie.append(c["px"] as Vector2)
+	return sortie
+
+func _tous_les_runners(racine: Node) -> Array:
+	var sortie: Array = []
+	if racine is NeonRunners:
+		sortie.append(racine)
+	for enfant in racine.get_children():
+		sortie.append_array(_tous_les_runners(enfant))
+	return sortie
+
+# Recadre la DERNIÈRE image capturée autour de `centre` et l'agrandit `facteur`
+# fois, au plus proche voisin — on veut voir les pixels, pas les lisser.
+func _capture_zoom(path: String, centre: Vector2, facteur: int) -> void:
+	var img := _vp.get_texture().get_image()
+	var taille := Vector2i(_vp.size) / facteur
+	var coin := Vector2i(centre) - taille / 2
+	coin.x = clampi(coin.x, 0, _vp.size.x - taille.x)
+	coin.y = clampi(coin.y, 0, _vp.size.y - taille.y)
+	var region := img.get_region(Rect2i(coin, taille))
+	region.resize(_vp.size.x, _vp.size.y, Image.INTERPOLATE_NEAREST)
+	region.save_png(path)
+	print("Screenshot -> ", path)
+
+func _capture(path: String) -> Image:
 	await RenderingServer.frame_post_draw
 	var img := _vp.get_texture().get_image()
 	img.save_png(path)
 	print("Screenshot -> ", path)
+	return img
 
 # Résumé de cycle factice : XP réparties réalistes, butin, une évolution dispo.
 func _fake_cycle_data() -> void:

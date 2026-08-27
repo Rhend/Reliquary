@@ -105,3 +105,6 @@ jobs:
 
       - name: TestShowRoom (vitrine des assets Spine — registre + aller-retour QG)
         run: $GODOT --headless --path . res://tests/TestShowRoom.tscn
+
+      - name: TestNeonsCite (enseignes néon vivantes — bake à jour + rendu)
+        run: $GODOT --headless --path . res://tests/TestNeonsCite.tscn

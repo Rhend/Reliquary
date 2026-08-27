@@ -5,7 +5,8 @@
 # donner de la profondeur. Jusqu'ici ils n'étaient qu'empilés : un seul bloc,
 # une seule échelle, aucun bénéfice du découpage. Ce nœud leur rend leur rôle.
 #
-# TROIS effets, tous pilotés par `PLANS` :
+# TROIS effets pilotés par `PLANS`, plus un quatrième porté par les enseignes
+# elles-mêmes (voir tout en bas) :
 #
 #  • PROFONDEUR — pendant le zoom-duel, `CombatCtbUi` agrandit le bloc entier
 #    (`_couche_scene.scale`). Chaque plan COMPENSE ce zoom au prorata de sa
@@ -41,6 +42,13 @@
 #    « perdent leurs bords » avec la distance dans `biome_background.gdshader`.
 #    Un calque néon reçoit la même teinte que son immeuble (même profondeur,
 #    déjà partagée pour la vitesse) : rien à faire de plus pour rester calé.
+#
+#  • ENSEIGNES VIVANTES (27/08/2026) — un point lumineux court le long du tube
+#    de chaque enseigne, comme sur la DA du QG. Les tracés sont EXTRAITS des
+#    images de Christophe et bakés hors ligne (`NeonsCiteData`,
+#    `tools/bake_neons_cite.gd`) ; ici on ne fait que poser un `NeonRunners`
+#    dans chaque copie du ruban. Rien d'autre n'a bougé : c'est le parentage
+#    qui offre le défilement, le zoom et la brume à l'effet.
 #
 # ⚠ Node2D + Sprite2D, PAS des Control/TextureRect. Godot arrondit la position
 # des Control au pixel entier (`gui/common/snap_controls_to_pixels`, vrai par
@@ -155,8 +163,16 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 			copies = maxi(int(ceil((larg - cadre.position.x) / cadre.size.x)) + 1, 2)
 		var noeud := Node2D.new()
 		noeud.modulate = _teinte_profondeur(float(plan["profondeur"]))
+		# Échelle d'affichage de ce plan : NeonRunners s'en sert pour écarter
+		# les enseignes trop petites une fois rendues pour porter un point.
+		var echelle_ecran := cadre.size.x / maxf(texture.get_size().x, 1.0)
 		for i in copies:
-			noeud.add_child(_calque(texture, cadre.size, Vector2(cadre.size.x * i, 0.0)))
+			var sp := _calque(texture, cadre.size, Vector2(cadre.size.x * i, 0.0))
+			# Les points lumineux vivent DANS la copie, pas à côté : ils
+			# héritent ainsi du défilement, du repli, de la compensation de
+			# zoom et de la brume, sans qu'aucun des quatre soit recâblé.
+			NeonRunners.poser(sp, chemin, texture.get_size(), echelle_ecran)
+			noeud.add_child(sp)
 		add_child(noeud)
 		_couches.append({
 			"noeud": noeud,
