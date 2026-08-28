@@ -39,6 +39,7 @@ func _ready() -> void:
 		"holo_prop": await _shoot_holo_prop()
 		"holo_pins": await _shoot_holo_pins()
 		"showroom":  await _shoot_showroom()
+		"factory":   await _shoot_factory()
 		"neons":     await _shoot_neons()
 		"expe":      await _shoot_expe()
 		"flux":      await _shoot_flux()
@@ -767,6 +768,28 @@ func _shoot_showroom() -> void:
 	salle._rafraichir_hud()
 	await get_tree().create_timer(0.6).timeout
 	await _capture("res://tests/_shot_showroom_combat_leg.png")
+
+# ── Capture du décor d'Usine (CombatDecorFactory, côté adverse) ────
+# Décor SEUL (pas de personnages), avancé à la main via `_process(dt)` (comme
+# `_shoot_neons` le fait pour la ville) : plein cadre à 3 instants espacés
+# pour juger le défilement des 3 Chaîne_Robotique + le flicker des 3 foyers,
+# puis un zoom sur le fourneau pour juger le flicker de près.
+func _shoot_factory() -> void:
+	var hote := Control.new()
+	hote.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_vp.add_child(hote)
+	var decor := CombatDecorFactory.construire(hote,
+			CombatCtbUi.SOL_Y_FRAC, CombatCtbUi.SOL_X_ADVERSE, CombatCtbUi.BANDE_VS_PX)
+	await get_tree().process_frame
+	for i in 4:
+		decor._process(1.0)   # +1s par capture : défilement et flicker visibles
+		await RenderingServer.frame_post_draw
+		await _capture("res://tests/_shot_factory_%d.png" % i)
+	var img := _vp.get_texture().get_image()
+	var crop := img.get_region(Rect2i(560, 0, 400, 300))
+	crop.resize(1200, 900, Image.INTERPOLATE_NEAREST)
+	crop.save_png("res://tests/_shot_factory_fourneau_zoom.png")
+	print("Screenshot -> res://tests/_shot_factory_fourneau_zoom.png")
 
 # ── Capture des enseignes néon vivantes ────────────────────
 # Le décor de ville SEUL (ni combattants ni HUD), à trois instants, en plein

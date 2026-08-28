@@ -46,10 +46,13 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
   `CombatFondScinde` / `CombatDecorCity` / un helper de `scenes/combat_ctb/`, appelé
   par les DEUX écrans. `ShowRoom.gd` ne garde que ce qui est vraiment de la vitrine
   (navigation clavier, étiquettes, éclairage de jugement). ⚠ Dettes restantes à cette
-  date : `CombatFondScinde.construire()` crée un `BiomeBackground` sans paramètre de
-  biome (le fond adverse ne suit donc pas encore le Lieu) ; `CombatCtbUi.gd:202` monte
-  encore des `EnergyBoule` pour les adversaires — c'est là que le pool devra se
-  brancher. Le miroir des ennemis, lui, est RÉGLÉ (voir `regarde_a_droite` ci-dessous).
+  date : le décor adverse (Usine, `CombatDecorFactory`, 28/08/2026) n'est PAS encore
+  DYNAMIQUE selon le Lieu — un seul décor adverse livré à ce jour, affiché pour TOUS
+  les combats (a remplacé le placeholder `BiomeBackground("forest")`, lui-même déjà
+  affiché sans distinction de Lieu — pas une régression, juste pas encore résolu) ;
+  `CombatCtbUi.gd:202` monte encore des `EnergyBoule` pour les adversaires — c'est là
+  que le pool devra se brancher. Le miroir des ennemis, lui, est RÉGLÉ (voir
+  `regarde_a_droite` ci-dessous).
 
 ## Architecture
 

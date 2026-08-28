@@ -3,23 +3,27 @@
 #
 # Côté HÉROS : décor RÉEL de Christophe, monté par `CombatDecorCity` — plans
 # parallaxés et défilants, calé pour que son sol tombe sur `sol_y_frac`.
-# Côté ADVERSE : toujours le placeholder procédural `BiomeBackground` (preset
-# "forest") — le Lieu n'a pas encore d'art dédié, seule la ville héros a été
-# livrée. Ce fichier ne fait plus que COMPOSER les deux moitiés et leur
-# couture ; tout ce qui touche aux plans de la ville vit dans CombatDecorCity.
+# Côté ADVERSE : décor RÉEL de l'Usine (Christophe, 28/08/2026), monté par
+# `CombatDecorFactory` — même technique, écrêté à la moitié droite par
+# `raster_split_mask.gdshader` (voir ce fichier). ⚠ Pas encore DYNAMIQUE selon
+# le Lieu de l'expédition (un seul décor adverse livré à ce jour) : l'Usine
+# s'affiche pour TOUS les combats, comme le faisait le placeholder "forest"
+# avant elle — c'est le sélecteur par Lieu qui reste à écrire, pas ce fichier.
+# Ce fichier ne fait plus que COMPOSER les deux moitiés et leur couture ; tout
+# ce qui touche aux plans de chaque décor vit dans son propre CombatDecor*.
 #
 # class_name statique (pattern Balance/ExpeStyle, PAS un autoload) : PARTAGÉ
 # entre l'écran de combat réel (CombatCtbUi) et la vitrine (ShowRoom) pour
 # que les deux restent identiques à l'octet près — une seule source, jamais
 # deux copies qui pourraient diverger.
 #
-# Pas de clip explicite du décor joueur : le shader de `fond_adverse` se
-# découpe déjà tout seul sur la diagonale (alpha nul côté héros), donc le
-# décor raster — ajouté avant lui, en dessous — n'apparaît que là où le
-# placeholder adverse le laisse transparaître. `CombatCoupureHolo`, posé
-# par-dessus, peint la coupure holographique (vide + bordures animées) —
-# opaque sur toute sa largeur, elle masque le mince fondu résiduel des deux
-# décors autour de l'axe sans qu'il faille toucher à leur découpe.
+# Pas de clip explicite du décor joueur : chaque sprite du décor adverse porte
+# déjà son écrêtage (alpha nul côté héros), donc le décor raster héros —
+# ajouté avant lui, en dessous — n'apparaît que là où l'adverse le laisse
+# transparaître. `CombatCoupureHolo`, posé par-dessus, peint la coupure
+# holographique (vide + bordures animées) — opaque sur toute sa largeur, elle
+# masque le mince fondu résiduel des deux décors autour de l'axe sans qu'il
+# faille toucher à leur découpe.
 # ============================================================
 class_name CombatFondScinde
 
@@ -32,10 +36,10 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	# un simple empilement — le découpage de Christophe est fait pour ça.
 	CombatDecorCity.construire(parent, sol_y_frac, sol_x_frac, vue)
 
-	var fond_adverse := BiomeBackground.new()
-	fond_adverse.apply_preset("forest")
-	fond_adverse.set_split(2, bande_vs_px)
-	parent.add_child(fond_adverse)
+	# Ancrage adverse = miroir exact du joueur (1 - sol_x_frac, comme
+	# CombatCtbUi.SOL_X_ADVERSE = 1 - SOL_X_JOUEUR) : ce fichier ne connaît
+	# qu'un seul ancrage en paramètre, celui du héros.
+	CombatDecorFactory.construire(parent, sol_y_frac, 1.0 - sol_x_frac, bande_vs_px, vue)
 
 	CombatCoupureHolo.construire(parent, bande_vs_px, vue)
 
