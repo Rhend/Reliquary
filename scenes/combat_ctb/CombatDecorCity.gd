@@ -76,16 +76,19 @@ const SOL_BAS_FRAC := 1.000    # bord bas de l'image
 # tout au fond du trottoir, comme collés au pied des immeubles.
 const DECOR_SOL_FRAC := (SOL_HAUT_FRAC + SOL_BAS_FRAC) * 0.5
 
-# ⚠ Ce choix a un COÛT, et c'est lui qui fixe SOL_Y_FRAC côté combat : sous les
-# pieds il ne reste plus que la moitié BASSE de la bande (15 % de l'image) pour
-# couvrir tout le bas de l'écran. Plus les personnages sont haut, plus le décor
-# doit être agrandi pour y arriver (voir le `maxf` de construire) — d'où des
-# immeubles démesurés si on garde les pieds trop haut. `REDUCTION_PLANS` sert à
-# rattraper cet agrandissement sur les seuls plans d'immeubles, le sol et le
-# ciel devant, eux, rester assez grands pour couvrir.
+# ⚠ Ce choix a un COÛT : sous les pieds il ne reste plus que la moitié BASSE
+# de la bande (15 % de l'image). `REDUCTION_PLANS` sert à dégager la vue
+# d'ensemble sur les seuls plans d'immeubles, le sol et le ciel devant, eux,
+# rester assez grands pour couvrir.
 
 # Réduction des plans d'IMMEUBLES pour dégager la vue d'ensemble (26/08/2026).
 const REDUCTION_PLANS := 0.9
+
+# Couleur EXACTE du bas de Background_City_Plan_2_Sol.png (mesurée, plate sur
+# toute la bande basse) — comble le vide que laisse la hauteur naturelle
+# (voir `construire()`, même correctif que CombatDecorFactory, 28/08/2026).
+# Plate → indiscernable du vrai trottoir.
+const SOL_SECOURS_COLOR := Color8(54, 30, 87)
 
 # Brume atmosphérique (26/08/2026) : teinte vers laquelle un plan lointain se
 # fond, et intensité MAX (au plan le plus lointain, profondeur 0 — le sol, à
@@ -128,17 +131,29 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	decor.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	decor.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	decor._noeud_zoom = parent
-	# Cale le SOL du décor sur celui du combat, sans laisser de vide au cadre.
-	# Décaler seul ne suffit pas : remonter le décor découvre le bas de l'écran.
-	# On cherche donc la hauteur H telle que le sol tombe sur sol_y_frac ET que
-	# le rectangle déborde des deux côtés — les deux contraintes donnent chacune
-	# une hauteur minimale, on garde la plus grande.
-	var h := maxf(vue.y * sol_y_frac / DECOR_SOL_FRAC,
-			vue.y * (1.0 - sol_y_frac) / (1.0 - DECOR_SOL_FRAC))
+	# Hauteur NATURELLE (28/08/2026, même correctif que CombatDecorFactory) :
+	# PAS la couverture "sans trou" (l'ancien `maxf` ci-dessous, retiré) — elle
+	# suppose que la bande de sol de l'image tombe à peu près à `sol_y_frac`,
+	# ce qui n'est vrai qu'à 5 points près (bande mesurée à 84,9 % contre
+	# 80,6 % voulu) et forçait un agrandissement uniforme d'environ 25 % —
+	# donc aussi de la LARGEUR, rognant une bonne partie de la skyline pour
+	# rien. `h = vue.y` couvre presque tout le canevas ; le pivot du sol
+	# (DECOR_SOL_FRAC) reste inchangé, l'alignement ne bouge pas.
+	var h := vue.y
 	var haut := vue.y * sol_y_frac - DECOR_SOL_FRAC * h
 	decor.offset_top = haut
 	decor.offset_bottom = haut + h - vue.y
 	decor._batir(vue.x, h, vue.x * sol_x_frac)
+	# Vide résiduel sous le sol (la bande y est plus fine que ce qu'il faut
+	# pour atteindre le bas de l'écran) : un aplat de la couleur exacte du
+	# trottoir, plate donc invisible en pratique.
+	var bas := vue.y - haut - h
+	if bas > 0.0:
+		var secours := ColorRect.new()
+		secours.color = SOL_SECOURS_COLOR
+		secours.position = Vector2(0.0, h)
+		secours.size = Vector2(vue.x, bas)
+		decor.add_child(secours)
 	parent.add_child(decor)
 	return decor
 
