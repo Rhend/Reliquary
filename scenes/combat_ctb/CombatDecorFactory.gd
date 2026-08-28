@@ -47,6 +47,21 @@ const FEU_ALPHA_MIN := 0.55
 const FEU_ALPHA_MAX := 1.0
 const FEU_ECLAT_MAX := 0.35   # boost RGB au pic, pour un flamboiement plus chaud qu'un simple fondu
 
+# Zoom arrière (28/08/2026, signalé par Rhend : "on ne voit pas toute la
+# scène"). La couverture stricte (cadrage qui garantit zéro trou, dérivée de
+# SOL_Y_FRAC/DECOR_SOL_FRAC comme pour la ville) cadre si serré qu'on ne voit
+# plus qu'UNE tour du fourneau central sur les trois que Christophe a peintes
+# côte à côte : contrairement aux immeubles de la ville (motif répété, un
+# crop serré ou large se ressemble), l'Usine est UNE composition large avec
+# des pièces maîtresses espacées — le crop serré en isole une seule.
+# On réduit donc l'image, pivotée sur la ligne de sol (même recette que
+# `REDUCTION_PLANS` de CombatDecorCity, poussée plus loin) pour élargir le
+# champ. Ça découvre un vide au-dessus (le pivot est près du bas du cadre) :
+# `_fond_secours` le comble d'une teinte proche du noir dominant de la scène
+# (usine de nuit, silhouettes sombres) — invisible en pratique.
+const REDUCTION := 0.55
+const FOND_SECOURS := Color(0.035, 0.02, 0.018)
+
 # Plans du PLUS LOINTAIN au plus proche (ordre d'empilement). `sens` : +1 =
 # droite→gauche (comme la ville), -1 = gauche→droite ; ignoré si vitesse = 0.
 # `feu` : calque de flamme, flicker géré à part (voir `_feux`).
@@ -95,6 +110,16 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	return decor
 
 func _batir(larg: float, haut: float, centre_x: float) -> void:
+	# Fond de secours : le zoom arrière (REDUCTION) laisse un vide au-dessus
+	# de l'image réduite (pivot près du bas) — un rectangle plein comble ce
+	# vide plutôt que de laisser transparaître le gris du nœud hôte.
+	var secours := ColorRect.new()
+	secours.color = FOND_SECOURS
+	secours.position = Vector2.ZERO
+	secours.size = Vector2(larg, haut)
+	secours.material = _mask_material
+	add_child(secours)
+
 	# Un seul cadre de couverture : chaque .png EST le canevas complet de la
 	# scène, donc tous les plans partagent le même cadrage (pas de "reduit").
 	var cadre := Rect2()
@@ -145,7 +170,12 @@ static func _cadre_couverture(taille_texture: Vector2, larg: float, haut: float,
 		return Rect2(Vector2.ZERO, Vector2(larg, haut))
 	var couvre := maxf(larg / taille_texture.x, haut / taille_texture.y)
 	var taille := taille_texture * couvre
-	return Rect2(Vector2(centre_x - taille.x * 0.5, (haut - taille.y) * 0.5), taille)
+	var origine := Vector2(centre_x - taille.x * 0.5, (haut - taille.y) * 0.5)
+	# Zoom arrière pivoté sur la ligne de sol : ce point-là doit rester à sa
+	# place (c'est lui qui cale `haut`/`offset_top` à la construction), tout
+	# le reste se réduit autour.
+	var pivot := Vector2(centre_x, SOL_HAUT_FRAC * haut)
+	return Rect2(pivot + (origine - pivot) * REDUCTION, taille * REDUCTION)
 
 static func _teinte_profondeur(profondeur: float) -> Color:
 	return Color.WHITE.lerp(HAZE_COLOR, HAZE_MAX * (1.0 - clampf(profondeur, 0.0, 1.0)))
