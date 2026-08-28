@@ -19,9 +19,9 @@ extends ColorRect
 
 const SHADER_PATH := "res://scenes/combat_ctb/combat_coupure_holo.gdshader"
 
-# Demi-largeur du vide, en fraction de la largeur d'écran (~0,9 % par côté,
-# ~1,8 % au total — point de départ à ajuster à l'œil en jeu, cf. spec).
-const GAP_FRAC := 0.009
+# Demi-largeur du vide, en fraction de la largeur d'écran (~0,45 % par côté,
+# ~0,9 % au total — réduite de moitié le 28/08/2026, signalé par Rhend).
+const GAP_FRAC := 0.0045
 
 static func construire(parent: Control, bande_vs_px: float,
 		vue: Vector2 = Vector2(1280, 720)) -> CombatCoupureHolo:
