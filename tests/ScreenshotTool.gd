@@ -40,6 +40,7 @@ func _ready() -> void:
 		"holo_pins": await _shoot_holo_pins()
 		"showroom":  await _shoot_showroom()
 		"factory":   await _shoot_factory()
+		"factory_full": await _shoot_factory_full()
 		"neons":     await _shoot_neons()
 		"expe":      await _shoot_expe()
 		"flux":      await _shoot_flux()
@@ -768,6 +769,11 @@ func _shoot_showroom() -> void:
 	salle._rafraichir_hud()
 	await get_tree().create_timer(0.6).timeout
 	await _capture("res://tests/_shot_showroom_combat_leg.png")
+	# Mode USINE (diagnostic 28/08/2026) : décor seul, plein écran, sans masque.
+	salle._mode = ShowRoom.Mode.USINE
+	salle._appliquer_mode()
+	await get_tree().create_timer(0.6).timeout
+	await _capture("res://tests/_shot_showroom_usine.png")
 
 # ── Capture du décor d'Usine (CombatDecorFactory, côté adverse) ────
 # Décor SEUL (pas de personnages), avancé à la main via `_process(dt)` (comme
@@ -778,8 +784,12 @@ func _shoot_factory() -> void:
 	var hote := Control.new()
 	hote.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_vp.add_child(hote)
+	# SHOT_SOL_X (optionnel) : ancrage horizontal de test, sans toucher au
+	# code réel — CombatCtbUi.SOL_X_ADVERSE par défaut.
+	var sol_x_env := OS.get_environment("SHOT_SOL_X")
+	var sol_x := CombatCtbUi.SOL_X_ADVERSE if sol_x_env == "" else float(sol_x_env)
 	var decor := CombatDecorFactory.construire(hote,
-			CombatCtbUi.SOL_Y_FRAC, CombatCtbUi.SOL_X_ADVERSE, CombatCtbUi.BANDE_VS_PX)
+			CombatCtbUi.SOL_Y_FRAC, sol_x, CombatCtbUi.BANDE_VS_PX)
 	await get_tree().process_frame
 	for i in 4:
 		decor._process(1.0)   # +1s par capture : défilement et flicker visibles
@@ -790,6 +800,32 @@ func _shoot_factory() -> void:
 	crop.resize(1200, 900, Image.INTERPOLATE_NEAREST)
 	crop.save_png("res://tests/_shot_factory_fourneau_zoom.png")
 	print("Screenshot -> res://tests/_shot_factory_fourneau_zoom.png")
+
+# ── Décor d'Usine SEUL, PLEIN ÉCRAN, SANS MASQUE ni ville ni séparateur ────
+# Diagnostic demandé par Rhend (28/08/2026) : voir le travail COMPLET de
+# Christophe tel quel, pour juger si les plans (Fourneau, Armature, Chaîne_
+# Robotique, Soudeurs, Barrière, Sol) s'accordent entre eux à l'échelle réelle
+# — le split/masque adverse est un problème SÉPARÉ, à ne pas mélanger avec
+# "est-ce que le calque du dessus est correctement composé avec les autres".
+# Centré à l'écran (0.5, pas l'ancrage adverse 0.75) : un aperçu plein cadre
+# symétrique, pas la fenêtre de combat.
+func _shoot_factory_full() -> void:
+	var hote := Control.new()
+	hote.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_vp.add_child(hote)
+	var decor := CombatDecorFactory.construire(hote,
+			CombatCtbUi.SOL_Y_FRAC, 0.5, CombatCtbUi.BANDE_VS_PX)
+	_retirer_masques(decor)
+	await get_tree().process_frame
+	decor._process(0.0)
+	await RenderingServer.frame_post_draw
+	await _capture("res://tests/_shot_factory_full.png")
+
+func _retirer_masques(racine: Node) -> void:
+	if racine is CanvasItem:
+		(racine as CanvasItem).material = null
+	for enfant in racine.get_children():
+		_retirer_masques(enfant)
 
 # ── Capture des enseignes néon vivantes ────────────────────
 # Le décor de ville SEUL (ni combattants ni HUD), à trois instants, en plein

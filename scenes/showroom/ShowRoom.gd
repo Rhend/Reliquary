@@ -5,17 +5,20 @@
 # aucun EventBus, aucune dépendance au flux de partie. Se lance seule
 # (F6 dans l'éditeur, ou `godot --path . res://scenes/showroom/ShowRoom.tscn`).
 #
-# Deux modes :
+# Trois modes (Tab/C font défiler) :
 #   • LIBRE   — fond neutre + repère de sol, tous les monstres visibles :
 #               une RANGÉE par monstre, ses paliers de gauche à droite
 #               (Commun → Légendaire). Caméra pan/zoom libre.
 #   • COMBAT  — cadrage RÉEL d'une bataille : le monstre courant à
 #               l'emplacement adverse, Relic à l'emplacement joueur, même
-#               fond scindé (`CombatFondScinde` — décor Christophe côté
-#               joueur, biome placeholder côté adverse), même sol / mêmes
-#               ancrages / même hauteur cible que CombatCtbUi — présentation
-#               PARTAGÉE (pas un décor à part). Sert à juger la lisibilité
-#               en situation.
+#               fond scindé (`CombatFondScinde` — décor Christophe des DEUX
+#               côtés depuis le 28/08/2026), même sol / mêmes ancrages / même
+#               hauteur cible que CombatCtbUi — présentation PARTAGÉE (pas un
+#               décor à part). Sert à juger la lisibilité en situation.
+#   • USINE   — diagnostic (28/08/2026, demande Rhend) : le décor de l'Usine
+#               SEUL, plein écran, sans masque adverse ni ville — pour juger
+#               le travail de Christophe tel quel, sans le mélanger avec le
+#               découpage du split de combat (un problème séparé).
 #
 # Le contenu vient du registre data/personnages/spine_personnages.tres :
 # un monstre livré = une entrée, il apparaît ici sans toucher ce fichier.
@@ -73,7 +76,7 @@ const NIVEAUX_LUMIERE: Array[Dictionary] = [
 # Commun, qui sont gris foncé — on n'y voyait rien.
 const LUMIERE_DEFAUT := 1
 
-enum Mode { LIBRE, COMBAT }
+enum Mode { LIBRE, COMBAT, USINE }
 
 # Scène à recharger en sortant. Posée par l'appelant AVANT le changement de
 # scène (cf. Village._ouvrir_showroom) ; vide quand la vitrine est lancée
@@ -100,6 +103,7 @@ var _duel_tween: Tween = null   # zoom-duel en cours ([A]/[T] en mode combat)
 var _cam: Camera2D
 var _fond_neutre: ColorRect
 var _decor: Control            # fond scindé (mode combat) : biomes + diagonale + sol
+var _decor_usine: Control      # mode USINE : décor d'Usine SEUL, plein écran, sans masque
 var _voile: ColorRect         # brume claire PAR-DESSUS le décor (mode combat)
 var _hud: Label
 var _titre: Label
@@ -143,6 +147,17 @@ func _construire() -> void:
 	_decor.visible = false
 	fond_layer.add_child(_decor)
 	_construire_fond_combat()
+
+	# Mode USINE (diagnostic, 28/08/2026, demande Rhend) : le décor de l'Usine
+	# SEUL, plein écran, SANS le masque adverse ni la ville — pour juger le
+	# travail de Christophe tel quel, sans mélanger ça avec le problème
+	# (séparé) de la fenêtre coupée en deux par le split de combat.
+	_decor_usine = Control.new()
+	_decor_usine.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_decor_usine.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_decor_usine.visible = false
+	fond_layer.add_child(_decor_usine)
+	_retirer_masques(CombatDecorFactory.construire(_decor_usine, SOL_Y_FRAC, 0.5, BANDE_VS_PX))
 
 	# Voile : posé APRÈS le décor donc au-dessus. Lever les noirs par-dessus
 	# est fiable partout, là où un modulate > 1 dépend du rendu (GL Compatibility).
@@ -239,6 +254,14 @@ func _construire() -> void:
 # part — et les deux ne peuvent plus diverger puisqu'ils appellent le même code.
 func _construire_fond_combat() -> void:
 	CombatFondScinde.construire(_decor, SOL_Y_FRAC, SOL_X_JOUEUR, CombatCtbUi.BANDE_VS_PX)
+
+# Retire tout `material` (le masque d'écrêtage adverse) d'un sous-arbre : sert
+# au mode USINE, qui veut voir le décor COMPLET, jamais coupé à la diagonale.
+func _retirer_masques(racine: Node) -> void:
+	if racine is CanvasItem:
+		(racine as CanvasItem).material = null
+	for enfant in racine.get_children():
+		_retirer_masques(enfant)
 
 # ─── Mode LIBRE : une rangée par monstre ─────────────────────
 
@@ -531,12 +554,15 @@ func _jouer_partout(anim: int) -> void:
 
 func _appliquer_mode() -> void:
 	var combat: bool = _mode == Mode.COMBAT
-	_monde.visible = not combat
-	_repere.visible = not combat
+	var usine: bool = _mode == Mode.USINE
+	var libre: bool = _mode == Mode.LIBRE
+	_monde.visible = libre
+	_repere.visible = libre
 	_duel.visible = combat
 	_decor.visible = combat
-	_fond_neutre.visible = not combat
-	_voile.visible = combat
+	_decor_usine.visible = usine
+	_fond_neutre.visible = libre
+	_voile.visible = combat   # pas de voile en USINE : jugement brut, sans filtre
 	# _panneau_file (mockup file d'initiative) reste MASQUÉ (demande Rhend,
 	# 27/08/2026) : il coiffait le haut du gap et cachait le point émetteur
 	# de la coupure holographique. Code conservé, juste jamais rendu visible.
@@ -544,6 +570,9 @@ func _appliquer_mode() -> void:
 	if combat:
 		_peupler_duel()
 		# Cadrage figé, identique au jeu : caméra centrée sur la vue de réf.
+		_cam.zoom = Vector2.ONE
+		_cam.position = VUE * 0.5
+	elif usine:
 		_cam.zoom = Vector2.ONE
 		_cam.position = VUE * 0.5
 	else:
@@ -576,6 +605,9 @@ func _rafraichir_hud() -> void:
 				+ LIGNE_ANIMS + "    —    cadrage réel : sol %.2f · joueur %.2f · adverse %.2f · %d px" % [
 				SOL_Y_FRAC, SOL_X_JOUEUR, SOL_X_ADVERSE,
 				int(SpriteSpinePersonnage.HAUTEUR_CIBLE_PX)]
+	elif _mode == Mode.USINE:
+		_titre.text = "USINE SEULE — plein écran, sans masque ni ville (diagnostic)"
+		_hud.text = "[Tab] mode suivant    —    décor Christophe tel quel, écrêtage adverse retiré"
 	else:
 		_titre.text = "SHOWROOM — héros (%d niveaux) + %d monstre(s) × %d paliers" % [
 				_heros_apparences.size(), _ennemis.size(), NB_PALIERS]
@@ -643,7 +675,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _touche(code: int) -> void:
 	match code:
 		KEY_TAB, KEY_C:
-			_mode = Mode.LIBRE if _mode == Mode.COMBAT else Mode.COMBAT
+			_mode = wrapi(_mode + 1, 0, 3)
 			_appliquer_mode()
 		KEY_R:
 			if _mode == Mode.LIBRE:
