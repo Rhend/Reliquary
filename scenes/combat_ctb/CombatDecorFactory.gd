@@ -82,7 +82,6 @@ const PLANS: Array[Dictionary] = [
 	{"f": "Background_Factory_Plan_3_Fourneau_Feu_3.png",   "profondeur": 0.70, "vitesse": 0.0,  "sens": 1.0,  "feu": true},
 	{"f": "Background_Factory_Plan_2_Barriere.png",         "profondeur": 1.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false},
 	{"f": "Background_Factory_Plan_2_Sol.png",              "profondeur": 1.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false},
-	{"f": "Background_Factory_Plan_1_Barriere.png",         "profondeur": 1.15, "vitesse": 0.0,  "sens": 1.0,  "feu": false},
 ]
 
 var _noeud_zoom: Control = null
