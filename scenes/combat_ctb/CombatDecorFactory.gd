@@ -11,13 +11,25 @@
 #  • Un seul cadre de couverture (`_cadre`), calculé UNE fois : chaque .png
 #    livré est le canevas COMPLET de la scène (pas une découpe d'immeuble à
 #    part), donc tous les plans se superposent avec exactement le même
-#    cadrage — pas de `REDUCTION_PLANS`/pivot à gérer. MÊME formule de calage
-#    du sol que la ville (`DECOR_SOL_FRAC`, milieu de bande, sans réduction) :
-#    c'est la ville qui fait AUTORITÉ sur la hauteur du sol (28/08/2026,
-#    signalé par Rhend) — dévier de cette recette (testé : dézoomer pour
-#    élargir le champ) décale le sol par rapport à elle, même en pivotant
-#    pile sur le point d'ancrage. Le crop est donc serré (une seule des trois
-#    tours du fourneau visible à la fois) — c'est le prix de l'alignement.
+#    cadrage — pas de `REDUCTION_PLANS`/pivot à gérer.
+#  • HAUTEUR NATURELLE, pas la couverture "sans trou" de CombatDecorCity
+#    (28/08/2026, signalé par Rhend : plein écran ET sans masque, on ne
+#    voyait toujours pas tout le travail de Christophe). La formule de la
+#    ville (h = de quoi couvrir l'écran ENTIER, pieds compris, sans jamais
+#    montrer de trou) suppose implicitement que la bande de sol de l'image
+#    tombe À PEU PRÈS à `sol_y_frac` — ce n'est pas le cas ici (bande mesurée
+#    à 85,7 % de la hauteur du canevas contre 80,6 % voulu), et cet écart de
+#    5 points oblige à grossir TOUTE l'image d'environ 35 % pour que le
+#    peu de canevas sous le sol (14,3 %) couvre quand même les 19,4 %
+#    d'écran requis sous les pieds — ce grossissement, uniforme, emporte
+#    aussi la largeur avec lui : c'est LUI qui rognait les tours latérales,
+#    pas le split. Ici `h` = la hauteur ÉCRAN telle quelle (720, aucun
+#    gonflage) : l'image couvre presque toute la largeur (~99 %), et le
+#    sol tombe pile où il faut (pivot exact, comme avant). Le prix : un
+#    petit vide en bas (voir GAP_BAS_SECOURS) là où la fine bande sous le
+#    sol de Christophe n'est plus assez étirée pour atteindre le bord de
+#    l'écran — comblé par un aplat de la couleur EXACTE du bas de
+#    Plan_2_Sol.png (mesurée : (38,11,12), plate, donc invisible en pratique).
 #  • ÉCRÊTAGE à la moitié adverse : ce décor est ajouté PAR-DESSUS le décor
 #    héros (CombatDecorCity, dessiné en dessous par CombatFondScinde), donc
 #    chaque sprite porte `raster_split_mask.gdshader` (alpha nul côté héros)
@@ -58,6 +70,11 @@ const HAZE_MAX := 0.30
 const FEU_ALPHA_MIN := 0.55
 const FEU_ALPHA_MAX := 1.0
 const FEU_ECLAT_MAX := 0.35   # boost RGB au pic, pour un flamboiement plus chaud qu'un simple fondu
+
+# Couleur EXACTE du bas de Background_Factory_Plan_2_Sol.png (mesurée, plate
+# sur toute la bande basse) — comble le petit vide que laisse la hauteur
+# naturelle (voir commentaire de tête). Plate → indiscernable du vrai sol.
+const SOL_SECOURS_COLOR := Color8(38, 11, 12)
 
 # Chariots de la Chaîne_Soudure : espacement MESURÉ (7 chariots sur le
 # canevas, ~670 px d'écart en moyenne, le premier centré vers x=315) — sert à
@@ -127,17 +144,35 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	decor._mask_material = ShaderMaterial.new()
 	decor._mask_material.shader = load(MASK_SHADER)
 	decor._mask_material.set_shader_parameter("split_tilt", bande_vs_px / maxf(vue.x, 1.0))
-	# Même formule que CombatDecorCity, avec DECOR_SOL_FRAC (milieu de bande) :
-	# c'est CE calcul, identique des deux côtés, qui garantit que le sol tombe
-	# à la même hauteur écran que la ville.
-	var h := maxf(vue.y * sol_y_frac / DECOR_SOL_FRAC,
-			vue.y * (1.0 - sol_y_frac) / (1.0 - DECOR_SOL_FRAC))
+	# Hauteur NATURELLE (720, pas gonflée) : voir le commentaire de tête pour
+	# pourquoi la formule "couverture sans trou" de la ville ne convient pas
+	# ici. Le pivot du sol (DECOR_SOL_FRAC) reste inchangé — c'est lui qui
+	# garantit l'alignement avec la ville, indépendamment de `h`.
+	var h := vue.y
 	var haut := vue.y * sol_y_frac - DECOR_SOL_FRAC * h
 	decor.offset_top = haut
 	decor.offset_bottom = haut + h - vue.y
 	decor._batir(vue.x, h, vue.x * sol_x_frac)
+	# Vide résiduel (voir commentaire de tête) : un aplat par bord concerné,
+	# en LOCAL (0 = haut du cadre bâti par `_batir`, h = son bas).
+	if haut > 0.0:
+		decor._patch_secours(Rect2(0.0, -haut, vue.x, haut))
+	var bas := vue.y - haut - h
+	if bas > 0.0:
+		decor._patch_secours(Rect2(0.0, h, vue.x, bas))
 	parent.add_child(decor)
 	return decor
+
+# Aplat de secours masqué (même écrêtage adverse que le reste) : comble un
+# vide de couverture sans jamais recouvrir le contenu réel (ajouté APRÈS
+# `_batir`, donc par-dessus rien d'autre — il n'y a rien d'autre là où il est).
+func _patch_secours(rect: Rect2) -> void:
+	var r := ColorRect.new()
+	r.color = SOL_SECOURS_COLOR
+	r.position = rect.position
+	r.size = rect.size
+	r.material = _mask_material
+	add_child(r)
 
 func _batir(larg: float, haut: float, centre_x: float) -> void:
 	# Un seul cadre de couverture : chaque .png EST le canevas complet de la
