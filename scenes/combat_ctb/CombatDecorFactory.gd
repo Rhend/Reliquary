@@ -107,28 +107,40 @@ const CHARIOT_PERIODE_TEX := 461.33
 const CHARIOT_PHASE_TEX := 218.5
 
 # ─── GÉOMÉTRIE DU BRAS SOUDEUR (Soudeur_2, 29/08/2026) ──────
-# ⚠ SUPERSÉDÉ trois fois le jour même :
+# ⚠ SUPERSÉDÉ QUATRE fois le jour même — la dernière fois sur un point de
+# PRINCIPE qui a piégé les découpes précédentes :
 #   1er essai : rotation de TOUT le calque `Soudeur_2_Bras` — bougeait aussi
 #     l'épaule, qui doit rester fixe.
-#   2e essai : découpe en DEUX (coude fixe, avant-bras+poignet+embout mobile
-#     EN BLOC) — mais Rhend prend le pivot AU MAUVAIS rond (le poignet au lieu
-#     du coude) au 2e essai, corrigé ensuite.
-#   3e essai (celui-ci) : Rhend demande un geste PLUS PROFOND ET plus robotique
-#     — « le coude qui descend + le poignet qui va chercher le chariot » —, ce
-#     qui exige un DEUXIÈME pivot indépendant. `Soudeur_2_Bras.png` est donc
-#     DÉCOUPÉ EN TROIS calques dérivés (script Python one-shot, composantes
-#     connexes après sectionnement local des DEUX jonctions) :
-#       `..._AvantBras_Fixe.png`   — socle→coude, STATIQUE (`bras: false`).
-#       `..._AvantBras_Mobile.png` — rond du COUDE + segment jusqu'au poignet,
-#                                    pivote autour de PIVOT_COUDE (`bras: true`).
-#       `..._Main_Mobile.png`      — rond du POIGNET + embout, posé en ENFANT
-#                                    du sprite avant-bras (voir `_batir`) :
-#                                    hérite AUTOMATIQUEMENT de la rotation du
-#                                    coude et ajoute la sienne par-dessus —
-#                                    exactement la composition d'un vrai bras
-#                                    à deux articulations. PAS un PLANS
-#                                    générique : construit à la main juste
-#                                    après l'avant-bras.
+#   2e essai : découpe en DEUX, mais pivot pris sur le MAUVAIS rond (le
+#     poignet au lieu du coude).
+#   3e essai : bon rond, mais le rond du COUDE lui-même était inclus dans la
+#     pièce qui pivote — hors le coude EST le pivot, il ne doit PAS bouger, il
+#     ne fait que « donner le point de départ » du mouvement de ce qui vient
+#     après lui (retour Rhend). Un rond de jointure appartient TOUJOURS à la
+#     pièce PARENTE (celle qui ne tourne pas AUTOUR de lui), jamais à la pièce
+#     enfant qui pivote sur son centre — sans ça, toute imprécision de mesure
+#     du centre se voit comme une coupure avec le reste de la structure.
+# 4e essai (celui-ci) applique cette règle aux DEUX jointures : `Soudeur_2_
+# Bras.png` est DÉCOUPÉ EN TROIS calques dérivés (script Python one-shot,
+# composantes connexes après sectionnement local des DEUX jonctions,
+# positionné juste APRÈS chaque rond — côté du segment qui s'éloigne du corps
+# — pour que le rond entier reste du côté qui ne tourne pas autour de lui) :
+#   `..._AvantBras_Fixe.png`   — socle→coude, ROND DU COUDE INCLUS, STATIQUE
+#                                (`bras: false`) : le coude ne bouge jamais.
+#   `..._AvantBras_Mobile.png` — segment coude→poignet, ROND DU POIGNET
+#                                INCLUS, pivote autour de PIVOT_COUDE
+#                                (`bras: true`) : le poignet est fixe PAR
+#                                RAPPORT à l'avant-bras, mais l'ensemble
+#                                (avant-bras + son rond de poignet) pivote en
+#                                bloc autour du coude.
+#   `..._Main_Mobile.png`      — embout SEUL (sans rond), posé en ENFANT du
+#                                sprite avant-bras (voir `_batir`) : hérite
+#                                AUTOMATIQUEMENT de la rotation du coude et
+#                                ajoute la sienne par-dessus, pivotant autour
+#                                du rond de poignet porté par son parent —
+#                                exactement la composition d'un vrai bras à
+#                                deux articulations. PAS un PLANS générique :
+#                                construit à la main juste après l'avant-bras.
 # Aucune demande à Christophe nécessaire tant que la découpe suffit ; si un
 # jour il livre le bras déjà séparé en couches, ces trois fichiers dérivés
 # peuvent être remplacés à l'identique (mêmes noms, même canevas).
