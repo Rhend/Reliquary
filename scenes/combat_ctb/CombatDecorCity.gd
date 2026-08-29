@@ -110,9 +110,11 @@ const PLANS: Array[Dictionary] = [
 	{"f": "Background_City_Plan_5_Immeuble_02.png",      "profondeur": 0.25, "vitesse": 3.6,  "reduit": true},
 	{"f": "Background_City_Plan_4_Immeuble_01.png",      "profondeur": 0.45, "vitesse": 5.6,  "reduit": true},
 	{"f": "Background_City_Plan_4_Immeuble_01_Neon.png", "profondeur": 0.45, "vitesse": 5.6,  "reduit": true},
+	{"f": "Background_City_Plan_4_Immeuble_01_Neon_2.png","profondeur": 0.45, "vitesse": 5.6,  "reduit": true},
 	{"f": "Background_City_Plan_4_Immeuble_02.png",      "profondeur": 0.45, "vitesse": 8.4,  "reduit": true},
 	{"f": "Background_City_Plan_3_Immeuble_01.png",      "profondeur": 0.70, "vitesse": 14.0, "reduit": true},
 	{"f": "Background_City_Plan_3_Immeuble_01_Neon.png", "profondeur": 0.70, "vitesse": 14.0, "reduit": true},
+	{"f": "Background_City_Plan_3_Immeuble_01_Neon_2.png","profondeur": 0.70, "vitesse": 14.0, "reduit": true},
 	{"f": "Background_City_Plan_2_Sol.png",              "profondeur": 1.00, "vitesse": 0.0,  "reduit": false},
 ]
 

@@ -1,11 +1,15 @@
 # ============================================================
 # NeonsCiteData — TRACÉS des enseignes néon du décor de ville, bakés au pixel.
 #
-# POURQUOI. Christophe livre chaque plan d'immeubles en DEUX images de même
-# cadrage : la façade nue (`…_Immeuble_01.png`) et la même façade AVEC ses
-# enseignes (`…_Immeuble_01_Neon.png`). Vérifié le 27/08/2026 : les deux sont
-# alignées au pixel près et ne diffèrent que sur ~1,3 % du cadre. La
-# DIFFÉRENCE isole donc les enseignes seules, sans rien demander à l'artiste.
+# POURQUOI. Christophe livre chaque enseigne déjà DÉCOUPÉE : un calque
+# `…_Immeuble_01_Neon(.png|_2.png)`, de même cadrage que la façade, transparent
+# partout sauf sur l'enseigne elle-même (alpha plein sur le tube, halo diffus
+# autour). Un seuil sur le canal ALPHA isole donc les enseignes seules, sans
+# rien demander de plus à l'artiste. ⚠ SUPERSÉDÉ 29/08/2026 : la première
+# livraison (24/08/2026) fournissait une façade AVEC enseignes à diffuser
+# contre la façade nue — Christophe fournit désormais le calque déjà isolé,
+# et un même immeuble peut porter PLUSIEURS calques (`_Neon`, `_Neon_2`, …)
+# pour des enseignes livrées en plusieurs passes.
 #
 # Chaque enseigne isolée est une composante connexe, et — c'est le coup de
 # chance qui rend l'effet abordable — son CONTOUR EXTÉRIEUR est déjà le tracé
@@ -46,7 +50,9 @@ const CHEMIN := "res://data/decor/neons_cite.tres"
 #   "res://…/…_Neon.png": {
 #       "source":    Vector2(4770, 2655),   # cadrage au moment du bake
 #       "empreinte": "d41d8c…",             # MD5 du .png source (dev)
-#       "traces":    [ {…}, {…} ],
+#       "traces":    [ {…}, {…} ],          # peut être VIDE — calque analysé
+#                                            # mais rien d'assez grand pour un
+#                                            # tracé (≠ jamais analysé)
 #   }
 # Un tracé :
 #   "points":   PackedVector2Array — contour FERMÉ (le premier point est

@@ -3,11 +3,13 @@
 #
 #   godot --headless --path . --script res://tools/bake_neons_cite.gd
 #
-# Pour chaque plan d'immeubles livré en DEUX images (façade nue / façade avec
-# enseignes) :
-#   1. DIFFÉRENCE des deux images → masque des seuls pixels ajoutés ;
+# Pour chaque calque néon livré par Christophe (DÉCOUPAGE déjà isolé, 29/08/2026
+# — le calque est transparent partout sauf sur les enseignes elles-mêmes ; PLUS
+# de façade nue à diffuser, l'ancienne méthode par différence est morte avec la
+# livraison du 24/08/2026) :
+#   1. seuil sur le CANAL ALPHA du calque → masque des pixels d'enseigne ;
 #   2. composantes connexes → une par enseigne ;
-#   3. filtrage du bruit (miettes, artefacts de raccord noirs sur les bords) ;
+#   3. filtrage du bruit (miettes, franges d'antialiasing) ;
 #   4. suivi de CONTOUR extérieur (Moore-neighbor) → le tracé du néon ;
 #   5. simplification Douglas-Peucker → une vingtaine de sommets au lieu de mille ;
 #   6. couleur vive de l'enseigne, pondérée par la luminance.
@@ -31,12 +33,12 @@ extends SceneTree
 
 const DIR := "res://assets/background/city/"
 
-# Les plans livrés en paire. Ajouter un plan = ajouter une ligne.
-const PAIRES := [
-	{"base": "Background_City_Plan_4_Immeuble_01.png",
-	 "neon": "Background_City_Plan_4_Immeuble_01_Neon.png"},
-	{"base": "Background_City_Plan_3_Immeuble_01.png",
-	 "neon": "Background_City_Plan_3_Immeuble_01_Neon.png"},
+# Les calques néon (découpages déjà isolés). Ajouter un calque = ajouter une ligne.
+const NEONS := [
+	"Background_City_Plan_4_Immeuble_01_Neon.png",
+	"Background_City_Plan_4_Immeuble_01_Neon_2.png",
+	"Background_City_Plan_3_Immeuble_01_Neon.png",
+	"Background_City_Plan_3_Immeuble_01_Neon_2.png",
 ]
 
 # Sous-échantillonnage de la passe de localisation. 4 est sûr : la plus petite
@@ -55,20 +57,22 @@ const MIN_CELLULES_GROS := 3
 # plutôt que de lancer un flood fill sur douze millions de pixels.
 const AIRE_BOITE_MAX := 0.08
 
-# Distance RGBA (somme des écarts par canal, en fraction de 255) au-delà de
-# laquelle un pixel est considéré comme AJOUTÉ par le calque néon. 0,10 laisse
-# passer l'antialiasing des façades, qui diffère très légèrement d'un export à
-# l'autre, sans rien perdre des enseignes (mesuré : elles tranchent très net).
-const SEUIL_DIFF := 0.10
+# Seuil sur le canal ALPHA (fraction de 255) au-delà duquel un pixel du calque
+# est considéré comme faisant partie d'une enseigne. 0,10 laisse passer le halo
+# diffus peint autour du tube sans rien perdre des enseignes (mesuré : le cœur
+# tranche net, à 255).
+const SEUIL_HALO := 0.10
 
 # DEUX seuils, parce qu'on pose deux questions différentes (27/08/2026).
-# Christophe peint un HALO diffus autour de chaque enseigne. Ce halo fait bien
-# partie de la différence — et c'est tant mieux pour LOCALISER l'enseigne — mais
-# si on suit le contour de tout ça, on épouse le bord du halo et le point court
-# à côté du tube, dans le vide. Le contour se trace donc sur un masque SERRÉ qui
-# ne garde que le cœur lumineux ; le halo, de faible amplitude, en tombe.
-# Repli : si le seuil serré ne laisse rien d'exploitable dans une boîte (une
-# enseigne peu contrastée), on retombe sur le seuil large pour cette boîte.
+# Christophe peint un HALO diffus autour de chaque enseigne (alpha faible mais
+# non nul). Ce halo fait bien partie du calque — et c'est tant mieux pour
+# LOCALISER l'enseigne — mais si on suit le contour de tout ça, on épouse le
+# bord du halo et le point court à côté du tube, dans le vide. Le contour se
+# trace donc sur un masque SERRÉ qui ne garde que le cœur opaque ; le halo, de
+# faible alpha, en tombe. Repli : si le seuil serré ne laisse rien d'exploitable
+# dans une boîte (une enseigne peu contrastée, tout en halo — cas mesuré sur
+# Plan_3_Immeuble_01_Neon_2, aucun pixel à alpha plein), on retombe sur le
+# seuil large pour cette boîte.
 const SEUIL_COEUR := 0.25
 
 # Rejets. Mesurés sur la livraison du 24/08/2026 : les vraies enseignes font
@@ -76,9 +80,9 @@ const SEUIL_COEUR := 0.25
 # (des traits de 38x10, invisibles une fois le décor à l'échelle).
 const MIN_PIXELS := 600
 const MIN_COTE := 24
-# Une composante quasi noire n'est pas une enseigne : ce sont les colonnes de
-# raccord du plan 3, dont l'écart gauche/droite de 0,0003 tombe au-dessus du
-# seuil de différence. Un néon, par définition, est lumineux.
+# Une composante quasi noire n'est pas une enseigne : une frange
+# d'antialiasing sombre peut passer le seuil alpha sans être un tube allumé.
+# Un néon, par définition, est lumineux.
 const LUM_MIN := 0.12
 
 # Tolérance de la simplification, en pixels source. 2,5 px ≈ 0,8 px à l'écran
@@ -115,9 +119,9 @@ func _init() -> void:
 	print("═══ Bake des tracés de néons ═══")
 	var data := NeonsCiteData.new()
 	var total := 0
-	for paire in PAIRES:
-		var chemin_neon: String = DIR + str(paire["neon"])
-		var entree := _analyser(DIR + str(paire["base"]), chemin_neon)
+	for nom in NEONS:
+		var chemin_neon: String = DIR + str(nom)
+		var entree := _analyser(chemin_neon)
 		if entree.is_empty():
 			continue
 		data.enseignes[chemin_neon] = entree
@@ -130,32 +134,26 @@ func _init() -> void:
 	_ecrire(data, total)
 	quit(0)
 
-# ─── Analyse d'une paire ────────────────────────────────────
+# ─── Analyse d'un calque ─────────────────────────────────────
 
-func _analyser(chemin_base: String, chemin_neon: String) -> Dictionary:
+func _analyser(chemin_neon: String) -> Dictionary:
 	print("\n> ", chemin_neon.get_file())
-	var base := _image(chemin_base)
 	var neon := _image(chemin_neon)
-	if base == null or neon == null:
-		push_error("  chargement impossible — plan ignoré.")
-		return {}
-	if base.get_size() != neon.get_size():
-		push_error("  cadrages différents (%s vs %s) — la différence n'a pas de sens."
-				% [base.get_size(), neon.get_size()])
+	if neon == null:
+		push_error("  chargement impossible — calque ignoré.")
 		return {}
 
-	var W := base.get_width()
-	var H := base.get_height()
-	var db := base.get_data()
+	var W := neon.get_width()
+	var H := neon.get_height()
 	var dn := neon.get_data()
-	var boites := _localiser(db, dn, W, H)
+	var boites := _localiser(dn, W, H)
 	print("  %d zone(s) candidate(s) localisée(s) au 1/%d" % [boites.size(), PAS_GROS])
 
 	var traces: Array = []
 	var rejets := {"petit": 0, "sombre": 0, "contour": 0}
 	var t1 := Time.get_ticks_msec()
 	for boite: Rect2i in boites:
-		for t in _extraire(db, dn, W, boite, rejets):
+		for t in _extraire(dn, W, boite, rejets):
 			traces.append(t)
 	print("  extraction des contours : %d ms" % (Time.get_ticks_msec() - t1))
 
@@ -169,8 +167,11 @@ func _analyser(chemin_base: String, chemin_neon: String) -> Dictionary:
 				   (t["couleur"] as Color).to_html(false)])
 		t.erase("nom")   # confort de log seulement, hors de la donnée versionnée
 
-	if traces.is_empty():
-		return {}
+	# Un calque analysé mais sans tracé exploitable (tout sous le plancher de
+	# taille — mesuré sur Plan_3_Immeuble_01_Neon_2, du texte en traits trop
+	# fins pour le plancher calibré sur les enseignes-tubes) reste ENREGISTRÉ,
+	# avec `traces` vide : c'est ce qui distingue « rien à en tirer » d'« oublié
+	# de re-baker » pour le contrôle d'obsolescence et pour le test de présence.
 	return {
 		"source": Vector2(W, H),
 		"empreinte": NeonsCiteData.empreinte_fichier(chemin_neon),
@@ -190,36 +191,33 @@ func _image(chemin: String) -> Image:
 	img.convert(Image.FORMAT_RGBA8)
 	return img
 
-# Vrai si le calque néon a ajouté quelque chose à ce pixel, au seuil demandé.
-static func _ajoute(db: PackedByteArray, dn: PackedByteArray, i: int, seuil: int) -> bool:
-	var d := absi(dn[i] - db[i]) + absi(dn[i + 1] - db[i + 1]) \
-			+ absi(dn[i + 2] - db[i + 2]) + absi(dn[i + 3] - db[i + 3])
-	return d > seuil
+# Vrai si le pixel du calque néon fait partie d'une enseigne, au seuil demandé
+# (fraction d'alpha, 0-255).
+static func _opaque(dn: PackedByteArray, i: int, seuil: int) -> bool:
+	return dn[i + 3] > seuil
 
 static func _seuil_brut(fraction: float) -> int:
-	return int(fraction * 255.0 * 3.0)
+	return int(fraction * 255.0)
 
 # ─── Passe 1 : où sont les enseignes ? ──────────────────────
 
 # Rend des boîtes en coordonnées PLEINES, déjà marginées et clampées.
-func _localiser(db: PackedByteArray, dn: PackedByteArray, W: int, H: int) -> Array:
+func _localiser(dn: PackedByteArray, W: int, H: int) -> Array:
 	var wg := W / PAS_GROS
 	var hg := H / PAS_GROS
 	var masque := PackedByteArray()
 	masque.resize(wg * hg)
-	# Comparaison inlinée plutôt qu'un appel à _ajoute : c'est la boucle la plus
+	# Lecture inlinée plutôt qu'un appel à _opaque : c'est la boucle la plus
 	# chaude du bake (790 k tours), et un appel de fonction GDScript y pèse plus
 	# que le calcul lui-même.
-	var seuil := int(SEUIL_DIFF * 255.0 * 3.0)
+	var seuil := _seuil_brut(SEUIL_HALO)
 	var t0 := Time.get_ticks_msec()
 	for y in hg:
 		var oy := y * PAS_GROS * W * 4
 		var ligne := y * wg
 		for x in wg:
 			var i := oy + x * PAS_GROS * 4
-			var d := absi(dn[i] - db[i]) + absi(dn[i + 1] - db[i + 1]) \
-					+ absi(dn[i + 2] - db[i + 2]) + absi(dn[i + 3] - db[i + 3])
-			if d > seuil:
+			if dn[i + 3] > seuil:
 				masque[ligne + x] = 1
 	print("  masque de localisation : %d ms" % (Time.get_ticks_msec() - t0))
 
@@ -247,7 +245,7 @@ func _localiser(db: PackedByteArray, dn: PackedByteArray, W: int, H: int) -> Arr
 
 # ─── Passe 2 : contour fin dans une boîte ───────────────────
 
-func _extraire(db: PackedByteArray, dn: PackedByteArray, W: int,
+func _extraire(dn: PackedByteArray, W: int,
 		boite: Rect2i, rejets: Dictionary) -> Array:
 	var bw := boite.size.x + 1
 	var bh := boite.size.y + 1
@@ -258,14 +256,14 @@ func _extraire(db: PackedByteArray, dn: PackedByteArray, W: int,
 	# Les rejets de la passe serrée ne comptent que si elle aboutit : sinon ils
 	# seraient additionnés à ceux du repli et le bilan compterait double.
 	var essai := {"petit": 0, "sombre": 0, "contour": 0}
-	var sortie := _extraire_au_seuil(db, dn, W, boite, bw, bh, SEUIL_COEUR, essai)
+	var sortie := _extraire_au_seuil(dn, W, boite, bw, bh, SEUIL_COEUR, essai)
 	if sortie.is_empty():
-		return _extraire_au_seuil(db, dn, W, boite, bw, bh, SEUIL_DIFF, rejets)
+		return _extraire_au_seuil(dn, W, boite, bw, bh, SEUIL_HALO, rejets)
 	for cle in essai:
 		rejets[cle] += essai[cle]
 	return sortie
 
-func _extraire_au_seuil(db: PackedByteArray, dn: PackedByteArray, W: int,
+func _extraire_au_seuil(dn: PackedByteArray, W: int,
 		boite: Rect2i, bw: int, bh: int, fraction: float, rejets: Dictionary) -> Array:
 	var seuil := _seuil_brut(fraction)
 	var masque := PackedByteArray()
@@ -273,7 +271,7 @@ func _extraire_au_seuil(db: PackedByteArray, dn: PackedByteArray, W: int,
 	for y in bh:
 		var oy := (boite.position.y + y) * W * 4 + boite.position.x * 4
 		for x in bw:
-			if _ajoute(db, dn, oy + x * 4, seuil):
+			if _opaque(dn, oy + x * 4, seuil):
 				masque[y * bw + x] = 1
 
 	var sortie: Array = []

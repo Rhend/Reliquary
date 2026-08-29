@@ -106,7 +106,9 @@ func _test_integrite_traces() -> void:
 		var e := bake.enseignes[chemin] as Dictionary
 		var source := e.get("source", Vector2.ZERO) as Vector2
 		var traces := e.get("traces", []) as Array
-		_assert(not traces.is_empty(), "%s : au moins une enseigne" % chemin.get_file())
+		# Un calque analysé peut légitimement n'avoir aucun tracé (tout sous le
+		# plancher de taille, ex. Plan_3_Immeuble_01_Neon_2 : du texte en
+		# traits trop fins) — voir le test 1 pour la présence de l'entrée.
 		var ok_points := true
 		var ok_ferme := true
 		var ok_longueur := true
@@ -165,6 +167,8 @@ func _test_traces_sur_la_lumiere() -> void:
 			continue
 		img.convert(Image.FORMAT_RGBA8)
 		var traces := (bake.enseignes[chemin] as Dictionary).get("traces", []) as Array
+		if traces.is_empty():
+			continue   # calque analysé sans tracé exploitable — rien à juger
 		var touches := 0
 		var total := 0
 		for t: Dictionary in traces:
