@@ -95,7 +95,16 @@ const SOL_SECOURS_COLOR := Color8(38, 11, 12)
 # reste le bon (la poutre EST censée passer devant ce qu'il y a derrière), seul
 # le soudeur était mal placé dessous. Corps ET bras se décalent ENSEMBLE (même
 # valeur) pour rester attachés l'un à l'autre.
-const DECALAGE_SOUDEUR_1_TEX := Vector2(140.0, 0.0)
+# ⚠ CORRIGÉ 29/08/2026 : un premier essai (+140 px) évitait bien la poutre en
+# plein écran (mode USINE de la ShowRoom, centré, sans masque) mais retombait
+# quasi entièrement dans la moitié HÉROS masquée une fois posé au vrai ancrage
+# de combat (`CombatCtbUi.SOL_X_ADVERSE = 0.75`) — d'où « aucune animation, pas
+# de VFX » : le soudeur entier (corps, bras, étincelles) était rendu à alpha
+# quasi nul par `raster_split_mask.gdshader`, pas juste son geste. Le décalage
+# doit donc dégager la poutre ET rester bien à droite de la diagonale VS — on
+# saute directement dans l'intervalle SUIVANT (après la 2ᵉ poutre), vérifié par
+# capture réelle (`SHOT_MODE=factory`), pas seulement par calque isolé.
+const DECALAGE_SOUDEUR_1_TEX := Vector2(670.0, 0.0)
 
 # Chariots de la Chaîne_Soudure : espacement et phase MESURÉS directement sur
 # Background_Factory_Plan_5_Chaine_Soudure.png (canevas natif 3256 px — PAS le
@@ -113,7 +122,7 @@ const CHARIOT_PHASE_TEX := 218.5
 # Point de contact du bras = centre mesuré de Plan_5_Soudeur_1_Bras.png
 # (539.5), DECALAGE_SOUDEUR_1_TEX.x déjà ajouté puisque le bras se décale avec
 # le corps.
-const BRAS_CONTACT_X_TEX := 679.5
+const BRAS_CONTACT_X_TEX := 1209.5
 # Extrémité de l'embout de soudure, en coordonnées LOCALES du sprite du bras —
 # donc SANS le décalage (un enfant du sprite hérite déjà de sa position).
 # Sert à poser le VFX d'étincelles au bon endroit (`_declencher_etincelles`).
