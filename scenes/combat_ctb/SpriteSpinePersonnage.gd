@@ -179,7 +179,7 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 #  3. La taille DÉCLARÉE, puis la constante — derniers recours.
 func _hauteur_source(donnees: Resource, apparence: Dictionary = {},
 		chemin_skel: String = "") -> float:
-	var mesure := _mesurer_corps(donnees, apparence)
+	var mesure := _mesurer_corps(donnees, apparence).y
 	if chemin_skel != "":
 		var bakees := SilhouettesData.charger()
 		if bakees != null:
@@ -194,19 +194,20 @@ func _hauteur_source(donnees: Resource, apparence: Dictionary = {},
 			return declaree
 	return HAUTEUR_SOURCE_DEFAUT
 
-# Hauteur du CORPS (unités Spine), arme et VFX écartés. On pose une skin de
-# MESURE — la même que l'apparence demandée, purgée des slots exclus —, on
-# mesure, puis on remet l'apparence réelle. Rend 0.0 si la mesure est
-# impossible (pas de runtime, pas de skin) : l'appelant retombe alors sur la
-# taille déclarée par l'export.
+# Bornes du CORPS (unités Spine), arme et VFX écartés — LARGEUR et HAUTEUR.
+# On pose une skin de MESURE — la même que l'apparence demandée, purgée des
+# slots exclus —, on mesure, puis on remet l'apparence réelle. Rend
+# Vector2.ZERO si la mesure est impossible (pas de runtime, pas de skin) :
+# l'appelant retombe alors sur la taille déclarée par l'export (hauteur
+# seulement — rien d'équivalent n'existe pour la largeur).
 #
 # On passe par une skin plutôt que par un décrochage d'attachements sur le
 # squelette vivant : c'est le même chemin (new_skin / add_skin /
 # remove_attachment) que la purge des niveaux, déjà éprouvé ici.
-func _mesurer_corps(donnees: Resource, apparence: Dictionary) -> float:
+func _mesurer_corps(donnees: Resource, apparence: Dictionary) -> Vector2:
 	var squelette: Object = _spine.call("get_skeleton")
 	if squelette == null or not squelette.has_method("get_bounds"):
-		return 0.0
+		return Vector2.ZERO
 	var skins := _skins_demandees(apparence)
 	var mesure_posee := false
 	if not skins.is_empty():
@@ -219,7 +220,7 @@ func _mesurer_corps(donnees: Resource, apparence: Dictionary) -> float:
 	var bornes := squelette.call("get_bounds") as Rect2
 	if mesure_posee:
 		definir_apparence(apparence)   # remet l'arme et les VFX
-	return bornes.size.y
+	return bornes.size
 
 # Retire de la skin tout ce qui ne doit pas compter dans la mesure d'échelle.
 func _purger_hors_mesure(skin: Object, donnees: Resource) -> void:
@@ -371,6 +372,27 @@ func hauteur_rendue_px() -> float:
 	var echelle: Vector2 = _spine.get("scale")
 	return corps * echelle.y
 
+# Largeur du CORPS RÉELLEMENT rendue à l'écran (px) — même principe que
+# hauteur_rendue_px (bornes de la pose courante, arme et VFX écartés, ×
+# l'échelle posée), pour caler la largeur d'un élément de décor sur le VRAI
+# encombrement du personnage (l'ombre portée, `CombatOmbrePortee` : « elle
+# doit englober la taille de l'entité », retour Rhend 29/08/2026). Pas de
+# repli sur une silhouette bakée comme la hauteur : SilhouettesData ne bake
+# que la hauteur (c'est elle qui pilote l'échelle du personnage) — une mesure
+# à la volée suffit ici, elle n'a besoin d'être qu'indicative. 0.0 sans
+# runtime Spine.
+func largeur_rendue_px() -> float:
+	if _spine == null:
+		return 0.0
+	var donnees: Resource = _spine.get("skeleton_data_res")
+	if donnees == null:
+		return 0.0
+	var largeur := _mesurer_corps(donnees, _apparence).x
+	if largeur <= 0.0:
+		return 0.0
+	var echelle: Vector2 = _spine.get("scale")
+	return largeur * absf(echelle.x)
+
 # Bornes du CORPS (unités Spine), arme et VFX retirés — la grandeur que
 # SilhouettesData retient comme témoin d'obsolescence. Réservé à l'outil de
 # bake, qui doit écrire exactement ce que le runtime relira.
@@ -378,7 +400,7 @@ func bornes_corps() -> float:
 	if _spine == null:
 		return 0.0
 	var donnees: Resource = _spine.get("skeleton_data_res")
-	return _mesurer_corps(donnees, _apparence) if donnees != null else 0.0
+	return _mesurer_corps(donnees, _apparence).y if donnees != null else 0.0
 
 # Pose la skin de MESURE (arme et VFX retirés) et l'y LAISSE. Réservé à l'outil
 # de bake, seul cas où l'on veut RENDRE le corps nu ; partout ailleurs la
