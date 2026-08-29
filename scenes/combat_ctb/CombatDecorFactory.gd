@@ -45,16 +45,18 @@
 #    un flicker (alpha + éclat) piloté par `_process`, phase propre par foyer
 #    pour ne pas pulser en bloc — l'usine doit paraître VIVANTE, pas
 #    métronomique (même souci que le cycle des enseignes de CombatDecorCity).
-#  • SOUDURE CHORÉGRAPHIÉE (29/08/2026, demandé par Rhend) : le Soudeur_1 est
+#  • SOUDURE CHORÉGRAPHIÉE (29/08/2026, demandé par Rhend) : Soudeur_1 est
 #    DÉCALÉ latéralement (`DECALAGE_SOUDEUR_1_TEX`) — son corps tombait en
 #    grande partie derrière une poutre fixe de Plan_4_Armature, les deux
 #    calques étant statiques (vitesse 0) donc le recouvrement était permanent,
-#    pas un accident de défilement. La Chaîne_Soudure ne défile plus en
-#    continu : un vrai CYCLE (`CYCLE_PERIODE_S`, 5 s) alterne défilement et
-#    arrêt — la chaîne s'immobilise avec un chariot pile sous le bras, celui-
-#    ci descend, un VFX d'étincelles (`FactorySoudureVfx`) se déclenche au
-#    contact, puis le bras remonte et la chaîne repart. Voir les constantes
-#    CHARIOT_*/BRAS_*/CYCLE_*/VFX_* et `_process_bras` pour le détail du calage.
+#    pas un accident de défilement. ⚠ Le bras ANIMÉ n'est PAS celui de Soudeur_1
+#    mais celui de SOUDEUR_2 (confirmé par Rhend : la grue déjà bien visible,
+#    jamais masquée — Soudeur_1 reste décalé mais statique). La Chaîne_Soudure
+#    ne défile plus en continu : un vrai CYCLE (`CYCLE_PERIODE_S`, 5 s) alterne
+#    défilement et arrêt — la chaîne s'immobilise avec un chariot pile sous le
+#    bras, celui-ci descend, un VFX d'étincelles (`FactorySoudureVfx`) se
+#    déclenche au contact, puis le bras remonte et la chaîne repart. Voir les
+#    constantes CHARIOT_*/BRAS_*/CYCLE_*/VFX_* et `_process_bras`.
 # ============================================================
 class_name CombatDecorFactory
 extends Control
@@ -94,16 +96,9 @@ const SOL_SECOURS_COLOR := Color8(38, 11, 12)
 # retomber dans l'intervalle entre deux poutres, suffit. L'ordre d'empilement
 # reste le bon (la poutre EST censée passer devant ce qu'il y a derrière), seul
 # le soudeur était mal placé dessous. Corps ET bras se décalent ENSEMBLE (même
-# valeur) pour rester attachés l'un à l'autre.
-# ⚠ CORRIGÉ 29/08/2026 : un premier essai (+140 px) évitait bien la poutre en
-# plein écran (mode USINE de la ShowRoom, centré, sans masque) mais retombait
-# quasi entièrement dans la moitié HÉROS masquée une fois posé au vrai ancrage
-# de combat (`CombatCtbUi.SOL_X_ADVERSE = 0.75`) — d'où « aucune animation, pas
-# de VFX » : le soudeur entier (corps, bras, étincelles) était rendu à alpha
-# quasi nul par `raster_split_mask.gdshader`, pas juste son geste. Le décalage
-# doit donc dégager la poutre ET rester bien à droite de la diagonale VS — on
-# saute directement dans l'intervalle SUIVANT (après la 2ᵉ poutre), vérifié par
-# capture réelle (`SHOT_MODE=factory`), pas seulement par calque isolé.
+# valeur) pour rester attachés l'un à l'autre. ⚠ Soudeur_1 n'est PLUS le
+# soudeur animé (voir plus bas) : ce décalage reste nécessaire pour le sortir
+# de la poutre, mais son bras ne bouge plus — Rhend a confirmé viser Soudeur_2.
 const DECALAGE_SOUDEUR_1_TEX := Vector2(670.0, 0.0)
 
 # Chariots de la Chaîne_Soudure : espacement et phase MESURÉS directement sur
@@ -119,14 +114,16 @@ const DECALAGE_SOUDEUR_1_TEX := Vector2(670.0, 0.0)
 # par cycle, voir `_process`). Premier chariot centré vers x=218.
 const CHARIOT_PERIODE_TEX := 461.33
 const CHARIOT_PHASE_TEX := 218.5
-# Point de contact du bras = centre mesuré de Plan_5_Soudeur_1_Bras.png
-# (539.5), DECALAGE_SOUDEUR_1_TEX.x déjà ajouté puisque le bras se décale avec
-# le corps.
-const BRAS_CONTACT_X_TEX := 1209.5
+# ⚠ SOUDEUR ANIMÉ : Soudeur_2, pas Soudeur_1 (29/08/2026, confirmé par Rhend —
+# c'est la grue déjà bien visible, jamais masquée par une poutre, donc AUCUN
+# décalage requis pour elle). Point de contact = centre mesuré de
+# Plan_5_Soudeur_2_Bras.png (bbox 1858-2058, soit x=1958).
+const BRAS_CONTACT_X_TEX := 1958.0
 # Extrémité de l'embout de soudure, en coordonnées LOCALES du sprite du bras —
-# donc SANS le décalage (un enfant du sprite hérite déjà de sa position).
-# Sert à poser le VFX d'étincelles au bon endroit (`_declencher_etincelles`).
-const BRAS_POINTE_LOCAL := Vector2(458.0, 957.0)
+# donc SANS décalage (un enfant du sprite hérite déjà de sa position) : mesurée
+# comme le pixel le plus bas de Plan_5_Soudeur_2_Bras.png. Sert à poser le VFX
+# d'étincelles au bon endroit (`_declencher_etincelles`).
+const BRAS_POINTE_LOCAL := Vector2(1892.5, 983.0)
 const BRAS_AMPLITUDE_PX := 16.0   # descente du bras à l'impact, en pixels écran
 
 # ─── CYCLE DE SOUDURE (29/08/2026, demandé par Rhend) ───────
@@ -156,9 +153,10 @@ const BRAS_ARRET_S := BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S + BRAS_REMONTEE_S
 # Plans du PLUS LOINTAIN au plus proche (ordre d'empilement). `sens` : +1 =
 # droite→gauche (comme la ville), -1 = gauche→droite ; ignoré si vitesse = 0.
 # `feu` : calque de flamme, flicker géré à part (voir `_feux`). `bras` : bras
-# soudeur, geste vertical géré à part (voir `_process_bras`) — phase-locké sur
-# le cycle d'arrêt de la Chaîne_Soudure, qui doit donc être bâtie AVANT lui
-# (ordre du tableau : Chaîne_Soudure précède Soudeur_1_Bras). `soudure` :
+# soudeur ANIMÉ — Soudeur_2_Bras (Soudeur_1_Bras suit son corps mais ne bouge
+# plus, voir DECALAGE_SOUDEUR_1_TEX) —, geste vertical géré à part (voir
+# `_process_bras`) — phase-locké sur le cycle d'arrêt de la Chaîne_Soudure, qui
+# doit donc être bâtie AVANT lui (ordre du tableau). `soudure` :
 # marque LE calque de la Chaîne_Soudure, dont le défilement n'est plus géré
 # par `vitesse` (générique) mais par le cycle CYCLE_* — `vitesse` y reste
 # purement documentaire (vitesse moyenne visuelle du convoyeur avant ce
@@ -180,9 +178,9 @@ const PLANS: Array[Dictionary] = [
 	{"f": "Background_Factory_Plan_Fond.png",               "profondeur": 0.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Chaine_Soudure.png",   "profondeur": 0.25, "vitesse": 80.0, "sens": 1.0,  "feu": false, "bras": false, "soudure": true},
 	{"f": "Background_Factory_Plan_5_Soudeur_1.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false, "decalage_tex": DECALAGE_SOUDEUR_1_TEX},
-	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true,  "decalage_tex": DECALAGE_SOUDEUR_1_TEX},
+	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false, "decalage_tex": DECALAGE_SOUDEUR_1_TEX},
 	{"f": "Background_Factory_Plan_5_Soudeur_2.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
-	{"f": "Background_Factory_Plan_5_Soudeur_2_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_2_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true},
 	{"f": "Background_Factory_Plan_5_Chaine_Robotique.png", "profondeur": 0.25, "vitesse": 4.0,  "sens": -1.0, "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_4_Armature.png",         "profondeur": 0.45, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_4_Chaine_Robotique.png", "profondeur": 0.45, "vitesse": 7.0,  "sens": 1.0,  "feu": false, "bras": false},
@@ -198,7 +196,7 @@ const PLANS: Array[Dictionary] = [
 var _noeud_zoom: Control = null
 var _couches: Array[Dictionary] = []
 var _feux: Array[Dictionary] = []   # {noeud, phase} — sous-ensemble de _couches
-var _bras_noeud: Node2D = null      # noeud du calque Soudeur_1_Bras (celui qui porte "bras": true)
+var _bras_noeud: Node2D = null      # noeud du calque "bras" animé (celui qui porte "bras": true — Soudeur_2_Bras)
 var _bras_sprite: Sprite2D = null   # son sprite direct — parent du VFX d'étincelles
 var _temps := 0.0
 var _mask_material: ShaderMaterial = null
