@@ -51,17 +51,21 @@
 #    SOUDEUR_2 (confirmé par Rhend : la grue déjà bien visible, jamais
 #    masquée). La Chaîne_Soudure ne défile plus en continu : un vrai CYCLE
 #    (`CYCLE_PERIODE_S`, 5 s) alterne défilement et arrêt — la chaîne
-#    s'immobilise avec un chariot pile sous le bras. ⚠ Le bras PIVOTE (29/08,
-#    2ᵉ retour de Rhend : « la tête doit descendre selon l'axe logique avec le
-#    pivot central, pas tout le sprite qui translate ») — ROTATION du sprite
-#    `Soudeur_2_Bras` autour du centre mesuré de son rond d'épaule
-#    (`PIVOT_LOCAL`), via le classique décalage `offset = -pivot` + repositionnement
-#    (voir `_batir`) : aucun redécoupage d'asset requis, un seul calque suffit
-#    tant que la base de l'épaule ne s'étend pas loin du rond. Un VFX
-#    d'étincelles (`FactorySoudureVfx`) se déclenche au contact — sa position
-#    locale suit AUTOMATIQUEMENT la rotation puisqu'elle est posée en ENFANT
-#    du sprite, au bon décalage du pivot. Voir CHARIOT_*/BRAS_*/CYCLE_*/VFX_*
-#    et `_process_bras`.
+#    s'immobilise avec un chariot pile sous le bras. Le bras PIVOTE (29/08,
+#    3ᵉ itération après deux retours de Rhend) : « la tête doit descendre
+#    selon l'axe logique avec le pivot central » (1er retour, a fait tomber
+#    la translation verticale) puis « c'est encore tout le sprite qui pivote,
+#    je veux que SEUL l'avant-bras bouge, l'épaule reste fixe, le coude se
+#    déplie » (2e retour, a fait tomber la rotation d'un calque unique). Le
+#    calque `Soudeur_2_Bras` livré par Christophe est donc DÉCOUPÉ EN DEUX
+#    (script one-shot, voir la section « GÉOMÉTRIE DU BRAS SOUDEUR ») :
+#    `AvantBras_Fixe` (épaule, statique, un calque ordinaire de plus) et
+#    `AvantBras_Mobile` (coude + avant-bras + embout, seul à pivoter — via le
+#    classique décalage `Sprite2D.offset = -pivot` + repositionnement, voir
+#    `_batir`). Un VFX d'étincelles (`FactorySoudureVfx`) se déclenche au
+#    contact — sa position locale suit AUTOMATIQUEMENT la rotation puisqu'elle
+#    est posée en ENFANT du sprite mobile, au bon décalage du pivot. Voir
+#    CHARIOT_*/BRAS_*/CYCLE_*/VFX_* et `_process_bras`.
 # ============================================================
 class_name CombatDecorFactory
 extends Control
@@ -103,42 +107,53 @@ const CHARIOT_PERIODE_TEX := 461.33
 const CHARIOT_PHASE_TEX := 218.5
 
 # ─── GÉOMÉTRIE DU BRAS SOUDEUR (Soudeur_2, 29/08/2026) ──────
-# Le bras est UN SEUL calque (corps+coude+avant-bras+embout fondus dans la
-# même image) : Christophe n'a pas (encore) séparé l'avant-bras de l'épaule.
-# Plutôt que de translater tout le sprite (1er essai, rejeté par Rhend — « la
-# tête doit descendre selon l'axe logique avec le pivot central, pas tout le
-# sprite ») on fait PIVOTER le sprite entier autour du rond d'épaule mesuré
-# sur l'image (`PIVOT_LOCAL`) : le classique décalage `Sprite2D.offset =
-# -pivot` + repositionnement (voir `_batir`) fait qu'une rotation du NŒUD
-# tourne autour de ce point précis plutôt que du coin de l'image. Ça bouge
-# aussi un peu la base/le coude (ils ne sont pas exactement SUR le pivot),
-# mais leur bras de levier est bien plus court que celui de l'embout — visuel
-# largement plus juste qu'une translation verticale pure. Si le résultat ne
-# convainc toujours pas, la vraie correction est de demander à Christophe de
-# séparer l'avant-bras (pivote) de l'épaule (fixe) en deux calques.
+# ⚠ SUPERSÉDÉ le jour même : le 1er essai faisait pivoter TOUT le calque
+# `Soudeur_2_Bras` (épaule + avant-bras fondus dans la même image) autour du
+# coude — ça bougeait donc aussi l'épaule/le haut du bras, qui doit rester
+# fixe (retour Rhend : « je veux que l'avant-bras seul bouge, le coude se
+# déplie, le bras [l'épaule] ne bouge pas »). Un SEUL calque raster ne peut
+# pas avoir une partie fixe et une partie qui tourne autour d'un point
+# INTERNE — on a donc DÉCOUPÉ `Soudeur_2_Bras.png` en deux calques dérivés
+# (script Python one-shot, pas une retouche à la main) le long d'une droite
+# perpendiculaire à l'axe épaule→coude, juste avant le rond du coude :
+#   `..._AvantBras_Fixe.png`   — l'épaule + le haut du bras, STATIQUE, posé
+#                                comme n'importe quel autre calque (`bras: false`).
+#   `..._AvantBras_Mobile.png` — le rond du coude + l'avant-bras + l'embout,
+#                                seul à porter `bras: true` et à pivoter.
+# Aucune demande à Christophe nécessaire tant que la découpe suffit ; si un
+# jour il livre le bras déjà séparé en couches, ces deux fichiers dérivés
+# peuvent être remplacés à l'identique (mêmes noms, même canevas).
 #
 # Mesurés sur Background_Factory_Plan_5_Soudeur_2_Bras.png (bbox natif
-# 1858-2058 × 728-984) :
-#   PIVOT_LOCAL   = centre du rond d'épaule (le plus gros des deux joints).
+# 1858-2058 × 728-984), AVANT découpe :
+#   PIVOT_LOCAL   = centre du rond du COUDE (celui d'où part l'avant-bras).
 #   BRAS_POINTE_LOCAL = extrémité de la fourche de soudure (pixel le plus à
 #                   DROITE de l'image — un bras qui reproche vers le bas-
 #                   droite, pas le plus BAS, qui tombe sur le pied du socle).
-const PIVOT_LOCAL := Vector2(1958.0, 748.0)
+const PIVOT_LOCAL := Vector2(1969.2, 766.8)
 const BRAS_POINTE_LOCAL := Vector2(2057.0, 830.5)
 
-# Amplitude de la rotation à l'impact (radians). 0.5236 rad = 30° : fait
-# parcourir à la pointe un arc de ~35 px NATIFS (mesuré depuis PIVOT_LOCAL et
-# BRAS_POINTE_LOCAL), comparable à l'ancienne translation de 16 px écran — à
-# ajuster « au feel ».
-const BRAS_ANGLE_MAX := 0.5236
+# Amplitude de la rotation à l'impact (radians). 0.349 rad = 20° : voir le
+# calcul de BRAS_CONTACT_X_TEX ci-dessous pour pourquoi ce n'est PAS un grand
+# angle — au-delà, la pointe recule VERS le socle au lieu de s'en éloigner
+# (géométrie de l'avant-bras, pas un choix de style). À ajuster « au feel »
+# en gardant à l'œil le calcul de contact si l'angle change.
+const BRAS_ANGLE_MAX := 0.349
 
-# Point de CONTACT du bras — PAS sa position au repos : c'est la pointe de
-# l'embout une fois tournée de BRAS_ANGLE_MAX autour de PIVOT_LOCAL, calculée
-# à la main (PIVOT_LOCAL + rotation(BRAS_POINTE_LOCAL - PIVOT_LOCAL,
-# BRAS_ANGLE_MAX)) — c'est CE point qui doit tomber sur un chariot, pas le
-# centre du sprite au repos (⚠ CORRIGÉ 29/08/2026 : le centre du bbox donnait
-# un chariot visiblement décalé du bras une fois celui-ci penché).
-const BRAS_CONTACT_X_TEX := 2002.4
+# Point de CONTACT — le centre où un CHARIOT doit s'arrêter, pas la position
+# de la pointe elle-même. ⚠ CORRIGÉ 29/08/2026 (2ᵉ retour Rhend : « le chariot
+# empiète sur la base du soudeur ») : caler le CENTRE du chariot sur la
+# pointe pure faisait déborder la moitié GAUCHE de son chargement (~230 px
+# natifs de large, mesuré sur Chaine_Soudure.png) par-dessus le socle du
+# soudeur (bord droit mesuré à x=1985) — la géométrie de l'avant-bras ne lui
+# permet PAS non plus de reculer beaucoup plus loin à droite en pivotant
+# (rotation vers le bas = la pointe REVIENT vers le coude, donc vers le
+# socle, voir BRAS_ANGLE_MAX). On cale donc le chariot pour que son bord
+# GAUCHE affleure le socle (x=1985), la pointe (à 20°, x≈2030 en natif)
+# tombant alors sur la partie gauche du chargement plutôt qu'en son centre —
+# imparfait mais plus juste qu'un centre qui chevauche visiblement le socle.
+#   cible = bord_socle(1985) + demi-largeur_chargement(116) + marge(15)
+const BRAS_CONTACT_X_TEX := 2116.0
 
 # ─── CYCLE DE SOUDURE (29/08/2026, demandé par Rhend) ───────
 # Avant : le bras battait en continu pendant que la Chaîne_Soudure défilait
@@ -167,9 +182,10 @@ const BRAS_ARRET_S := BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S + BRAS_REMONTEE_S
 # Plans du PLUS LOINTAIN au plus proche (ordre d'empilement). `sens` : +1 =
 # droite→gauche (comme la ville), -1 = gauche→droite ; ignoré si vitesse = 0.
 # `feu` : calque de flamme, flicker géré à part (voir `_feux`). `bras` : bras
-# soudeur ANIMÉ — Soudeur_2_Bras — géré à part (voir `_process_bras`, pivote
-# autour de `PIVOT_LOCAL`) — phase-locké sur le cycle d'arrêt de la Chaîne_
-# Soudure, qui doit donc être bâtie AVANT lui (ordre du tableau). `soudure` :
+# soudeur ANIMÉ — Soudeur_2_AvantBras_Mobile SEUL (Fixe reste un calque
+# statique ordinaire) — géré à part (voir `_process_bras`, pivote autour de
+# `PIVOT_LOCAL`) — phase-locké sur le cycle d'arrêt de la Chaîne_Soudure, qui
+# doit donc être bâtie AVANT lui (ordre du tableau). `soudure` :
 # marque LE calque de la Chaîne_Soudure, dont le défilement n'est plus géré
 # par `vitesse` (générique) mais par le cycle CYCLE_* — `vitesse` y reste
 # purement documentaire (vitesse moyenne visuelle du convoyeur avant ce
@@ -193,7 +209,8 @@ const PLANS: Array[Dictionary] = [
 	{"f": "Background_Factory_Plan_5_Soudeur_1.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Soudeur_2.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
-	{"f": "Background_Factory_Plan_5_Soudeur_2_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true},
+	{"f": "Background_Factory_Plan_5_Soudeur_2_AvantBras_Fixe.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_2_AvantBras_Mobile.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true},
 	{"f": "Background_Factory_Plan_5_Chaine_Robotique.png", "profondeur": 0.25, "vitesse": 4.0,  "sens": -1.0, "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_4_Armature.png",         "profondeur": 0.45, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_4_Chaine_Robotique.png", "profondeur": 0.45, "vitesse": 7.0,  "sens": 1.0,  "feu": false, "bras": false},
