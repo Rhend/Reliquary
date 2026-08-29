@@ -123,7 +123,11 @@ const BRAS_CONTACT_X_TEX := 1958.0
 # donc SANS décalage (un enfant du sprite hérite déjà de sa position) : mesurée
 # comme le pixel le plus bas de Plan_5_Soudeur_2_Bras.png. Sert à poser le VFX
 # d'étincelles au bon endroit (`_declencher_etincelles`).
-const BRAS_POINTE_LOCAL := Vector2(1892.5, 983.0)
+# ⚠ CORRIGÉ 29/08/2026 : premier essai au pixel le plus BAS de l'image, qui
+# tombait sur le PIED du soudeur (bord de cadrage), pas sur l'embout — pour un
+# bras articulé qui reproche vers le bas-DROITE, la pointe est le pixel le
+# plus À DROITE (mesuré : (2057, 830), le bout de la fourche de soudure).
+const BRAS_POINTE_LOCAL := Vector2(2057.0, 830.5)
 const BRAS_AMPLITUDE_PX := 16.0   # descente du bras à l'impact, en pixels écran
 
 # ─── CYCLE DE SOUDURE (29/08/2026, demandé par Rhend) ───────
@@ -146,7 +150,7 @@ const BRAS_DESCENTE_S := 0.3
 # Durée du CONTACT — et donc du VFX d'étincelles, qui dure exactement le temps
 # où le bras reste posé sur le robot. Constante SÉPARÉE de BRAS_DESCENTE_S/
 # BRAS_REMONTEE_S : à ajuster seule « au feel » sans retoucher le geste du bras.
-const VFX_ETINCELLES_DUREE_S := 1.0
+const VFX_ETINCELLES_DUREE_S := 2.0
 const BRAS_REMONTEE_S := 0.3
 const BRAS_ARRET_S := BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S + BRAS_REMONTEE_S
 

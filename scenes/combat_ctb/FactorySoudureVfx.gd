@@ -17,18 +17,28 @@ extends Node2D
 
 const MASK_SHADER := "res://scenes/combat_ctb/raster_split_mask_additif.gdshader"
 
-const N_ETINCELLES := 14
+# Réglages 29/08/2026 (retour Rhend) : ×2 étincelles, traits et flash plus
+# intenses. Chaque étincelle a maintenant sa PROPRE vie COURTE (VIE_ETINCELLE_*,
+# indépendante de la durée totale du VFX) et les déclenchements s'étalent sur
+# QUASIMENT TOUTE la durée du contact (`ETALEMENT_FRACTION`) plutôt que sur les
+# 30% initiaux : à `_duree` = 2 s, une seule bouffée qui s'éteint lentement
+# aurait fait des traînées interminables et clairsemées vers la fin — une
+# pluie CONTINUE de courtes étincelles pendant toute la soudure lit mieux.
+const N_ETINCELLES := 28
 const VITESSE_MIN := 60.0
 const VITESSE_MAX := 220.0
 const GRAVITE := 340.0
-const EPAISSEUR := 2.0
-const LONGUEUR_TRAIT := 6.0
-const FLASH_RAYON := 10.0
+const EPAISSEUR := 3.0
+const LONGUEUR_TRAIT := 7.0
+const FLASH_RAYON := 15.0
 const FLASH_DUREE := 0.15
+const VIE_ETINCELLE_MIN := 0.35
+const VIE_ETINCELLE_MAX := 0.55
+const ETALEMENT_FRACTION := 0.8
 
 var _duree := 1.0
 var _t := 0.0
-var _etincelles: Array = []   # {dir, vitesse, decalage}
+var _etincelles: Array = []   # {dir, vitesse, decalage, vie_max}
 
 # `split_tilt` : même bande VS que le reste du décor Usine, pour rester du
 # bon côté de l'écran si jamais un contact tombait près de la diagonale.
@@ -50,9 +60,8 @@ static func declencher(parent: Node2D, position_locale: Vector2, duree: float,
 		vfx._etincelles.append({
 			"dir": Vector2.RIGHT.rotated(angle),
 			"vitesse": rng.randf_range(VITESSE_MIN, VITESSE_MAX),
-			# Étalement du déclenchement : toutes les étincelles ne jaillissent
-			# pas à la même milliseconde, sinon la gerbe fait un pouls unique.
-			"decalage": rng.randf() * vfx._duree * 0.3,
+			"decalage": rng.randf() * vfx._duree * ETALEMENT_FRACTION,
+			"vie_max": rng.randf_range(VIE_ETINCELLE_MIN, VIE_ETINCELLE_MAX),
 		})
 	parent.add_child(vfx)
 	return vfx
@@ -68,13 +77,13 @@ func _draw() -> void:
 	var flash := clampf(1.0 - _t / FLASH_DUREE, 0.0, 1.0)
 	if flash > 0.0:
 		draw_circle(Vector2.ZERO, FLASH_RAYON * (0.4 + 0.6 * flash),
-				Color(1.0, 0.95, 0.7, 0.8 * flash))
+				Color(1.0, 0.95, 0.7, 0.9 * flash))
 	for e in _etincelles:
 		var vie := _t - float(e["decalage"])
-		var duree_vie := _duree - float(e["decalage"])
-		if vie <= 0.0 or duree_vie <= 0.0:
+		var vie_max: float = e["vie_max"]
+		if vie <= 0.0 or vie >= vie_max:
 			continue
-		var k := clampf(vie / duree_vie, 0.0, 1.0)
+		var k := vie / vie_max
 		var dir: Vector2 = e["dir"]
 		var vitesse: float = e["vitesse"]
 		# Trajectoire balistique : vitesse initiale + chute sous la gravité.
