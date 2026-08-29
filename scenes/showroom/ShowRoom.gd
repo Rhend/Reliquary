@@ -397,6 +397,16 @@ func _peupler_duel() -> void:
 			# livraison arrive retournée, ça se corrige dans le registre.
 			relic.orienter(SpinePersonnagesData.echelle_x(_heros, true))
 			relic.position = Vector2(VUE.x * SOL_X_JOUEUR, sol_y)
+			# Ombre AVANT le sprite (ordre d'ajout = ordre de dessin, voir
+			# CombatOmbrePortee) — même vitrine partagée que le vrai combat.
+			# Anneau laissé ACTIF en permanence : la ShowRoom est le banc
+			# d'essai, pas de notion de tour ici, autant pouvoir juger l'anneau
+			# sans attendre un combat réel.
+			var ombre_h := CombatOmbrePortee.creer(true)
+			if ombre_h != null:
+				ombre_h.position = relic.position
+				ombre_h.definir_actif(true)
+				_duel.add_child(ombre_h)
 			_duel.add_child(relic)
 			_duel_heros = relic
 
@@ -412,6 +422,11 @@ func _peupler_duel() -> void:
 		# dans le registre, seul endroit qui sait comment l'asset a été livré.
 		mob.orienter(SpinePersonnagesData.echelle_x(e, false))
 		mob.position = Vector2(VUE.x * SOL_X_ADVERSE, sol_y)
+		var ombre_m := CombatOmbrePortee.creer(false)
+		if ombre_m != null:
+			ombre_m.position = mob.position
+			ombre_m.definir_actif(true)
+			_duel.add_child(ombre_m)
 		_duel.add_child(mob)
 		_duel_monstre = mob
 
