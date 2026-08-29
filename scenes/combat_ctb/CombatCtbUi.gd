@@ -105,6 +105,7 @@ var _ciblage_actif := false
 var _sol: Control = null       # scène : sol + emplacements des futurs sprites
 var _orbes: Dictionary = {}    # CtbCombattant → EnergyBoule (placeholder sprite)
 var _sprites: Dictionary = {}  # CtbCombattant → SpriteSpinePersonnage (sprite RÉEL)
+var _ombres: Dictionary = {}   # CtbCombattant → CombatOmbrePortee (ombre au sol, sous le sprite/orbe)
 var _pieds: Dictionary = {}    # CtbCombattant → point d'appui au sol (dessin)
 var _file_box: HBoxContainer
 var _bandeau_tour: Label
@@ -187,6 +188,13 @@ func _construire() -> void:
 	_sol.resized.connect(_placer_orbes)
 	_couche_scene.add_child(_sol)
 	for cb in moteur.combattants:
+		# Ombre portée AVANT le sprite/orbe : l'ordre d'ajout EST l'ordre de
+		# dessin dans Godot, donc l'ombre reste sous le personnage sans jouer
+		# avec le z-index (voir CombatOmbrePortee).
+		var ombre := CombatOmbrePortee.creer(cb.est_joueur())
+		if ombre != null:
+			_ombres[cb] = ombre
+			_sol.add_child(ombre)
 		# Personnage principal : sprite Spine RÉEL (DA Christophe, Idle en
 		# boucle + Attack sur son action) quand le runtime spine-godot et
 		# les assets sont là — sinon placeholder EnergyBoule, comme les
@@ -358,33 +366,27 @@ func _placer_orbes() -> void:
 			var noeud := _noeud_bataille(membres[i])
 			if noeud != null:
 				noeud.position = _pos_depuis_pied(membres[i], pied)
+			var ombre: CombatOmbrePortee = _ombres.get(membres[i])
+			if ombre != null:
+				ombre.position = pied
 			var zone: Control = _zones_cible.get(membres[i])
 			if zone != null:
 				zone.position = pied - Vector2(zone.size.x * 0.5, zone.size.y - 12.0)
 	_sol.queue_redraw()
 
-# Sol de la scène : ellipse d'emplacement sous chaque placeholder EnergyBoule
-# (repère au sol d'une boule de lumière sans silhouette propre) — RETIRÉE pour
-# tout combattant qui porte un vrai sprite Spine (27/08/2026, signalé par
-# Rhend). La ligne d'horizon + bande dégradée qui vivait ici avant (chrome
-# peint par-dessus le décor, pensé pour un sol sans art réel) est SUPPRIMÉE :
-# posée sur le vrai décor de ville, elle se lisait comme un trait diffus non
-# voulu en travers de tout le côté joueur, pile sous les pieds de Relic
-# (signalé par Rhend). Le décor réel (`CombatDecorCity`) porte déjà son
+# Sol de la scène : la ligne d'horizon + bande dégradée qui vivait ici avant
+# (chrome peint par-dessus le décor, pensé pour un sol sans art réel) est
+# SUPPRIMÉE : posée sur le vrai décor de ville, elle se lisait comme un trait
+# diffus non voulu en travers de tout le côté joueur, pile sous les pieds de
+# Relic (signalé par Rhend). Le décor réel (`CombatDecorCity`) porte déjà son
 # propre trottoir. Même correctif déjà appliqué à la ShowRoom (26 et
-# 27/08/2026).
+# 27/08/2026). L'ellipse-repère qui vivait ensuite ici sous chaque placeholder
+# EnergyBoule est ELLE AUSSI retirée (29/08/2026) : remplacée par la vraie
+# ombre portée de Christophe (`CombatOmbrePortee`, sprite au sol sous CHAQUE
+# combattant, sprite Spine compris — plus une exception pour le placeholder).
 func _dessiner_sol() -> void:
 	if _sol.size.x <= 0.0:
 		return
-	for cb: CtbCombattant in _pieds:
-		if _sprites.has(cb):
-			continue
-		var accent := ExpeStyle.accent_camp(cb.est_joueur())
-		var pied: Vector2 = _pieds[cb]
-		_sol.draw_set_transform(pied, 0.0, Vector2(1.0, 0.38))
-		_sol.draw_circle(Vector2.ZERO, 34.0, Color(UIColors.CYBER_BG, 0.55))
-		_sol.draw_arc(Vector2.ZERO, 34.0, 0.0, TAU, 40, Color(accent, 0.65), 2.0)
-		_sol.draw_set_transform(Vector2.ZERO)
 	# Mode ciblage (retour Rhend 07/2026) : l'ennemi se choisit à la souris
 	# dans la scène — anneau OR discret sur chaque cible possible, réticule
 	# marqué + chevron sur la cible survolée (même or que les cartes :
@@ -681,6 +683,8 @@ func _rafraichir_file() -> void:
 func _marquer_actif(c: CtbCombattant) -> void:
 	for cb: CtbCombattant in _cartes:
 		(_cartes[cb] as CarteCombattantCtb).marquer_actif(cb == c)
+	for cb: CtbCombattant in _ombres:
+		(_ombres[cb] as CombatOmbrePortee).definir_actif(cb == c)
 
 # ─── Retours visuels (signal structuré du moteur) ────────────
 
