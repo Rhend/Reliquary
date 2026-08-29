@@ -45,18 +45,23 @@
 #    un flicker (alpha + éclat) piloté par `_process`, phase propre par foyer
 #    pour ne pas pulser en bloc — l'usine doit paraître VIVANTE, pas
 #    métronomique (même souci que le cycle des enseignes de CombatDecorCity).
-#  • SOUDURE CHORÉGRAPHIÉE (29/08/2026, demandé par Rhend) : Soudeur_1 est
-#    DÉCALÉ latéralement (`DECALAGE_SOUDEUR_1_TEX`) — son corps tombait en
-#    grande partie derrière une poutre fixe de Plan_4_Armature, les deux
-#    calques étant statiques (vitesse 0) donc le recouvrement était permanent,
-#    pas un accident de défilement. ⚠ Le bras ANIMÉ n'est PAS celui de Soudeur_1
-#    mais celui de SOUDEUR_2 (confirmé par Rhend : la grue déjà bien visible,
-#    jamais masquée — Soudeur_1 reste décalé mais statique). La Chaîne_Soudure
-#    ne défile plus en continu : un vrai CYCLE (`CYCLE_PERIODE_S`, 5 s) alterne
-#    défilement et arrêt — la chaîne s'immobilise avec un chariot pile sous le
-#    bras, celui-ci descend, un VFX d'étincelles (`FactorySoudureVfx`) se
-#    déclenche au contact, puis le bras remonte et la chaîne repart. Voir les
-#    constantes CHARIOT_*/BRAS_*/CYCLE_*/VFX_* et `_process_bras`.
+#  • SOUDURE CHORÉGRAPHIÉE (29/08/2026, demandé par Rhend) : Soudeur_1 reste à
+#    sa position D'ORIGINE (le décalage tenté puis annulé — SUPERSÉDÉ, voir
+#    l'historique git si besoin de le ressortir). Le bras ANIMÉ est celui de
+#    SOUDEUR_2 (confirmé par Rhend : la grue déjà bien visible, jamais
+#    masquée). La Chaîne_Soudure ne défile plus en continu : un vrai CYCLE
+#    (`CYCLE_PERIODE_S`, 5 s) alterne défilement et arrêt — la chaîne
+#    s'immobilise avec un chariot pile sous le bras. ⚠ Le bras PIVOTE (29/08,
+#    2ᵉ retour de Rhend : « la tête doit descendre selon l'axe logique avec le
+#    pivot central, pas tout le sprite qui translate ») — ROTATION du sprite
+#    `Soudeur_2_Bras` autour du centre mesuré de son rond d'épaule
+#    (`PIVOT_LOCAL`), via le classique décalage `offset = -pivot` + repositionnement
+#    (voir `_batir`) : aucun redécoupage d'asset requis, un seul calque suffit
+#    tant que la base de l'épaule ne s'étend pas loin du rond. Un VFX
+#    d'étincelles (`FactorySoudureVfx`) se déclenche au contact — sa position
+#    locale suit AUTOMATIQUEMENT la rotation puisqu'elle est posée en ENFANT
+#    du sprite, au bon décalage du pivot. Voir CHARIOT_*/BRAS_*/CYCLE_*/VFX_*
+#    et `_process_bras`.
 # ============================================================
 class_name CombatDecorFactory
 extends Control
@@ -88,47 +93,52 @@ const FEU_ECLAT_MAX := 0.35   # boost RGB au pic, pour un flamboiement plus chau
 # naturelle (voir commentaire de tête). Plate → indiscernable du vrai sol.
 const SOL_SECOURS_COLOR := Color8(38, 11, 12)
 
-# DÉCALAGE DU SOUDEUR 1 (29/08/2026, signalé par Rhend : son corps est en
-# grande partie caché par une poutre de Plan_4_Armature, qui passe DEVANT lui
-# — Armature est un plan plus proche, profondeur 0.45 contre 0.25 ici). Corps
-# ET bras sont TOUS DEUX statiques (vitesse 0) : le recouvrement est donc FIXE,
-# pas un accident de défilement — un simple décalage latéral, mesuré pour
-# retomber dans l'intervalle entre deux poutres, suffit. L'ordre d'empilement
-# reste le bon (la poutre EST censée passer devant ce qu'il y a derrière), seul
-# le soudeur était mal placé dessous. Corps ET bras se décalent ENSEMBLE (même
-# valeur) pour rester attachés l'un à l'autre. ⚠ Soudeur_1 n'est PLUS le
-# soudeur animé (voir plus bas) : ce décalage reste nécessaire pour le sortir
-# de la poutre, mais son bras ne bouge plus — Rhend a confirmé viser Soudeur_2.
-const DECALAGE_SOUDEUR_1_TEX := Vector2(670.0, 0.0)
-
 # Chariots de la Chaîne_Soudure : espacement et phase MESURÉS directement sur
 # Background_Factory_Plan_5_Chaine_Soudure.png (canevas natif 3256 px — PAS le
-# canevas 4770 px des plans Barrière/Sol). ⚠ CORRIGÉ 29/08/2026 : les valeurs
-# précédentes (670/315) avaient été mesurées dans le mauvais référentiel
-# (~1,46× trop grandes, le rapport 4770/3256) — ça passait inaperçu tant que
-# le bras ne faisait qu'un battement approximatif en continu, mais le nouveau
-# cycle À L'ARRÊT (voir CYCLE_* plus bas) exige un calage correct, sinon le
-# chariot s'immobilise à côté du bras plutôt que dessous. 7 chariots, ~461 px
-# d'écart en moyenne (varie de 450 à 488 : l'art n'est pas une grille
-# parfaite ; la moyenne suffit car le défilement avance de PILE une période
-# par cycle, voir `_process`). Premier chariot centré vers x=218.
+# canevas 4770 px des plans Barrière/Sol). 7 chariots, ~461 px d'écart en
+# moyenne (varie de 450 à 488 : l'art n'est pas une grille parfaite ; la
+# moyenne suffit car le défilement avance de PILE une période par cycle, voir
+# `_process`). Premier chariot centré vers x=218.
 const CHARIOT_PERIODE_TEX := 461.33
 const CHARIOT_PHASE_TEX := 218.5
-# ⚠ SOUDEUR ANIMÉ : Soudeur_2, pas Soudeur_1 (29/08/2026, confirmé par Rhend —
-# c'est la grue déjà bien visible, jamais masquée par une poutre, donc AUCUN
-# décalage requis pour elle). Point de contact = centre mesuré de
-# Plan_5_Soudeur_2_Bras.png (bbox 1858-2058, soit x=1958).
-const BRAS_CONTACT_X_TEX := 1958.0
-# Extrémité de l'embout de soudure, en coordonnées LOCALES du sprite du bras —
-# donc SANS décalage (un enfant du sprite hérite déjà de sa position) : mesurée
-# comme le pixel le plus bas de Plan_5_Soudeur_2_Bras.png. Sert à poser le VFX
-# d'étincelles au bon endroit (`_declencher_etincelles`).
-# ⚠ CORRIGÉ 29/08/2026 : premier essai au pixel le plus BAS de l'image, qui
-# tombait sur le PIED du soudeur (bord de cadrage), pas sur l'embout — pour un
-# bras articulé qui reproche vers le bas-DROITE, la pointe est le pixel le
-# plus À DROITE (mesuré : (2057, 830), le bout de la fourche de soudure).
+
+# ─── GÉOMÉTRIE DU BRAS SOUDEUR (Soudeur_2, 29/08/2026) ──────
+# Le bras est UN SEUL calque (corps+coude+avant-bras+embout fondus dans la
+# même image) : Christophe n'a pas (encore) séparé l'avant-bras de l'épaule.
+# Plutôt que de translater tout le sprite (1er essai, rejeté par Rhend — « la
+# tête doit descendre selon l'axe logique avec le pivot central, pas tout le
+# sprite ») on fait PIVOTER le sprite entier autour du rond d'épaule mesuré
+# sur l'image (`PIVOT_LOCAL`) : le classique décalage `Sprite2D.offset =
+# -pivot` + repositionnement (voir `_batir`) fait qu'une rotation du NŒUD
+# tourne autour de ce point précis plutôt que du coin de l'image. Ça bouge
+# aussi un peu la base/le coude (ils ne sont pas exactement SUR le pivot),
+# mais leur bras de levier est bien plus court que celui de l'embout — visuel
+# largement plus juste qu'une translation verticale pure. Si le résultat ne
+# convainc toujours pas, la vraie correction est de demander à Christophe de
+# séparer l'avant-bras (pivote) de l'épaule (fixe) en deux calques.
+#
+# Mesurés sur Background_Factory_Plan_5_Soudeur_2_Bras.png (bbox natif
+# 1858-2058 × 728-984) :
+#   PIVOT_LOCAL   = centre du rond d'épaule (le plus gros des deux joints).
+#   BRAS_POINTE_LOCAL = extrémité de la fourche de soudure (pixel le plus à
+#                   DROITE de l'image — un bras qui reproche vers le bas-
+#                   droite, pas le plus BAS, qui tombe sur le pied du socle).
+const PIVOT_LOCAL := Vector2(1958.0, 748.0)
 const BRAS_POINTE_LOCAL := Vector2(2057.0, 830.5)
-const BRAS_AMPLITUDE_PX := 16.0   # descente du bras à l'impact, en pixels écran
+
+# Amplitude de la rotation à l'impact (radians). 0.5236 rad = 30° : fait
+# parcourir à la pointe un arc de ~35 px NATIFS (mesuré depuis PIVOT_LOCAL et
+# BRAS_POINTE_LOCAL), comparable à l'ancienne translation de 16 px écran — à
+# ajuster « au feel ».
+const BRAS_ANGLE_MAX := 0.5236
+
+# Point de CONTACT du bras — PAS sa position au repos : c'est la pointe de
+# l'embout une fois tournée de BRAS_ANGLE_MAX autour de PIVOT_LOCAL, calculée
+# à la main (PIVOT_LOCAL + rotation(BRAS_POINTE_LOCAL - PIVOT_LOCAL,
+# BRAS_ANGLE_MAX)) — c'est CE point qui doit tomber sur un chariot, pas le
+# centre du sprite au repos (⚠ CORRIGÉ 29/08/2026 : le centre du bbox donnait
+# un chariot visiblement décalé du bras une fois celui-ci penché).
+const BRAS_CONTACT_X_TEX := 2002.4
 
 # ─── CYCLE DE SOUDURE (29/08/2026, demandé par Rhend) ───────
 # Avant : le bras battait en continu pendant que la Chaîne_Soudure défilait
@@ -157,15 +167,14 @@ const BRAS_ARRET_S := BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S + BRAS_REMONTEE_S
 # Plans du PLUS LOINTAIN au plus proche (ordre d'empilement). `sens` : +1 =
 # droite→gauche (comme la ville), -1 = gauche→droite ; ignoré si vitesse = 0.
 # `feu` : calque de flamme, flicker géré à part (voir `_feux`). `bras` : bras
-# soudeur ANIMÉ — Soudeur_2_Bras (Soudeur_1_Bras suit son corps mais ne bouge
-# plus, voir DECALAGE_SOUDEUR_1_TEX) —, geste vertical géré à part (voir
-# `_process_bras`) — phase-locké sur le cycle d'arrêt de la Chaîne_Soudure, qui
-# doit donc être bâtie AVANT lui (ordre du tableau). `soudure` :
+# soudeur ANIMÉ — Soudeur_2_Bras — géré à part (voir `_process_bras`, pivote
+# autour de `PIVOT_LOCAL`) — phase-locké sur le cycle d'arrêt de la Chaîne_
+# Soudure, qui doit donc être bâtie AVANT lui (ordre du tableau). `soudure` :
 # marque LE calque de la Chaîne_Soudure, dont le défilement n'est plus géré
 # par `vitesse` (générique) mais par le cycle CYCLE_* — `vitesse` y reste
 # purement documentaire (vitesse moyenne visuelle du convoyeur avant ce
-# chantier). `decalage_tex` : translation supplémentaire du calque, en pixels
-# du canevas NATIF (avant mise à l'échelle écran) — voir DECALAGE_SOUDEUR_1_TEX.
+# chantier). Soudeur_1 est resté à sa position D'ORIGINE (le décalage tenté a
+# été annulé, voir l'en-tête du fichier).
 #
 # LOGIQUE DE DÉFILEMENT (28/08/2026, harmonisée à la demande de Rhend) : les
 # TROIS plans de la chaîne de production ROBOTS (5 → 4 → 3, les plus
@@ -181,8 +190,8 @@ const BRAS_ARRET_S := BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S + BRAS_REMONTEE_S
 const PLANS: Array[Dictionary] = [
 	{"f": "Background_Factory_Plan_Fond.png",               "profondeur": 0.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Chaine_Soudure.png",   "profondeur": 0.25, "vitesse": 80.0, "sens": 1.0,  "feu": false, "bras": false, "soudure": true},
-	{"f": "Background_Factory_Plan_5_Soudeur_1.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false, "decalage_tex": DECALAGE_SOUDEUR_1_TEX},
-	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false, "decalage_tex": DECALAGE_SOUDEUR_1_TEX},
+	{"f": "Background_Factory_Plan_5_Soudeur_1.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Soudeur_2.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Soudeur_2_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true},
 	{"f": "Background_Factory_Plan_5_Chaine_Robotique.png", "profondeur": 0.25, "vitesse": 4.0,  "sens": -1.0, "feu": false, "bras": false},
@@ -282,13 +291,20 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 			idx_max = maxi(int(ceil((larg - cadre.position.x) / cadre.size.x)), 1)
 		var noeud := Node2D.new()
 		noeud.modulate = _teinte_profondeur(float(plan["profondeur"]))
-		var decalage_tex: Vector2 = plan.get("decalage_tex", Vector2.ZERO)
+		var est_bras := bool(plan["bras"])
 		# Dernière copie créée : suffisant pour "bras" (toujours vitesse 0, donc
 		# une SEULE copie — idx_min == idx_max == 0), pas de sens à désambiguïser.
 		var derniere_copie: Sprite2D = null
 		for i in range(idx_min, idx_max + 1):
 			var sp := _calque(texture, cadre.size, Vector2(cadre.size.x * i, 0.0))
-			sp.position += decalage_tex * _couvre
+			if est_bras:
+				# Décale le DESSIN du sprite pour que PIVOT_LOCAL tombe sur
+				# l'origine du nœud, puis repousse le nœud d'autant pour que le
+				# rendu reste identique à zéro rotation — c'est CE point qui
+				# reste fixe quand `_process_bras` tourne le sprite (voir l'en-
+				# tête du fichier, section « GÉOMÉTRIE DU BRAS SOUDEUR »).
+				sp.offset = -PIVOT_LOCAL
+				sp.position += PIVOT_LOCAL * sp.scale
 			sp.material = _mask_material
 			noeud.add_child(sp)
 			derniere_copie = sp
@@ -305,7 +321,7 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 		if bool(plan["feu"]):
 			_feux.append({"noeud": noeud, "phase": float(idx_feu) * 2.39996})
 			idx_feu += 1
-		if bool(plan["bras"]):
+		if est_bras:
 			_bras_noeud = noeud
 			_bras_sprite = derniere_copie
 
@@ -384,24 +400,24 @@ func _process(delta: float) -> void:
 
 # Descente → contact (VFX d'étincelles) → remontée du bras soudeur, PENDANT
 # la fenêtre d'ARRÊT du cycle seulement (`t_arret` < 0 : la chaîne défile
-# encore, le bras reste au repos, position inchangée).
+# encore, le bras reste au repos, angle nul). PIVOTE le SPRITE (`_bras_sprite`,
+# voir `_batir`), pas le nœud de parallaxe : la rotation ne doit pas se
+# mélanger avec le défilement/zoom/brume déjà posés sur `_bras_noeud`.
 func _process_bras(t_arret: float, cycle_index: int) -> void:
-	if not is_instance_valid(_bras_noeud):
+	if not is_instance_valid(_bras_sprite):
 		return
-	var y := 0.0
+	var angle := 0.0
 	var contact := false
 	if t_arret >= 0.0:
 		if t_arret < BRAS_DESCENTE_S:
-			y = _ease_out(t_arret / BRAS_DESCENTE_S) * BRAS_AMPLITUDE_PX
+			angle = _ease_out(t_arret / BRAS_DESCENTE_S) * BRAS_ANGLE_MAX
 		elif t_arret < BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S:
-			y = BRAS_AMPLITUDE_PX
+			angle = BRAS_ANGLE_MAX
 			contact = true
 		elif t_arret < BRAS_ARRET_S:
 			var k := (t_arret - BRAS_DESCENTE_S - VFX_ETINCELLES_DUREE_S) / BRAS_REMONTEE_S
-			y = (1.0 - _ease_out(clampf(k, 0.0, 1.0))) * BRAS_AMPLITUDE_PX
-	# Le nœud a déjà sa position de PARALLAXE posée par la boucle `_couches`
-	# ci-dessus (`_bras_noeud` en fait partie) : on n'AJOUTE que le geste.
-	_bras_noeud.position.y += y
+			angle = (1.0 - _ease_out(clampf(k, 0.0, 1.0))) * BRAS_ANGLE_MAX
+	_bras_sprite.rotation = angle
 	if contact and cycle_index != _vfx_dernier_cycle:
 		_vfx_dernier_cycle = cycle_index
 		_declencher_etincelles()
@@ -409,7 +425,12 @@ func _process_bras(t_arret: float, cycle_index: int) -> void:
 func _declencher_etincelles() -> void:
 	if not is_instance_valid(_bras_sprite):
 		return
-	FactorySoudureVfx.declencher(_bras_sprite, BRAS_POINTE_LOCAL,
+	# Position LOCALE relative à l'origine du sprite, qui est désormais le
+	# PIVOT (voir `sp.offset = -PIVOT_LOCAL` dans `_batir`) — un enfant posé au
+	# décalage pivot→pointe suit donc AUTOMATIQUEMENT la rotation du bras,
+	# sans recalcul : au moment du contact, `_bras_sprite.rotation` vaut déjà
+	# BRAS_ANGLE_MAX, donc le VFX apparaît pile là où retombe la pointe tournée.
+	FactorySoudureVfx.declencher(_bras_sprite, BRAS_POINTE_LOCAL - PIVOT_LOCAL,
 			VFX_ETINCELLES_DUREE_S, _split_tilt)
 
 # Ease-out quadratique : geste mécanique rapide au départ, adouci à l'arrivée
