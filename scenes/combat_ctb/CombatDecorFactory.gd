@@ -107,18 +107,26 @@ const CHARIOT_PERIODE_TEX := 461.33
 const CHARIOT_PHASE_TEX := 218.5
 
 # ─── GÉOMÉTRIE DU BRAS SOUDEUR (Soudeur_2, 29/08/2026) ──────
-# ⚠ SUPERSÉDÉ le jour même : le 1er essai faisait pivoter TOUT le calque
-# `Soudeur_2_Bras` (épaule + avant-bras fondus dans la même image) autour du
-# coude — ça bougeait donc aussi l'épaule/le haut du bras, qui doit rester
-# fixe (retour Rhend : « je veux que l'avant-bras seul bouge, le coude se
-# déplie, le bras [l'épaule] ne bouge pas »). Un SEUL calque raster ne peut
-# pas avoir une partie fixe et une partie qui tourne autour d'un point
-# INTERNE — on a donc DÉCOUPÉ `Soudeur_2_Bras.png` en deux calques dérivés
-# (script Python one-shot, pas une retouche à la main) le long d'une droite
-# perpendiculaire à l'axe épaule→coude, juste avant le rond du coude :
-#   `..._AvantBras_Fixe.png`   — l'épaule + le haut du bras, STATIQUE, posé
-#                                comme n'importe quel autre calque (`bras: false`).
-#   `..._AvantBras_Mobile.png` — le rond du coude + l'avant-bras + l'embout,
+# ⚠ SUPERSÉDÉ deux fois le jour même :
+#   1er essai : rotation de TOUT le calque `Soudeur_2_Bras` (épaule + avant-
+#     bras fondus dans la même image) — bougeait aussi l'épaule, qui doit
+#     rester fixe.
+#   2e essai : DÉCOUPE en deux calques (juste avant le MAUVAIS rond — celui du
+#     haut, que Rhend appelle le POIGNET dans sa métaphore, pas le coude).
+# Dans la métaphore de Rhend, le bras a DEUX ronds : le rond du BAS (proche du
+# socle) est le COUDE — c'est LUI qui se déplie, et tout ce qui est en aval
+# (avant-bras + rond du haut = poignet + embout) doit bouger EN BLOC autour de
+# lui. Seul le petit segment socle→coude reste fixe.
+#
+# Un SEUL calque raster ne peut pas avoir une partie fixe et une partie qui
+# tourne autour d'un point INTERNE — `Soudeur_2_Bras.png` est donc DÉCOUPÉ EN
+# DEUX calques dérivés (script Python one-shot, composantes connexes après
+# sectionnement local de la jonction — une droite infinie faisait mal
+# classer la fourche, trop loin du point de coupe pour que son léger biais
+# angulaire reste sans effet) :
+#   `..._AvantBras_Fixe.png`   — socle→coude SEULEMENT, STATIQUE, posé comme
+#                                n'importe quel autre calque (`bras: false`).
+#   `..._AvantBras_Mobile.png` — rond du coude + avant-bras + poignet + embout,
 #                                seul à porter `bras: true` et à pivoter.
 # Aucune demande à Christophe nécessaire tant que la découpe suffit ; si un
 # jour il livre le bras déjà séparé en couches, ces deux fichiers dérivés
@@ -126,32 +134,29 @@ const CHARIOT_PHASE_TEX := 218.5
 #
 # Mesurés sur Background_Factory_Plan_5_Soudeur_2_Bras.png (bbox natif
 # 1858-2058 × 728-984), AVANT découpe :
-#   PIVOT_LOCAL   = centre du rond du COUDE (celui d'où part l'avant-bras).
+#   PIVOT_LOCAL   = centre du rond du COUDE (le plus BAS des deux — pas celui
+#                   du haut, qui est le poignet).
 #   BRAS_POINTE_LOCAL = extrémité de la fourche de soudure (pixel le plus à
 #                   DROITE de l'image — un bras qui reproche vers le bas-
 #                   droite, pas le plus BAS, qui tombe sur le pied du socle).
-const PIVOT_LOCAL := Vector2(1969.2, 766.8)
+const PIVOT_LOCAL := Vector2(1889.6, 827.0)
 const BRAS_POINTE_LOCAL := Vector2(2057.0, 830.5)
 
-# Amplitude de la rotation à l'impact (radians). 0.349 rad = 20° : voir le
-# calcul de BRAS_CONTACT_X_TEX ci-dessous pour pourquoi ce n'est PAS un grand
-# angle — au-delà, la pointe recule VERS le socle au lieu de s'en éloigner
-# (géométrie de l'avant-bras, pas un choix de style). À ajuster « au feel »
-# en gardant à l'œil le calcul de contact si l'angle change.
-const BRAS_ANGLE_MAX := 0.349
+# Amplitude de la rotation à l'impact (radians). 0.2618 rad = 15° : le bras de
+# levier COUDE→POINTE est bien plus long qu'avant (le poignet + l'embout
+# suivent maintenant ensemble), donc un angle plus modeste suffit à un geste
+# lisible — à ajuster « au feel » en gardant à l'œil le calcul de contact
+# ci-dessous si l'angle change.
+const BRAS_ANGLE_MAX := 0.2618
 
 # Point de CONTACT — le centre où un CHARIOT doit s'arrêter, pas la position
-# de la pointe elle-même. ⚠ CORRIGÉ 29/08/2026 (2ᵉ retour Rhend : « le chariot
-# empiète sur la base du soudeur ») : caler le CENTRE du chariot sur la
-# pointe pure faisait déborder la moitié GAUCHE de son chargement (~230 px
-# natifs de large, mesuré sur Chaine_Soudure.png) par-dessus le socle du
-# soudeur (bord droit mesuré à x=1985) — la géométrie de l'avant-bras ne lui
-# permet PAS non plus de reculer beaucoup plus loin à droite en pivotant
-# (rotation vers le bas = la pointe REVIENT vers le coude, donc vers le
-# socle, voir BRAS_ANGLE_MAX). On cale donc le chariot pour que son bord
-# GAUCHE affleure le socle (x=1985), la pointe (à 20°, x≈2030 en natif)
-# tombant alors sur la partie gauche du chargement plutôt qu'en son centre —
-# imparfait mais plus juste qu'un centre qui chevauche visiblement le socle.
+# de la pointe elle-même. Caler le CENTRE du chariot sur la pointe pure ferait
+# déborder la moitié GAUCHE de son chargement (~230 px natifs de large,
+# mesuré sur Chaine_Soudure.png) par-dessus le socle du soudeur (bord droit
+# mesuré à x=1985). On cale donc le chariot pour que son bord GAUCHE affleure
+# le socle, la pointe tombant alors sur la partie gauche du chargement plutôt
+# qu'en son centre — imparfait mais plus juste qu'un centre qui chevauche
+# visiblement le socle.
 #   cible = bord_socle(1985) + demi-largeur_chargement(116) + marge(15)
 const BRAS_CONTACT_X_TEX := 2116.0
 
