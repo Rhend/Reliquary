@@ -45,6 +45,16 @@
 #    un flicker (alpha + éclat) piloté par `_process`, phase propre par foyer
 #    pour ne pas pulser en bloc — l'usine doit paraître VIVANTE, pas
 #    métronomique (même souci que le cycle des enseignes de CombatDecorCity).
+#  • SOUDURE CHORÉGRAPHIÉE (29/08/2026, demandé par Rhend) : le Soudeur_1 est
+#    DÉCALÉ latéralement (`DECALAGE_SOUDEUR_1_TEX`) — son corps tombait en
+#    grande partie derrière une poutre fixe de Plan_4_Armature, les deux
+#    calques étant statiques (vitesse 0) donc le recouvrement était permanent,
+#    pas un accident de défilement. La Chaîne_Soudure ne défile plus en
+#    continu : un vrai CYCLE (`CYCLE_PERIODE_S`, 5 s) alterne défilement et
+#    arrêt — la chaîne s'immobilise avec un chariot pile sous le bras, celui-
+#    ci descend, un VFX d'étincelles (`FactorySoudureVfx`) se déclenche au
+#    contact, puis le bras remonte et la chaîne repart. Voir les constantes
+#    CHARIOT_*/BRAS_*/CYCLE_*/VFX_* et `_process_bras` pour le détail du calage.
 # ============================================================
 class_name CombatDecorFactory
 extends Control
@@ -76,24 +86,75 @@ const FEU_ECLAT_MAX := 0.35   # boost RGB au pic, pour un flamboiement plus chau
 # naturelle (voir commentaire de tête). Plate → indiscernable du vrai sol.
 const SOL_SECOURS_COLOR := Color8(38, 11, 12)
 
-# Chariots de la Chaîne_Soudure : espacement MESURÉ (7 chariots sur le
-# canevas, ~670 px d'écart en moyenne, le premier centré vers x=315) — sert à
-# synchroniser le bras soudeur (voir BRAS_* et `_bras` plus bas). Approximatif
-# par nature (l'espacement réel varie de 660 à 710 px) : suffisant pour un
-# geste qui a l'air synchronisé, pas pour un pixel-perfect — à peaufiner.
-const CHARIOT_PERIODE_TEX := 670.0
-const CHARIOT_PHASE_TEX := 315.0
-# Point de contact du bras = centre mesuré de Plan_5_Soudeur_1_Bras.png.
-const BRAS_CONTACT_X_TEX := 789.5
+# DÉCALAGE DU SOUDEUR 1 (29/08/2026, signalé par Rhend : son corps est en
+# grande partie caché par une poutre de Plan_4_Armature, qui passe DEVANT lui
+# — Armature est un plan plus proche, profondeur 0.45 contre 0.25 ici). Corps
+# ET bras sont TOUS DEUX statiques (vitesse 0) : le recouvrement est donc FIXE,
+# pas un accident de défilement — un simple décalage latéral, mesuré pour
+# retomber dans l'intervalle entre deux poutres, suffit. L'ordre d'empilement
+# reste le bon (la poutre EST censée passer devant ce qu'il y a derrière), seul
+# le soudeur était mal placé dessous. Corps ET bras se décalent ENSEMBLE (même
+# valeur) pour rester attachés l'un à l'autre.
+const DECALAGE_SOUDEUR_1_TEX := Vector2(140.0, 0.0)
+
+# Chariots de la Chaîne_Soudure : espacement et phase MESURÉS directement sur
+# Background_Factory_Plan_5_Chaine_Soudure.png (canevas natif 3256 px — PAS le
+# canevas 4770 px des plans Barrière/Sol). ⚠ CORRIGÉ 29/08/2026 : les valeurs
+# précédentes (670/315) avaient été mesurées dans le mauvais référentiel
+# (~1,46× trop grandes, le rapport 4770/3256) — ça passait inaperçu tant que
+# le bras ne faisait qu'un battement approximatif en continu, mais le nouveau
+# cycle À L'ARRÊT (voir CYCLE_* plus bas) exige un calage correct, sinon le
+# chariot s'immobilise à côté du bras plutôt que dessous. 7 chariots, ~461 px
+# d'écart en moyenne (varie de 450 à 488 : l'art n'est pas une grille
+# parfaite ; la moyenne suffit car le défilement avance de PILE une période
+# par cycle, voir `_process`). Premier chariot centré vers x=218.
+const CHARIOT_PERIODE_TEX := 461.33
+const CHARIOT_PHASE_TEX := 218.5
+# Point de contact du bras = centre mesuré de Plan_5_Soudeur_1_Bras.png
+# (539.5), DECALAGE_SOUDEUR_1_TEX.x déjà ajouté puisque le bras se décale avec
+# le corps.
+const BRAS_CONTACT_X_TEX := 679.5
+# Extrémité de l'embout de soudure, en coordonnées LOCALES du sprite du bras —
+# donc SANS le décalage (un enfant du sprite hérite déjà de sa position).
+# Sert à poser le VFX d'étincelles au bon endroit (`_declencher_etincelles`).
+const BRAS_POINTE_LOCAL := Vector2(458.0, 957.0)
 const BRAS_AMPLITUDE_PX := 16.0   # descente du bras à l'impact, en pixels écran
-const BRAS_LARGEUR_S := 0.12      # largeur du geste (gaussienne), en secondes
+
+# ─── CYCLE DE SOUDURE (29/08/2026, demandé par Rhend) ───────
+# Avant : le bras battait en continu pendant que la Chaîne_Soudure défilait
+# sans jamais s'arrêter — une approximation. Désormais un VRAI temps d'arrêt :
+# la chaîne s'immobilise, un chariot se retrouve pile sous le bras, celui-ci
+# descend le souder (étincelles), remonte, puis la chaîne repart. Un cycle
+# dure CYCLE_PERIODE_S secondes : une fenêtre de DÉFILEMENT puis une fenêtre
+# d'ARRÊT (somme des trois temps du bras ci-dessous) :
+#     défilement → [descente → contact (VFX) → remontée] → défilement → …
+# Le défilement avance de PILE UNE période de chariot (CHARIOT_PERIODE_TEX)
+# par cycle, jamais plus ni moins : le chariot suivant arrive donc exactement
+# là où le précédent s'est arrêté, cycle après cycle, sans dérive cumulée.
+# ⚠ Simplification assumée : le cycle s'arrête sur LE chariot qui se trouve
+# là au bon moment, sans distinguer les chariots « robot » des chariots
+# « ferraille » du décor de Christophe — un raffinement pour plus tard si le
+# feel le demande, pas un pré-requis pour un décor qui a l'air vivant.
+const CYCLE_PERIODE_S := 5.0
+const BRAS_DESCENTE_S := 0.3
+# Durée du CONTACT — et donc du VFX d'étincelles, qui dure exactement le temps
+# où le bras reste posé sur le robot. Constante SÉPARÉE de BRAS_DESCENTE_S/
+# BRAS_REMONTEE_S : à ajuster seule « au feel » sans retoucher le geste du bras.
+const VFX_ETINCELLES_DUREE_S := 1.0
+const BRAS_REMONTEE_S := 0.3
+const BRAS_ARRET_S := BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S + BRAS_REMONTEE_S
 
 # Plans du PLUS LOINTAIN au plus proche (ordre d'empilement). `sens` : +1 =
 # droite→gauche (comme la ville), -1 = gauche→droite ; ignoré si vitesse = 0.
 # `feu` : calque de flamme, flicker géré à part (voir `_feux`). `bras` : bras
-# soudeur, geste vertical géré à part (voir `_bras`) — synchronisé sur le
-# défilement de la Chaîne_Soudure, qui doit donc être bâtie AVANT lui (ordre
-# du tableau : Chaîne_Soudure précède Soudeur_1_Bras).
+# soudeur, geste vertical géré à part (voir `_process_bras`) — phase-locké sur
+# le cycle d'arrêt de la Chaîne_Soudure, qui doit donc être bâtie AVANT lui
+# (ordre du tableau : Chaîne_Soudure précède Soudeur_1_Bras). `soudure` :
+# marque LE calque de la Chaîne_Soudure, dont le défilement n'est plus géré
+# par `vitesse` (générique) mais par le cycle CYCLE_* — `vitesse` y reste
+# purement documentaire (vitesse moyenne visuelle du convoyeur avant ce
+# chantier). `decalage_tex` : translation supplémentaire du calque, en pixels
+# du canevas NATIF (avant mise à l'échelle écran) — voir DECALAGE_SOUDEUR_1_TEX.
 #
 # LOGIQUE DE DÉFILEMENT (28/08/2026, harmonisée à la demande de Rhend) : les
 # TROIS plans de la chaîne de production ROBOTS (5 → 4 → 3, les plus
@@ -108,9 +169,9 @@ const BRAS_LARGEUR_S := 0.12      # largeur du geste (gaussienne), en secondes
 # les chariots au bras soudeur).
 const PLANS: Array[Dictionary] = [
 	{"f": "Background_Factory_Plan_Fond.png",               "profondeur": 0.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
-	{"f": "Background_Factory_Plan_5_Chaine_Soudure.png",   "profondeur": 0.25, "vitesse": 80.0, "sens": 1.0,  "feu": false, "bras": false},
-	{"f": "Background_Factory_Plan_5_Soudeur_1.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
-	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true},
+	{"f": "Background_Factory_Plan_5_Chaine_Soudure.png",   "profondeur": 0.25, "vitesse": 80.0, "sens": 1.0,  "feu": false, "bras": false, "soudure": true},
+	{"f": "Background_Factory_Plan_5_Soudeur_1.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false, "decalage_tex": DECALAGE_SOUDEUR_1_TEX},
+	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true,  "decalage_tex": DECALAGE_SOUDEUR_1_TEX},
 	{"f": "Background_Factory_Plan_5_Soudeur_2.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Soudeur_2_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Chaine_Robotique.png", "profondeur": 0.25, "vitesse": 4.0,  "sens": -1.0, "feu": false, "bras": false},
@@ -128,11 +189,13 @@ const PLANS: Array[Dictionary] = [
 var _noeud_zoom: Control = null
 var _couches: Array[Dictionary] = []
 var _feux: Array[Dictionary] = []   # {noeud, phase} — sous-ensemble de _couches
-var _bras: Array[Dictionary] = []   # {noeud, t0, periode} — sous-ensemble de _couches
+var _bras_noeud: Node2D = null      # noeud du calque Soudeur_1_Bras (celui qui porte "bras": true)
+var _bras_sprite: Sprite2D = null   # son sprite direct — parent du VFX d'étincelles
 var _temps := 0.0
 var _mask_material: ShaderMaterial = null
-var _soudure_vitesse := 0.0   # captées en bâtissant Chaîne_Soudure, réutilisées pour le bras
-var _soudure_sens := 1.0
+var _split_tilt := 0.0   # copie de bande_vs_px/vue.x — réutilisée par le VFX d'étincelles
+var _soudure_d0_tex := 0.0    # décalage-texture initial du cycle, voir `_calcule_d0_soudure`
+var _vfx_dernier_cycle := -1  # évite de redéclencher le VFX plusieurs fois dans le même cycle
 var _couvre := 1.0
 
 static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
@@ -143,7 +206,8 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	decor._noeud_zoom = parent
 	decor._mask_material = ShaderMaterial.new()
 	decor._mask_material.shader = load(MASK_SHADER)
-	decor._mask_material.set_shader_parameter("split_tilt", bande_vs_px / maxf(vue.x, 1.0))
+	decor._split_tilt = bande_vs_px / maxf(vue.x, 1.0)
+	decor._mask_material.set_shader_parameter("split_tilt", decor._split_tilt)
 	# Hauteur NATURELLE (720, pas gonflée) : voir le commentaire de tête pour
 	# pourquoi la formule "couverture sans trou" de la ville ne convient pas
 	# ici. Le pivot du sol (DECOR_SOL_FRAC) reste inchangé — c'est lui qui
@@ -193,9 +257,9 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 			_couvre = cadre.size.x / maxf(texture.get_size().x, 1.0)
 		var vitesse := float(plan["vitesse"])
 		var sens := float(plan["sens"])
-		if str(plan["f"]) == "Background_Factory_Plan_5_Chaine_Soudure.png":
-			_soudure_vitesse = vitesse
-			_soudure_sens = sens
+		var est_soudure := bool(plan.get("soudure", false))
+		if est_soudure:
+			_soudure_d0_tex = _calcule_d0_soudure(sens)
 		var idx_min := 0
 		var idx_max := 0
 		if vitesse != 0.0 and cadre.size.x > 0.0:
@@ -207,10 +271,16 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 			idx_max = maxi(int(ceil((larg - cadre.position.x) / cadre.size.x)), 1)
 		var noeud := Node2D.new()
 		noeud.modulate = _teinte_profondeur(float(plan["profondeur"]))
+		var decalage_tex: Vector2 = plan.get("decalage_tex", Vector2.ZERO)
+		# Dernière copie créée : suffisant pour "bras" (toujours vitesse 0, donc
+		# une SEULE copie — idx_min == idx_max == 0), pas de sens à désambiguïser.
+		var derniere_copie: Sprite2D = null
 		for i in range(idx_min, idx_max + 1):
 			var sp := _calque(texture, cadre.size, Vector2(cadre.size.x * i, 0.0))
+			sp.position += decalage_tex * _couvre
 			sp.material = _mask_material
 			noeud.add_child(sp)
+			derniere_copie = sp
 		add_child(noeud)
 		_couches.append({
 			"noeud": noeud,
@@ -219,12 +289,25 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 			"sens": sens,
 			"origine": cadre.position,
 			"boucle_px": cadre.size.x,
+			"soudure": est_soudure,
 		})
 		if bool(plan["feu"]):
 			_feux.append({"noeud": noeud, "phase": float(idx_feu) * 2.39996})
 			idx_feu += 1
 		if bool(plan["bras"]):
-			_bras.append(_bras_synchro(noeud))
+			_bras_noeud = noeud
+			_bras_sprite = derniere_copie
+
+# Décalage-texture initial du défilement de la Chaîne_Soudure, choisi pour
+# que la PREMIÈRE fenêtre de défilement (t=0) amène déjà un chariot pile sous
+# le bras au premier arrêt. Toute multiple de CHARIOT_PERIODE_TEX ajoutée
+# ensuite (voir `_process`) reste congrue, donc l'alignement se répète à
+# chaque cycle sans dérive.
+static func _calcule_d0_soudure(sens: float) -> float:
+	var cible := fposmod(CHARIOT_PHASE_TEX - BRAS_CONTACT_X_TEX, CHARIOT_PERIODE_TEX)
+	if sens < 0.0:
+		cible = fposmod(-cible, CHARIOT_PERIODE_TEX)
+	return cible
 
 static func _cadre_couverture(taille_texture: Vector2, larg: float, haut: float, centre_x: float) -> Rect2:
 	if taille_texture.x <= 0.0 or taille_texture.y <= 0.0:
@@ -232,22 +315,6 @@ static func _cadre_couverture(taille_texture: Vector2, larg: float, haut: float,
 	var couvre := maxf(larg / taille_texture.x, haut / taille_texture.y)
 	var taille := taille_texture * couvre
 	return Rect2(Vector2(centre_x - taille.x * 0.5, (haut - taille.y) * 0.5), taille)
-
-# Calcule à quel instant (dans le repère de _temps) un chariot de la
-# Chaîne_Soudure passe sous le point de contact du bras, et à quel intervalle
-# ça se reproduit — dérivé du sens/vitesse de la Chaîne_Soudure (captés
-# pendant sa construction, forcément AVANT le bras dans `PLANS`) convertis en
-# pixels TEXTURE (divisés par `_couvre`) pour raisonner dans le référentiel où
-# CHARIOT_PERIODE_TEX/CHARIOT_PHASE_TEX ont été mesurés.
-func _bras_synchro(noeud: Node2D) -> Dictionary:
-	var vitesse_tex := _soudure_vitesse / maxf(_couvre, 0.0001)
-	if vitesse_tex <= 0.0:
-		return {"noeud": noeud, "t0": 0.0, "periode": 1.0e9}   # pas de défilement : jamais de geste
-	var cible := fposmod(CHARIOT_PHASE_TEX - BRAS_CONTACT_X_TEX, CHARIOT_PERIODE_TEX)
-	if _soudure_sens < 0.0:
-		cible = fposmod(-cible, CHARIOT_PERIODE_TEX)
-	var periode := CHARIOT_PERIODE_TEX / vitesse_tex
-	return {"noeud": noeud, "t0": cible / vitesse_tex, "periode": periode}
 
 static func _teinte_profondeur(profondeur: float) -> Color:
 	return Color.WHITE.lerp(HAZE_COLOR, HAZE_MAX * (1.0 - clampf(profondeur, 0.0, 1.0)))
@@ -269,16 +336,31 @@ func _process(delta: float) -> void:
 	if is_instance_valid(_noeud_zoom):
 		zoom = maxf(_noeud_zoom.scale.y, 0.001)
 		foyer = _noeud_zoom.pivot_offset - position
+
+	var t_defilement_s := CYCLE_PERIODE_S - BRAS_ARRET_S
+	var cycle_index := floori(_temps / CYCLE_PERIODE_S)
+	var t_cycle := fposmod(_temps, CYCLE_PERIODE_S)
+	# Progression du défilement DANS ce cycle : 0→1 pendant la fenêtre de
+	# défilement, puis PLAFONNÉE à 1 (chaîne figée) pendant l'arrêt.
+	var progres := clampf(t_cycle / maxf(t_defilement_s, 0.0001), 0.0, 1.0)
+	var d_soudure_tex := _soudure_d0_tex + (float(cycle_index) + progres) * CHARIOT_PERIODE_TEX
+
 	for couche in _couches:
 		var noeud: Node2D = couche["noeud"]
 		var origine: Vector2 = couche["origine"]
-		var vitesse: float = couche["vitesse"]
 		var boucle: float = couche["boucle_px"]
-		if vitesse != 0.0 and boucle > 0.0:
-			origine.x -= fmod(_temps * vitesse, boucle) * float(couche["sens"])
+		if bool(couche.get("soudure", false)):
+			# La Chaîne_Soudure ne suit plus `vitesse` : son défilement est
+			# entièrement piloté par le cycle d'arrêt (voir plus haut).
+			origine.x -= fmod(d_soudure_tex * _couvre, boucle) * float(couche["sens"])
+		else:
+			var vitesse: float = couche["vitesse"]
+			if vitesse != 0.0 and boucle > 0.0:
+				origine.x -= fmod(_temps * vitesse, boucle) * float(couche["sens"])
 		var echelle := (1.0 + (zoom - 1.0) * float(couche["profondeur"])) / zoom
 		noeud.position = foyer + (origine - foyer) * echelle
 		noeud.scale = Vector2.ONE * echelle
+
 	for feu in _feux:
 		var noeud: Node2D = feu["noeud"]
 		var intens := _flicker(_temps, float(feu["phase"]))
@@ -286,14 +368,44 @@ func _process(delta: float) -> void:
 		var eclat := 1.0 + FEU_ECLAT_MAX * intens
 		var alpha := FEU_ALPHA_MIN + (FEU_ALPHA_MAX - FEU_ALPHA_MIN) * intens
 		noeud.modulate = Color(base.r * eclat, base.g * eclat, base.b * eclat, alpha)
-	for b in _bras:
-		var noeud: Node2D = b["noeud"]
-		var periode: float = b["periode"]
-		var phase := fposmod(_temps - float(b["t0"]), periode)
-		if phase > periode * 0.5:
-			phase -= periode
-		var frappe := exp(-pow(phase / BRAS_LARGEUR_S, 2.0))
-		noeud.position.y += frappe * BRAS_AMPLITUDE_PX
+
+	_process_bras(t_cycle - t_defilement_s, cycle_index)
+
+# Descente → contact (VFX d'étincelles) → remontée du bras soudeur, PENDANT
+# la fenêtre d'ARRÊT du cycle seulement (`t_arret` < 0 : la chaîne défile
+# encore, le bras reste au repos, position inchangée).
+func _process_bras(t_arret: float, cycle_index: int) -> void:
+	if not is_instance_valid(_bras_noeud):
+		return
+	var y := 0.0
+	var contact := false
+	if t_arret >= 0.0:
+		if t_arret < BRAS_DESCENTE_S:
+			y = _ease_out(t_arret / BRAS_DESCENTE_S) * BRAS_AMPLITUDE_PX
+		elif t_arret < BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S:
+			y = BRAS_AMPLITUDE_PX
+			contact = true
+		elif t_arret < BRAS_ARRET_S:
+			var k := (t_arret - BRAS_DESCENTE_S - VFX_ETINCELLES_DUREE_S) / BRAS_REMONTEE_S
+			y = (1.0 - _ease_out(clampf(k, 0.0, 1.0))) * BRAS_AMPLITUDE_PX
+	# Le nœud a déjà sa position de PARALLAXE posée par la boucle `_couches`
+	# ci-dessus (`_bras_noeud` en fait partie) : on n'AJOUTE que le geste.
+	_bras_noeud.position.y += y
+	if contact and cycle_index != _vfx_dernier_cycle:
+		_vfx_dernier_cycle = cycle_index
+		_declencher_etincelles()
+
+func _declencher_etincelles() -> void:
+	if not is_instance_valid(_bras_sprite):
+		return
+	FactorySoudureVfx.declencher(_bras_sprite, BRAS_POINTE_LOCAL,
+			VFX_ETINCELLES_DUREE_S, _split_tilt)
+
+# Ease-out quadratique : geste mécanique rapide au départ, adouci à l'arrivée
+# — pour la descente ET la remontée (celle-ci l'utilise inversé, voir plus haut).
+static func _ease_out(k: float) -> float:
+	var c := clampf(k, 0.0, 1.0)
+	return 1.0 - (1.0 - c) * (1.0 - c)
 
 # Flicker organique (deux sinusoïdes, pas un pouls régulier) — un flamboiement
 # de fourneau, pas un néon qui clignote.
