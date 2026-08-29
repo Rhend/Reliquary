@@ -107,47 +107,49 @@ const CHARIOT_PERIODE_TEX := 461.33
 const CHARIOT_PHASE_TEX := 218.5
 
 # ─── GÉOMÉTRIE DU BRAS SOUDEUR (Soudeur_2, 29/08/2026) ──────
-# ⚠ SUPERSÉDÉ deux fois le jour même :
-#   1er essai : rotation de TOUT le calque `Soudeur_2_Bras` (épaule + avant-
-#     bras fondus dans la même image) — bougeait aussi l'épaule, qui doit
-#     rester fixe.
-#   2e essai : DÉCOUPE en deux calques (juste avant le MAUVAIS rond — celui du
-#     haut, que Rhend appelle le POIGNET dans sa métaphore, pas le coude).
-# Dans la métaphore de Rhend, le bras a DEUX ronds : le rond du BAS (proche du
-# socle) est le COUDE — c'est LUI qui se déplie, et tout ce qui est en aval
-# (avant-bras + rond du haut = poignet + embout) doit bouger EN BLOC autour de
-# lui. Seul le petit segment socle→coude reste fixe.
-#
-# Un SEUL calque raster ne peut pas avoir une partie fixe et une partie qui
-# tourne autour d'un point INTERNE — `Soudeur_2_Bras.png` est donc DÉCOUPÉ EN
-# DEUX calques dérivés (script Python one-shot, composantes connexes après
-# sectionnement local de la jonction — une droite infinie faisait mal
-# classer la fourche, trop loin du point de coupe pour que son léger biais
-# angulaire reste sans effet) :
-#   `..._AvantBras_Fixe.png`   — socle→coude SEULEMENT, STATIQUE, posé comme
-#                                n'importe quel autre calque (`bras: false`).
-#   `..._AvantBras_Mobile.png` — rond du coude + avant-bras + poignet + embout,
-#                                seul à porter `bras: true` et à pivoter.
+# ⚠ SUPERSÉDÉ trois fois le jour même :
+#   1er essai : rotation de TOUT le calque `Soudeur_2_Bras` — bougeait aussi
+#     l'épaule, qui doit rester fixe.
+#   2e essai : découpe en DEUX (coude fixe, avant-bras+poignet+embout mobile
+#     EN BLOC) — mais Rhend prend le pivot AU MAUVAIS rond (le poignet au lieu
+#     du coude) au 2e essai, corrigé ensuite.
+#   3e essai (celui-ci) : Rhend demande un geste PLUS PROFOND ET plus robotique
+#     — « le coude qui descend + le poignet qui va chercher le chariot » —, ce
+#     qui exige un DEUXIÈME pivot indépendant. `Soudeur_2_Bras.png` est donc
+#     DÉCOUPÉ EN TROIS calques dérivés (script Python one-shot, composantes
+#     connexes après sectionnement local des DEUX jonctions) :
+#       `..._AvantBras_Fixe.png`   — socle→coude, STATIQUE (`bras: false`).
+#       `..._AvantBras_Mobile.png` — rond du COUDE + segment jusqu'au poignet,
+#                                    pivote autour de PIVOT_COUDE (`bras: true`).
+#       `..._Main_Mobile.png`      — rond du POIGNET + embout, posé en ENFANT
+#                                    du sprite avant-bras (voir `_batir`) :
+#                                    hérite AUTOMATIQUEMENT de la rotation du
+#                                    coude et ajoute la sienne par-dessus —
+#                                    exactement la composition d'un vrai bras
+#                                    à deux articulations. PAS un PLANS
+#                                    générique : construit à la main juste
+#                                    après l'avant-bras.
 # Aucune demande à Christophe nécessaire tant que la découpe suffit ; si un
-# jour il livre le bras déjà séparé en couches, ces deux fichiers dérivés
+# jour il livre le bras déjà séparé en couches, ces trois fichiers dérivés
 # peuvent être remplacés à l'identique (mêmes noms, même canevas).
 #
 # Mesurés sur Background_Factory_Plan_5_Soudeur_2_Bras.png (bbox natif
 # 1858-2058 × 728-984), AVANT découpe :
-#   PIVOT_LOCAL   = centre du rond du COUDE (le plus BAS des deux — pas celui
-#                   du haut, qui est le poignet).
-#   BRAS_POINTE_LOCAL = extrémité de la fourche de soudure (pixel le plus à
-#                   DROITE de l'image — un bras qui reproche vers le bas-
-#                   droite, pas le plus BAS, qui tombe sur le pied du socle).
-const PIVOT_LOCAL := Vector2(1889.6, 827.0)
+const PIVOT_COUDE := Vector2(1889.6, 827.0)
+const PIVOT_POIGNET := Vector2(1969.2, 766.8)
+# Extrémité de la fourche de soudure (pixel le plus à DROITE de l'image — un
+# bras qui reproche vers le bas-droite, pas le plus BAS, qui tombe sur le pied
+# du socle). Coordonnées natives ; relative à PIVOT_POIGNET une fois posée en
+# enfant du sprite Main (voir `_declencher_etincelles`).
 const BRAS_POINTE_LOCAL := Vector2(2057.0, 830.5)
 
-# Amplitude de la rotation à l'impact (radians). 0.2618 rad = 15° : le bras de
-# levier COUDE→POINTE est bien plus long qu'avant (le poignet + l'embout
-# suivent maintenant ensemble), donc un angle plus modeste suffit à un geste
-# lisible — à ajuster « au feel » en gardant à l'œil le calcul de contact
-# ci-dessous si l'angle change.
-const BRAS_ANGLE_MAX := 0.2618
+# Amplitudes de rotation à l'impact (radians), COUDE et POIGNET indépendants
+# — deux petites rotations composées donnent un geste plus profond et plus
+# articulé qu'une seule grande, sans faire reculer la pointe vers le socle
+# aussi vite (voir BRAS_CONTACT_X_TEX). À ajuster « au feel » en gardant à
+# l'œil le calcul de contact si l'un des deux angles change.
+const BRAS_ANGLE_COUDE_MAX := 0.6981     # 40°
+const BRAS_ANGLE_POIGNET_MAX := 0.3142   # 18°
 
 # Point de CONTACT — le centre où un CHARIOT doit s'arrêter, pas la position
 # de la pointe elle-même. Caler le CENTRE du chariot sur la pointe pure ferait
@@ -157,8 +159,15 @@ const BRAS_ANGLE_MAX := 0.2618
 # le socle, la pointe tombant alors sur la partie gauche du chargement plutôt
 # qu'en son centre — imparfait mais plus juste qu'un centre qui chevauche
 # visiblement le socle.
+# ⚠ CALIBRÉ EMPIRIQUEMENT (29/08/2026), pas par un calcul de trigonométrie
+# pur : le calcul « à la main » (rotation composée coude+poignet appliquée à
+# BRAS_POINTE_LOCAL) accumule assez d'erreur de mesure sur les centres de
+# rond pour dériver de plusieurs dizaines de pixels écran — mesuré en
+# construisant le VRAI décor et en lisant `Sprite2D.to_global()` sur la
+# pointe tournée au maximum (outil dev jetable, non versionné). Revalider de
+# la même façon si PIVOT_COUDE/POIGNET ou les angles changent.
 #   cible = bord_socle(1985) + demi-largeur_chargement(116) + marge(15)
-const BRAS_CONTACT_X_TEX := 2116.0
+const BRAS_CONTACT_X_TEX := 2100.0
 
 # ─── CYCLE DE SOUDURE (29/08/2026, demandé par Rhend) ───────
 # Avant : le bras battait en continu pendant que la Chaîne_Soudure défilait
@@ -186,11 +195,13 @@ const BRAS_ARRET_S := BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S + BRAS_REMONTEE_S
 
 # Plans du PLUS LOINTAIN au plus proche (ordre d'empilement). `sens` : +1 =
 # droite→gauche (comme la ville), -1 = gauche→droite ; ignoré si vitesse = 0.
-# `feu` : calque de flamme, flicker géré à part (voir `_feux`). `bras` : bras
-# soudeur ANIMÉ — Soudeur_2_AvantBras_Mobile SEUL (Fixe reste un calque
-# statique ordinaire) — géré à part (voir `_process_bras`, pivote autour de
-# `PIVOT_LOCAL`) — phase-locké sur le cycle d'arrêt de la Chaîne_Soudure, qui
-# doit donc être bâtie AVANT lui (ordre du tableau). `soudure` :
+# `feu` : calque de flamme, flicker géré à part (voir `_feux`). `bras` : le
+# COUDE animé — Soudeur_2_AvantBras_Mobile SEUL (Fixe reste un calque
+# statique ordinaire ; le POIGNET, Main_Mobile, n'est PAS dans ce tableau —
+# construit à la main en ENFANT du sprite coude juste après, voir `_batir`) —
+# géré à part (voir `_process_bras`, pivote autour de `PIVOT_COUDE`) —
+# phase-locké sur le cycle d'arrêt de la Chaîne_Soudure, qui doit donc être
+# bâtie AVANT lui (ordre du tableau). `soudure` :
 # marque LE calque de la Chaîne_Soudure, dont le défilement n'est plus géré
 # par `vitesse` (générique) mais par le cycle CYCLE_* — `vitesse` y reste
 # purement documentaire (vitesse moyenne visuelle du convoyeur avant ce
@@ -231,8 +242,9 @@ const PLANS: Array[Dictionary] = [
 var _noeud_zoom: Control = null
 var _couches: Array[Dictionary] = []
 var _feux: Array[Dictionary] = []   # {noeud, phase} — sous-ensemble de _couches
-var _bras_noeud: Node2D = null      # noeud du calque "bras" animé (celui qui porte "bras": true — Soudeur_2_Bras)
-var _bras_sprite: Sprite2D = null   # son sprite direct — parent du VFX d'étincelles
+var _bras_noeud: Node2D = null      # noeud du calque "bras" animé (celui qui porte "bras": true — AvantBras_Mobile)
+var _bras_sprite: Sprite2D = null   # son sprite direct — pivote autour de PIVOT_COUDE
+var _main_sprite: Sprite2D = null   # ENFANT de _bras_sprite (Main_Mobile) — pivote autour de PIVOT_POIGNET, hérite du coude ; parent du VFX d'étincelles
 var _temps := 0.0
 var _mask_material: ShaderMaterial = null
 var _split_tilt := 0.0   # copie de bande_vs_px/vue.x — réutilisée par le VFX d'étincelles
@@ -320,13 +332,13 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 		for i in range(idx_min, idx_max + 1):
 			var sp := _calque(texture, cadre.size, Vector2(cadre.size.x * i, 0.0))
 			if est_bras:
-				# Décale le DESSIN du sprite pour que PIVOT_LOCAL tombe sur
+				# Décale le DESSIN du sprite pour que PIVOT_COUDE tombe sur
 				# l'origine du nœud, puis repousse le nœud d'autant pour que le
 				# rendu reste identique à zéro rotation — c'est CE point qui
 				# reste fixe quand `_process_bras` tourne le sprite (voir l'en-
 				# tête du fichier, section « GÉOMÉTRIE DU BRAS SOUDEUR »).
-				sp.offset = -PIVOT_LOCAL
-				sp.position += PIVOT_LOCAL * sp.scale
+				sp.offset = -PIVOT_COUDE
+				sp.position += PIVOT_COUDE * sp.scale
 			sp.material = _mask_material
 			noeud.add_child(sp)
 			derniere_copie = sp
@@ -346,6 +358,31 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 		if est_bras:
 			_bras_noeud = noeud
 			_bras_sprite = derniere_copie
+			_main_sprite = _construire_main(derniere_copie)
+
+# Construit le sprite du POIGNET (Main_Mobile) en ENFANT du sprite du coude —
+# il hérite ainsi AUTOMATIQUEMENT de la rotation du coude (composition de
+# transforms de Godot) et n'a qu'à ajouter la sienne par-dessus, voir
+# `_process_bras`. Même principe de décalage que le coude, mais SANS
+# pré-multiplier par une échelle : `sp.position` est ici exprimée dans
+# l'espace LOCAL du PARENT (`parent_sprite`, dont le `scale` — déjà non
+# identité à cet instant — s'applique automatiquement à ses enfants) ;
+# pré-multiplier comme pour le coude doublerait l'échelle.
+func _construire_main(parent_sprite: Sprite2D) -> Sprite2D:
+	var chemin := DECOR_DIR + "Background_Factory_Plan_5_Soudeur_2_Main_Mobile.png"
+	if not ResourceLoader.exists(chemin):
+		return null
+	var texture: Texture2D = load(chemin)
+	if texture == null:
+		return null
+	var sp := Sprite2D.new()
+	sp.texture = texture
+	sp.centered = false
+	sp.offset = -PIVOT_POIGNET
+	sp.position = PIVOT_POIGNET - PIVOT_COUDE
+	sp.material = _mask_material
+	parent_sprite.add_child(sp)
+	return sp
 
 # Décalage-texture initial du défilement de la Chaîne_Soudure, choisi pour
 # que la PREMIÈRE fenêtre de défilement (t=0) amène déjà un chariot pile sous
@@ -422,37 +459,43 @@ func _process(delta: float) -> void:
 
 # Descente → contact (VFX d'étincelles) → remontée du bras soudeur, PENDANT
 # la fenêtre d'ARRÊT du cycle seulement (`t_arret` < 0 : la chaîne défile
-# encore, le bras reste au repos, angle nul). PIVOTE le SPRITE (`_bras_sprite`,
-# voir `_batir`), pas le nœud de parallaxe : la rotation ne doit pas se
-# mélanger avec le défilement/zoom/brume déjà posés sur `_bras_noeud`.
+# encore, le bras reste au repos, angles nuls). PIVOTE les DEUX sprites
+# (`_bras_sprite` = coude, `_main_sprite` = poignet — ENFANT du premier, voir
+# `_batir`), pas le nœud de parallaxe : la rotation ne doit pas se mélanger
+# avec le défilement/zoom/brume déjà posés sur `_bras_noeud`. Les deux angles
+# progressent ENSEMBLE (même minuterie) : le coude descend pendant que le
+# poignet se replie vers le chariot, un seul geste continu en deux temps.
 func _process_bras(t_arret: float, cycle_index: int) -> void:
 	if not is_instance_valid(_bras_sprite):
 		return
-	var angle := 0.0
+	var k_ouvert := 0.0   # 0 = repos, 1 = pleinement replié (contact)
 	var contact := false
 	if t_arret >= 0.0:
 		if t_arret < BRAS_DESCENTE_S:
-			angle = _ease_out(t_arret / BRAS_DESCENTE_S) * BRAS_ANGLE_MAX
+			k_ouvert = _ease_out(t_arret / BRAS_DESCENTE_S)
 		elif t_arret < BRAS_DESCENTE_S + VFX_ETINCELLES_DUREE_S:
-			angle = BRAS_ANGLE_MAX
+			k_ouvert = 1.0
 			contact = true
 		elif t_arret < BRAS_ARRET_S:
 			var k := (t_arret - BRAS_DESCENTE_S - VFX_ETINCELLES_DUREE_S) / BRAS_REMONTEE_S
-			angle = (1.0 - _ease_out(clampf(k, 0.0, 1.0))) * BRAS_ANGLE_MAX
-	_bras_sprite.rotation = angle
+			k_ouvert = 1.0 - _ease_out(clampf(k, 0.0, 1.0))
+	_bras_sprite.rotation = k_ouvert * BRAS_ANGLE_COUDE_MAX
+	if is_instance_valid(_main_sprite):
+		_main_sprite.rotation = k_ouvert * BRAS_ANGLE_POIGNET_MAX
 	if contact and cycle_index != _vfx_dernier_cycle:
 		_vfx_dernier_cycle = cycle_index
 		_declencher_etincelles()
 
 func _declencher_etincelles() -> void:
-	if not is_instance_valid(_bras_sprite):
+	if not is_instance_valid(_main_sprite):
 		return
-	# Position LOCALE relative à l'origine du sprite, qui est désormais le
-	# PIVOT (voir `sp.offset = -PIVOT_LOCAL` dans `_batir`) — un enfant posé au
-	# décalage pivot→pointe suit donc AUTOMATIQUEMENT la rotation du bras,
-	# sans recalcul : au moment du contact, `_bras_sprite.rotation` vaut déjà
-	# BRAS_ANGLE_MAX, donc le VFX apparaît pile là où retombe la pointe tournée.
-	FactorySoudureVfx.declencher(_bras_sprite, BRAS_POINTE_LOCAL - PIVOT_LOCAL,
+	# Position LOCALE relative à l'origine du sprite Main, qui est désormais le
+	# PIVOT POIGNET (voir `sp.offset = -PIVOT_POIGNET` dans `_construire_main`)
+	# — un enfant posé au décalage pivot→pointe suit donc AUTOMATIQUEMENT la
+	# rotation du poignet ET celle du coude (héritée via le parentage), sans
+	# recalcul : au moment du contact, le VFX apparaît pile là où retombe la
+	# pointe tournée en deux temps.
+	FactorySoudureVfx.declencher(_main_sprite, BRAS_POINTE_LOCAL - PIVOT_POIGNET,
 			VFX_ETINCELLES_DUREE_S, _split_tilt)
 
 # Ease-out quadratique : geste mécanique rapide au départ, adouci à l'arrivée
