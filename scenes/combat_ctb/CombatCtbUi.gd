@@ -193,24 +193,25 @@ func _construire() -> void:
 		# les assets sont là — sinon placeholder EnergyBoule, comme les
 		# adversaires (leurs sprites n'existent pas encore). Construit AVANT
 		# l'ombre (mais pas encore ajouté à l'arbre) pour pouvoir mesurer sa
-		# hauteur RENDUE réelle (`hauteur_rendue_px`) — l'ombre doit être à
-		# l'échelle du personnage qu'elle porte, pas une taille fixe pour tout
-		# le monde (retour Rhend 29/08/2026 : « aucune corrélation entre la
-		# taille du sprite et l'ombre »).
+		# largeur RENDUE réelle (`largeur_rendue_px`) — l'ombre doit englober
+		# l'encombrement du personnage qu'elle porte, pas une taille fixe pour
+		# tout le monde (retours Rhend 29/08/2026 : « aucune corrélation entre
+		# la taille du sprite et l'ombre », puis « elle doit englober la
+		# taille de l'entité »).
 		var sprite: SpriteSpinePersonnage = null
 		if cb == moteur.avatar():
 			# creer_heros() et pas creer() : l'apparence vient du registre —
 			# sans skin posée, l'export « costumes » de Relic est invisible.
 			sprite = SpriteSpinePersonnage.creer_heros()
-		var hauteur_ref := ORBE_TAILLE.y
+		var largeur_ref := ORBE_TAILLE.x
 		if sprite != null:
-			var h := sprite.hauteur_rendue_px()
-			if h > 0.0:
-				hauteur_ref = h
+			var l := sprite.largeur_rendue_px()
+			if l > 0.0:
+				largeur_ref = l
 		# Ombre portée AVANT le sprite/orbe : l'ordre d'ajout EST l'ordre de
 		# dessin dans Godot, donc l'ombre reste sous le personnage sans jouer
 		# avec le z-index (voir CombatOmbrePortee).
-		var ombre := CombatOmbrePortee.creer(cb.est_joueur(), hauteur_ref)
+		var ombre := CombatOmbrePortee.creer(cb.est_joueur(), largeur_ref)
 		if ombre != null:
 			_ombres[cb] = ombre
 			_sol.add_child(ombre)

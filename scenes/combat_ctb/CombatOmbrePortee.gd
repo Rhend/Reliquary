@@ -14,13 +14,20 @@
 # (posés sur le sol de l'Usine) — même logique que le choix de décor de
 # CombatFondScinde, la ville ne change jamais de camp aujourd'hui.
 #
-# TAILLE PROPORTIONNELLE au personnage (⚠ CORRIGÉ 29/08/2026, retour Rhend :
-# « aucune corrélation entre la taille du sprite et l'ombre » — une largeur
-# fixe pour tout le monde faisait une ombre de hobbit sous un héros et une
-# ombre de héros sous un placeholder EnergyBoule). `creer()` prend la hauteur
-# RENDUE du personnage (`SpriteSpinePersonnage.hauteur_rendue_px()`, ou
-# `ORBE_TAILLE.y` en repli pour un placeholder) et en dérive la largeur de
-# l'ombre via RATIO_LARGEUR_HAUTEUR.
+# TAILLE PROPORTIONNELLE au personnage — deux corrections successives de
+# Rhend après vérification en jeu :
+#   1) « aucune corrélation entre la taille du sprite et l'ombre » — une
+#      largeur fixe pour tout le monde faisait une ombre de hobbit sous un
+#      héros et une ombre de héros sous un placeholder EnergyBoule.
+#   2) « l'ombre doit englober les pieds de l'entité et dépasser un peu
+#      plus » — caler sur la HAUTEUR du personnage (1er essai) donnait une
+#      largeur d'ombre indexée sur la mauvaise dimension : un personnage
+#      LARGE mais pas spécialement grand aurait quand même une ombre étroite.
+#      `creer()` prend donc la LARGEUR rendue du personnage
+#      (`SpriteSpinePersonnage.largeur_rendue_px()`, ou `ORBE_TAILLE.x` en
+#      repli pour un placeholder) et en dérive la largeur de l'ombre via
+#      MARGE_LARGEUR (> 1 : elle doit DÉBORDER du personnage, pas s'arrêter
+#      pile à ses bords).
 #
 # Posée en SIBLING du sprite/orbe du combattant dans `_sol`, ajoutée AVANT
 # lui (CombatCtbUi._construire) : l'ordre des enfants dans Godot EST l'ordre
@@ -35,11 +42,10 @@ extends Node2D
 const DIR_CITY := "res://assets/background/city/"
 const DIR_FACTORY := "res://assets/background/Factory/"
 
-# Largeur de l'ombre en fraction de la hauteur RENDUE du personnage qui la
-# porte. 0.32 recale un héros (hauteur_rendue_px ≈ 276) sur ~88 px de large,
-# proche de l'ancien repère placeholder qu'elle remplace (cercle de rayon 34,
-# soit 68 px). Le disque source fait 878 px de large nativement.
-const RATIO_LARGEUR_HAUTEUR := 0.32
+# Largeur de l'ombre = largeur RENDUE du personnage × cette marge (elle doit
+# déborder un peu, pas s'arrêter pile aux pieds). Le disque source fait
+# 878 px de large nativement.
+const MARGE_LARGEUR := 1.3
 
 # ⚠ CORRIGÉ 29/08/2026 (2e retour Rhend) : le PREMIER essai faisait aussi
 # PIVOTER l'anneau (`rotation`, l'axe Z de l'écran). L'anneau est une
@@ -61,14 +67,14 @@ var _anneau: Sprite2D = null
 var _actif := false
 var _temps := 0.0
 
-static func creer(camp_joueur: bool, hauteur_ref_px: float) -> CombatOmbrePortee:
+static func creer(camp_joueur: bool, largeur_ref_px: float) -> CombatOmbrePortee:
 	var dir := DIR_CITY if camp_joueur else DIR_FACTORY
 	var prefixe := "Background_City_Ombre" if camp_joueur else "Background_Factory_Ombre"
 	var chemin_base := dir + prefixe + ".png"
 	if not ResourceLoader.exists(chemin_base):
 		return null   # dégradation propre : pas d'ombre plutôt qu'un nœud cassé
 	var ombre := CombatOmbrePortee.new()
-	ombre._echelle = maxf(hauteur_ref_px, 1.0) * RATIO_LARGEUR_HAUTEUR / 878.0
+	ombre._echelle = maxf(largeur_ref_px, 1.0) * MARGE_LARGEUR / 878.0
 
 	var base := Sprite2D.new()
 	base.texture = load(chemin_base)
