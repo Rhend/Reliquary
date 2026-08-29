@@ -401,8 +401,9 @@ func _peupler_duel() -> void:
 			# CombatOmbrePortee) — même vitrine partagée que le vrai combat.
 			# Anneau laissé ACTIF en permanence : la ShowRoom est le banc
 			# d'essai, pas de notion de tour ici, autant pouvoir juger l'anneau
-			# sans attendre un combat réel.
-			var ombre_h := CombatOmbrePortee.creer(true)
+			# sans attendre un combat réel. Taille à l'échelle du personnage,
+			# comme dans le vrai combat (voir CombatOmbrePortee).
+			var ombre_h := CombatOmbrePortee.creer(true, relic.hauteur_rendue_px())
 			if ombre_h != null:
 				ombre_h.position = relic.position
 				ombre_h.definir_actif(true)
@@ -422,7 +423,7 @@ func _peupler_duel() -> void:
 		# dans le registre, seul endroit qui sait comment l'asset a été livré.
 		mob.orienter(SpinePersonnagesData.echelle_x(e, false))
 		mob.position = Vector2(VUE.x * SOL_X_ADVERSE, sol_y)
-		var ombre_m := CombatOmbrePortee.creer(false)
+		var ombre_m := CombatOmbrePortee.creer(false, mob.hauteur_rendue_px())
 		if ombre_m != null:
 			ombre_m.position = mob.position
 			ombre_m.definir_actif(true)

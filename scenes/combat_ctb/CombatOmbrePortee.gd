@@ -7,21 +7,20 @@
 #                    TOUJOURS visible, posé au repos.
 #   `Ombre_Dessus` — le même anneau, isolé SEUL sur calque transparent —
 #                    caché au repos, réservé au tour ACTIF (voir
-#                    `definir_actif`). Mesuré : l'anneau est une teinte
-#                    PARFAITEMENT unie sur tout son pourtour (pas de dégradé
-#                    directionnel), donc le faire tourner seul ne se verrait
-#                    pas — on COMBINE rotation continue et pulsation
-#                    (échelle + alpha, sinusoïdes déphasées comme le flicker
-#                    du Fourneau) : c'est la pulsation qui porte l'essentiel
-#                    du signal « c'est mon tour », la rotation reste prête à
-#                    se voir si Christophe enrichit l'anneau plus tard (un
-#                    repère, une graduation) sans qu'il faille retoucher ce
-#                    fichier.
+#                    `definir_actif`).
 #
 # `Background_City_Ombre*` sous les combattants du camp JOUEUR (posés sur le
 # trottoir de CombatDecorCity), `Background_Factory_Ombre*` sous l'ADVERSE
 # (posés sur le sol de l'Usine) — même logique que le choix de décor de
 # CombatFondScinde, la ville ne change jamais de camp aujourd'hui.
+#
+# TAILLE PROPORTIONNELLE au personnage (⚠ CORRIGÉ 29/08/2026, retour Rhend :
+# « aucune corrélation entre la taille du sprite et l'ombre » — une largeur
+# fixe pour tout le monde faisait une ombre de hobbit sous un héros et une
+# ombre de héros sous un placeholder EnergyBoule). `creer()` prend la hauteur
+# RENDUE du personnage (`SpriteSpinePersonnage.hauteur_rendue_px()`, ou
+# `ORBE_TAILLE.y` en repli pour un placeholder) et en dérive la largeur de
+# l'ombre via RATIO_LARGEUR_HAUTEUR.
 #
 # Posée en SIBLING du sprite/orbe du combattant dans `_sol`, ajoutée AVANT
 # lui (CombatCtbUi._construire) : l'ordre des enfants dans Godot EST l'ordre
@@ -36,35 +35,45 @@ extends Node2D
 const DIR_CITY := "res://assets/background/city/"
 const DIR_FACTORY := "res://assets/background/Factory/"
 
-# Largeur cible à l'écran (px), calée sur l'ancien repère placeholder qu'elle
-# remplace (`_dessiner_sol` dessinait un cercle de rayon 34, soit 68 px de
-# large). Le disque source fait 878 px de large nativement.
-const LARGEUR_CIBLE_PX := 80.0
-const ECHELLE := LARGEUR_CIBLE_PX / 878.0
+# Largeur de l'ombre en fraction de la hauteur RENDUE du personnage qui la
+# porte. 0.32 recale un héros (hauteur_rendue_px ≈ 276) sur ~88 px de large,
+# proche de l'ancien repère placeholder qu'elle remplace (cercle de rayon 34,
+# soit 68 px). Le disque source fait 878 px de large nativement.
+const RATIO_LARGEUR_HAUTEUR := 0.32
 
-const VITESSE_ROTATION := 0.9        # rad/s — lent, un repère, pas un ventilateur
+# ⚠ CORRIGÉ 29/08/2026 (2e retour Rhend) : le PREMIER essai faisait aussi
+# PIVOTER l'anneau (`rotation`, l'axe Z de l'écran). L'anneau est une
+# ELLIPSE (le disque écrasé pour la perspective au sol) : la faire tourner
+# dans le plan de l'écran fait BASCULER son grand axe, donnant l'illusion
+# d'un disque qui bascule en 3D au lieu de tourner à plat sur le sol — casse
+# le réalisme de la scène (retour Rhend : « ça casse tout le réalisme »).
+# Un anneau de teinte unie sur tout son pourtour n'a de toute façon rien à
+# montrer tourner. Seule la PULSATION (échelle + alpha, comme le flicker du
+# Fourneau) porte le signal « c'est mon tour » — flat, jamais de rotation.
 const PULSE_VITESSE := 3.2
 const PULSE_ECHELLE_MIN := 0.92
 const PULSE_ECHELLE_MAX := 1.18
 const PULSE_ALPHA_MIN := 0.55
 const PULSE_ALPHA_MAX := 1.0
 
+var _echelle := 1.0
 var _anneau: Sprite2D = null
 var _actif := false
 var _temps := 0.0
 
-static func creer(camp_joueur: bool) -> CombatOmbrePortee:
+static func creer(camp_joueur: bool, hauteur_ref_px: float) -> CombatOmbrePortee:
 	var dir := DIR_CITY if camp_joueur else DIR_FACTORY
 	var prefixe := "Background_City_Ombre" if camp_joueur else "Background_Factory_Ombre"
 	var chemin_base := dir + prefixe + ".png"
 	if not ResourceLoader.exists(chemin_base):
 		return null   # dégradation propre : pas d'ombre plutôt qu'un nœud cassé
 	var ombre := CombatOmbrePortee.new()
+	ombre._echelle = maxf(hauteur_ref_px, 1.0) * RATIO_LARGEUR_HAUTEUR / 878.0
 
 	var base := Sprite2D.new()
 	base.texture = load(chemin_base)
 	base.centered = true
-	base.scale = Vector2.ONE * ECHELLE
+	base.scale = Vector2.ONE * ombre._echelle
 	ombre.add_child(base)
 
 	var chemin_anneau := dir + prefixe + "_Dessus.png"
@@ -72,7 +81,7 @@ static func creer(camp_joueur: bool) -> CombatOmbrePortee:
 		var anneau := Sprite2D.new()
 		anneau.texture = load(chemin_anneau)
 		anneau.centered = true
-		anneau.scale = Vector2.ONE * ECHELLE
+		anneau.scale = Vector2.ONE * ombre._echelle
 		anneau.visible = false
 		# Additif (29/08/2026, mesuré : la teinte ville est presque la couleur
 		# DU SOL LUI-MÊME — un anneau en alpha normal s'y noyait complètement,
@@ -97,15 +106,13 @@ func definir_actif(actif: bool) -> void:
 		# Repos net : le prochain tour de CE combattant reparte d'un état
 		# identique, pas de la phase où le pouls s'est arrêté la fois d'avant.
 		_temps = 0.0
-		_anneau.rotation = 0.0
-		_anneau.scale = Vector2.ONE * ECHELLE
+		_anneau.scale = Vector2.ONE * _echelle
 		_anneau.modulate.a = 1.0
 
 func _process(delta: float) -> void:
 	if not _actif:
 		return
 	_temps += delta
-	_anneau.rotation = _temps * VITESSE_ROTATION
 	var p := 0.5 + 0.5 * sin(_temps * PULSE_VITESSE)
-	_anneau.scale = Vector2.ONE * ECHELLE * lerpf(PULSE_ECHELLE_MIN, PULSE_ECHELLE_MAX, p)
+	_anneau.scale = Vector2.ONE * _echelle * lerpf(PULSE_ECHELLE_MIN, PULSE_ECHELLE_MAX, p)
 	_anneau.modulate.a = lerpf(PULSE_ALPHA_MIN, PULSE_ALPHA_MAX, p)
