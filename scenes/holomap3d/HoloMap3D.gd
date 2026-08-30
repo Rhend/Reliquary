@@ -563,15 +563,19 @@ func _charger_excel() -> void:
 	# EXPÉRIMENTATION « aération » : cadrage de repos VOLONTAIREMENT plus serré
 	# que « toute la grille tient à l'écran » (qui correspondait à 0.98) — on ne
 	# voit qu'une partie de la ville, le reste se découvre en zoomant/déplaçant
-	# la caméra (ZQSD). Ratio choisi par dichotomie contre TestHoloPicking :
-	# en dessous de ~0.7 (testé à 0.6 et 0.5), au plongée minimale (vue la plus
-	# rasante), un bâtiment de premier plan se met à occulter RÉELLEMENT un lieu
-	# situé derrière lui (biome_marecage devant biome_cimetiere) — occlusion 3D
-	# normale d'une caméra plus proche/plus basse, pas un bug de hitbox, mais la
-	# règle du picking (« chaque lieu découvert reste cliquable ») ne le tolère
-	# pas. 0.7 passe cette règle sur le gabarit actuel ; retoucher les lieux
-	# (positions/paliers) sur le gabarit Excel pourrait déplacer ce seuil.
-	distance = TAILLE_MONDE_CIBLE * 0.7
+	# la caméra (ZQSD). En dessous de ~0.7 (testé à 0.6, 0.55, 0.5), au plongée
+	# EXPORT MINIMALE (25°, vue la plus rasante), un bâtiment de premier plan se
+	# met à occulter RÉELLEMENT un lieu situé derrière lui (biome_marecage
+	# devant biome_cimetiere) — occlusion 3D normale d'une caméra plus
+	# proche/plus basse, pas un bug de hitbox, mais que la règle du picking
+	# (« chaque lieu découvert reste cliquable ») ne tolère pas. `plongee_min`
+	# remonté à 32° (au lieu de 25° par défaut) pour cette carte SPÉCIFIQUEMENT :
+	# la vue la plus rasante disparaît (le joueur ne peut plus descendre au
+	# raz du sol), ce qui suffit à éliminer l'occlusion même à un cadrage à
+	# 0.55. Si on retouche encore le ratio, revérifier TestHoloPicking (angle
+	# bas) — remonter encore `plongee_min` si besoin.
+	distance = TAILLE_MONDE_CIBLE * 0.55
+	plongee_min = 32.0
 	plongee_deg = 50.0
 	couleur_decor_bati = Color(0.46, 0.56, 0.74)
 	luminosite_decor = 2.2
