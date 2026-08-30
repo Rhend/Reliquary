@@ -169,30 +169,43 @@ const PIVOT_POIGNET := Vector2(2885.8, 1101.6)
 # une fois posée en enfant du sprite Main (voir `_declencher_etincelles`).
 const BRAS_POINTE_LOCAL := Vector2(3013.0, 1217.0)
 
-# Amplitudes de rotation à l'impact (radians), COUDE et POIGNET indépendants
-# — deux petites rotations composées donnent un geste plus profond et plus
-# articulé qu'une seule grande, sans faire reculer la pointe vers le socle
-# aussi vite (voir BRAS_CONTACT_X_TEX). À ajuster « au feel » en gardant à
-# l'œil le calcul de contact si l'un des deux angles change.
+# Amplitudes de rotation à l'impact (radians), COUDE et POIGNET indépendants.
+# ⚠ COUDE et POIGNET COMPOSENT (le poignet tourne DANS le repère déjà tourné
+# du coude, voir `_construire_enfant_bras`) : au repos, le segment poignet→
+# pointe pointe déjà vers le SUD-EST (~42° sous l'horizontale — c'est le
+# dessin de Christophe). Tourner le COUDE de 40° l'amène (seul) à ~82° sous
+# l'horizontale — quasi plein SUD. Un POIGNET positif s'AJOUTE par-dessus et
+# fait franchir la verticale : la main finit au SUD-OUEST, repliée vers le
+# socle au lieu de tendre vers le chariot (bug signalé par Rhend, 30/08/2026,
+# « je veux que ça aille vers le sud-est en direction du robot »). Le POIGNET
+# doit donc être NÉGATIF : il retranche de la rotation du coude pour ramener
+# la pointe sous ~50-55° sous l'horizontale (SUD-EST net, pas plein sud) —
+# c'est un contre-braquet du poignet pendant que le coude descend, pas un
+# repli supplémentaire.
 const BRAS_ANGLE_COUDE_MAX := 0.6981     # 40°
-const BRAS_ANGLE_POIGNET_MAX := 0.3142   # 18°
+const BRAS_ANGLE_POIGNET_MAX := -0.5236  # -30° (voir note ci-dessus, PAS +18° comme avant)
 
 # Point de CONTACT — le centre où un CHARIOT doit s'arrêter, pas la position
 # de la pointe elle-même. Caler le CENTRE du chariot sur la pointe pure ferait
 # déborder la moitié GAUCHE de son chargement (~360 px natifs de large,
 # re-mesuré le 30/08 sur le nouveau Chaine_Soudure.png) par-dessus le socle
 # du soudeur (bord droit re-mesuré à x=2907 sur Soudeur_2.png). On cale donc
-# le chariot pour que son bord GAUCHE affleure le socle, la pointe tombant
-# alors sur la partie gauche du chargement plutôt qu'en son centre.
-#   cible = bord_socle(2907) + demi-largeur_chargement(180) + marge(15)
+# le chariot pour que la pointe tombe FRANCHEMENT dans le chargement (pas sur
+# son bord) tout en restant PROCHE du socle (30/08/2026, 2ᵉ retour de Rhend :
+# « le chariot peut se rapprocher encore » ET « la pointe doit toucher une
+# partie du chariot ») :
+#   cible = bord_socle(2907) + demi-largeur_chargement(180) − marge(30)
+# La marge est NÉGATIVE : le bord gauche du chargement (cible − demi-largeur)
+# tombe donc LÉGÈREMENT avant le bord du socle plutôt qu'après — le chariot
+# glisse un peu sous l'aplomb du bras, plus resserré que la version précédente.
 # ⚠ Formule indicative seulement, pas un calcul de trigonométrie pur : la
 # rotation composée coude+poignet accumule de l'erreur de mesure sur les
 # centres de rond, qui dérive en plusieurs dizaines de pixels écran une fois
 # la pointe tournée au maximum. Revalider en construisant le VRAI décor et en
-# lisant `Sprite2D.to_global()` sur la pointe tournée à fond (outil dev
-# jetable, non versionné) si l'alignement visuel déçoit, ou si PIVOT_COUDE/
-# POIGNET/les angles changent à nouveau.
-const BRAS_CONTACT_X_TEX := 3102.0
+# lisant `Sprite2D.to_global()` sur la pointe tournée à fond (outil dev :
+# `SHOT_MODE=factory_bras` sur `ScreenshotTool`) si l'alignement visuel déçoit,
+# ou si PIVOT_COUDE/POIGNET/les angles changent à nouveau.
+const BRAS_CONTACT_X_TEX := 3057.0
 
 # ─── CYCLE DE SOUDURE (29/08/2026, demandé par Rhend) ───────
 # Avant : le bras battait en continu pendant que la Chaîne_Soudure défilait
