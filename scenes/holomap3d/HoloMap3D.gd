@@ -230,6 +230,7 @@ var _post_mat: ShaderMaterial
 
 var _yaw := 0.0
 var _dragging := false
+var _dragging_plongee := false   # clic droit maintenu : lever/baisser la caméra (souris haut/bas)
 var _tooltip: HoloTooltip
 var _hovered: HoloLocation3D
 var _radar: Node3D
@@ -1393,9 +1394,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			_dragging = mb.pressed and mode_rotation == 0
+		elif mb.button_index == MOUSE_BUTTON_RIGHT:
+			# Clic droit maintenu + souris haut/bas : incline la caméra (relève/abaisse
+			# la vue), sans toucher au lacet — un contrôle DÉDIÉ à la plongée, en plus
+			# du clic gauche qui fait déjà les deux (yaw + plongée) en mode Libre.
+			_dragging_plongee = mb.pressed
+			if mb.pressed:
+				get_viewport().set_input_as_handled()   # pas de menu contextuel / clic du hub derrière
 	elif event is InputEventMouseMotion and _dragging:
 		var rel := (event as InputEventMouseMotion).relative
 		_yaw -= rel.x * 0.01
+		plongee_deg = clampf(plongee_deg + rel.y * 0.3, plongee_min, plongee_max)
+		_appliquer_camera()
+	elif event is InputEventMouseMotion and _dragging_plongee:
+		var rel := (event as InputEventMouseMotion).relative
 		plongee_deg = clampf(plongee_deg + rel.y * 0.3, plongee_min, plongee_max)
 		_appliquer_camera()
 	elif event is InputEventKey and (event as InputEventKey).pressed \
