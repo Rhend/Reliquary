@@ -40,13 +40,29 @@ const MASK_SHADER := "res://scenes/combat_ctb/raster_split_mask_additif.gdshader
 # l'écran (usine qui monte une armée de robots, pas un fer à souder de
 # bricoleur) — vitesse et gravité montées ENSEMBLE pour garder la même forme
 # de gerbe (juste plus grande/plus loin), pas juste plus lente ou plus haute.
+#
+# ⚠ FLOU signalé (30/08/2026, retour Rhend, une fois vu EN JEU — invisible
+# dans `SHOT_MODE=factory_bras`, qui capture un SubViewport offscreen à
+# 1280×720 SANS passer par l'étirement de fenêtre, voir ScreenshotTool.gd) :
+# le projet est en `window/stretch/mode="canvas_items"`, donc la fenêtre
+# réelle (`window/size/mode=4` = plein écran EXCLUSIF, très probablement
+# > 1280×720) réétire ce rendu au filtrage BILINÉAIRE. Un détail fin — un
+# trait de quelques pixels avec en plus SA PROPRE antialiasing (`draw_line`
+# posait `antialiased=true`) — passe très mal ce ré-étirement : le double
+# adoucissement (AA du trait + filtrage bilinéaire de la fenêtre) le rend
+# flou, là où l'aplat du décor (grandes zones de couleur plate, bords francs
+# mais peu nombreux) ne montre presque rien du même effet. Remède : traits
+# SANS antialiasing propre (`draw_line(..., false)`, bords francs laissés au
+# filtrage de fenêtre plutôt qu'ajoutés en double) et encore plus ÉPAIS —
+# plus une forme est grande à l'écran, moins le flou du filtrage bilinéaire
+# se voit PROPORTIONNELLEMENT à sa taille.
 const N_ETINCELLES := 46
 const VITESSE_MIN := 220.0
 const VITESSE_MAX := 820.0
 const GRAVITE := 1250.0
-const EPAISSEUR := 11.0
-const LONGUEUR_TRAIT := 26.0
-const FLASH_RAYON := 55.0
+const EPAISSEUR := 20.0
+const LONGUEUR_TRAIT := 36.0
+const FLASH_RAYON := 62.0
 const FLASH_DUREE := 0.22
 const VIE_ETINCELLE_MIN := 0.32
 const VIE_ETINCELLE_MAX := 0.55
@@ -97,9 +113,9 @@ func _draw() -> void:
 		# simple disque orange à ce diamètre lisait comme une tache plate,
 		# pas un arc de soudure aveuglant.
 		draw_circle(Vector2.ZERO, FLASH_RAYON * 1.7 * (0.3 + 0.7 * flash),
-				Color(1.0, 0.55, 0.15, 0.5 * flash))
+				Color(1.0, 0.55, 0.15, 0.5 * flash), true, -1.0, false)
 		draw_circle(Vector2.ZERO, FLASH_RAYON * (0.4 + 0.6 * flash),
-				Color(1.0, 0.98, 0.9, 0.95 * flash))
+				Color(1.0, 0.98, 0.9, 0.95 * flash), true, -1.0, false)
 	for e in _etincelles:
 		var vie := _t - float(e["decalage"])
 		var vie_max: float = e["vie_max"]
@@ -113,4 +129,4 @@ func _draw() -> void:
 		# Refroidissement : jaune-blanc vif au départ, rouge braise en fin de vie.
 		var couleur := Color(1.0, 0.85, 0.3).lerp(Color(0.7, 0.15, 0.05), k)
 		draw_line(p - dir * LONGUEUR_TRAIT, p,
-				Color(couleur.r, couleur.g, couleur.b, 1.0 - k), EPAISSEUR, true)
+				Color(couleur.r, couleur.g, couleur.b, 1.0 - k), EPAISSEUR, false)
