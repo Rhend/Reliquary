@@ -560,16 +560,18 @@ func _charger_excel() -> void:
 	# Réglages spécifiques carte Excel (décor dense au sol, pas de gratte-ciels) :
 	# cadrage plus serré, bâti plus clair/lisible, routes moins envahissantes,
 	# brume repoussée (la carte tient dans le champ proche).
-	# EXPÉRIMENTATION « aération » : le ratio de cadrage (0.98 = toute la grille
-	# tient à l'écran) est CONSERVÉ tel quel — TestHoloPicking (angle bas +
-	# clic dans le vide) est câblé sur ce cadrage précis, un ratio plus serré
-	# fait se chevaucher les boîtes de collision des lieux au raz du sol et
-	# casse le picking. Le sentiment « on ne voit pas tout d'un coup » vient
-	# plutôt de _jouer_intro() (descente depuis plus loin + peinture radiale)
-	# et du monde simplement plus grand → à retravailler proprement (retailler
-	# les boîtes de HoloLocation3D) si on veut vraiment un cadrage de repos
-	# plus serré.
-	distance = TAILLE_MONDE_CIBLE * 0.98
+	# EXPÉRIMENTATION « aération » : cadrage de repos VOLONTAIREMENT plus serré
+	# que « toute la grille tient à l'écran » (qui correspondait à 0.98) — on ne
+	# voit qu'une partie de la ville, le reste se découvre en zoomant/déplaçant
+	# la caméra (ZQSD). Ratio choisi par dichotomie contre TestHoloPicking :
+	# en dessous de ~0.7 (testé à 0.6 et 0.5), au plongée minimale (vue la plus
+	# rasante), un bâtiment de premier plan se met à occulter RÉELLEMENT un lieu
+	# situé derrière lui (biome_marecage devant biome_cimetiere) — occlusion 3D
+	# normale d'une caméra plus proche/plus basse, pas un bug de hitbox, mais la
+	# règle du picking (« chaque lieu découvert reste cliquable ») ne le tolère
+	# pas. 0.7 passe cette règle sur le gabarit actuel ; retoucher les lieux
+	# (positions/paliers) sur le gabarit Excel pourrait déplacer ce seuil.
+	distance = TAILLE_MONDE_CIBLE * 0.7
 	plongee_deg = 50.0
 	couleur_decor_bati = Color(0.46, 0.56, 0.74)
 	luminosite_decor = 2.2
