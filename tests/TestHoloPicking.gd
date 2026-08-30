@@ -75,8 +75,9 @@ func _ready() -> void:
 
 	print("\n[4] Clic dans le vide → aucune sélection fantôme")
 	_selections.clear()
-	await _cliquer(Vector2(20.0, 700.0))   # coin bas-gauche : hors de toute zone
-	_check("clic dans le vide → rien", _selections.is_empty())
+	var pos_vide := _point_vide(holo._map)
+	await _cliquer(pos_vide)
+	_check("clic dans le vide → rien (%s)" % str(pos_vide.round()), _selections.is_empty())
 	holo.queue_free()
 	await get_tree().process_frame
 
@@ -298,6 +299,26 @@ func _diag_rayon(map: HoloMap3D, pos: Vector2) -> void:
 		var col := res["collider"] as Node
 		print("    [diag] rayon touche %s à %s" % [
 				col.lieu_id if col is HoloLocation3D else str(col), str(res["position"])])
+
+# Pixel d'écran garanti vide (aucune zone sous le rayon) : sondé au runtime
+# parmi quelques coins plutôt que figé en dur — un cadrage caméra différent
+# (zoom, plongée…) déplace ce qui tombe dans chaque coin de l'écran.
+func _point_vide(map: HoloMap3D) -> Vector2:
+	var candidats: Array[Vector2] = [
+		Vector2(20.0, 700.0), Vector2(1260.0, 700.0),
+		Vector2(20.0, 20.0), Vector2(1260.0, 20.0),
+		Vector2(640.0, 10.0),
+	]
+	for pos in candidats:
+		var origine: Vector3 = map._cam.project_ray_origin(pos)
+		var dir: Vector3 = map._cam.project_ray_normal(pos)
+		var params := PhysicsRayQueryParameters3D.create(origine, origine + dir * 1000.0)
+		params.collide_with_areas = true
+		params.collide_with_bodies = true
+		var res: Dictionary = map.get_world_3d().direct_space_state.intersect_ray(params)
+		if res.is_empty():
+			return pos
+	return candidats[0]   # aucun coin vide (improbable) : le check ci-dessous échouera, visible en CI
 
 # Diagnostic d'échec : quel Control (chemin complet) est sous ce point ?
 func _log_control_sous(pos: Vector2) -> void:
