@@ -842,9 +842,15 @@ func _shoot_factory_bras() -> void:
 	decor._process(0.0)
 	await RenderingServer.frame_post_draw
 	var img_repos := await _capture("res://tests/_shot_factory_bras_repos.png")
+	# t=2.72s : descente (0.3 s) finie à 2.7 s → juste APRÈS le début du
+	# contact, en plein flash (FLASH_DUREE ~0.2 s) — capture le BURST lui-même,
+	# pas seulement la pluie d'étincelles qui suit.
+	decor._process(2.72)
+	await RenderingServer.frame_post_draw
+	var img_flash := await _capture("res://tests/_shot_factory_bras_flash.png")
 	# t=3.4s : cycle 0 (durée 5 s), fenêtre d'arrêt à partir de 2.4 s,
 	# descente (0.3 s) finie à 2.7 s → 3.4 s tombe en plein plateau de contact.
-	decor._process(3.4)
+	decor._process(0.68)
 	await RenderingServer.frame_post_draw
 	var img_contact := await _capture("res://tests/_shot_factory_bras_contact.png")
 	# +1 cycle complet (5 s) : même point du geste, chariot SUIVANT — vérifie
@@ -857,6 +863,7 @@ func _shoot_factory_bras() -> void:
 	# captures, comparables côte à côte.
 	var centre := Vector2(_vp.size.x * 0.62, _vp.size.y * 0.55)
 	_capture_zoom_img(img_repos, "res://tests/_shot_factory_bras_repos_zoom.png", centre, 3)
+	_capture_zoom_img(img_flash, "res://tests/_shot_factory_bras_flash_zoom.png", centre, 3)
 	_capture_zoom_img(img_contact, "res://tests/_shot_factory_bras_contact_zoom.png", centre, 3)
 	_capture_zoom_img(img_contact2, "res://tests/_shot_factory_bras_contact2_zoom.png", centre, 3)
 

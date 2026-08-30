@@ -24,15 +24,31 @@ const MASK_SHADER := "res://scenes/combat_ctb/raster_split_mask_additif.gdshader
 # 30% initiaux : à `_duree` = 2 s, une seule bouffée qui s'éteint lentement
 # aurait fait des traînées interminables et clairsemées vers la fin — une
 # pluie CONTINUE de courtes étincelles pendant toute la soudure lit mieux.
-const N_ETINCELLES := 28
-const VITESSE_MIN := 60.0
-const VITESSE_MAX := 220.0
-const GRAVITE := 340.0
-const EPAISSEUR := 3.0
-const LONGUEUR_TRAIT := 7.0
-const FLASH_RAYON := 15.0
-const FLASH_DUREE := 0.15
-const VIE_ETINCELLE_MIN := 0.35
+#
+# ⚠ RE-CALIBRÉ le 30/08/2026 (retour Rhend : « on dirait une petite soudure de
+# rien du tout ») — deux causes cumulées, pas juste un manque de punch :
+#  1. Ce VFX est posé en ENFANT du sprite Main (voir `declencher`), donc TOUTES
+#     ses tailles en pixels sont dans le repère LOCAL de ce sprite, hérité de
+#     son `scale` (~0.27 à l'écran, cadre écran / canevas natif 4770 px). Un
+#     rayon de flash "15" ne fait donc que ~4 px ÉCRAN, quasi invisible.
+#  2. Le nouveau canevas plein cadre de la découpe (30/08, voir CombatDecorFactory)
+#     a fait BAISSER ce ratio d'échelle par rapport à l'ancien Bras à part
+#     (canevas 3256 px, scale ~0.40) : à réglages inchangés, le VFX avait donc
+#     RÉTRÉCI tout seul en plus d'être déjà petit.
+# Les constantes spatiales (épaisseur/longueur/rayon/vitesse/gravité) sont
+# donc portées à un niveau qui rend un ARC DE SOUDURE INDUSTRIELLE bien vu à
+# l'écran (usine qui monte une armée de robots, pas un fer à souder de
+# bricoleur) — vitesse et gravité montées ENSEMBLE pour garder la même forme
+# de gerbe (juste plus grande/plus loin), pas juste plus lente ou plus haute.
+const N_ETINCELLES := 46
+const VITESSE_MIN := 220.0
+const VITESSE_MAX := 820.0
+const GRAVITE := 1250.0
+const EPAISSEUR := 11.0
+const LONGUEUR_TRAIT := 26.0
+const FLASH_RAYON := 55.0
+const FLASH_DUREE := 0.22
+const VIE_ETINCELLE_MIN := 0.32
 const VIE_ETINCELLE_MAX := 0.55
 const ETALEMENT_FRACTION := 0.8
 
@@ -76,8 +92,14 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var flash := clampf(1.0 - _t / FLASH_DUREE, 0.0, 1.0)
 	if flash > 0.0:
+		# Halo double : lueur orange large (additif, donc elle se contente de
+		# chauffer les alentours) + cœur quasi blanc étroit par-dessus — un
+		# simple disque orange à ce diamètre lisait comme une tache plate,
+		# pas un arc de soudure aveuglant.
+		draw_circle(Vector2.ZERO, FLASH_RAYON * 1.7 * (0.3 + 0.7 * flash),
+				Color(1.0, 0.55, 0.15, 0.5 * flash))
 		draw_circle(Vector2.ZERO, FLASH_RAYON * (0.4 + 0.6 * flash),
-				Color(1.0, 0.95, 0.7, 0.9 * flash))
+				Color(1.0, 0.98, 0.9, 0.95 * flash))
 	for e in _etincelles:
 		var vie := _t - float(e["decalage"])
 		var vie_max: float = e["vie_max"]
