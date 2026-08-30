@@ -51,21 +51,34 @@
 #    SOUDEUR_2 (confirmé par Rhend : la grue déjà bien visible, jamais
 #    masquée). La Chaîne_Soudure ne défile plus en continu : un vrai CYCLE
 #    (`CYCLE_PERIODE_S`, 5 s) alterne défilement et arrêt — la chaîne
-#    s'immobilise avec un chariot pile sous le bras. Le bras PIVOTE (29/08,
-#    3ᵉ itération après deux retours de Rhend) : « la tête doit descendre
-#    selon l'axe logique avec le pivot central » (1er retour, a fait tomber
-#    la translation verticale) puis « c'est encore tout le sprite qui pivote,
-#    je veux que SEUL l'avant-bras bouge, l'épaule reste fixe, le coude se
-#    déplie » (2e retour, a fait tomber la rotation d'un calque unique). Le
-#    calque `Soudeur_2_Bras` livré par Christophe est donc DÉCOUPÉ EN DEUX
-#    (script one-shot, voir la section « GÉOMÉTRIE DU BRAS SOUDEUR ») :
-#    `AvantBras_Fixe` (épaule, statique, un calque ordinaire de plus) et
-#    `AvantBras_Mobile` (coude + avant-bras + embout, seul à pivoter — via le
-#    classique décalage `Sprite2D.offset = -pivot` + repositionnement, voir
-#    `_batir`). Un VFX d'étincelles (`FactorySoudureVfx`) se déclenche au
-#    contact — sa position locale suit AUTOMATIQUEMENT la rotation puisqu'elle
-#    est posée en ENFANT du sprite mobile, au bon décalage du pivot. Voir
-#    CHARIOT_*/BRAS_*/CYCLE_*/VFX_* et `_process_bras`.
+#    s'immobilise avec un chariot pile sous le bras. Le bras PIVOTE en DEUX
+#    articulations (coude + poignet, geste composé).
+#  • DÉCOUPAGE DU BRAS — VRAIE LIVRAISON (30/08/2026) : le calque `Soudeur_2_
+#    Bras` livré en un seul morceau a d'abord été débité à la main par un
+#    script one-shot (3 pièces, épaule/avant-bras/main) le 29/08 — SUPERSÉDÉ
+#    le lendemain par Christophe, qui a livré le bras déjà découpé en CINQ
+#    fichiers `Soudeur_{1,2}_Bras_{1..5}.png` (même canevas plein cadre que
+#    tout le reste, donc plus de mismatch de résolution à corriger). Chaîne
+#    anatomique, du corps vers la pointe : `_1` épaule/avant-bras HAUT (socle
+#    → coude, STATIQUE), `_2` rond du COUDE (STATIQUE — le coude ne bouge
+#    jamais, il ne fait que donner le centre de rotation de ce qui suit, même
+#    règle qu'avant : un rond de jointure appartient à la pièce qui ne tourne
+#    PAS autour de lui), `_3` avant-bras (coude → poignet, PIVOTE autour du
+#    coude), `_4` rond du POIGNET (solidaire de l'avant-bras — pivote AVEC le
+#    coude mais n'ajoute aucune rotation propre, même logique que `_2`), `_5`
+#    main + embout de soudure (PIVOTE en plus autour du poignet, hérite de la
+#    rotation du coude par parentage). `_1`/`_2` sont des calques ordinaires
+#    du tableau `PLANS` ; `_3` est le calque marqué `"bras": true` ; `_4` et
+#    `_5` sont construits à la main en ENFANTS de `_3` (voir `_batir` /
+#    `_construire_enfant_bras`), au même décalage `Sprite2D.offset = -pivot`
+#    + repositionnement qu'avant. Soudeur_1 (bras jamais animé) reçoit les
+#    5 pièces comme de simples calques statiques, dans le même ordre. Pivots
+#    et pointe RE-MESURÉS sur la nouvelle livraison (centroïde alpha des
+#    ronds `_2`/`_4`, pixel le plus à DROITE de `_5`) — voir « GÉOMÉTRIE DU
+#    BRAS SOUDEUR ». Un VFX d'étincelles (`FactorySoudureVfx`) se déclenche
+#    au contact — sa position locale suit AUTOMATIQUEMENT la rotation
+#    puisqu'elle est posée en ENFANT du sprite Main, au bon décalage du
+#    pivot. Voir CHARIOT_*/BRAS_*/CYCLE_*/VFX_* et `_process_bras`.
 # ============================================================
 class_name CombatDecorFactory
 extends Control
@@ -98,62 +111,63 @@ const FEU_ECLAT_MAX := 0.35   # boost RGB au pic, pour un flamboiement plus chau
 const SOL_SECOURS_COLOR := Color8(38, 11, 12)
 
 # Chariots de la Chaîne_Soudure : espacement et phase MESURÉS directement sur
-# Background_Factory_Plan_5_Chaine_Soudure.png (canevas natif 3256 px — PAS le
-# canevas 4770 px des plans Barrière/Sol). 7 chariots, ~461 px d'écart en
-# moyenne (varie de 450 à 488 : l'art n'est pas une grille parfaite ; la
-# moyenne suffit car le défilement avance de PILE une période par cycle, voir
-# `_process`). Premier chariot centré vers x=218.
-const CHARIOT_PERIODE_TEX := 461.33
-const CHARIOT_PHASE_TEX := 218.5
+# Background_Factory_Plan_5_Chaine_Soudure.png. RE-MESURÉS le 30/08/2026 :
+# Christophe a re-livré ce calque sur le canevas PLEIN CADRE 4770 px (avant :
+# 3256 px, un canevas à part — voir l'historique git) ; les anciennes
+# constantes (461.33 / 218.5) sont des pixels de l'ANCIEN canevas et
+# n'auraient plus aucun sens telles quelles sur le nouveau, bien plus grand.
+# Toujours 7 chariots, ~676 px d'écart en moyenne (varie de 667 à 715 : l'art
+# n'est pas une grille parfaite ; la moyenne suffit car le défilement avance
+# de PILE une période par cycle, voir `_process`). Premier chariot centré
+# vers x=316.
+const CHARIOT_PERIODE_TEX := 675.83
+const CHARIOT_PHASE_TEX := 316.0
 
-# ─── GÉOMÉTRIE DU BRAS SOUDEUR (Soudeur_2, 29/08/2026) ──────
-# ⚠ SUPERSÉDÉ QUATRE fois le jour même — la dernière fois sur un point de
-# PRINCIPE qui a piégé les découpes précédentes :
-#   1er essai : rotation de TOUT le calque `Soudeur_2_Bras` — bougeait aussi
-#     l'épaule, qui doit rester fixe.
-#   2e essai : découpe en DEUX, mais pivot pris sur le MAUVAIS rond (le
-#     poignet au lieu du coude).
-#   3e essai : bon rond, mais le rond du COUDE lui-même était inclus dans la
-#     pièce qui pivote — hors le coude EST le pivot, il ne doit PAS bouger, il
-#     ne fait que « donner le point de départ » du mouvement de ce qui vient
-#     après lui (retour Rhend). Un rond de jointure appartient TOUJOURS à la
-#     pièce PARENTE (celle qui ne tourne pas AUTOUR de lui), jamais à la pièce
-#     enfant qui pivote sur son centre — sans ça, toute imprécision de mesure
-#     du centre se voit comme une coupure avec le reste de la structure.
-# 4e essai (celui-ci) applique cette règle aux DEUX jointures : `Soudeur_2_
-# Bras.png` est DÉCOUPÉ EN TROIS calques dérivés (script Python one-shot,
-# composantes connexes après sectionnement local des DEUX jonctions,
-# positionné juste APRÈS chaque rond — côté du segment qui s'éloigne du corps
-# — pour que le rond entier reste du côté qui ne tourne pas autour de lui) :
-#   `..._AvantBras_Fixe.png`   — socle→coude, ROND DU COUDE INCLUS, STATIQUE
-#                                (`bras: false`) : le coude ne bouge jamais.
-#   `..._AvantBras_Mobile.png` — segment coude→poignet, ROND DU POIGNET
-#                                INCLUS, pivote autour de PIVOT_COUDE
-#                                (`bras: true`) : le poignet est fixe PAR
-#                                RAPPORT à l'avant-bras, mais l'ensemble
-#                                (avant-bras + son rond de poignet) pivote en
-#                                bloc autour du coude.
-#   `..._Main_Mobile.png`      — embout SEUL (sans rond), posé en ENFANT du
-#                                sprite avant-bras (voir `_batir`) : hérite
-#                                AUTOMATIQUEMENT de la rotation du coude et
-#                                ajoute la sienne par-dessus, pivotant autour
-#                                du rond de poignet porté par son parent —
-#                                exactement la composition d'un vrai bras à
-#                                deux articulations. PAS un PLANS générique :
-#                                construit à la main juste après l'avant-bras.
-# Aucune demande à Christophe nécessaire tant que la découpe suffit ; si un
-# jour il livre le bras déjà séparé en couches, ces trois fichiers dérivés
-# peuvent être remplacés à l'identique (mêmes noms, même canevas).
+# ─── GÉOMÉTRIE DU BRAS SOUDEUR (Soudeur_2, 30/08/2026) ──────
+# Historique (29/08) : trois découpes ratées puis un script one-shot à trois
+# pièces (épaule / avant-bras+poignet / main) — voir l'historique git pour le
+# détail des essais et la règle qui s'en est dégagée : UN ROND DE JOINTURE
+# APPARTIENT TOUJOURS À LA PIÈCE PARENTE (celle qui ne tourne PAS autour de
+# lui), jamais à la pièce enfant qui pivote sur son centre — sinon la moindre
+# imprécision de mesure du centre se voit comme une coupure visible.
+# 30/08 : Christophe livre le bras DÉJÀ DÉCOUPÉ, en CINQ fichiers `Soudeur_
+# {1,2}_Bras_{1..5}.png` (même canevas plein cadre que tout le reste — plus
+# de canevas à part à corriger). Le script one-shot et ses trois fichiers
+# dérivés (`AvantBras_Fixe/Mobile`, `Main_Mobile`) sont RETIRÉS, remplacés à
+# l'identique dans le principe (même règle du rond ci-dessus, juste appliquée
+# à la vraie découpe de l'artiste) :
+#   `_1` — épaule (socle → coude), STATIQUE, `"bras": false`, un calque
+#          ordinaire de plus dans `PLANS`.
+#   `_2` — rond du COUDE, STATIQUE : appartient à l'épaule (`_1`), ne pivote
+#          JAMAIS — le coude ne bouge pas, il donne seulement le centre de
+#          rotation de ce qui suit. Calque ordinaire, `"bras": false`.
+#   `_3` — avant-bras (coude → poignet), PIVOTE autour de PIVOT_COUDE,
+#          `"bras": true` — c'est LUI qui porte le flag dans `PLANS`, comme
+#          l'ancien `AvantBras_Mobile`.
+#   `_4` — rond du POIGNET, solidaire de l'avant-bras (même règle qu'avant :
+#          il appartient à `_3`, pas à la main) — pivote AVEC le coude par
+#          parentage mais n'ajoute JAMAIS sa propre rotation. PAS un calque
+#          `PLANS` générique : construit à la main en ENFANT de `_3` (voir
+#          `_batir` / `_construire_enfant_bras`), rotation laissée à 0.
+#   `_5` — main + embout de soudure, ENFANT de `_3` au même titre que `_4` :
+#          hérite AUTOMATIQUEMENT de la rotation du coude et ajoute la
+#          sienne par-dessus (rotation autour de PIVOT_POIGNET) — exactement
+#          la composition d'un vrai bras à deux articulations.
+# Soudeur_1 (bras jamais animé, voir plus haut) reçoit les 5 pièces comme de
+# simples calques statiques dans `PLANS`, `_4`/`_5` compris — pas besoin de
+# les construire à la main puisque rien n'y pivote.
 #
-# Mesurés sur Background_Factory_Plan_5_Soudeur_2_Bras.png (bbox natif
-# 1858-2058 × 728-984), AVANT découpe :
-const PIVOT_COUDE := Vector2(1889.6, 827.0)
-const PIVOT_POIGNET := Vector2(1969.2, 766.8)
-# Extrémité de la fourche de soudure (pixel le plus à DROITE de l'image — un
-# bras qui reproche vers le bas-droite, pas le plus BAS, qui tombe sur le pied
-# du socle). Coordonnées natives ; relative à PIVOT_POIGNET une fois posée en
-# enfant du sprite Main (voir `_declencher_etincelles`).
-const BRAS_POINTE_LOCAL := Vector2(2057.0, 830.5)
+# Pivots RE-MESURÉS sur la nouvelle livraison (centroïde du canal alpha des
+# ronds `Soudeur_2_Bras_2`/`_4` — un rond plein, le centroïde alpha ≈ le
+# centre géométrique, plus robuste qu'un centre de bbox à l'anti-aliasing du
+# bord) :
+const PIVOT_COUDE := Vector2(2756.4, 1221.2)
+const PIVOT_POIGNET := Vector2(2885.8, 1101.6)
+# Extrémité de la fourche de soudure (pixel le plus à DROITE de `Soudeur_2_
+# Bras_5.png` — un bras qui reproche vers le bas-droite, pas le plus BAS, qui
+# tombe sur le pied du socle). Coordonnées natives ; relative à PIVOT_POIGNET
+# une fois posée en enfant du sprite Main (voir `_declencher_etincelles`).
+const BRAS_POINTE_LOCAL := Vector2(3013.0, 1217.0)
 
 # Amplitudes de rotation à l'impact (radians), COUDE et POIGNET indépendants
 # — deux petites rotations composées donnent un geste plus profond et plus
@@ -165,21 +179,20 @@ const BRAS_ANGLE_POIGNET_MAX := 0.3142   # 18°
 
 # Point de CONTACT — le centre où un CHARIOT doit s'arrêter, pas la position
 # de la pointe elle-même. Caler le CENTRE du chariot sur la pointe pure ferait
-# déborder la moitié GAUCHE de son chargement (~230 px natifs de large,
-# mesuré sur Chaine_Soudure.png) par-dessus le socle du soudeur (bord droit
-# mesuré à x=1985). On cale donc le chariot pour que son bord GAUCHE affleure
-# le socle, la pointe tombant alors sur la partie gauche du chargement plutôt
-# qu'en son centre — imparfait mais plus juste qu'un centre qui chevauche
-# visiblement le socle.
-# ⚠ CALIBRÉ EMPIRIQUEMENT (29/08/2026), pas par un calcul de trigonométrie
-# pur : le calcul « à la main » (rotation composée coude+poignet appliquée à
-# BRAS_POINTE_LOCAL) accumule assez d'erreur de mesure sur les centres de
-# rond pour dériver de plusieurs dizaines de pixels écran — mesuré en
-# construisant le VRAI décor et en lisant `Sprite2D.to_global()` sur la
-# pointe tournée au maximum (outil dev jetable, non versionné). Revalider de
-# la même façon si PIVOT_COUDE/POIGNET ou les angles changent.
-#   cible = bord_socle(1985) + demi-largeur_chargement(116) + marge(15)
-const BRAS_CONTACT_X_TEX := 2100.0
+# déborder la moitié GAUCHE de son chargement (~360 px natifs de large,
+# re-mesuré le 30/08 sur le nouveau Chaine_Soudure.png) par-dessus le socle
+# du soudeur (bord droit re-mesuré à x=2907 sur Soudeur_2.png). On cale donc
+# le chariot pour que son bord GAUCHE affleure le socle, la pointe tombant
+# alors sur la partie gauche du chargement plutôt qu'en son centre.
+#   cible = bord_socle(2907) + demi-largeur_chargement(180) + marge(15)
+# ⚠ Formule indicative seulement, pas un calcul de trigonométrie pur : la
+# rotation composée coude+poignet accumule de l'erreur de mesure sur les
+# centres de rond, qui dérive en plusieurs dizaines de pixels écran une fois
+# la pointe tournée au maximum. Revalider en construisant le VRAI décor et en
+# lisant `Sprite2D.to_global()` sur la pointe tournée à fond (outil dev
+# jetable, non versionné) si l'alignement visuel déçoit, ou si PIVOT_COUDE/
+# POIGNET/les angles changent à nouveau.
+const BRAS_CONTACT_X_TEX := 3102.0
 
 # ─── CYCLE DE SOUDURE (29/08/2026, demandé par Rhend) ───────
 # Avant : le bras battait en continu pendant que la Chaîne_Soudure défilait
@@ -235,10 +248,22 @@ const PLANS: Array[Dictionary] = [
 	{"f": "Background_Factory_Plan_Fond.png",               "profondeur": 0.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Chaine_Soudure.png",   "profondeur": 0.25, "vitesse": 80.0, "sens": 1.0,  "feu": false, "bras": false, "soudure": true},
 	{"f": "Background_Factory_Plan_5_Soudeur_1.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
-	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	# Soudeur_1 : bras jamais animé (voir en-tête) — les 5 pièces de la vraie
+	# découpe sont posées comme de simples calques statiques, `_4`/`_5` compris.
+	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras_1.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras_2.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras_3.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras_4.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_1_Bras_5.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_5_Soudeur_2.png",        "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
-	{"f": "Background_Factory_Plan_5_Soudeur_2_AvantBras_Fixe.png",   "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
-	{"f": "Background_Factory_Plan_5_Soudeur_2_AvantBras_Mobile.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true},
+	# Soudeur_2 : bras ANIMÉ. `_1` épaule et `_2` rond du coude sont statiques
+	# (calques ordinaires) ; `_3` avant-bras porte "bras": true (pivote autour
+	# de PIVOT_COUDE, voir `_process_bras`) ; `_4` rond du poignet et `_5` main
+	# sont construits à la main en ENFANTS de `_3` dans `_batir` — PAS des
+	# entrées `PLANS`, ne pas les rajouter ici.
+	{"f": "Background_Factory_Plan_5_Soudeur_2_Bras_1.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_2_Bras_2.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	{"f": "Background_Factory_Plan_5_Soudeur_2_Bras_3.png", "profondeur": 0.25, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": true},
 	{"f": "Background_Factory_Plan_5_Chaine_Robotique.png", "profondeur": 0.25, "vitesse": 4.0,  "sens": -1.0, "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_4_Armature.png",         "profondeur": 0.45, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_4_Chaine_Robotique.png", "profondeur": 0.45, "vitesse": 7.0,  "sens": 1.0,  "feu": false, "bras": false},
@@ -254,9 +279,10 @@ const PLANS: Array[Dictionary] = [
 var _noeud_zoom: Control = null
 var _couches: Array[Dictionary] = []
 var _feux: Array[Dictionary] = []   # {noeud, phase} — sous-ensemble de _couches
-var _bras_noeud: Node2D = null      # noeud du calque "bras" animé (celui qui porte "bras": true — AvantBras_Mobile)
+var _bras_noeud: Node2D = null      # noeud du calque "bras" animé (celui qui porte "bras": true — Soudeur_2_Bras_3, l'avant-bras)
 var _bras_sprite: Sprite2D = null   # son sprite direct — pivote autour de PIVOT_COUDE
-var _main_sprite: Sprite2D = null   # ENFANT de _bras_sprite (Main_Mobile) — pivote autour de PIVOT_POIGNET, hérite du coude ; parent du VFX d'étincelles
+var _poignet_sprite: Sprite2D = null # ENFANT de _bras_sprite (Bras_4, rond du poignet) — solidaire de l'avant-bras, AUCUNE rotation propre
+var _main_sprite: Sprite2D = null   # ENFANT de _bras_sprite (Bras_5) — pivote autour de PIVOT_POIGNET, hérite du coude ; parent du VFX d'étincelles
 var _temps := 0.0
 var _mask_material: ShaderMaterial = null
 var _split_tilt := 0.0   # copie de bande_vs_px/vue.x — réutilisée par le VFX d'étincelles
@@ -370,18 +396,25 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 		if est_bras:
 			_bras_noeud = noeud
 			_bras_sprite = derniere_copie
-			_main_sprite = _construire_main(derniere_copie)
+			# `_4` (rond du poignet) D'ABORD : solidaire de l'avant-bras, doit
+			# rester DESSOUS la main dans l'ordre d'empilement (un rond de
+			# jointure ne doit jamais recouvrir l'embout qui vient après lui).
+			_poignet_sprite = _construire_enfant_bras(derniere_copie,
+					"Background_Factory_Plan_5_Soudeur_2_Bras_4.png")
+			_main_sprite = _construire_enfant_bras(derniere_copie,
+					"Background_Factory_Plan_5_Soudeur_2_Bras_5.png")
 
-# Construit le sprite du POIGNET (Main_Mobile) en ENFANT du sprite du coude —
-# il hérite ainsi AUTOMATIQUEMENT de la rotation du coude (composition de
-# transforms de Godot) et n'a qu'à ajouter la sienne par-dessus, voir
-# `_process_bras`. Même principe de décalage que le coude, mais SANS
-# pré-multiplier par une échelle : `sp.position` est ici exprimée dans
+# Construit un calque (rond du poignet `_4`, ou main `_5`) en ENFANT du
+# sprite de l'avant-bras (le coude) — il hérite ainsi AUTOMATIQUEMENT de la
+# rotation du coude (composition de transforms de Godot). `_4` s'arrête là
+# (rotation propre toujours nulle, voir `_process_bras`) ; `_5` ajoute sa
+# propre rotation par-dessus. Même principe de décalage que le coude, mais
+# SANS pré-multiplier par une échelle : `sp.position` est ici exprimée dans
 # l'espace LOCAL du PARENT (`parent_sprite`, dont le `scale` — déjà non
 # identité à cet instant — s'applique automatiquement à ses enfants) ;
 # pré-multiplier comme pour le coude doublerait l'échelle.
-func _construire_main(parent_sprite: Sprite2D) -> Sprite2D:
-	var chemin := DECOR_DIR + "Background_Factory_Plan_5_Soudeur_2_Main_Mobile.png"
+func _construire_enfant_bras(parent_sprite: Sprite2D, fichier: String) -> Sprite2D:
+	var chemin := DECOR_DIR + fichier
 	if not ResourceLoader.exists(chemin):
 		return null
 	var texture: Texture2D = load(chemin)

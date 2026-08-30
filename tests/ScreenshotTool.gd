@@ -41,6 +41,7 @@ func _ready() -> void:
 		"showroom":  await _shoot_showroom()
 		"factory":   await _shoot_factory()
 		"factory_full": await _shoot_factory_full()
+		"factory_bras": await _shoot_factory_bras()
 		"neons":     await _shoot_neons()
 		"expe":      await _shoot_expe()
 		"flux":      await _shoot_flux()
@@ -820,6 +821,54 @@ func _shoot_factory_full() -> void:
 	decor._process(0.0)
 	await RenderingServer.frame_post_draw
 	await _capture("res://tests/_shot_factory_full.png")
+
+# ── Bras soudeur SEUL, zoomé, repos ET contact ────────────────────────────
+# Diagnostic de calibrage (30/08/2026, découpage en 5 pièces livré par
+# Christophe) : juge le geste coude→avant-bras→poignet→main ET l'alignement
+# de la pointe sur un chariot, sans se soucier du reste du décor. Plein cadre
+# sans masque (même raison que `_shoot_factory_full`), zoomé sur la zone
+# Soudeur_2 + Chaîne_Soudure. `decor._process(t)` avance par un DELTA (pas un
+# temps absolu) : un unique grand pas reproduit fidèlement l'état atteint par
+# une vraie lecture image par image jusqu'à `t`, ce module n'ayant aucun état
+# dépendant de la vitesse (voir `_process`/`_process_bras`).
+func _shoot_factory_bras() -> void:
+	var hote := Control.new()
+	hote.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_vp.add_child(hote)
+	var decor := CombatDecorFactory.construire(hote,
+			CombatCtbUi.SOL_Y_FRAC, 0.5, CombatCtbUi.BANDE_VS_PX)
+	_retirer_masques(decor)
+	await get_tree().process_frame
+	decor._process(0.0)
+	await RenderingServer.frame_post_draw
+	var img_repos := await _capture("res://tests/_shot_factory_bras_repos.png")
+	# t=3.4s : cycle 0 (durée 5 s), fenêtre d'arrêt à partir de 2.4 s,
+	# descente (0.3 s) finie à 2.7 s → 3.4 s tombe en plein plateau de contact.
+	decor._process(3.4)
+	await RenderingServer.frame_post_draw
+	var img_contact := await _capture("res://tests/_shot_factory_bras_contact.png")
+	# +1 cycle complet (5 s) : même point du geste, chariot SUIVANT — vérifie
+	# l'absence de dérive cumulée (voir `_calcule_d0_soudure`).
+	decor._process(5.0)
+	await RenderingServer.frame_post_draw
+	var img_contact2 := await _capture("res://tests/_shot_factory_bras_contact2.png")
+	# Zoom centré sur Soudeur_2 (ancrage adverse 0.75 côté écran, cadré large
+	# pour voir le bras ET le chariot visé) : mêmes coordonnées pour les deux
+	# captures, comparables côte à côte.
+	var centre := Vector2(_vp.size.x * 0.62, _vp.size.y * 0.55)
+	_capture_zoom_img(img_repos, "res://tests/_shot_factory_bras_repos_zoom.png", centre, 3)
+	_capture_zoom_img(img_contact, "res://tests/_shot_factory_bras_contact_zoom.png", centre, 3)
+	_capture_zoom_img(img_contact2, "res://tests/_shot_factory_bras_contact2_zoom.png", centre, 3)
+
+func _capture_zoom_img(img: Image, path: String, centre: Vector2, facteur: int) -> void:
+	var taille := Vector2i(_vp.size) / facteur
+	var coin := Vector2i(centre) - taille / 2
+	coin.x = clampi(coin.x, 0, _vp.size.x - taille.x)
+	coin.y = clampi(coin.y, 0, _vp.size.y - taille.y)
+	var region := img.get_region(Rect2i(coin, taille))
+	region.resize(_vp.size.x, _vp.size.y, Image.INTERPOLATE_NEAREST)
+	region.save_png(path)
+	print("Screenshot -> ", path)
 
 func _retirer_masques(racine: Node) -> void:
 	if racine is CanvasItem:
