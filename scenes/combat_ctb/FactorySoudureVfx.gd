@@ -43,26 +43,27 @@ const MASK_SHADER := "res://scenes/combat_ctb/raster_split_mask_additif.gdshader
 #
 # ⚠ FLOU signalé (30/08/2026, retour Rhend, une fois vu EN JEU — invisible
 # dans `SHOT_MODE=factory_bras`, qui capture un SubViewport offscreen à
-# 1280×720 SANS passer par l'étirement de fenêtre, voir ScreenshotTool.gd) :
-# le projet est en `window/stretch/mode="canvas_items"`, donc la fenêtre
-# réelle (`window/size/mode=4` = plein écran EXCLUSIF, très probablement
-# > 1280×720) réétire ce rendu au filtrage BILINÉAIRE. Un détail fin — un
-# trait de quelques pixels avec en plus SA PROPRE antialiasing (`draw_line`
-# posait `antialiased=true`) — passe très mal ce ré-étirement : le double
-# adoucissement (AA du trait + filtrage bilinéaire de la fenêtre) le rend
-# flou, là où l'aplat du décor (grandes zones de couleur plate, bords francs
-# mais peu nombreux) ne montre presque rien du même effet. Remède : traits
-# SANS antialiasing propre (`draw_line(..., false)`, bords francs laissés au
-# filtrage de fenêtre plutôt qu'ajoutés en double) et encore plus ÉPAIS —
-# plus une forme est grande à l'écran, moins le flou du filtrage bilinéaire
-# se voit PROPORTIONNELLEMENT à sa taille.
+# 1280×720 SANS passer par l'étirement de fenêtre, voir ScreenshotTool.gd).
+# Un premier passage a désactivé l'antialiasing propre des traits (doublait
+# le flou avec le filtrage bilinéaire de la fenêtre, `window/stretch/mode=
+# "canvas_items"` + plein écran EXCLUSIF) — insuffisant : Rhend a fourni
+# `tests/etincelleFlou.png`, une capture RÉELLE du jeu. Mesure sur cette
+# capture : l'épaisseur d'un trait n'y fait que ~5 px, et le héros au premier
+# plan montre que le décor Usine est vu DE LOIN (petit dans le cadre) — la
+# cause dominante n'était donc pas un doublon d'antialiasing mais une
+# EMPREINTE BRUTE ridiculement petite avant même tout ré-étirement de
+# fenêtre : aucun réglage d'antialiasing ne peut rendre net un trait de 5 px
+# une fois affiché sur un écran haute résolution. Toutes les tailles
+# spatiales remontent donc franchement (×3 environ par rapport au réglage
+# précédent) — vitesse et gravité ENSEMBLE pour garder la même forme de
+# gerbe, juste beaucoup plus grande.
 const N_ETINCELLES := 46
-const VITESSE_MIN := 220.0
-const VITESSE_MAX := 820.0
-const GRAVITE := 1250.0
-const EPAISSEUR := 20.0
-const LONGUEUR_TRAIT := 36.0
-const FLASH_RAYON := 62.0
+const VITESSE_MIN := 900.0
+const VITESSE_MAX := 2000.0
+const GRAVITE := 3100.0
+const EPAISSEUR := 60.0
+const LONGUEUR_TRAIT := 150.0
+const FLASH_RAYON := 260.0
 const FLASH_DUREE := 0.22
 const VIE_ETINCELLE_MIN := 0.32
 const VIE_ETINCELLE_MAX := 0.55
