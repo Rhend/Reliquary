@@ -49,7 +49,12 @@ const FACE_INSET := 0.96   # faces légèrement insérées → les arêtes ne so
 # Grésillement des néons (pannes courtes, cf. holo_neon) : DÉSACTIVÉ volontairement —
 # bonne idée mais rendu actuel brouillon. Remettre true pour ré-expérimenter.
 const FLICKER_NEON := false
-const TAILLE_MONDE_CIBLE := 13.0   # largeur monde visée pour la grille Excel (cadrage caméra)
+const TAILLE_MONDE_CIBLE := 22.0   # largeur monde visée pour la grille Excel (cadrage caméra)
+# ↑ EXPÉRIMENTATION « aération » (30/08/2026, à jeter si non concluant) : monde
+# ~1.7× plus grand qu'avant (13.0) — même grille Excel, cases/bâtiments/routes
+# juste plus espacés (tout est exprimé en multiples de taille_cellule, donc
+# ça grossit uniformément). Voir aussi le cadrage caméra initial dans
+# _charger_excel() : il ne montre plus toute la carte d'un coup.
 const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit de carte par défaut
 
 @export var seed_val := 1337
@@ -555,6 +560,15 @@ func _charger_excel() -> void:
 	# Réglages spécifiques carte Excel (décor dense au sol, pas de gratte-ciels) :
 	# cadrage plus serré, bâti plus clair/lisible, routes moins envahissantes,
 	# brume repoussée (la carte tient dans le champ proche).
+	# EXPÉRIMENTATION « aération » : le ratio de cadrage (0.98 = toute la grille
+	# tient à l'écran) est CONSERVÉ tel quel — TestHoloPicking (angle bas +
+	# clic dans le vide) est câblé sur ce cadrage précis, un ratio plus serré
+	# fait se chevaucher les boîtes de collision des lieux au raz du sol et
+	# casse le picking. Le sentiment « on ne voit pas tout d'un coup » vient
+	# plutôt de _jouer_intro() (descente depuis plus loin + peinture radiale)
+	# et du monde simplement plus grand → à retravailler proprement (retailler
+	# les boîtes de HoloLocation3D) si on veut vraiment un cadrage de repos
+	# plus serré.
 	distance = TAILLE_MONDE_CIBLE * 0.98
 	plongee_deg = 50.0
 	couleur_decor_bati = Color(0.46, 0.56, 0.74)
