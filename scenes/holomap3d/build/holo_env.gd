@@ -166,6 +166,38 @@ static func sol_disc(h, sc: Vector2, R: float) -> void:
 		k += pas
 	h._ajouter_mesh(HoloMesh3D.commit(sg, ng), "SolGrille", h._mat_sol)
 
+# ─── Drones : petite vie ambiante au-dessus de la ville ───────
+# Quelques patrouilles lentes, chacune en orbite libre autour d'un centre tiré au
+# hasard (≠ couloirs aériens rectilignes de Ville.trafic_aerien) — la carte ne
+# semble plus figée même loin de tout Lieu. Un diamant miniature par drone (même
+# forme que le pin d'un Lieu, en plus petit) ; les métadonnées de trajectoire sont
+# lues et animées par HoloMap3D._maj_drones (réutilise l'horloge _proj_t).
+static func drones(h) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = h.seed_val ^ 0x0D20E5
+	var rv: float = h._cgrid() * h.taille_cellule
+	var nb := 7
+	var pal := [Color(0.45, 0.90, 1.00), Color(1.00, 0.62, 0.30), Color(0.75, 0.95, 0.55)]
+	for i in nb:
+		var node := Node3D.new()
+		node.name = "Drone%d" % i
+		var s := HoloMesh3D.st()
+		var col: Color = pal[i % pal.size()]
+		var n := HoloMesh3D.diamond(s, Vector3.ZERO, h.taille_cellule * 0.16, h.taille_cellule * 0.22, col)
+		var mi := MeshInstance3D.new()
+		mi.name = "DroneMesh"
+		mi.mesh = HoloMesh3D.commit(s, n)
+		mi.material_override = h._mat_prop   # néon doux, sans cœur blanc → discret
+		node.add_child(mi)
+		var centre := Vector3(rng.randf_range(-rv * 0.7, rv * 0.7), 0.0, rng.randf_range(-rv * 0.7, rv * 0.7))
+		node.set_meta("centre", centre)
+		node.set_meta("rayon", rv * rng.randf_range(0.10, 0.30))
+		node.set_meta("hauteur", h.unite_maison * rng.randf_range(3.0, 7.0))
+		node.set_meta("vitesse", rng.randf_range(0.10, 0.22) * (1.0 if i % 2 == 0 else -1.0))
+		node.set_meta("phase", rng.randf() * TAU)
+		h._monde.add_child(node)
+		h._drones.append(node)
+
 # ─── Balayage radar (sweep en éventail, tourne lentement) ─────
 static func radar(h) -> void:
 	var r: float = (h._cgrid() + 1.0) * h.taille_cellule * 1.06

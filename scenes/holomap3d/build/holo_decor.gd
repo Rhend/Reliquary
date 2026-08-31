@@ -1913,6 +1913,20 @@ static func _disque_plat(s: SurfaceTool, c: Vector3, rx: float, rz: float, seg: 
 # lampadaires néon. PLAT (aucun volume bâti) : un lieu posé dessus reste « sans
 # bâtiment ». Gradient de richesse sur les structures (h._moduler) ; la pelouse
 # partage l'uniforme de son shader, comme les parcs-arbres.
+# ─── Repère de navigation (30/08/2026) : mât lumineux planté au-dessus des
+# landmarks RARES (Grand parc / Université / Musée) — pas un Lieu d'expédition,
+# juste un signal de silhouette pour s'orienter en vue d'ensemble : contrairement
+# aux pins de Lieu (cf. HoloMap3D._appliquer_fade_pins), il ne se dégraisse JAMAIS
+# au dézoom. Flèche verticale teintée de la couleur d'identité du landmark
+# (celle déjà utilisée pour ses accents néon), cap diamant au sommet.
+static func _repere_navigation(h, centre: Vector3, y_toit: float, col: Color, s: SurfaceTool) -> int:
+	var base := centre + Vector3(0, y_toit, 0)
+	var haut: float = h.unite_maison * 2.6   # dépasse franchement le bâti environnant
+	var sommet := base + Vector3(0, haut, 0)
+	var n := HoloMesh3D.line(s, base, sommet, col)
+	n += HoloMesh3D.diamond(s, sommet, h.taille_cellule * 0.10, h.taille_cellule * 0.16, col)
+	return n
+
 static func grands_parcs(h) -> void:
 	if h._excel.grands_parcs.is_empty():
 		return
@@ -2018,6 +2032,8 @@ static func grands_parcs(h) -> void:
 			n += HoloMesh3D.line(s, base, base + Vector3(0, mh, 0), blanc)
 			nn += HoloMesh3D.diamond(sn, base + Vector3(0, mh + h.taille_cellule * 0.03, 0),
 					h.taille_cellule * 0.035, h.taille_cellule * 0.05, ambre)
+		# 7) Repère de navigation (au-dessus des kiosques, teinté émeraude du parc).
+		nn += _repere_navigation(h, centre, h.unite_maison * 1.3, vert, sn)
 	h._ajouter_mesh(HoloMesh3D.commit(sg, ng), "GrandsParcsPelouse", mat_pelouse)
 	h._ajouter_mesh(HoloMesh3D.commit(se, ne), "GrandsParcsBassins", h._mat_eau)
 	h._ajouter_mesh(HoloMesh3D.commit(sc, nc), "GrandsParcsAllees", h._mat_contour)
@@ -2099,6 +2115,8 @@ static func universites(h) -> void:
 		# PANNEAUX D'AFFICHAGE lumineux plantés sur l'esplanade (vie étudiante).
 		for up: float in [0.22, 0.78]:
 			nse += _panneau_campus(h, bb, d, up, 0.12, fram, cyan, se)
+			# Repère de navigation (au-dessus de l'amphi-dôme, teinté framboise du campus).
+			nn += _repere_navigation(h, centre, haut * 1.30, fram, sn)
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Universites")
 	h._ajouter_faces(HoloMesh3D.commit(sf, nf), "UniversitesFaces")
 	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "UniversitesNeon", h._mat_neon)
@@ -2199,6 +2217,8 @@ static func musees(h) -> void:
 				maxf(g0.x, g1.x), maxf(g0.y, g1.y), 0.014, Color(chaud.r, chaud.g, chaud.b, 0.10))
 		nse += _hologramme_expo(h, bb, d, 0.16, 0.12, prune, true, se)
 		nse += _hologramme_expo(h, bb, d, 0.84, 0.12, prune, false, se)
+		# Repère de navigation (au-dessus de la verrière, teinté prune du musée).
+		nn += _repere_navigation(h, centre, haut * 1.35, prune, sn)
 	h._ajouter_mesh(HoloMesh3D.commit(s, n), "Musees")
 	h._ajouter_faces(HoloMesh3D.commit(sf, nf), "MuseesFaces")
 	h._ajouter_mesh(HoloMesh3D.commit(sn, nn), "MuseesNeon", h._mat_neon)
