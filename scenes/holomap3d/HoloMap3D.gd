@@ -56,6 +56,12 @@ const TAILLE_MONDE_CIBLE := 22.0   # largeur monde visée pour la grille Excel (
 # ça grossit uniformément). Voir aussi le cadrage caméra initial dans
 # _charger_excel() : il ne montre plus toute la carte d'un coup.
 const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit de carte par défaut
+# EXPÉRIMENTATION « cadrage adaptatif » (30/08/2026, à jeter si non concluant) : la
+# caméra de repos (ouverture + rejouer_intro + touche R) se centre sur le BARYCENTRE
+# des Lieux DÉCOUVERTS plutôt que sur le centre géométrique de la grille — en début
+# de partie, peu de Lieux sont découverts et le centre du monde peut être une zone
+# vide sans intérêt. À comparer au cadrage fixe (mettre à false) selon le ressenti.
+const CADRAGE_ADAPTATIF := true
 
 @export var seed_val := 1337
 
@@ -75,6 +81,17 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # Déplacement libre ZQSD (se balader) : on translate le centre d'orbite.
 # Z/S = avant/arrière, Q/D = gauche/droite, E/A = monter/descendre. Vitesse ∝ zoom.
 @export var vitesse_balade := 0.55
+# Plongée ÉLASTIQUE (30/08/2026) : plongee_min/max restent le seuil DUR validé par
+# TestHoloPicking (en dessous, un bâtiment de premier plan peut occulter un Lieu —
+# cf. commentaire de _charger_excel) — mais ce n'est plus un MUR pour le joueur : au
+# clic-glisser, la plongée peut dépasser la marge (résistance croissante) puis un
+# ressort la ramène en zone sûre au relâcher (cf. _pas_elastique / _ressort_si_hors_plage).
+# `vue_libre_active` (TAB) coupe complètement la contrainte pour l'exploration pure —
+# aucune garantie de picking sous cet angle, assumé (mode contemplation, pas de jeu).
+const PLONGEE_ELASTIQUE_MARGE := 12.0
+const VUE_LIBRE_PLONGEE_MIN := 3.0
+const VUE_LIBRE_PLONGEE_MAX := 88.0
+@export var vue_libre_active := false
 
 # ─── Échelle (référencée maison) ──────────────────────────────
 @export_group("Échelle")
@@ -189,6 +206,10 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # la ville (VTOL) → la mégalopole vit en 3D, pas seulement au sol.
 @export var trafic_aerien_actif := true
 @export var couloirs_aeriens := 9
+# Drones : petite vie ambiante au-dessus de la ville — quelques patrouilles lentes
+# en orbite libre (≠ couloirs aériens rectilignes), pour que la carte ne semble pas
+# figée même loin de tout Lieu.
+@export var drones_actif := true
 # Brume de profondeur : les arêtes lointaines s'estompent (focus centre).
 @export var brume_debut := 16.0
 @export var brume_fin := 30.0
@@ -216,6 +237,13 @@ const CHEMIN_GABARIT_DEFAUT := "res://Carte Holo/carte_holomap.xlsx"   # gabarit
 # ─── Lieux ────────────────────────────────────────────────────
 @export_group("Lieux")
 @export var lieux: Array[HoloLieuData] = []
+# Dégraissage des pins au dézoom (lisibilité, 30/08/2026) : au-delà de `pin_fade_loin`,
+# l'opacité des pins descend vers `pin_fade_min` — jamais invisible, juste moins criard
+# quand plusieurs Lieux sont visibles d'un coup en vue d'ensemble. Même esprit que le
+# glow au zoom (_appliquer_glow_zoom), appliqué aux marqueurs de Lieu (cf. _appliquer_fade_pins).
+@export var pin_fade_pres := 10.0
+@export var pin_fade_loin := 22.0
+@export_range(0.0, 1.0) var pin_fade_min := 0.45
 
 var _excel: HoloXlsxMap   # modèle lu depuis le gabarit Excel (null = ville procédurale)
 var _rig: Node3D
@@ -231,6 +259,14 @@ var _post_mat: ShaderMaterial
 var _yaw := 0.0
 var _dragging := false
 var _dragging_plongee := false   # clic droit maintenu : lever/baisser la caméra (souris haut/bas)
+var _ressort_actif := false      # tween de ressort en cours (plongée hors plage → retour)
+var _ressort_tw: Tween
+var _prev_yaw := 0.0              # état caméra à la frame précédente (réponse caméra dynamique)
+var _prev_plongee := 0.0
+var _prev_distance := 0.0
+var _prev_rig_pos := Vector3.ZERO
+var _cam_vel := 0.0                # vitesse caméra lissée [0;1] → aberration/vignette au mouvement
+var _drones: Array[Node3D] = []    # patrouilles ambiantes (cf. Env.drones), animées en _process
 var _tooltip: HoloTooltip
 var _hovered: HoloLocation3D
 var _radar: Node3D
@@ -326,6 +362,8 @@ func _setup_camera() -> void:
 	_rig = Node3D.new()
 	_rig.name = "CameraRig"
 	add_child(_rig)
+	if CADRAGE_ADAPTATIF:
+		_rig.position = _centre_lieux_monde()
 	_cam = Camera3D.new()
 	_cam.fov = fov
 	_cam.near = 0.1
@@ -527,6 +565,18 @@ func _world(gx: float, gy: float, y: float) -> Vector3:
 func _centre_emprise(i: int, j: int, emp: Vector2i) -> Vector3:
 	return _world(i + (emp.x - 1) * 0.5, j + (emp.y - 1) * 0.5, 0.0)
 
+# Barycentre monde des Lieux DÉCOUVERTS (cf. CADRAGE_ADAPTATIF). Vide → centre du
+# monde (Vector3.ZERO, comportement historique) : pas de régression en tout début
+# de partie sans aucun Lieu découvert.
+func _centre_lieux_monde() -> Vector3:
+	var somme := Vector3.ZERO
+	var n := 0
+	for l in lieux:
+		if l.decouvert:
+			somme += _centre_emprise(l.cellule.x, l.cellule.y, l.emprise)
+			n += 1
+	return somme / float(n) if n > 0 else Vector3.ZERO
+
 # ─── Construction ─────────────────────────────────────────────
 func _build_all() -> void:
 	if not is_instance_valid(_monde):
@@ -621,6 +671,7 @@ func _build_all_excel() -> void:
 	_discos.clear()
 	_capstones.clear()
 	_projecteurs.clear()
+	_drones.clear()
 	# L'eau est gérée par le shader animé (Ville.eau). On NE peuple PAS _eau
 	# → Decor.decor n'ajoute pas de vaguelettes statiques par-dessus le courant.
 	for c: Vector2i in _excel.parcs:
@@ -671,6 +722,8 @@ func _build_all_excel() -> void:
 		Env.motes(self)
 	if radar_actif:
 		Env.radar(self)
+	if drones_actif:
+		Env.drones(self)
 	_construire_lieux(lieux)    # lieux découverts (feuille « Lieux ») posés sur le décor
 	if intro_actif:
 		_jouer_intro()
@@ -1287,11 +1340,83 @@ func _on_lieu_clique(id: String) -> void:
 func _appliquer_camera() -> void:
 	if not is_instance_valid(_rig):
 		return
-	plongee_deg = clampf(plongee_deg, plongee_min, plongee_max)
+	if vue_libre_active:
+		plongee_deg = clampf(plongee_deg, VUE_LIBRE_PLONGEE_MIN, VUE_LIBRE_PLONGEE_MAX)
+	elif not (_dragging or _dragging_plongee or _ressort_actif):
+		# Hors drag/ressort : le seuil dur s'applique (comportement HISTORIQUE — un
+		# appelant qui pose `plongee_deg` directement, ex. TestHoloPicking, doit
+		# retrouver EXACTEMENT ce clamp). Pendant un drag ou un ressort, la valeur
+		# est déjà bornée ailleurs (_pas_elastique / le tween de _lancer_ressort) :
+		# la re-clamper ici écraserait l'effet élastique.
+		plongee_deg = clampf(plongee_deg, plongee_min, plongee_max)
 	distance = clampf(distance, distance_min, distance_max)
 	_rig.rotation = Vector3(-deg_to_rad(plongee_deg), _yaw, 0.0)
 	_cam.position = Vector3(0, 0, distance)
 	_cam.fov = fov
+
+# Pas de plongée pendant un drag : peut dépasser plongee_min/max jusqu'à la marge
+# élastique, avec une résistance croissante une fois hors de la plage stricte —
+# une sensation de ressort, pas un mur (cf. const PLONGEE_ELASTIQUE_MARGE).
+func _pas_elastique(valeur: float, delta: float) -> float:
+	var hors_plage := valeur < plongee_min or valeur > plongee_max
+	var d := delta * (0.35 if hors_plage else 1.0)
+	return clampf(valeur + d, plongee_min - PLONGEE_ELASTIQUE_MARGE, plongee_max + PLONGEE_ELASTIQUE_MARGE)
+
+# Fin de drag : si la plongée est ressortie de la plage stricte (marge élastique),
+# ressort qui la ramène en douceur. No-op si l'autre bouton tient encore le drag,
+# ou si la vue libre est active (aucune contrainte à restaurer).
+func _ressort_si_hors_plage() -> void:
+	if _dragging or _dragging_plongee or vue_libre_active:
+		return
+	var cible := clampf(plongee_deg, plongee_min, plongee_max)
+	if absf(cible - plongee_deg) < 0.05:
+		return
+	_lancer_ressort(cible)
+
+func _lancer_ressort(cible: float) -> void:
+	if is_instance_valid(_ressort_tw):
+		_ressort_tw.kill()
+	_ressort_actif = true
+	_ressort_tw = create_tween()
+	_ressort_tw.tween_method(_set_plongee_ressort, plongee_deg, cible, 0.32) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	_ressort_tw.finished.connect(func() -> void:
+		_ressort_actif = false
+		_appliquer_camera())
+
+func _set_plongee_ressort(v: float) -> void:
+	plongee_deg = v
+	_appliquer_camera()
+
+# TAB : bascule le mode « vue libre » — désactive/rétablit la contrainte d'angle.
+# En sortant, la plongée ressort vers la plage stricte si elle en était sortie.
+func _toggle_vue_libre() -> void:
+	vue_libre_active = not vue_libre_active
+	if not vue_libre_active:
+		_ressort_si_hors_plage()
+
+# R : recentre la caméra sur le cadrage de repos (yaw/plongée/distance/position
+# d'origine), en douceur — sort aussi de la vue libre. Utile pour se retrouver
+# après une balade ZQSD ou une exploration en vue libre.
+func _recentrer_vue() -> void:
+	vue_libre_active = false
+	if is_instance_valid(_ressort_tw):
+		_ressort_tw.kill()
+	_ressort_actif = true
+	var tw := create_tween().set_parallel(true)
+	_ressort_tw = tw
+	if is_instance_valid(_rig):
+		var pos_repos := _centre_lieux_monde() if CADRAGE_ADAPTATIF else Vector3.ZERO
+		tw.tween_property(_rig, "position", pos_repos, 0.45) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_method(_set_yaw, _yaw, 0.0, 0.45) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_method(_set_plongee_ressort, plongee_deg, _plongee_init, 0.45) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	_distance_cible = _dist_init
+	tw.finished.connect(func() -> void:
+		_ressort_actif = false
+		_appliquer_camera())
 
 # Déplacement libre ZQSD : translate le centre d'orbite dans le plan horizontal de
 # la caméra (E/A pour l'altitude). Vitesse proportionnelle au zoom (distance).
@@ -1331,6 +1456,52 @@ func _appliquer_glow_zoom() -> void:
 		var m: ShaderMaterial = pair[0]
 		m.set_shader_parameter("emission_strength", float(pair[1]) * att)
 
+# Dégraissage des pins au dézoom : opacité pleine de près, réduite (jamais nulle)
+# au-delà de pin_fade_loin — en vue d'ensemble, la nappe de diamants + barrières
+# ne noie plus le décor (cf. pin_fade_* dans le groupe Lieux).
+func _appliquer_fade_pins() -> void:
+	if not is_instance_valid(_lieux_node):
+		return
+	var f := lerpf(1.0, pin_fade_min, smoothstep(pin_fade_pres, pin_fade_loin, distance))
+	for c in _lieux_node.get_children():
+		if c is HoloLocation3D:
+			(c as HoloLocation3D).set_fade(f)
+
+# Réponse caméra dynamique : chromatic aberration + vignette réagissent (léger boost
+# transitoire) au mouvement de la caméra — lacet, plongée, zoom, balade ZQSD — puis
+# retombent aux valeurs de repos (exports aberration/vignette_force). Renforce le
+# ressenti « hologramme piloté » sans permanence (au repos, rendu inchangé).
+func _maj_reponse_camera(dt: float) -> void:
+	if not is_instance_valid(_post_mat) or not is_instance_valid(_rig):
+		return
+	var d_yaw := absf(angle_difference(_prev_yaw, _yaw))
+	var d_plongee := absf(plongee_deg - _prev_plongee)
+	var d_dist := absf(distance - _prev_distance) / maxf(1.0, distance)
+	var d_pos := (_rig.position - _prev_rig_pos).length()
+	_prev_yaw = _yaw
+	_prev_plongee = plongee_deg
+	_prev_distance = distance
+	_prev_rig_pos = _rig.position
+	var brut := clampf(d_yaw * 6.0 + d_plongee * 0.05 + d_dist * 3.0 + d_pos * 0.6, 0.0, 1.0)
+	_cam_vel = lerpf(_cam_vel, brut, 1.0 - exp(-8.0 * dt))
+	_post_mat.set_shader_parameter("aberration", aberration + _cam_vel * 0.0035)
+	_post_mat.set_shader_parameter("vignette_force", clampf(vignette_force + _cam_vel * 0.22, 0.0, 1.0))
+
+# Drones (vie ambiante, cf. Env.drones) : orbite lente autour de leur centre tiré au
+# hasard à la construction (meta posées par Env.drones), réutilise l'horloge des
+# projecteurs (_proj_t, déjà incrémentée en _process) plutôt qu'un timer dédié.
+func _maj_drones() -> void:
+	for d in _drones:
+		if not is_instance_valid(d):
+			continue
+		var centre: Vector3 = d.get_meta("centre")
+		var rayon: float = d.get_meta("rayon")
+		var haut: float = d.get_meta("hauteur")
+		var vit: float = d.get_meta("vitesse")
+		var ph: float = d.get_meta("phase")
+		var t := _proj_t * vit + ph
+		d.position = centre + Vector3(cos(t) * rayon, haut + sin(t * 2.3) * 0.15, sin(t) * rayon)
+
 func _process(dt: float) -> void:
 	if auto_rotation:
 		_yaw += deg_to_rad(vitesse_rotation) * dt
@@ -1338,8 +1509,11 @@ func _process(dt: float) -> void:
 	if zoom_amorti and not _intro_en_cours:
 		distance = lerpf(distance, _distance_cible, 1.0 - exp(-12.0 * dt))
 	_appliquer_glow_zoom()
+	_appliquer_fade_pins()
 	_appliquer_camera()
+	_maj_reponse_camera(dt)
 	_deplacement_zqsd(dt)
+	_maj_drones()
 	if is_instance_valid(_radar):
 		_radar.rotation.y += deg_to_rad(radar_vitesse) * dt
 	# Boules à facettes : rotation lente → balayage des rayons lumineux.
@@ -1385,15 +1559,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not zoom_amorti:
 				distance = _distance_cible
 				_appliquer_camera()
+			AudioManager.play_sfx("holo_zoom", -22.0, randf_range(0.95, 1.12))
 			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
 			_distance_cible = clampf(_distance_cible / 0.88, distance_min, distance_max)
 			if not zoom_amorti:
 				distance = _distance_cible
 				_appliquer_camera()
+			AudioManager.play_sfx("holo_zoom", -22.0, randf_range(0.82, 0.98))
 			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			_dragging = mb.pressed and mode_rotation == 0
+			if _dragging:
+				AudioManager.play_sfx("holo_pan", -20.0, 0.95)
+			else:
+				_ressort_si_hors_plage()
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
 			# Clic droit maintenu + souris haut/bas : incline la caméra (relève/abaisse
 			# la vue), sans toucher au lacet — un contrôle DÉDIÉ à la plongée, en plus
@@ -1401,14 +1581,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dragging_plongee = mb.pressed
 			if mb.pressed:
 				get_viewport().set_input_as_handled()   # pas de menu contextuel / clic du hub derrière
+				AudioManager.play_sfx("holo_pan", -20.0, 1.05)
+			else:
+				_ressort_si_hors_plage()
 	elif event is InputEventMouseMotion and _dragging:
 		var rel := (event as InputEventMouseMotion).relative
 		_yaw -= rel.x * 0.01
-		plongee_deg = clampf(plongee_deg + rel.y * 0.3, plongee_min, plongee_max)
+		plongee_deg = _pas_elastique(plongee_deg, rel.y * 0.3)
 		_appliquer_camera()
 	elif event is InputEventMouseMotion and _dragging_plongee:
 		var rel := (event as InputEventMouseMotion).relative
-		plongee_deg = clampf(plongee_deg + rel.y * 0.3, plongee_min, plongee_max)
+		plongee_deg = _pas_elastique(plongee_deg, rel.y * 0.3)
 		_appliquer_camera()
 	elif event is InputEventKey and (event as InputEventKey).pressed \
 			and (event as InputEventKey).keycode == KEY_ESCAPE \
@@ -1418,6 +1601,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Village, `current_scene` est le Village → ce cas ne s'applique pas (c'est
 		# HoloMap3DOverlay qui gère Échap : fermeture de la carte, pas du jeu).
 		get_tree().quit()
+	elif event is InputEventKey and (event as InputEventKey).pressed \
+			and (event as InputEventKey).keycode == KEY_TAB:
+		_toggle_vue_libre()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and (event as InputEventKey).pressed \
+			and (event as InputEventKey).keycode == KEY_R:
+		_recentrer_vue()
+		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and (event as InputEventKey).pressed and mode_rotation == 1:
 		var k := (event as InputEventKey).keycode
 		if k == KEY_LEFT:
@@ -1454,6 +1645,8 @@ func rejouer_intro() -> void:
 	_distance_cible = _dist_init
 	distance = _dist_init
 	if is_instance_valid(_rig):
-		_rig.position = Vector3.ZERO   # centre d'orbite ramené au centre (balade ZQSD oubliée)
+		# Centre d'orbite ramené au repos (balade ZQSD oubliée) — barycentre des
+		# Lieux découverts si CADRAGE_ADAPTATIF, sinon le centre du monde.
+		_rig.position = _centre_lieux_monde() if CADRAGE_ADAPTATIF else Vector3.ZERO
 	_appliquer_camera()
 	_jouer_intro()

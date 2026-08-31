@@ -93,6 +93,11 @@ func _build_library() -> void:
 	_streams["reveal_pop"]         = _gen_blip(523.25, 0.06)              # apparition d'un élément
 	_streams["xp_gain"]            = _gen_bell(1568.0, 0.30, 14.0)        # étincelle d'XP
 
+	# Carte holographique (30/08/2026) : retour sonore discret sur la navigation
+	# (zoom molette / prise en main du drag) — volumes bas, joués par HoloMap3D.
+	_streams["holo_zoom"] = _gen_whoosh(0.22)
+	_streams["holo_pan"]  = _gen_blip(340.0, 0.14)
+
 # Stream nommé, pour un appelant qui gère son propre player (son séquencé /
 # pitché, ex. le rituel d'évolution). null si inconnu.
 func stream(sound_name: String) -> AudioStream:

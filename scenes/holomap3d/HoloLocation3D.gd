@@ -35,6 +35,7 @@ var line_shader: Shader
 var perimetre: PackedVector3Array = PackedVector3Array()
 
 var _t := 0.0
+var _fade := 1.0                 # opacité du pin au dézoom (1 = plein, cf. HoloMap3D._appliquer_fade_pins)
 var _hover := false
 var _pin: MeshInstance3D
 var _barriere: MeshInstance3D
@@ -87,6 +88,12 @@ func _ready() -> void:
 
 func ancre_globale() -> Vector3:
 	return to_global(Vector3(0, _pin_y + PIN_H, 0))
+
+# Opacité du pin (0..1) pilotée par le dézoom (cf. HoloMap3D._appliquer_fade_pins) —
+# jamais la barrière : elle reste invisible au repos de toute façon (n'apparaît
+# qu'au survol), le fondu au dézoom n'a donc rien à y ajouter.
+func set_fade(f: float) -> void:
+	_fade = f
 
 # Reveal d'intro : rayon de matérialisation poussé sur tous les matériaux.
 func set_reveal(r: float) -> void:
@@ -142,6 +149,7 @@ func _process(dt: float) -> void:
 		_pin.position.y = _pin_y + sin(_t * 2.0) * 0.06
 		_mat_pin.set_shader_parameter("emission_strength",
 				(10.5 + 1.2 * pulse) if _hover else (7.5 + 0.6 * pulse))
+		_mat_pin.set_shader_parameter("alpha_mult", _fade)
 
 	# Barrière : INVISIBLE au repos, fondu d'apparition au survol — l'animation VIVANTE
 	# (bandes montantes, impulsion qui tourne, crépitement) est portée par le shader.
