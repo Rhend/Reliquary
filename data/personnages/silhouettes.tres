@@ -7,14 +7,14 @@ script = ExtResource("1")
 mesures = {
 "res://assets/personnages/ennemis/flamebot/FlameBot.skel": {
 "bornes": 3028.0002,
-"hauteur": 2149.880209299982
+"hauteur": 2149.880277202885
 },
 "res://assets/personnages/ennemis/workbot/WorkBot.skel": {
 "bornes": 2480.041,
-"hauteur": 1880.6977664778838
+"hauteur": 1880.6977896452536
 },
 "res://assets/personnages/relic/Relic.skel": {
-"bornes": 1881.0,
-"hauteur": 1790.085017071581
+"bornes": 1882.4524,
+"hauteur": 1787.1016169010793
 }
 }
