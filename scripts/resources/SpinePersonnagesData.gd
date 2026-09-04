@@ -62,6 +62,7 @@ extends Resource
 #     "niveaux":      0,                         # paliers portés par les slots
 #     "ennemi":       true,
 #     "regarde_a_droite": true,                  # SENS D'EXPORT (voir plus bas)
+#     "taille_relative_pct": 20.0,                # écart chara design vs l'étalon (voir plus bas)
 #   }
 @export var personnages: Array[Dictionary] = []
 
@@ -108,6 +109,34 @@ static func regarde_a_droite(entree: Dictionary) -> bool:
 # Rend -1 quand le sens d'export et le sens voulu s'opposent, +1 sinon.
 static func echelle_x(entree: Dictionary, doit_regarder_a_droite: bool) -> float:
 	return 1.0 if regarde_a_droite(entree) == doit_regarder_a_droite else -1.0
+
+# ─── TAILLE RELATIVE (chara design, acté 09/2026) ────────────
+#
+# Les entités n'ont plus toutes la même hauteur à l'écran : leur gabarit sert
+# à ENVOYER UN MESSAGE au joueur (WorkBot lit petit et utilitaire, FlameBot
+# lit imposant et dangereux). On est PARTI d'un ratio d'unités Spine brutes
+# entre squelettes pour dériver ça automatiquement — abandonné : les unités
+# natives d'un export ne reflètent AUCUNE intention de gabarit (un simple
+# sous-produit de l'échelle de travail propre à chaque fichier Spine), au
+# point d'inverser l'ordre voulu (Relic mesurait moins d'unités que WorkBot,
+# alors qu'il doit rendre plus grand). La taille relative est donc une
+# DÉCISION DE DESIGN explicite, un chiffre par entrée, jamais déduite.
+#
+# `taille_relative_pct` = écart en % par rapport à l'ÉTALON
+# (`SpriteSpinePersonnage.HAUTEUR_ETALON_PX` — WorkBot aujourd'hui, à 0 %).
+# +20.0 = 20 % plus grand que l'étalon ; -10.0 = 10 % plus petit. Absent =
+# 0 % (même taille que l'étalon). Christophe n'a RIEN à faire porter ça dans
+# son export (voir ChristopheAnimationWIP/SPECS_SPINE.md §5) : ce chiffre vit
+# uniquement ici.
+static func taille_relative_pct(entree: Dictionary) -> float:
+	return float(entree.get("taille_relative_pct", 0.0))
+
+# Hauteur RENDUE (px) visée pour cette entrée : l'étalon modulé par son écart
+# de chara design. Remplace l'ancienne cible UNIQUE partagée par tout le
+# monde — voir SpriteSpinePersonnage.HAUTEUR_ETALON_PX pour le mécanisme de
+# mise à l'échelle qui consomme cette valeur.
+static func hauteur_cible_px(entree: Dictionary) -> float:
+	return SpriteSpinePersonnage.HAUTEUR_ETALON_PX * (1.0 + taille_relative_pct(entree) / 100.0)
 
 # Première entrée non ennemie = le héros (Relic) — le vis-à-vis du mode Combat.
 func heros() -> Dictionary:

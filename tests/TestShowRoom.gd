@@ -324,19 +324,26 @@ func _test_costumes() -> void:
 	_assert(salle._monde.get_child_count() > 0, "les touches d'animation laissent la vitrine debout")
 	salle.free()
 
-# ─── 6. Échelle : héros et monstres au même mètre ───────────
+# ─── 6. Échelle : chaque entité à SON gabarit de chara design ──
 #
-# La ShowRoom sert précisément à juger les tailles les unes par rapport aux
-# autres : un personnage hors d'échelle y est un bug de LIVRAISON. L'échelle
+# Un personnage hors de SA propre cible reste un bug de LIVRAISON : l'échelle
 # se déduit de la hauteur mesurée du squelette (SpriteSpinePersonnage.
 # _hauteur_source) — la taille DÉCLARÉE par l'export ne fait pas foi : la
 # livraison « cheveux » du 25/08/2026 annonçait 573 unités pour un Relic qui
 # en mesure 2917, et le héros sortait ~5× trop grand devant les monstres.
 #
+# Mais depuis 09/2026 (chara design de Rhend/Christophe), la cible n'est PLUS
+# la même pour tout le monde : chaque entrée du registre porte son propre
+# écart en % (`taille_relative_pct`) par rapport à l'ÉTALON (WorkBot, 0 %,
+# `SpriteSpinePersonnage.HAUTEUR_ETALON_PX` — PLACEHOLDER en attendant le vrai
+# chiffre de Christophe). Ce test vérifie que chacun rend à SA cible propre
+# (`SpinePersonnagesData.hauteur_cible_px`), et que l'ordre de gabarit voulu
+# (WorkBot < Relic < FlameBot) est bien respecté.
+#
 # TOLÉRANCE : la mesure porte sur la pose COURANTE, qui respire avec l'Idle —
-# on ne vérifie pas un pixel, on vérifie que tout le monde est au même mètre.
+# on ne vérifie pas un pixel, on vérifie que chacun est à SON mètre.
 
-const ECART_ECHELLE_MAX := 0.2   # ±20 % de la hauteur cible
+const ECART_ECHELLE_MAX := 0.2   # ±20 % de la hauteur cible DE CHAQUE entité
 
 # La mesure d'échelle vient d'un BAKE (SilhouettesData) : les pixels réellement
 # dessinés, comptés hors ligne par tools/mesurer_silhouettes.tscn, parce que
@@ -372,36 +379,50 @@ func _test_silhouettes_bakees() -> void:
 		sprite.free()
 
 func _test_echelle() -> void:
-	print("\n[TEST 6] Échelle : tous les personnages au même mètre")
+	print("\n[TEST 6] Échelle : chaque entité à SON gabarit (WorkBot = étalon)")
 	if not SpriteSpinePersonnage.disponible():
 		print("  (runtime spine-godot absent : échelle non mesurable)")
 		return
 	await _test_silhouettes_bakees()
-	var cible := SpriteSpinePersonnage.HAUTEUR_CIBLE_PX
-	var marge := cible * ECART_ECHELLE_MAX
 	var reg := load(ShowRoom.REGISTRE) as SpinePersonnagesData
+	var cibles := {}   # id → hauteur cible (réutilisé pour le contrôle d'ordre)
 	for p in reg.personnages:
+		var id := str(p.get("id", "?"))
 		var app := SpinePersonnagesData.apparences(p)
+		var cible := SpinePersonnagesData.hauteur_cible_px(p)
+		cibles[id] = cible
+		var marge := cible * ECART_ECHELLE_MAX
 		var sprite := SpriteSpinePersonnage.creer(str(p.get("skel", "")),
-				str(p.get("atlas", "")), app[0])
+				str(p.get("atlas", "")), app[0], cible)
 		if sprite == null:
-			_assert(false, "%s : le sprite se construit" % p.get("id", "?"))
+			_assert(false, "%s : le sprite se construit" % id)
 			continue
 		add_child(sprite)
 		await get_tree().process_frame
 		var haut := sprite.hauteur_rendue_px()
 		_assert(absf(haut - cible) <= marge,
-				"%s : rendu à %.0f px (cible %.0f ± %.0f)" % [p.get("id", "?"), haut, cible, marge])
+				"%s : rendu à %.0f px (cible %.0f ± %.0f, %+.0f %% vs étalon)" %
+				[id, haut, cible, marge, SpinePersonnagesData.taille_relative_pct(p)])
 		sprite.free()
 	# Le héros au dernier niveau d'équipement ne doit pas grandir non plus :
-	# les 6 costumes partagent un squelette, donc une échelle.
+	# les 6 costumes partagent un squelette, donc une échelle — SA PROPRE
+	# échelle (Relic +10 %), plus l'étalon universel d'avant 09/2026.
+	var cible_heros: float = cibles.get("relic", SpriteSpinePersonnage.HAUTEUR_ETALON_PX)
 	var nv6 := SpriteSpinePersonnage.creer_heros(6)
 	if nv6 != null:
 		add_child(nv6)
 		await get_tree().process_frame
-		_assert(absf(nv6.hauteur_rendue_px() - cible) <= marge,
+		_assert(absf(nv6.hauteur_rendue_px() - cible_heros) <= cible_heros * ECART_ECHELLE_MAX,
 				"le héros Nv6 garde la taille du Nv1")
 		nv6.free()
+	# L'ORDRE voulu par le chara design (09/2026) : WorkBot (étalon) < Relic <
+	# FlameBot — c'est la contrainte que Rhend a posée, pas un simple ±20 %.
+	if cibles.has("workbot") and cibles.has("relic"):
+		_assert(float(cibles["workbot"]) < float(cibles["relic"]),
+				"WorkBot (étalon) est plus petit que Relic")
+	if cibles.has("relic") and cibles.has("flamebot"):
+		_assert(float(cibles["relic"]) < float(cibles["flamebot"]),
+				"Relic est plus petit que FlameBot")
 
 # ─── 7. Sens d'export et mise en scène ──────────────────────
 #

@@ -49,10 +49,28 @@ const MARQUEUR_NIVEAU := "_Nv"
 # occupait à elle seule la moitié du budget de hauteur, ce qui le rendait
 # visiblement plus petit que des monstres au corps monobloc.
 const MOTIFS_HORS_MESURE := ["Sword", "VFX"]
-# Hauteur affichée à l'écran (px) — la source Spine fait ~2 800 unités de haut,
-# l'échelle est déduite de la hauteur MESURÉE du squelette au chargement
-# (voir _hauteur_source : la taille déclarée par l'export n'est pas fiable).
-const HAUTEUR_CIBLE_PX := 276.0   # 240 + 15 % (26/08/2026 : héros et monstres jugés trop petits)
+# Hauteur RENDUE (px) de l'ÉTALON de chara design — aujourd'hui WorkBot, à
+# 0 % (voir SpinePersonnagesData.taille_relative_pct). L'échelle de CHAQUE
+# personnage est déduite de sa hauteur MESURÉE au chargement (voir
+# _hauteur_source : la taille déclarée par l'export n'est pas fiable), puis
+# modulée par son propre écart en % — SpinePersonnagesData.hauteur_cible_px()
+# fait ce calcul et c'est SA valeur qui doit être passée en `hauteur_cible_px`
+# à `creer()`, pas cette constante directement (sauf pour l'étalon lui-même,
+# ou un appelant qui n'a pas d'entrée de registre — outils de mesure, tests).
+#
+# ⚠ PLACEHOLDER (09/2026) : 200 px en attendant que Christophe donne le vrai
+# chiffre. Acté avec Rhend : jusqu'en 08/2026, TOUT le monde rendait à la même
+# hauteur (276 px, ancienne HAUTEUR_CIBLE_PX) — abandonné, le chara design
+# demande des gabarits différents pour porter un message au joueur (WorkBot
+# petit et utilitaire, FlameBot imposant). Voir taille_relative_pct pour
+# pourquoi ça ne se déduit PAS des unités Spine brutes de chaque export.
+const HAUTEUR_ETALON_PX := 200.0
+# Hauteur à laquelle `decalage_x_px` (recentrage de Relic) a été MESURÉ
+# (26/08/2026, ancienne HAUTEUR_CIBLE_PX) — une calibration figée dans le
+# temps, SANS RAPPORT avec l'étalon de taille courant : changer HAUTEUR_
+# ETALON_PX ne doit pas fausser le recentrage d'un personnage qui a sa propre
+# hauteur cible désormais. Voir son usage plus bas.
+const HAUTEUR_CALIBRAGE_DECALAGE_PX := 276.0
 const HAUTEUR_SOURCE_DEFAUT := 2770.0   # dernier recours : ni mesure ni taille déclarée
 # Fondu par défaut entre deux animations Spine consécutives (26/08/2026) :
 # sans lui, l'extension enchaîne Idle→Attaque→Idle (et →Hit, →Mort) en cut
@@ -82,7 +100,7 @@ static func disponible(chemin_skel: String = CHEMIN_SKEL,
 static func creer(chemin_skel: String = CHEMIN_SKEL,
 		chemin_atlas: String = CHEMIN_ATLAS,
 		apparence: Dictionary = {},
-		hauteur_cible_px: float = HAUTEUR_CIBLE_PX) -> SpriteSpinePersonnage:
+		hauteur_cible_px: float = HAUTEUR_ETALON_PX) -> SpriteSpinePersonnage:
 	if not disponible(chemin_skel, chemin_atlas):
 		return null
 	var noeud := SpriteSpinePersonnage.new()
@@ -98,22 +116,27 @@ static func creer(chemin_skel: String = CHEMIN_SKEL,
 # `niveau` = son palier d'ÉQUIPEMENT (1 = Commun, la dotation de départ du
 # chantier 13). Le brancher sur l'équipement réel du joueur se fait ICI, et
 # nulle part ailleurs.
-static func creer_heros(niveau: int = 1,
-		hauteur_cible_px: float = HAUTEUR_CIBLE_PX) -> SpriteSpinePersonnage:
+#
+# La hauteur cible n'est PLUS un paramètre : elle se résout depuis l'entrée du
+# registre (`SpinePersonnagesData.hauteur_cible_px`), donc du gabarit propre
+# de Relic (chara design), jamais celui d'un autre personnage.
+static func creer_heros(niveau: int = 1) -> SpriteSpinePersonnage:
 	var registre := SpinePersonnagesData.charger()
 	var entree: Dictionary = registre.heros() if registre != null else {}
 	var apparences: Array[Dictionary] = []
 	if not entree.is_empty():
 		apparences = SpinePersonnagesData.apparences(entree)
+	var hauteur := SpinePersonnagesData.hauteur_cible_px(entree) if not entree.is_empty() \
+			else HAUTEUR_ETALON_PX
 	if apparences.is_empty():
-		return creer(CHEMIN_SKEL, CHEMIN_ATLAS, {}, hauteur_cible_px)
+		return creer(CHEMIN_SKEL, CHEMIN_ATLAS, {}, hauteur)
 	return creer(str(entree.get("skel", CHEMIN_SKEL)), str(entree.get("atlas", CHEMIN_ATLAS)),
-			apparences[clampi(niveau - 1, 0, apparences.size() - 1)], hauteur_cible_px)
+			apparences[clampi(niveau - 1, 0, apparences.size() - 1)], hauteur)
 
 func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 		chemin_atlas: String = CHEMIN_ATLAS,
 		apparence: Dictionary = {},
-		hauteur_cible_px: float = HAUTEUR_CIBLE_PX) -> bool:
+		hauteur_cible_px: float = HAUTEUR_ETALON_PX) -> bool:
 	var skel: Resource = load(chemin_skel)
 	var atlas: Resource = load(chemin_atlas)
 	if skel == null or atlas == null:
@@ -149,10 +172,13 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 	# masse DESSINÉE peut pencher — Relic a un pied en avant, ce qui décale sa
 	# silhouette de +17 px vers la droite à la taille de combat (mesuré). Sans
 	# ça il paraît décentré sur un décor qui, lui, est centré sur l'ancrage.
-	# Valeur donnée pour HAUTEUR_CIBLE_PX, remise à l'échelle demandée.
+	# Valeur donnée pour HAUTEUR_CALIBRAGE_DECALAGE_PX, remise à l'échelle
+	# demandée — PAS HAUTEUR_ETALON_PX, qui n'a plus rien à voir avec la
+	# hauteur à laquelle `dx` a été mesuré (l'étalon peut changer, `dx` non).
 	var dx := float(apparence.get("decalage_x_px", 0.0))
 	if dx != 0.0:
-		_spine.set("position", Vector2(-dx * hauteur_cible_px / HAUTEUR_CIBLE_PX, 0.0))
+		_spine.set("position",
+				Vector2(-dx * hauteur_cible_px / HAUTEUR_CALIBRAGE_DECALAGE_PX, 0.0))
 	_jouer(ANIM_IDLE, true)
 	return true
 

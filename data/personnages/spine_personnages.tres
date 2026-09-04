@@ -41,6 +41,14 @@ script = ExtResource("1")
 ;
 ; Le champ reste là pour le jour où une livraison arrivera dans l'autre sens :
 ; une ligne à changer sur SON entrée, aucun code à toucher.
+;
+; TAILLE RELATIVE (`taille_relative_pct`, acté 09/2026 — chara design de Rhend
+; et Christophe) : les entités n'ont PLUS toutes la même hauteur à l'écran.
+; WorkBot est l'ÉTALON (0 %, `SpriteSpinePersonnage.HAUTEUR_ETALON_PX` —
+; PLACEHOLDER 200 px en attendant le vrai chiffre de Christophe) ; chaque
+; autre entrée porte un écart en % au-dessus ou en dessous de cet étalon
+; (Relic +10 %, FlameBot +20 %). Absent d'une entrée = 0 % (même taille que
+; l'étalon). Voir SpinePersonnagesData.hauteur_cible_px().
 personnages = [{
 "id": "relic",
 "nom": "Relic (héros)",
@@ -62,6 +70,7 @@ personnages = [{
 "decalage_x_px": 17.0,
 "niveaux": 6,
 "regarde_a_droite": true,
+"taille_relative_pct": 10.0,
 "ennemi": false
 }, {
 "id": "flamebot",
@@ -70,6 +79,7 @@ personnages = [{
 "atlas": "res://assets/personnages/ennemis/flamebot/FlameBot.atlas",
 "prefixe_skin": "FlameBot_Nv",
 "regarde_a_droite": false,
+"taille_relative_pct": 20.0,
 "ennemi": true
 }, {
 "id": "workbot",
@@ -78,5 +88,6 @@ personnages = [{
 "atlas": "res://assets/personnages/ennemis/workbot/WorkBot.atlas",
 "prefixe_skin": "WorkBot_Nv",
 "regarde_a_droite": false,
+"taille_relative_pct": 0.0,
 "ennemi": true
 }]

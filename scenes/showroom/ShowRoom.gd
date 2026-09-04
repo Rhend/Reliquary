@@ -308,7 +308,7 @@ func _peupler_libre() -> void:
 		for k in apparences.size():
 			var ap := apparences[k]
 			var sprite := SpriteSpinePersonnage.creer(str(e.get("skel", "")),
-					str(e.get("atlas", "")), ap)
+					str(e.get("atlas", "")), ap, SpinePersonnagesData.hauteur_cible_px(e))
 			if sprite == null:
 				continue
 			sprite.position = Vector2(k * COL_PAS, y)
@@ -391,7 +391,7 @@ func _peupler_duel() -> void:
 		if _idx_heros < _heros_apparences.size():
 			ap_h = _heros_apparences[_idx_heros]
 		var relic := SpriteSpinePersonnage.creer(str(_heros.get("skel", "")),
-				str(_heros.get("atlas", "")), ap_h)
+				str(_heros.get("atlas", "")), ap_h, SpinePersonnagesData.hauteur_cible_px(_heros))
 		if relic != null:
 			# Le camp joueur est à GAUCHE : le héros regarde vers la droite.
 			# Explicite même si l'export va déjà dans ce sens — le jour où une
@@ -417,7 +417,8 @@ func _peupler_duel() -> void:
 	var e := _ennemis[_idx_monstre]
 	var ap_mob := _apparences(e)
 	var mob := SpriteSpinePersonnage.creer(str(e.get("skel", "")), str(e.get("atlas", "")),
-			ap_mob[clampi(_idx_palier, 0, ap_mob.size() - 1)])
+			ap_mob[clampi(_idx_palier, 0, ap_mob.size() - 1)],
+			SpinePersonnagesData.hauteur_cible_px(e))
 	if mob != null:
 		# Le camp adverse est à DROITE : l'ennemi regarde vers la gauche. Le
 		# miroir n'est plus systématique — il dépend du sens d'export déclaré
@@ -638,11 +639,15 @@ func _rafraichir_hud() -> void:
 		var e := _ennemis[_idx_monstre]
 		_titre.text = "COMBAT — %s  ·  %s   vs   %s" % [str(e.get("nom", "?")),
 				GameData.get_tier_name(_idx_palier), _nom_apparence_heros()]
+		# Hauteurs cibles PAR ENTITÉ (chara design, 09/2026) : plus un seul « px »
+		# valable pour tout le monde — on affiche celle du héros ET celle de
+		# l'adversaire courant, chacune résolue depuis son propre écart en %.
 		_hud.text = "[Tab] mode libre    [←/→] monstre    [↑/↓] palier    [H] niveau héros    [V] %s    [B] lumière : %s\n" % [
 				_nom_cosmetique(), _nom_lumiere()] \
-				+ LIGNE_ANIMS + "    —    cadrage réel : sol %.2f · joueur %.2f · adverse %.2f · %d px" % [
+				+ LIGNE_ANIMS + "    —    cadrage réel : sol %.2f · joueur %.2f · adverse %.2f · héros %d px · adverse %d px" % [
 				SOL_Y_FRAC, SOL_X_JOUEUR, SOL_X_ADVERSE,
-				int(SpriteSpinePersonnage.HAUTEUR_CIBLE_PX)]
+				int(SpinePersonnagesData.hauteur_cible_px(_heros)),
+				int(SpinePersonnagesData.hauteur_cible_px(e))]
 	elif _mode == Mode.USINE:
 		_titre.text = "USINE SEULE — plein écran, sans masque ni ville (diagnostic)"
 		_hud.text = "[Tab] mode suivant    —    décor Christophe tel quel, écrêtage adverse retiré"

@@ -150,8 +150,9 @@ s'enfonce dans le décor, et il faut le rattraper à la main dans le code.
 ## 5️⃣ La taille : le jeu **recadre** tout le monde
 
 Le jeu ne fait pas confiance à la taille déclarée par l'export. Il **mesure** le
-squelette au chargement et le met à l'échelle pour qu'il fasse **240 px** de haut
-à l'écran.
+squelette au chargement et le met à l'échelle pour qu'il fasse une hauteur
+**cible en px** — propre à CHAQUE personnage (voir l'encadré 📌 plus bas,
+mise à jour 09/2026 : ce n'est plus la même pour tout le monde).
 
 Deux conséquences pour toi :
 
@@ -188,11 +189,19 @@ légitime, et ça ne remet rien en cause.
 Ce que je dois éviter, ce n'est pas l'effet : c'est de le découvrir en voyant un
 boss deux fois trop petit sans comprendre pourquoi.
 
-> 📌 **À savoir** : aujourd'hui **tous** les personnages sont ramenés à la même
-> hauteur, héros comme monstres. Un petit rat et un colosse sortiraient de la même
-> taille. Le jour où on voudra de vraies différences de gabarit, ça se réglera d'un
-> chiffre par personnage côté code — mais **ne compte pas sur ton export pour
-> porter l'échelle relative** pour l'instant.
+> 📌 **À savoir (mis à jour 09/2026)** : c'est fait — chaque personnage a
+> maintenant SA propre hauteur cible, pour que le gabarit porte un vrai message
+> (un petit robot lit petit et utilitaire, un colosse lit imposant). C'est un
+> **chiffre de design posé côté code** (un % relatif à un personnage étalon),
+> **jamais déduit de la taille de ton fichier Spine** — on a essayé de le
+> déduire des unités natives de chaque export, ça ne marchait pas : ces unités
+> ne reflètent que l'échelle de travail de ton fichier, pas une intention de
+> gabarit. **Ne compte donc toujours pas sur ton export pour porter l'échelle
+> relative** : rigge à l'échelle qui t'arrange, comme avant. La seule chose
+> nouvelle à me dire : l'intention de gabarit d'un nouveau personnage par
+> rapport aux autres (« ce monstre doit lire deux fois plus imposant que
+> WorkBot », par ex.) — c'est une info que j'ai besoin d'avoir de toi, elle ne
+> se lit pas dans le fichier.
 
 ---
 
@@ -365,8 +374,9 @@ ne va pas.
 | glisser / molette / `R` | Déplacer · zoomer · recadrer |
 | `Échap` | Retour au QG |
 
-En vue libre, le **héros est affiché en premier** : c'est le mètre étalon, on juge
-les monstres par rapport à lui.
+En vue libre, le **héros est affiché en premier** (repère de mise en scène) ;
+l'étalon de TAILLE, lui, est **WorkBot** (09/2026) — c'est par rapport à lui que
+les autres gabarits sont réglés en %.
 
 ---
 
