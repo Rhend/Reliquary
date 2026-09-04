@@ -11,6 +11,8 @@
 #   "village"          — hub du village avec pastilles forcées
 #   "evolution"        — EvolutionRitual avec une évolution factice
 #   "forge"            — panneau Forge (forgeable / XP basse / verrouillé)
+#   "compare_ennemis"  — FlameBot + WorkBot sur une même ligne diagonale
+#                        (diagnostic de taille relative, chara design)
 # ============================================================
 extends Node
 
@@ -39,6 +41,7 @@ func _ready() -> void:
 		"holo_prop": await _shoot_holo_prop()
 		"holo_pins": await _shoot_holo_pins()
 		"showroom":  await _shoot_showroom()
+		"compare_ennemis": await _shoot_compare_ennemis()
 		"factory":   await _shoot_factory()
 		"factory_full": await _shoot_factory_full()
 		"factory_bras": await _shoot_factory_bras()
@@ -775,6 +778,84 @@ func _shoot_showroom() -> void:
 	salle._appliquer_mode()
 	await get_tree().create_timer(0.6).timeout
 	await _capture("res://tests/_shot_showroom_usine.png")
+
+# ── Comparaison de taille : FlameBot et WorkBot sur une même ligne ──────────
+# Diagnostic demandé par Rhend (09/2026, chara design des tailles relatives) :
+# poser les deux ennemis sur une même ligne DIAGONALE plutôt qu'une rangée
+# plate — comme deux combattants d'un même camp vus sous un angle de caméra
+# décalé (le même trajet horizontal+vertical, une seule pente). Un trait fin
+# relie leurs pieds pour rendre la ligne commune lisible : sans lui, l'œil ne
+# perçoit pas que le léger décalage vertical est voulu plutôt qu'une erreur de
+# calage au sol.
+#
+# L'espacement se déduit de la largeur RENDUE de chacun (`largeur_rendue_px`),
+# jamais d'une valeur fixe : FlameBot (+20 % de chara design) est nettement
+# plus large que WorkBot, un espacement fixe les aurait fait chevaucher ou
+# laissé un vide selon lequel des deux est passé en premier.
+const ANGLE_DIAGONALE_DEG := 12.0
+const MARGE_ESPACEMENT_PX := 60.0
+
+func _shoot_compare_ennemis() -> void:
+	var hote := Control.new()
+	hote.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_vp.add_child(hote)
+	var fond := ColorRect.new()
+	fond.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fond.color = Color(0.09, 0.10, 0.13)
+	hote.add_child(fond)
+
+	var reg := SpinePersonnagesData.charger()
+	var flamebot_e: Dictionary = {}
+	var workbot_e: Dictionary = {}
+	for p: Dictionary in reg.personnages:
+		match str(p.get("id", "")):
+			"flamebot": flamebot_e = p
+			"workbot": workbot_e = p
+
+	var wb := SpriteSpinePersonnage.creer(str(workbot_e.get("skel", "")),
+			str(workbot_e.get("atlas", "")), SpinePersonnagesData.apparences(workbot_e)[0],
+			SpinePersonnagesData.hauteur_cible_px(workbot_e))
+	var fb := SpriteSpinePersonnage.creer(str(flamebot_e.get("skel", "")),
+			str(flamebot_e.get("atlas", "")), SpinePersonnagesData.apparences(flamebot_e)[0],
+			SpinePersonnagesData.hauteur_cible_px(flamebot_e))
+	if wb == null or fb == null:
+		print("compare_ennemis : sprite(s) non constructible(s) — runtime spine-godot absent ?")
+		return
+	# Orientation de camp adverse (même sens qu'en combat réel : vers le
+	# joueur, à gauche) — les deux du même côté, comme un vrai duo d'ennemis.
+	wb.orienter(SpinePersonnagesData.echelle_x(workbot_e, false))
+	fb.orienter(SpinePersonnagesData.echelle_x(flamebot_e, false))
+	hote.add_child(wb)
+	hote.add_child(fb)
+	await get_tree().process_frame   # une frame pour que la largeur soit mesurable
+
+	var pied_wb := Vector2(500.0, 440.0)   # centre la paire dans le cadre 1280×720
+	var espacement := (wb.largeur_rendue_px() + fb.largeur_rendue_px()) * 0.5 + MARGE_ESPACEMENT_PX
+	var pente := tan(deg_to_rad(ANGLE_DIAGONALE_DEG))
+	var pied_fb := pied_wb + Vector2(espacement, espacement * pente)
+	wb.position = pied_wb
+	fb.position = pied_fb
+
+	var ligne_guide := Control.new()
+	ligne_guide.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ligne_guide.draw.connect(func() -> void:
+		ligne_guide.draw_line(pied_wb, pied_fb, Color(1.0, 1.0, 1.0, 0.35), 1.5)
+		ligne_guide.draw_circle(pied_wb, 4.0, Color(1.0, 1.0, 1.0, 0.6))
+		ligne_guide.draw_circle(pied_fb, 4.0, Color(1.0, 1.0, 1.0, 0.6)))
+	hote.add_child(ligne_guide)
+
+	var lbl_wb := UIHelpers.label("WorkBot — %d px" % int(SpinePersonnagesData.hauteur_cible_px(workbot_e)),
+			14, Color.WHITE)
+	lbl_wb.position = pied_wb + Vector2(-40.0, 20.0)
+	hote.add_child(lbl_wb)
+	var lbl_fb := UIHelpers.label("FlameBot — %d px" % int(SpinePersonnagesData.hauteur_cible_px(flamebot_e)),
+			14, Color.WHITE)
+	lbl_fb.position = pied_fb + Vector2(-40.0, 20.0)
+	hote.add_child(lbl_fb)
+	ligne_guide.queue_redraw()
+
+	await get_tree().process_frame
+	await _capture("res://tests/_shot_compare_ennemis.png")
 
 # ── Capture du décor d'Usine (CombatDecorFactory, côté adverse) ────
 # Décor SEUL (pas de personnages), avancé à la main via `_process(dt)` (comme
