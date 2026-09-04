@@ -96,6 +96,7 @@ var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
 var _duel_tween: Tween = null
 var _duel_restaure: Array = []      # paires [CanvasItem, position d'origine]
 var _duel_acteurs: Array = []       # [attaquant, cible] du duel en cours
+var _duel_ordre_restaure: Array = []   # [CanvasItem attaquant, index d'origine dans _sol]
 # Ciblage À LA SOURIS dans la scène (retour Rhend 07/2026) : une zone de
 # clic invisible par ennemi, ACTIVE seulement en mode ciblage — l'ennemi se
 # choisit en le cliquant (scène ou carte), plus de rangée de boutons nominatifs.
@@ -722,6 +723,7 @@ func _duel_interrompre() -> void:
 	for paire: Array in _duel_restaure:
 		(paire[0] as CanvasItem).position = paire[1]
 	_duel_restaure.clear()
+	_duel_restaurer_ordre()
 	if _couche_scene != null:
 		_couche_scene.scale = Vector2.ONE
 	if not _duel_acteurs.is_empty():
@@ -758,13 +760,34 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
 	# Rien à restaurer sans convergence : les positions ne sont pas touchées.
 	_duel_restaure = [[noeud_att, noeud_att.position], [noeud_cib, noeud_cib.position]] \
 			if converger else []
+	# L'ATTAQUANT doit se dessiner PAR-DESSUS sa cible : son arme déborde de
+	# son propre corps pendant le geste, et l'ordre d'ajout à `_sol` (joueur
+	# ajouté avant les ennemis, cf. `_construire`) le mettait sinon TOUJOURS
+	# derrière l'adversaire dès que la convergence les rapproche au centre —
+	# le coup d'épée du héros disparaissait derrière l'ennemi (retour Rhend).
+	if converger:
+		_duel_ordre_restaure = [noeud_att, noeud_att.get_index()]
+		_sol.move_child(noeud_att, _sol.get_child_count() - 1)
 	_duel_acteurs = [att, cible]
 	_duel_tween = DuelZoomFx.jouer(_couche_scene, foyer, noeud_att, pos_att, noeud_cib, pos_cib,
 			crit, converger, facteur_delais, func() -> void:
 				_duel_restaure.clear()
+				_duel_restaurer_ordre()
 				_duel_tween = null
 				_duel_acteurs = []
 				_rafraichir_orbes())   # fondu différé du vaincu, une fois le duel joué
+
+# Replace l'attaquant à son rang d'origine dans `_sol` une fois le duel fini
+# (ou interrompu) — le z-order ne doit servir que le temps du geste, jamais
+# devenir l'ordre permanent de la scène.
+func _duel_restaurer_ordre() -> void:
+	if _duel_ordre_restaure.is_empty():
+		return
+	var noeud := _duel_ordre_restaure[0] as CanvasItem
+	var index: int = _duel_ordre_restaure[1]
+	_duel_ordre_restaure = []
+	if is_instance_valid(noeud) and _sol != null:
+		_sol.move_child(noeud, index)
 
 func _sur_evenement(e: Dictionary) -> void:
 	if not is_inside_tree():

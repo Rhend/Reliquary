@@ -100,6 +100,7 @@ var _duel: Node2D             # sprites du mode COMBAT
 var _duel_heros: SpriteSpinePersonnage = null    # dans _duel, ou null
 var _duel_monstre: SpriteSpinePersonnage = null  # dans _duel, ou null
 var _duel_tween: Tween = null   # zoom-duel en cours ([A]/[T] en mode combat)
+var _duel_ordre_restaure: Array = []   # [_duel_heros, index d'origine dans _duel]
 var _cam: Camera2D
 var _fond_neutre: ColorRect
 var _decor: Control            # fond scindé (mode combat) : biomes + diagonale + sol
@@ -481,6 +482,13 @@ func _zoom_duel(converger: bool) -> void:
 	var origine_m := _duel_monstre.position
 	var pos_h := centre + Vector2(-DuelZoomFx.ECART_PX * 0.5, 0.0)
 	var pos_m := centre + Vector2(DuelZoomFx.ECART_PX * 0.5, 0.0)
+	# Le héros (toujours l'attaquant ici) doit rester DEVANT le monstre : sinon
+	# son arme, qui déborde de son propre corps pendant le geste, disparaît
+	# derrière lui dès que la convergence les rapproche — même correctif que
+	# `CombatCtbUi._duel_attaque` (recette partagée, même bug des deux côtés).
+	if converger:
+		_duel_ordre_restaure = [_duel_heros, _duel_heros.get_index()]
+		_duel.move_child(_duel_heros, _duel.get_child_count() - 1)
 	_decor.pivot_offset = foyer - Vector2(0.0, DuelZoomFx.FOCUS_HAUT_PX)
 	_duel_tween = create_tween()
 	_duel_tween.tween_method(_poser_zoom_scene.bind(foyer), 1.0, DuelZoomFx.ZOOM,
@@ -498,7 +506,20 @@ func _zoom_duel(converger: bool) -> void:
 				DuelZoomFx.DUREE_OUT).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 		_duel_tween.parallel().tween_property(_duel_monstre, "position", origine_m,
 				DuelZoomFx.DUREE_OUT).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_duel_tween.finished.connect(func() -> void: _duel_tween = null)
+	_duel_tween.finished.connect(func() -> void:
+		_duel_restaurer_ordre()
+		_duel_tween = null)
+
+# Replace le héros à son rang d'origine dans `_duel` une fois le duel fini
+# (ou interrompu) — le z-order ne doit servir que le temps du geste.
+func _duel_restaurer_ordre() -> void:
+	if _duel_ordre_restaure.is_empty():
+		return
+	var noeud := _duel_ordre_restaure[0] as CanvasItem
+	var index: int = _duel_ordre_restaure[1]
+	_duel_ordre_restaure = []
+	if is_instance_valid(noeud) and _duel != null:
+		_duel.move_child(noeud, index)
 
 # Applique un zoom `s` autour de `foyer` aux DEUX espaces de coordonnées de
 # la vitrine : `_decor` (Control, pivot_offset natif) et `_duel` (Node2D,
@@ -517,6 +538,7 @@ func _zoom_duel_interrompre() -> void:
 	if _duel_tween != null and _duel_tween.is_valid():
 		_duel_tween.kill()
 	_duel_tween = null
+	_duel_restaurer_ordre()
 	_decor.scale = Vector2.ONE
 	_duel.scale = Vector2.ONE
 	_duel.position = Vector2.ZERO
