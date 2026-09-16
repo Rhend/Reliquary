@@ -120,12 +120,16 @@ static func creer(chemin_skel: String = CHEMIN_SKEL,
 # La hauteur cible n'est PLUS un paramètre : elle se résout depuis l'entrée du
 # registre (`SpinePersonnagesData.hauteur_cible_px`), donc du gabarit propre
 # de Relic (chara design), jamais celui d'un autre personnage.
-static func creer_heros(niveau: int = 1) -> SpriteSpinePersonnage:
+# `cosmetique` = jeu d'accessoires « Random » (défaut 0, le seul posé par le
+# jeu réel — voir SpinePersonnagesData.cosmetiques). Second paramètre ajouté
+# pour la ShowRoom (fusionnée dans CombatCtbUi, 09/2026), qui doit pouvoir
+# prévisualiser les jeux alternatifs sans dupliquer cette fabrique.
+static func creer_heros(niveau: int = 1, cosmetique: int = 0) -> SpriteSpinePersonnage:
 	var registre := SpinePersonnagesData.charger()
 	var entree: Dictionary = registre.heros() if registre != null else {}
 	var apparences: Array[Dictionary] = []
 	if not entree.is_empty():
-		apparences = SpinePersonnagesData.apparences(entree)
+		apparences = SpinePersonnagesData.apparences(entree, cosmetique)
 	var hauteur := SpinePersonnagesData.hauteur_cible_px(entree) if not entree.is_empty() \
 			else HAUTEUR_ETALON_PX
 	if apparences.is_empty():

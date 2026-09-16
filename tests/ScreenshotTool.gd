@@ -743,36 +743,27 @@ func _shoot_maxtier_village() -> void:
 	await get_tree().create_timer(1.2).timeout
 	_capture("res://tests/_shot_maxtier_village.png")
 
-# ── Vitrine des assets Spine (ShowRoom) : les deux modes ────
+# ── Vitrine des assets Spine (ShowRoom) : fusionnée avec CombatCtbUi (09/2026) ──
 func _shoot_showroom() -> void:
 	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
 	_vp.add_child(salle)
-	# La vitrine démarre désormais en mode COMBAT (26/08/2026) : mode LIBRE
-	# explicite pour les deux premières captures, qui doivent montrer ce mode.
-	salle._mode = ShowRoom.Mode.LIBRE
-	salle._appliquer_mode()
-	await get_tree().create_timer(0.6).timeout   # laisse jouer l'Idle
-	await _capture("res://tests/_shot_showroom_libre.png")
-	# Niveau « Jour » : vérifie que les étiquettes restent lisibles quand le
-	# fond s'éclaircit (les couleurs d'UI sont pensées pour du sombre).
+	await get_tree().create_timer(0.6).timeout   # laisse jouer l'Idle + le splash d'ouverture
+	await _capture("res://tests/_shot_showroom_duel.png")
+	# Niveau « Jour » : vérifie que le décor reste lisible quand il s'éclaircit
+	# (les personnages, eux, ne sont jamais modulés).
 	salle._idx_lumiere = 2
 	salle._appliquer_lumiere()
 	salle._rafraichir_hud()
 	await get_tree().create_timer(0.3).timeout
-	await _capture("res://tests/_shot_showroom_libre_jour.png")
+	await _capture("res://tests/_shot_showroom_duel_jour.png")
 	salle._idx_lumiere = ShowRoom.LUMIERE_DEFAUT
 	salle._appliquer_lumiere()
-	salle._mode = ShowRoom.Mode.COMBAT
-	salle._appliquer_mode()
-	await get_tree().create_timer(0.6).timeout
-	await _capture("res://tests/_shot_showroom_combat.png")
 	# Deuxième monstre, palier Légendaire : vérifie la commutation de skin.
 	salle._idx_monstre = 1
 	salle._idx_palier = 4
-	salle._peupler_duel()
-	salle._rafraichir_hud()
+	salle._lancer_duel()
 	await get_tree().create_timer(0.6).timeout
-	await _capture("res://tests/_shot_showroom_combat_leg.png")
+	await _capture("res://tests/_shot_showroom_duel_leg.png")
 	# Mode USINE (diagnostic 28/08/2026) : décor seul, plein écran, sans masque.
 	salle._mode = ShowRoom.Mode.USINE
 	salle._appliquer_mode()

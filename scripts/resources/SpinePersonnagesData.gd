@@ -73,6 +73,23 @@ const CHEMIN := "res://data/personnages/spine_personnages.tres"
 static func charger() -> SpinePersonnagesData:
 	return load(CHEMIN) as SpinePersonnagesData
 
+# Entrée du registre pour un id de COMBAT (`CombattantCtbData.id`, = l'id
+# d'entité GameData, ex. "creature_flamebot") — le registre garde ses propres
+# ids COURTS ("flamebot", voir l'en-tête) : ce pont accepte les deux formes
+# plutôt que de faire porter le préfixe "creature_" au registre visuel, qui
+# n'a aucune raison de connaître le bestiaire. {} si l'entrée n'existe pas
+# encore (livraison non faite) — l'appelant retombe alors sur son placeholder.
+static func par_id(id: String) -> Dictionary:
+	var registre := charger()
+	if registre == null:
+		return {}
+	var court := id.trim_prefix("creature_")
+	for p in registre.personnages:
+		var pid := str(p.get("id", ""))
+		if pid == id or pid == court:
+			return p
+	return {}
+
 # Entrées ennemies, dans l'ordre du registre.
 func ennemis() -> Array[Dictionary]:
 	var sortie: Array[Dictionary] = []

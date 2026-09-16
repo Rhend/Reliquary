@@ -111,6 +111,16 @@ var recompenses_fournisseur := Callable()
 var inventaire_fournisseur := Callable()
 var sur_objet_utilise := Callable()
 
+# Surcharges de PRÉVISUALISATION dev (ShowRoom UNIQUEMENT, 09/2026 — la
+# vitrine est désormais CET écran, pas une copie, voir CLAUDE.md « la
+# ShowRoom est un banc d'essai ») : posées par l'appelant avant `add_child`,
+# comme `embuscade`/`facteur_delais` ci-dessus. -1 (ou 0 pour le cosmétique)
+# = comportement du jeu réel — niveau d'équipement/Maîtrise RÉELS. N'affectent
+# QUE le sprite choisi à la construction, jamais les stats ni le déroulé.
+var previsu_niveau_heros := -1
+var previsu_cosmetique_heros := 0
+var previsu_palier_ennemi := -1
+
 const SOL_Y_FRAC := 0.806          # ligne des pieds : MILIEU de la bande de sol du décor
 const SOL_X_JOUEUR := 0.25         # ancrage des emplacements du camp joueur : CENTRE de sa moitié
 const SOL_X_ADVERSE := 0.75        # ancrage du camp adverse — miroir exact du joueur
@@ -133,6 +143,11 @@ var _zones_cible: Dictionary = {}   # CtbCombattant → Control (zone de clic)
 var _cible_survolee: CtbCombattant = null
 var _ciblage_actif := false
 var _sol: Control = null       # scène : sol + emplacements des futurs sprites
+# Voile de LUMIÈRE dev (ShowRoom UNIQUEMENT — `previsu_definir_voile`) : posé
+# au-dessus du décor, EN DESSOUS des personnages (jamais sur eux, voir
+# CLAUDE.md « on éclaire le décor, jamais les personnages »). Transparent par
+# défaut : le jeu réel ne l'appelle jamais, aucune différence visuelle.
+var _voile_previsu: ColorRect = null
 var _orbes: Dictionary = {}    # CtbCombattant → EnergyBoule (placeholder sprite)
 var _sprites: Dictionary = {}  # CtbCombattant → SpriteSpinePersonnage (sprite RÉEL)
 var _ombres: Dictionary = {}   # CtbCombattant → CombatOmbrePortee (ombre au sol, sous le sprite/orbe)
@@ -195,6 +210,13 @@ static func pour_run(run: ExpeRun, data: Dictionary, sur_fermee: Callable) -> Co
 		sur_fermee.call())
 	return ui
 
+# Teinte le voile de prévisu (ShowRoom) — sans effet si appelé avant
+# `_construire()` (le voile n'existe pas encore) ; la ShowRoom l'appelle donc
+# après `add_child`, comme le reste de son overlay dev.
+func previsu_definir_voile(couleur: Color) -> void:
+	if _voile_previsu != null:
+		_voile_previsu.color = couleur
+
 func _ready() -> void:
 	# and_offsets : set_anchors_preset seul CONSERVE les offsets courants —
 	# ajouté à un SubViewport (ScreenshotTool), l'écran restait en 0×0.
@@ -209,6 +231,98 @@ func _ready() -> void:
 	_boucle()
 
 # ─── Construction (100 % code — règle projet) ────────────────
+
+# Sprite/ombre RÉELS d'UN combattant, ou repli EnergyBoule — factorisé hors
+# de `_construire()` pour que `previsu_rafraichir_visuel` (hot-reload du
+# palier/niveau/costume prévisualisés, ShowRoom) reconstruise EXACTEMENT le
+# même visuel, sans dupliquer cette logique en deux endroits qui pourraient
+# diverger. N'ajoute PAS la carte HUD (celle-ci ne dépend jamais de
+# l'apparence, jamais reconstruite — voir `previsu_rafraichir_visuel`).
+func _construire_visuel(cb: CtbCombattant) -> void:
+	# Construit AVANT l'ombre (mais pas encore ajouté à l'arbre) pour pouvoir
+	# mesurer sa largeur RENDUE réelle (`largeur_rendue_px`) — l'ombre doit
+	# englober l'encombrement du personnage qu'elle porte, pas une taille
+	# fixe pour tout le monde (retours Rhend 29/08/2026 : « aucune
+	# corrélation entre la taille du sprite et l'ombre », puis « elle doit
+	# englober la taille de l'entité »).
+	var sprite: SpriteSpinePersonnage = null
+	if cb == moteur.avatar():
+		# creer_heros() et pas creer() : l'apparence vient du registre —
+		# sans skin posée, l'export « costumes » de Relic est invisible.
+		# `previsu_niveau_heros`/`previsu_cosmetique_heros` : surcharge dev
+		# ShowRoom, -1 = comportement réel (Nv1, la dotation de départ).
+		sprite = SpriteSpinePersonnage.creer_heros(
+				previsu_niveau_heros if previsu_niveau_heros > 0 else 1,
+				previsu_cosmetique_heros)
+	else:
+		# Ennemi : même registre / même apparence que la ShowRoom, qui EST
+		# cet écran depuis 09/2026 (voir CLAUDE.md « la ShowRoom est un
+		# banc d'essai ») — {} tant que sa livraison Spine n'existe pas
+		# encore, repli sur EnergyBoule ci-dessous.
+		sprite = _creer_sprite_ennemi(cb)
+	var largeur_ref := ORBE_TAILLE.x
+	if sprite != null:
+		var l := sprite.largeur_rendue_px()
+		if l > 0.0:
+			largeur_ref = l
+	# Ombre portée AVANT le sprite/orbe : l'ordre d'ajout EST l'ordre de
+	# dessin dans Godot, donc l'ombre reste sous le personnage sans jouer
+	# avec le z-index (voir CombatOmbrePortee).
+	var ombre := CombatOmbrePortee.creer(cb.est_joueur(), largeur_ref)
+	if ombre != null:
+		_ombres[cb] = ombre
+		_sol.add_child(ombre)
+	if sprite != null:
+		_sprites[cb] = sprite
+		_sol.add_child(sprite)
+	else:
+		var orbe := EnergyBoule.new()
+		orbe.accent = ExpeStyle.accent_camp(cb.est_joueur())
+		orbe.size = ORBE_TAILLE
+		_orbes[cb] = orbe
+		_sol.add_child(orbe)
+		# Placeholder de sprite, pas un élément interactif (EnergyBoule
+		# est cliquable par défaut au Village) : souris ignorée.
+		orbe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+# Hot-reload du VISUEL prévisualisé (ShowRoom UNIQUEMENT, retour Rhend :
+# « t'es obligé de reload le combat ? ») : ↑/↓/H/V ne changent QUE le skin
+# affiché, JAMAIS les stats (le palier ennemi prévisualisé ne touche pas
+# `CtbPont.combattant_depuis_entite`, qui reste sur la Maîtrise réelle) — le
+# moteur, les PV en cours, l'ordre d'initiative n'ont donc aucune raison de
+# bouger. `pour_ennemi` borne le rafraîchissement à un camp : changer le
+# costume du héros ne doit jamais retoucher l'ennemi, et réciproquement.
+# Change de CRÉATURE (←/→) reste une reconstruction complète côté ShowRoom
+# (`_lancer_duel`) : ça change les stats réelles, donc le combattant du
+# moteur lui-même — pas un simple habillage.
+func previsu_rafraichir_visuel(pour_ennemi: bool) -> void:
+	if _sol == null:
+		return
+	for cb in moteur.combattants:
+		if cb.est_joueur() == pour_ennemi:
+			continue
+		var carte: CarteCombattantCtb = _cartes.get(cb)
+		for dico: Dictionary in [_ombres, _sprites, _orbes]:
+			if dico.has(cb):
+				var ancien: Node = dico[cb]
+				_sol.remove_child(ancien)
+				ancien.queue_free()
+				dico.erase(cb)
+		_construire_visuel(cb)
+		# Réinsère juste AVANT la carte de CE combattant — ombre < sprite <
+		# carte, comme à la construction initiale. Le reste de l'arbre (les
+		# autres combattants) n'a pas bougé.
+		if carte != null:
+			if _ombres.has(cb):
+				_sol.move_child(_ombres[cb], carte.get_index())
+			var noeud := _noeud_bataille(cb)
+			if noeud != null:
+				_sol.move_child(noeud, carte.get_index())
+	_placer_orbes()
+	# La puce de file d'initiative de ce combattant porte le même portrait
+	# que son sprite (`_portrait_pour`) : sans ce rafraîchissement, elle
+	# resterait sur l'ancien palier/niveau après un hot-reload.
+	_rafraichir_file()
 
 func _construire() -> void:
 	# Fond scindé : décor RÉEL de Christophe côté joueur, biome placeholder
@@ -225,6 +339,15 @@ func _construire() -> void:
 	add_child(_couche_scene)
 	CombatFondScinde.construire(_couche_scene, SOL_Y_FRAC, SOL_X_JOUEUR, BANDE_VS_PX)
 
+	# Voile de prévisu (ShowRoom) — posé APRÈS le décor, AVANT `_sol` (donc
+	# sous les personnages) : ordre d'ajout = ordre de dessin. Transparent tant
+	# que `previsu_definir_voile` n'est pas appelé.
+	_voile_previsu = ColorRect.new()
+	_voile_previsu.color = Color(0.0, 0.0, 0.0, 0.0)
+	_voile_previsu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_voile_previsu.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_couche_scene.add_child(_voile_previsu)
+
 	# Scène de bataille : SOL + emplacements des futurs sprites de personnages
 	# (placeholder : boules de lumière — retour Rhend, chantier 10).
 	_sol = Control.new()
@@ -234,45 +357,7 @@ func _construire() -> void:
 	_sol.resized.connect(_placer_orbes)
 	_couche_scene.add_child(_sol)
 	for cb in moteur.combattants:
-		# Personnage principal : sprite Spine RÉEL (DA Christophe, Idle en
-		# boucle + Attack sur son action) quand le runtime spine-godot et
-		# les assets sont là — sinon placeholder EnergyBoule, comme les
-		# adversaires (leurs sprites n'existent pas encore). Construit AVANT
-		# l'ombre (mais pas encore ajouté à l'arbre) pour pouvoir mesurer sa
-		# largeur RENDUE réelle (`largeur_rendue_px`) — l'ombre doit englober
-		# l'encombrement du personnage qu'elle porte, pas une taille fixe pour
-		# tout le monde (retours Rhend 29/08/2026 : « aucune corrélation entre
-		# la taille du sprite et l'ombre », puis « elle doit englober la
-		# taille de l'entité »).
-		var sprite: SpriteSpinePersonnage = null
-		if cb == moteur.avatar():
-			# creer_heros() et pas creer() : l'apparence vient du registre —
-			# sans skin posée, l'export « costumes » de Relic est invisible.
-			sprite = SpriteSpinePersonnage.creer_heros()
-		var largeur_ref := ORBE_TAILLE.x
-		if sprite != null:
-			var l := sprite.largeur_rendue_px()
-			if l > 0.0:
-				largeur_ref = l
-		# Ombre portée AVANT le sprite/orbe : l'ordre d'ajout EST l'ordre de
-		# dessin dans Godot, donc l'ombre reste sous le personnage sans jouer
-		# avec le z-index (voir CombatOmbrePortee).
-		var ombre := CombatOmbrePortee.creer(cb.est_joueur(), largeur_ref)
-		if ombre != null:
-			_ombres[cb] = ombre
-			_sol.add_child(ombre)
-		if sprite != null:
-			_sprites[cb] = sprite
-			_sol.add_child(sprite)
-		else:
-			var orbe := EnergyBoule.new()
-			orbe.accent = ExpeStyle.accent_camp(cb.est_joueur())
-			orbe.size = ORBE_TAILLE
-			_orbes[cb] = orbe
-			_sol.add_child(orbe)
-			# Placeholder de sprite, pas un élément interactif (EnergyBoule
-			# est cliquable par défaut au Village) : souris ignorée.
-			orbe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_construire_visuel(cb)
 		# HUD compact (PV + statuts) SOUS LES PIEDS de CE combattant — chantier
 		# UI_Concept2 (07/09/2026, le mockup fait foi) : plus de carte en
 		# colonne latérale. Ajoutée APRÈS le sprite/orbe pour rester visible
@@ -397,6 +482,56 @@ func _construire() -> void:
 	_voile_contenu.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_voile_contenu.alignment = BoxContainer.ALIGNMENT_CENTER
 	_voile.add_child(_voile_contenu)
+
+# Sprite Spine RÉEL d'un ennemi si son entrée existe au registre — MÊME
+# apparence/orientation que la ShowRoom (banc d'essai partagé, voir CLAUDE.md
+# « la ShowRoom est un banc d'essai, pas une fin ») : sens d'export lu du
+# registre (`echelle_x(entree, false)` — camp adverse regarde vers la
+# GAUCHE), hauteur cible = son chara design (`hauteur_cible_px`). Le palier
+# affiché suit la Maîtrise RÉELLE de la créature (`maitrise_actuelle`,
+# 0=Commun..4=Légendaire — mêmes indices que les 5 skins de palier) : deux
+# WorkBot au même combat peuvent donc ne pas avoir la même apparence si leur
+# progression diverge. `previsu_palier_ennemi` (ShowRoom) force un palier au
+# lieu de la Maîtrise réelle — -1 = comportement réel. null tant que la
+# livraison Spine de cette créature n'existe pas (registre vide pour son id)
+# — l'appelant retombe sur EnergyBoule, exactement comme avant ce branchement.
+func _creer_sprite_ennemi(cb: CtbCombattant) -> SpriteSpinePersonnage:
+	var entree := SpinePersonnagesData.par_id(cb.data.id)
+	if entree.is_empty():
+		return null
+	var apparences := SpinePersonnagesData.apparences(entree)
+	if apparences.is_empty():
+		return null
+	var sprite := SpriteSpinePersonnage.creer(str(entree.get("skel", "")),
+			str(entree.get("atlas", "")),
+			apparences[clampi(_palier_ennemi(cb), 0, apparences.size() - 1)],
+			SpinePersonnagesData.hauteur_cible_px(entree))
+	if sprite != null:
+		sprite.orienter(SpinePersonnagesData.echelle_x(entree, false))
+	return sprite
+
+# Palier AFFICHÉ d'un ennemi (skin Spine ET portrait de file) : la Maîtrise
+# réelle de la créature, sauf surcharge dev `previsu_palier_ennemi`
+# (ShowRoom, jamais posée par le jeu réel). Centralisé pour que le sprite et
+# le portrait ne puissent jamais afficher deux paliers différents.
+func _palier_ennemi(cb: CtbCombattant) -> int:
+	return previsu_palier_ennemi if previsu_palier_ennemi >= 0 \
+			else int(GameData.get_entity(cb.data.id).get("maitrise_actuelle", 0))
+
+# Portrait d'UN combattant pour sa puce de file d'initiative — même source
+# que son sprite : le héros suit son niveau d'équipement prévisualisé/réel,
+# l'ennemi son palier réel/prévisualisé (`_palier_ennemi`, PARTAGÉ avec
+# `_creer_sprite_ennemi`). `null` si la livraison Turn_Icone n'a pas encore
+# ce personnage/ce palier — l'appelant (`_rafraichir_file`) retombe sur
+# l'initiale du nom.
+func _portrait_pour(cb: CtbCombattant) -> Texture2D:
+	if cb == moteur.avatar():
+		return CombatUiSkin.portrait_heros(
+				previsu_niveau_heros if previsu_niveau_heros > 0 else 1)
+	var entree := SpinePersonnagesData.par_id(cb.data.id)
+	if entree.is_empty():
+		return null
+	return CombatUiSkin.portrait_ennemi(str(entree.get("nom", "")), _palier_ennemi(cb))
 
 # Panneau de stats : PLAQUÉ contre le bord bas-gauche de l'écran, sa largeur
 # forcée jusqu'au trait de séparation (retour Rhend : « doit prendre tout le
@@ -876,10 +1011,10 @@ func _rafraichir_tout() -> void:
 
 # File d'initiative compacte : rangée HORIZONTALE de puces carrées façon
 # portraits (chantier UI_Concept2 — remplace la colonne de noms en toutes
-# lettres). Portrait réel si `CombatUiSkin.portrait(id)` en trouve un, sinon
-# repli sur l'initiale du nom (aucun portrait livré à ce jour — Christophe
-# les pousse prochainement, voir CombatUiSkin.DOSSIER_PORTRAITS). Ordre des
-# N_FILE prochaines activations, recalculé après chaque action.
+# lettres). Portrait RÉEL si `_portrait_pour(cb)` en trouve un (livraison
+# « Turn_Icone_Ennemis », 16/09/2026 — FlameBot/WorkBot, 5 paliers chacun ;
+# le héros n'a pas encore le sien), sinon repli sur l'initiale du nom. Ordre
+# des N_FILE prochaines activations, recalculé après chaque action.
 func _rafraichir_file() -> void:
 	UIHelpers.clear_children_now(_file_box)
 	var predits := moteur.prevoir_ordre(N_FILE)
@@ -891,7 +1026,7 @@ func _rafraichir_file() -> void:
 		# PROCHAINE activation (i == 0) pour la faire ressortir de la file.
 		chip.add_theme_stylebox_override("panel",
 				CombatUiSkin.style_chip_tour(cb.est_joueur(), i == 0))
-		var portrait := CombatUiSkin.portrait(cb.data.id)
+		var portrait := _portrait_pour(cb)
 		if portrait != null:
 			var tr := TextureRect.new()
 			tr.texture = portrait

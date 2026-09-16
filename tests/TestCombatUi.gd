@@ -114,9 +114,10 @@ func _test_ecran_complet() -> void:
 	_assert(interdits.is_empty(), "aucun bouton Objet (ni Compétence) dans l'écran",
 			str(interdits.map(func(b: Button) -> String: return b.text)))
 
-	# File d'initiative compacte : N_FILE puces, ordre = prevoir_ordre. Aucun
-	# portrait livré dans cet environnement de test → repli sur l'initiale du
-	# nom (voir CombatUiSkin.portrait), la seule chose qu'un Label expose ici.
+	# File d'initiative compacte : N_FILE puces, ordre = prevoir_ordre. Les
+	# combattants factices d'ici ("gob_1"…) n'ont pas d'entrée au registre
+	# Spine → repli sur l'initiale du nom (voir CombatCtbUi._portrait_pour),
+	# la seule chose qu'un Label expose ici.
 	var predit := m.prevoir_ordre(CombatCtbUi.N_FILE)
 	var puces := ui._file_box.get_child_count()
 	_assert(puces == CombatCtbUi.N_FILE,

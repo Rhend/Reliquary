@@ -83,11 +83,13 @@ const CHEVRON := preload(DOSSIER_ICONES + "UI_Icone_Arrow_1.png")
 # ── Connecteur bouton → personnage (file d'initiative + éventail d'actions).
 const CYBER_LINE := preload(DOSSIER + "UI_Combat_Cyber_Line.png")
 
-# ── Portraits par personnage (file d'initiative compacte) — AUCUN livré à ce
-# jour ; dossier + convention choisis par ce chantier (un fichier par
-# CombattantCtbData.id, ex. "hero.png"/"flamebot.png") pour que la prochaine
-# livraison n'ait qu'à y déposer les fichiers.
-const DOSSIER_PORTRAITS := "res://assets/ui/Portraits/"
+# ── Portraits par personnage (file d'initiative compacte) — livraison
+# « Turn_Icone_Ennemis » du 16/09/2026 : PAS un fichier par id de combat
+# (l'ancien contrat, jamais livré dans ce dossier) mais un fichier par
+# CRÉATURE × PALIER, sous `Combat/Turn_Icone/`, nommé sur le NOM affiché
+# dans le registre (`FlameBot`/`WorkBot`, voir SpinePersonnagesData) — pas
+# l'id bestiaire `creature_*`.
+const DOSSIER_TOUR_ICONE := DOSSIER + "Turn_Icone/"
 
 # Splash « ENNEMY DETECTED » (3 calques + glyphe), PARTAGÉ entre l'intro de
 # CombatCtbUi et l'écran de chargement affiché pendant sa construction
@@ -271,12 +273,29 @@ static func style_chip_tour(camp_joueur: bool, en_tete: bool) -> StyleBoxTexture
 	couches.append(border)
 	return _style_texture(cle, couches)
 
-# Portrait d'UN personnage pour sa puce de file d'initiative — `null` si la
-# livraison n'a pas (encore) ce fichier ; l'appelant retombe alors sur
-# l'initiale du nom (repli propre, même esprit que SpriteSpinePersonnage face
-# à un squelette manquant).
-static func portrait(id: String) -> Texture2D:
-	var chemin := DOSSIER_PORTRAITS + id + ".png"
+# Portrait d'un ENNEMI pour sa puce de file d'initiative, au palier affiché
+# (0 = Commun … 4 = Légendaire, mêmes indices que ses skins Spine de palier —
+# `nom` et `palier` viennent de `SpinePersonnagesData`/`CombatCtbUi.
+# _palier_ennemi`, jamais lus ici). `null` si la livraison n'a pas (encore)
+# ce personnage/ce palier ; l'appelant retombe alors sur l'initiale du nom
+# (repli propre, même esprit que SpriteSpinePersonnage face à un squelette
+# manquant).
+static func portrait_ennemi(nom: String, palier: int) -> Texture2D:
+	var chemin := "%sUI_Combat_Turn_back_%s_Nv_%d.png" % [DOSSIER_TOUR_ICONE, nom, palier + 1]
+	if not ResourceLoader.exists(chemin):
+		return null
+	return load(chemin) as Texture2D
+
+# Portrait du HÉROS, même contrat, indexé par NIVEAU D'ÉQUIPEMENT (1..6, pas
+# un palier de rareté 0-based — cohérent avec `SpriteSpinePersonnage.
+# creer_heros`). ⚠ PAS ENCORE LIVRÉ à cette date (seuls les ennemis le sont,
+# commit « Turn_Icone_Ennemis ») : le nom de fichier ci-dessous est une
+# ANTICIPATION de la convention déjà vue sur les ennemis (`<Nom>_Nv_<n>`) —
+# à vérifier contre le fichier réel le jour de la livraison, `ResourceLoader.
+# exists` dégrade proprement en attendant (repli sur l'initiale, comme
+# aujourd'hui).
+static func portrait_heros(niveau: int) -> Texture2D:
+	var chemin := "%sUI_Combat_Turn_back_Relic_Nv_%d.png" % [DOSSIER_TOUR_ICONE, niveau]
 	if not ResourceLoader.exists(chemin):
 		return null
 	return load(chemin) as Texture2D

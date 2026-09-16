@@ -121,41 +121,83 @@ func _test_aller_retour_qg() -> void:
 	ShowRoom.scene_retour = ""
 	add_child(salle)
 	await get_tree().process_frame
-	_assert(salle._rangees().size() >= 3, "vitrine peuplée : héros + ennemis")
-	_assert(salle._mode == ShowRoom.Mode.COMBAT, "démarre en mode combat (26/08/2026)")
+	_assert(salle._mode == ShowRoom.Mode.DUEL, "démarre en mode duel (09/2026 : le vrai combat)")
+	_assert(salle._combat_ui != null,
+			"le VRAI CombatCtbUi est instancié — plus une copie de son rendu")
+	_assert(salle._combat_ui.moteur.combattants.size() == 2,
+			"le faux combat oppose le héros à la créature choisie")
+	# Rien ne doit pouvoir « gagner » quoi que ce soit depuis la vitrine —
+	# les mêmes garde-fous que le sandbox dev, jamais d'écriture indirecte.
+	_assert(not salle._combat_ui.recompenses_fournisseur.is_valid()
+			and not salle._combat_ui.inventaire_fournisseur.is_valid(),
+			"aucune récompense/inventaire câblé : la vitrine ne peut rien faire gagner")
 
-	salle._appliquer_mode()
-	_assert(salle._duel.get_child_count() >= 1, "mode combat : le duel est peuplé")
-	_assert(salle._decor.visible and not salle._fond_neutre.visible,
-			"mode combat : fond scindé affiché, fond neutre masqué")
+	# Portrait de file d'initiative (livraison « Turn_Icone_Ennemis »,
+	# 16/09/2026) : la première créature du registre a un vrai fichier —
+	# la puce doit porter une texture, pas juste l'initiale de repli.
+	# La ShowRoom garde le VRAI timing du splash d'ouverture (« tout doit
+	# être identique », pas de facteur_delais=0 ici) : la file n'est peuplée
+	# qu'une fois l'intro terminée (~1,45 s), donc on l'attend pour de vrai.
+	_assert(CombatUiSkin.portrait_ennemi(str(salle._ennemis[0].get("nom", "")), 0) != null,
+			"portrait_ennemi(FlameBot, Commun) résout un vrai fichier livré")
+	await get_tree().create_timer(1.6).timeout
+	# Le héros n'a pas encore le sien (portrait_heros dégrade proprement) :
+	# la moindre TextureRect trouvée dans la file ne peut venir que de
+	# l'ennemi — confirme que la puce affiche un portrait, pas l'initiale.
+	var une_puce_a_portrait := false
+	for c: Control in salle._combat_ui._file_box.get_children():
+		for enfant in c.get_children():
+			if enfant is TextureRect:
+				une_puce_a_portrait = true
+	_assert(une_puce_a_portrait, "au moins une puce de la file affiche un vrai portrait")
 
-	# Cycle de palier et de monstre : la commutation ne doit pas vider la scène.
+	# Cycle de palier et de monstre : reconstruit un combat frais, avec les
+	# bonnes surcharges de prévisualisation transmises au VRAI écran — jamais
+	# la Maîtrise réelle du joueur (TestCombatUi.gd couvre déjà le rendu et le
+	# zoom-duel de CombatCtbUi lui-même, pas la peine de le rejouer ici).
 	salle._idx_palier = SpinePersonnagesData.NB_PALIERS - 1
 	salle._idx_monstre = salle._ennemis.size() - 1
-	salle._peupler_duel()
-	_assert(salle._duel.get_child_count() >= 1, "duel encore peuplé après changement de cible")
+	salle._lancer_duel()
+	_assert(salle._combat_ui != null, "duel reconstruit après changement de cible")
+	_assert(salle._combat_ui.previsu_palier_ennemi == SpinePersonnagesData.NB_PALIERS - 1,
+			"le palier prévisualisé est transmis au vrai écran de combat")
+	_assert(salle._combat_ui.previsu_niveau_heros == salle._idx_niveau_heros + 1,
+			"le niveau d'équipement du héros prévisualisé est transmis lui aussi")
 
-	# Zoom-duel (26/08/2026) : [A]/[T] en mode combat rejouent la vraie mise
-	# en scène de CombatCtbUi (DuelZoomFx SOURCE PARTAGÉE), pas juste
-	# « tout le monde joue l'animation ».
-	salle._touche(KEY_A)
-	_assert(salle._duel_tween != null, "[A] en combat lance le zoom-duel")
-	await get_tree().create_timer(1.0).timeout   # in + tenue + out (0.89 s), laisse le tween finir
-	_assert(salle._duel_tween == null, "le zoom-duel retombe seul, sans intervention")
-	_assert(salle._decor.scale.is_equal_approx(Vector2.ONE),
-			"le décor (fond) a repris son échelle de repos")
-	_assert(salle._duel.scale.is_equal_approx(Vector2.ONE),
-			"le duel (personnages) a repris son échelle de repos")
-	salle._touche(KEY_T)
-	_assert(salle._duel_tween != null, "[T] en combat lance aussi le punch-in (sans convergence)")
-	salle._zoom_duel_interrompre()
-	_assert(salle._duel_tween == null and salle._duel.scale.is_equal_approx(Vector2.ONE),
-			"interruption : la scène redevient nette immédiatement")
+	# [↑/↓] : HOT-RELOAD, pas une reconstruction (retour Rhend : « t'es
+	# obligé de reload le combat ? ») — le palier prévisualisé ne change QUE
+	# le skin de l'ennemi, jamais ses stats, donc le moteur en cours (et le
+	# CombatCtbUi qui le pilote) n'ont aucune raison de disparaître.
+	var ui_avant_touche := salle._combat_ui
+	var ennemi_courant: CtbCombattant = null
+	for cb in ui_avant_touche.moteur.combattants:
+		if not cb.est_joueur():
+			ennemi_courant = cb
+			break
+	var sprite_ennemi_avant: SpriteSpinePersonnage = \
+			ui_avant_touche._sprites.get(ennemi_courant) if ennemi_courant != null else null
+	salle._touche(KEY_UP)
+	_assert(salle._combat_ui == ui_avant_touche,
+			"[↑] ne reconstruit PAS l'écran de combat")
+	_assert(salle._combat_ui.previsu_palier_ennemi == salle._idx_palier,
+			"[↑] met bien à jour le palier prévisualisé")
+	if sprite_ennemi_avant != null:
+		var sprite_ennemi_apres: SpriteSpinePersonnage = \
+				salle._combat_ui._sprites.get(ennemi_courant)
+		_assert(sprite_ennemi_apres != null and sprite_ennemi_apres != sprite_ennemi_avant,
+				"[↑] a bien remplacé le sprite de l'ennemi (hot-reload effectif, pas un no-op)")
 
-	salle._mode = ShowRoom.Mode.LIBRE
-	salle._appliquer_mode()
-	_assert(salle._fond_neutre.visible and not salle._decor.visible,
-			"retour au mode libre : fond neutre repris")
+	# Mode Usine (diagnostic) : bascule de visibilité, PAS une reconstruction
+	# — le duel en cours n'a aucune raison d'être perdu pour regarder le décor.
+	var meme_combat_ui := salle._combat_ui
+	salle._touche(KEY_TAB)
+	_assert(salle._mode == ShowRoom.Mode.USINE, "[Tab] bascule vers Usine seul")
+	_assert(salle._decor_usine.visible, "Usine : décor seul visible")
+	_assert(not salle._combat_ui.visible, "Usine : le duel se masque")
+	_assert(salle._combat_ui == meme_combat_ui, "Usine ne reconstruit rien, juste une bascule")
+	salle._touche(KEY_TAB)
+	_assert(salle._mode == ShowRoom.Mode.DUEL and salle._combat_ui.visible,
+			"[Tab] revient au duel, redevenu visible")
 
 	# Contrat de sortie : avec une destination posée, Échap n'éteint PAS le jeu.
 	ShowRoom.scene_retour = "res://scenes/village/village.tscn"
@@ -169,54 +211,41 @@ func _test_aller_retour_qg() -> void:
 # elle n'éclaire JAMAIS les personnages — sinon on juge un rendu faussé.
 
 func _test_lumiere() -> void:
-	print("\n[TEST 4] Éclairage : fond réglable, assets jamais modulés")
+	print("\n[TEST 4] Éclairage : voile au-dessus du décor RÉEL, jamais sur les personnages")
 	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
 	ShowRoom.scene_retour = ""
 	add_child(salle)
 	await get_tree().process_frame
 
-	var defaut: Color = ShowRoom.NIVEAUX_LUMIERE[ShowRoom.LUMIERE_DEFAUT]["fond"]
-	var nuit: Color = ShowRoom.NIVEAUX_LUMIERE[0]["fond"]
-	_assert(defaut.get_luminance() > nuit.get_luminance(),
-			"le niveau par défaut est plus clair que « Nuit » (on voit les Communs)")
-	_assert(salle._fond_neutre.color.is_equal_approx(defaut),
-			"le fond appliqué est bien celui du niveau par défaut")
+	_assert(salle._idx_lumiere == ShowRoom.LUMIERE_DEFAUT,
+			"démarre au niveau par défaut (« Studio », pas « Nuit » qui noie les Communs)")
+	var alpha_defaut := float(ShowRoom.NIVEAUX_LUMIERE[ShowRoom.LUMIERE_DEFAUT]["voile"])
+	_assert(salle._combat_ui._voile_previsu != null
+			and is_equal_approx(salle._combat_ui._voile_previsu.color.a, alpha_defaut),
+			"le voile posé sur l'écran RÉEL correspond au niveau par défaut")
 
 	# Le cycle passe par tous les niveaux et boucle.
 	var vus: Array[String] = []
 	for i in ShowRoom.NIVEAUX_LUMIERE.size():
-		vus.append(salle._nom_lumiere())
+		vus.append(str(ShowRoom.NIVEAUX_LUMIERE[salle._idx_lumiere]["nom"]))
 		salle._touche(KEY_B)
 	_assert(vus.size() == ShowRoom.NIVEAUX_LUMIERE.size() and vus[0] == "Studio",
 			"[B] parcourt les %d niveaux" % ShowRoom.NIVEAUX_LUMIERE.size())
 	_assert(salle._idx_lumiere == ShowRoom.LUMIERE_DEFAUT, "[B] boucle sur le premier niveau")
 
-	# Contraste : sur fond clair, les textes doivent s'assombrir, sinon ils
-	# blanchissent (le HUD était illisible en « Jour » au premier essai).
-	var i_clair := -1
-	for i in ShowRoom.NIVEAUX_LUMIERE.size():
-		if (ShowRoom.NIVEAUX_LUMIERE[i]["fond"] as Color).get_luminance() > ShowRoom.SEUIL_FOND_CLAIR:
-			i_clair = i
-			break
-	_assert(i_clair >= 0, "au moins un niveau clair est proposé")
-	if i_clair >= 0:
-		salle._idx_lumiere = i_clair
-		_assert(salle._fond_clair(), "ce niveau est bien détecté comme clair")
-		var base := UIColors.TEXT_HEADER
-		_assert(ShowRoom._lisible(base, true).get_luminance() < base.get_luminance(),
-				"texte assombri sur fond clair")
-		_assert(ShowRoom._lisible(base, false).is_equal_approx(base),
-				"texte inchangé sur fond sombre")
-
-	# Le voile n'existe qu'en combat et ne touche que le décor.
-	salle._mode = ShowRoom.Mode.COMBAT
+	# Le niveau le plus clair pose un voile plus opaque...
 	salle._idx_lumiere = ShowRoom.NIVEAUX_LUMIERE.size() - 1
-	salle._appliquer_mode()
-	_assert(salle._voile.visible and salle._voile.color.a > 0.0,
-			"mode combat : le voile éclaircit le décor")
-	for sprite in salle._duel.get_children():
-		_assert((sprite as Node2D).modulate.is_equal_approx(Color.WHITE),
-				"le personnage n'est PAS modulé (couleurs d'origine préservées)")
+	salle._appliquer_lumiere()
+	_assert(salle._combat_ui._voile_previsu.color.a > alpha_defaut,
+			"niveau le plus clair : voile plus opaque")
+	# ...et ne touche JAMAIS les personnages (garde-fou historique : un asset
+	# doit se juger sur son rendu réel, jamais modulé — même règle que ShowRoom
+	# appliquait déjà, portée maintenant par l'écran de combat lui-même).
+	for cb in salle._combat_ui.moteur.combattants:
+		var sprite: SpriteSpinePersonnage = salle._combat_ui._sprites.get(cb)
+		if sprite != null:
+			_assert(sprite.modulate.is_equal_approx(Color.WHITE),
+					"%s : jamais modulé par l'éclairage" % cb.data.id)
 	salle.free()
 
 # ─── 5. Costumes de Relic (livraison 24/08/2026) ────────────
@@ -302,26 +331,36 @@ func _test_costumes() -> void:
 		_assert(true, "un tir demandé à un ennemi retombe sur sa mêlée")
 		sbire.free()
 
-	# La vitrine : [V] fait défiler les accessoires sans se vider. Mode LIBRE
-	# explicite : la vitrine démarre désormais en COMBAT (26/08/2026), et ce
-	# test porte sur le repeuplement de `_monde`, qui n'est repeuplé qu'en
-	# mode libre (`_repeupler`).
+	# La vitrine : [V]/[H] font défiler le costume du héros sur le VRAI écran
+	# de combat, sans jamais le laisser vide (reconstruit, jamais retiré sans
+	# remplaçant — voir ShowRoom._lancer_duel).
 	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
 	ShowRoom.scene_retour = ""
 	add_child(salle)
 	await get_tree().process_frame
-	salle._mode = ShowRoom.Mode.LIBRE
-	salle._appliquer_mode()
-	var avant := salle._idx_cosmetique
+	var ui_avant_touches := salle._combat_ui
+	var sprite_heros_avant: SpriteSpinePersonnage = \
+			ui_avant_touches._sprites.get(ui_avant_touches.moteur.avatar())
+	var jeux := SpinePersonnagesData.cosmetiques(salle._heros)
+	var avant_cosmetique := salle._idx_cosmetique
 	salle._touche(KEY_V)
-	await get_tree().process_frame
-	_assert(salle._idx_cosmetique != avant, "[V] change de jeu d'accessoires")
-	_assert(salle._monde.get_child_count() > 0, "la vitrine est repeuplée, pas vidée")
-	_assert(salle._heros_apparences.size() == 6, "les 6 niveaux survivent au changement")
-	# Les touches d'animation ne doivent jamais planter, quel que soit le mode.
-	for code in ShowRoom.TOUCHES_ANIM.keys():
-		salle._touche(int(code))
-	_assert(salle._monde.get_child_count() > 0, "les touches d'animation laissent la vitrine debout")
+	if jeux.size() > 1:
+		_assert(salle._idx_cosmetique != avant_cosmetique, "[V] change de jeu d'accessoires")
+	_assert(salle._combat_ui != null, "le combat reste peuplé après [V]")
+	_assert(salle._combat_ui == ui_avant_touches, "[V] ne reconstruit PAS l'écran (hot-reload)")
+	var avant_niveau := salle._idx_niveau_heros
+	salle._touche(KEY_H)
+	_assert(salle._idx_niveau_heros == wrapi(avant_niveau + 1, 0, ShowRoom.NB_NIVEAUX_HEROS),
+			"[H] avance d'un niveau d'équipement (boucle sur %d)" % ShowRoom.NB_NIVEAUX_HEROS)
+	_assert(salle._combat_ui != null
+			and salle._combat_ui.previsu_niveau_heros == salle._idx_niveau_heros + 1,
+			"le niveau d'équipement prévisualisé suit [H]")
+	_assert(salle._combat_ui == ui_avant_touches, "[H] ne reconstruit PAS l'écran (hot-reload)")
+	if sprite_heros_avant != null:
+		var sprite_heros_apres: SpriteSpinePersonnage = \
+				salle._combat_ui._sprites.get(salle._combat_ui.moteur.avatar())
+		_assert(sprite_heros_apres != null and sprite_heros_apres != sprite_heros_avant,
+				"[V]+[H] ont bien remplacé le sprite du héros (hot-reload effectif)")
 	salle.free()
 
 # ─── 6. Échelle : chaque entité à SON gabarit de chara design ──
@@ -479,36 +518,42 @@ func _test_orientation() -> void:
 		print("  (runtime spine-godot absent : mise en scène non vérifiable)")
 		return
 
-	# Et la mise en scène réelle : héros face à l'ennemi, ennemi face au héros.
+	# Et la mise en scène réelle, à travers le VRAI écran de combat : héros
+	# face à l'ennemi, ennemi face au héros.
 	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
 	add_child(salle)
-	salle._mode = ShowRoom.Mode.COMBAT
-	salle._appliquer_mode()
 	await get_tree().process_frame
+	var ui := salle._combat_ui
+	if ui == null:
+		salle.queue_free()
+		return
+	var heros_sprite: SpriteSpinePersonnage = ui._sprites.get(ui.moteur.avatar())
 	# Le signe posé doit être CELUI QUE LE REGISTRE CALCULE, et non un signe
 	# figé : c'est la seule formulation qui reste vraie si une livraison change
 	# de sens — l'ancienne version du test affirmait « l'ennemi est retourné »,
 	# ce qui figeait précisément le bug qu'on corrige ici.
-	if salle._duel_heros != null:
-		_assert(salle._duel_heros.scale.x
-					* SpinePersonnagesData.echelle_x(reg.heros(), true) > 0.0,
+	if heros_sprite != null:
+		_assert(heros_sprite.scale.x * SpinePersonnagesData.echelle_x(reg.heros(), true) > 0.0,
 				"en combat, le héros est orienté selon son sens d'export déclaré")
-	if salle._duel_monstre != null and not reg.ennemis().is_empty():
-		_assert(salle._duel_monstre.scale.x
-					* SpinePersonnagesData.echelle_x(reg.ennemis()[0], false) > 0.0,
+	var ennemi: CtbCombattant = null
+	for cb in ui.moteur.combattants:
+		if not cb.est_joueur():
+			ennemi = cb
+			break
+	var ennemi_sprite: SpriteSpinePersonnage = ui._sprites.get(ennemi) if ennemi != null else null
+	if ennemi_sprite != null and not reg.ennemis().is_empty():
+		_assert(ennemi_sprite.scale.x * SpinePersonnagesData.echelle_x(reg.ennemis()[0], false) > 0.0,
 				"en combat, l'ennemi est orienté selon son sens d'export déclaré")
 		# Et le résultat concret sur la livraison actuelle : personne n'est retourné.
-		_assert(salle._duel_monstre.scale.x > 0.0,
+		_assert(ennemi_sprite.scale.x > 0.0,
 				"avec la livraison courante, l'ennemi fait face au héros sans miroir")
-	# `orienter` ne doit toucher que le SIGNE : une échelle posée par
-	# l'appelant survit, sinon retourner un sprite le remettrait à sa taille
-	# native sans prévenir.
-	if salle._duel_monstre != null:
-		var sprite: SpriteSpinePersonnage = salle._duel_monstre
-		sprite.scale = Vector2(0.5, 0.5)
-		sprite.orienter(-1.0)
-		_assert(is_equal_approx(absf(sprite.scale.x), 0.5)
-				and is_equal_approx(sprite.scale.y, 0.5),
+		# `orienter` ne doit toucher que le SIGNE : une échelle posée par
+		# l'appelant survit, sinon retourner un sprite le remettrait à sa
+		# taille native sans prévenir.
+		ennemi_sprite.scale = Vector2(0.5, 0.5)
+		ennemi_sprite.orienter(-1.0)
+		_assert(is_equal_approx(absf(ennemi_sprite.scale.x), 0.5)
+				and is_equal_approx(ennemi_sprite.scale.y, 0.5),
 				"orienter() préserve la taille et ne change que le sens")
 	salle.queue_free()
 
