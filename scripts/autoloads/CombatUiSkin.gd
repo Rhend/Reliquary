@@ -337,6 +337,14 @@ static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
 		return null
 	var cle := "%d_%d_%d" % [niveau, cosmetique, coiffure]
 	if _cache_portraits_heros.has(cle):
+		# Un retour synchrone ici casserait le contrat "toujours différé d'au
+		# moins une frame" (voir doc au-dessus) : l'appelant fire-and-forget
+		# (CombatCtbUi._demarrer_generation_portrait_heros) le suppose pour
+		# rafraîchir la file APRÈS la construction en cours — un cache hit
+		# pendant `_construire()` (2e combat avec la même apparence, ex.
+		# ScreenshotTool) rappellerait sinon `_rafraichir_file()` alors que
+		# `_file_box` n'existe pas encore.
+		await Engine.get_main_loop().process_frame
 		return _cache_portraits_heros[cle]
 	if not SpriteSpinePersonnage.disponible() or not is_instance_valid(hote) \
 			or not hote.is_inside_tree():
@@ -367,7 +375,6 @@ static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
 	var vp := SubViewport.new()
 	vp.size = Vector2i(TAILLE_PORTRAIT_GENERE_PX, TAILLE_PORTRAIT_GENERE_PX)
 	vp.transparent_bg = true
-	vp.own_world_2d = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	vp.add_child(sprite)
 	hote.add_child(vp)
