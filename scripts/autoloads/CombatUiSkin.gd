@@ -303,6 +303,96 @@ static func portrait_heros(niveau: int) -> Texture2D:
 		return null
 	return load(chemin) as Texture2D
 
+# ─── Portrait du héros GÉNÉRÉ à la volée (aucun fichier livré) ────────
+#
+# `portrait_heros` ci-dessus n'a AUCUNE livraison pour le héros à ce jour —
+# retour Rhend 17/09/2026 : au lieu d'attendre, on rend nous-mêmes une
+# vignette via un SubViewport isolé, avec un sprite Spine JETABLE monté pour
+# l'occasion. Cadrage demandé : « juste la tête et le cou sans l'épée avec
+# les cheveux » — `SpriteSpinePersonnage.poser_skin_portrait` purge tout le
+# reste (torse, bras, jambes, épée, VFX) et rend les BORNES RÉELLEMENT
+# dessinées de ce qui reste ; ce sont CES bornes qui cadrent le SubViewport,
+# pas un ratio deviné à la main — robuste à n'importe quel niveau
+# d'équipement/coiffure/visage.
+#
+# ASYNCHRONE : le rendu d'un SubViewport est DIFFÉRÉ d'au moins une frame —
+# l'appelant doit `await` (ou lancer en fire-and-forget, voir CombatCtbUi.
+# _demarrer_generation_portrait_heros). `hote` = un nœud DÉJÀ dans l'arbre,
+# utilisé UNIQUEMENT comme point d'attache temporaire du SubViewport (`hote.
+# add_child`) — retiré et libéré (`queue_free`) dès la capture faite, rien ne
+# persiste que la texture mise en CACHE (par niveau/cosmétique/coiffure :
+# gratuit dès la 2e fois pour la même apparence, y compris d'un combat à
+# l'autre). `null` en tête headless (aucun contexte de rendu réel à capturer,
+# même garde que `installer_curseur`) ou si le runtime spine-godot/le
+# registre/l'apparence manquent — dégradation propre, comme le reste de ce
+# fichier face à un export absent.
+const TAILLE_PORTRAIT_GENERE_PX := 96
+const MARGE_PORTRAIT_FRAC := 0.12   # marge de chaque côté du cadrage mesuré
+
+static var _cache_portraits_heros: Dictionary = {}   # "niv_cos_coif" → Texture2D
+
+static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
+		hote: Node) -> Texture2D:
+	if DisplayServer.get_name() == "headless":
+		return null
+	var cle := "%d_%d_%d" % [niveau, cosmetique, coiffure]
+	if _cache_portraits_heros.has(cle):
+		return _cache_portraits_heros[cle]
+	if not SpriteSpinePersonnage.disponible() or not is_instance_valid(hote) \
+			or not hote.is_inside_tree():
+		return null
+	var registre := SpinePersonnagesData.charger()
+	var entree: Dictionary = registre.heros() if registre != null else {}
+	if entree.is_empty():
+		return null
+	var apparences := SpinePersonnagesData.apparences(entree, cosmetique, coiffure)
+	if apparences.is_empty():
+		return null
+	var apparence: Dictionary = apparences[clampi(niveau - 1, 0, apparences.size() - 1)]
+	var sprite := SpriteSpinePersonnage.creer(str(entree.get("skel", "")),
+			str(entree.get("atlas", "")), apparence,
+			SpinePersonnagesData.hauteur_cible_px(entree))
+	if sprite == null:
+		return null
+	var bornes := sprite.poser_skin_portrait(apparence)
+	if bornes.size.x <= 0.0 or bornes.size.y <= 0.0:
+		sprite.free()
+		return null
+	var rect_local := sprite.rect_local_depuis_bornes(bornes)
+	var cote := maxf(rect_local.size.x, rect_local.size.y) * (1.0 + MARGE_PORTRAIT_FRAC * 2.0)
+	if cote <= 0.0:
+		sprite.free()
+		return null
+
+	var vp := SubViewport.new()
+	vp.size = Vector2i(TAILLE_PORTRAIT_GENERE_PX, TAILLE_PORTRAIT_GENERE_PX)
+	vp.transparent_bg = true
+	vp.own_world_2d = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	vp.add_child(sprite)
+	hote.add_child(vp)
+
+	# Cadre le rect mesuré, CENTRÉ, SANS étirement anisotrope : le plus grand
+	# côté du rect pilote l'échelle des DEUX axes (un visage déformé se
+	# verrait immédiatement) — TextureRect (CombatCtbUi._rafraichir_file)
+	# complète ensuite en STRETCH_KEEP_ASPECT_COVERED, comme les ennemis.
+	var echelle := float(TAILLE_PORTRAIT_GENERE_PX) / cote
+	sprite.scale = Vector2.ONE * echelle
+	var centre := rect_local.position + rect_local.size * 0.5
+	sprite.position = Vector2.ONE * (float(TAILLE_PORTRAIT_GENERE_PX) * 0.5) - centre * echelle
+
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	if not is_instance_valid(vp):
+		return null
+	var img := vp.get_texture().get_image()
+	var tex: Texture2D = null
+	if img != null:
+		tex = ImageTexture.create_from_image(img)
+		_cache_portraits_heros[cle] = tex
+	vp.queue_free()
+	return tex
+
 # ─── Panneau de stats détaillé (bas d'écran, CombatPanneauStats) ─────
 
 # Mêmes calques Back/Border que la carte de combattant (`style_panneau_carte`),
@@ -313,6 +403,29 @@ static func style_panneau_stats(camp_joueur: bool) -> StyleBoxTexture:
 	var back: Texture2D = PANEL_BACK_HERO if camp_joueur else PANEL_BACK_ENNEMI
 	var border: Texture2D = PANEL_BORDER_HERO if camp_joueur else PANEL_BORDER_ENNEMI
 	return _style_texture("panel_stats_%s" % str(camp_joueur), [back, border])
+
+# ─── Pastille de statut (CarteCombattantCtb) ──────────────────
+#
+# Remplace `ExpeStyle.style_chip` POUR LE COMBAT SEULEMENT (17/09/2026,
+# retour Rhend : « travail propre d'highlight/ombre-lumière sur toute l'UI
+# de combat ») — `style_chip` reste un plat fond+bordure sans aucun modelé de
+# lumière, correct pour la carte d'expédition mais plat une fois posé sur un
+# décor maintenant éclairé (voir CombatCtbUi.VOILE_ALPHA_DEFAUT). Une vraie
+# pastille de chrome a une OMBRE PORTÉE douce (elle « flotte » au-dessus du
+# décor, cohérent avec l'ombre portée sous chaque personnage) et un fond
+# légèrement plus clair pour se détacher — pas de dégradé (StyleBoxFlat n'en
+# fait pas nativement) mais l'ombre suffit à donner du relief sans passer par
+# un Control à dessin procédural pour un si petit élément.
+static func style_pill(accent: Color) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(UIColors.CYBER_BG_PANEL_2, 0.92).lightened(0.06)
+	s.border_color = Color(accent, 0.85)
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(2)
+	s.shadow_color = Color(0, 0, 0, 0.40)
+	s.shadow_size = 3
+	s.shadow_offset = Vector2(0, 1)
+	return s
 
 # ─── Connecteur bouton → personnage ───────────────────────────────────
 

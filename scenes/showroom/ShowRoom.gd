@@ -42,14 +42,19 @@ const SOL_Y_FRAC := CombatCtbUi.SOL_Y_FRAC
 const BANDE_VS_PX := CombatCtbUi.BANDE_VS_PX
 
 # ─── Éclairage du décor (jamais des personnages) ─────────────
+# « Studio » = EXACTEMENT le niveau ambiant par défaut du jeu réel
+# (CombatCtbUi.VOILE_ALPHA_DEFAUT, 17/09/2026) — un seul réglage « lumière
+# normale » pour tout le monde, la vitrine ne fait plus qu'ENCADRER cette
+# valeur de part et d'autre (plus sombre pour un rendu dramatique, plus clair
+# pour calibrer un palier Commun terne) au lieu de la dupliquer.
 const NIVEAUX_LUMIERE: Array[Dictionary] = [
 	{"nom": "Nuit",   "voile": 0.00},
-	{"nom": "Studio", "voile": 0.10},
+	{"nom": "Studio", "voile": CombatCtbUi.VOILE_ALPHA_DEFAUT},
 	{"nom": "Jour",   "voile": 0.22},
 	{"nom": "Blanc",  "voile": 0.34},
 ]
-const TEINTE_VOILE := Color(0.78, 0.82, 0.90)
-# Démarre en « Studio » : un fond quasi noir noie les paliers Commun (gris foncé).
+const TEINTE_VOILE := CombatCtbUi.VOILE_TEINTE_DEFAUT
+# Démarre en « Studio », désormais le même défaut que le jeu réel.
 const LUMIERE_DEFAUT := 1
 
 enum Mode { DUEL, USINE }

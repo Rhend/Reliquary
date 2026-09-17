@@ -153,7 +153,26 @@ const ORBE_TAILLE := Vector2(64, 64)
 # cohérent quelle que soit la résolution.
 const CARTE_DECALAGE_BAS_FRAC := 0.05
 
+# Voile de lumière AMBIANT par défaut (17/09/2026, voir _voile_previsu) —
+# teinte froide quasi blanche, additive et douce : elle NE remplace aucune
+# couleur du décor, elle en soulève juste l'exposition, comme une lumière de
+# studio au-dessus de la scène. SOURCE UNIQUE : ShowRoom.NIVEAUX_LUMIERE
+# (niveau « Studio ») pointe sur CES MÊMES constantes plutôt que de garder sa
+# propre valeur — un seul réglage « lumière normale », qu'on le voie depuis le
+# jeu réel ou depuis la vitrine dev. Un peu plus haut que l'ancien défaut
+# ShowRoom (0.10 → 0.14) : suffisant pour sortir un palier Commun (gris
+# terne) du quasi-noir sans blanchir les néons/le rouge du camp adverse.
+const VOILE_TEINTE_DEFAUT := Color(0.78, 0.82, 0.90)
+const VOILE_ALPHA_DEFAUT := 0.14
+
 var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
+# Vignette « tête/cou/cheveux » du héros GÉNÉRÉE à la volée pour la file
+# d'initiative (voir _demarrer_generation_portrait_heros) — null tant que le
+# rendu SubViewport (différé d'au moins une frame) n'est pas prêt, ou si
+# aucun runtime spine-godot. Repli SOUS le fichier livré (`CombatUiSkin.
+# portrait_heros`, prioritaire s'il existe un jour), lui-même au-dessus de
+# l'initiale du nom (voir _portrait_pour).
+var _portrait_heros_genere: Texture2D = null
 var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
 var _duel_tween: Tween = null
 var _duel_restaure: Array = []      # paires [CanvasItem, position d'origine]
@@ -166,10 +185,19 @@ var _zones_cible: Dictionary = {}   # CtbCombattant → Control (zone de clic)
 var _cible_survolee: CtbCombattant = null
 var _ciblage_actif := false
 var _sol: Control = null       # scène : sol + emplacements des futurs sprites
-# Voile de LUMIÈRE dev (ShowRoom UNIQUEMENT — `previsu_definir_voile`) : posé
-# au-dessus du décor, EN DESSOUS des personnages (jamais sur eux, voir
-# CLAUDE.md « on éclaire le décor, jamais les personnages »). Transparent par
-# défaut : le jeu réel ne l'appelle jamais, aucune différence visuelle.
+# Voile de LUMIÈRE au-dessus du décor, EN DESSOUS des personnages (jamais sur
+# eux — on éclaire le décor, jamais les personnages, dont le rendu Spine a
+# déjà sa propre exposition). Posé à un niveau AMBIANT PAR DÉFAUT (voir
+# VOILE_TEINTE_DEFAUT/VOILE_ALPHA_DEFAUT) — ⚠ RETOUR au 17/09/2026 (Rhend :
+# « tout est assez sombre, travail propre d'highlight/ombre-lumière sur toute
+# l'UI de combat ») : avant cette date, le voile démarrait TRANSPARENT (zéro
+# lumière) et seule la ShowRoom le réglait (`previsu_definir_voile`,
+# jamais appelé par le jeu réel) — la vitrine tournait donc TOUJOURS mieux
+# éclairée que le vrai combat, qui rendait sa version la plus sombre possible
+# par pur défaut de câblage, pas par choix de DA (CLAUDE.md notait déjà :
+# « un fond quasi noir noie les paliers Commun » — un constat qui s'appliquait
+# au jeu réel sans que personne ne l'y corrige). `previsu_definir_voile`
+# (ShowRoom) reste un OVERRIDE possible par-dessus ce défaut, posé après coup.
 var _voile_previsu: ColorRect = null
 var _orbes: Dictionary = {}    # CtbCombattant → EnergyBoule (placeholder sprite)
 var _sprites: Dictionary = {}  # CtbCombattant → SpriteSpinePersonnage (sprite RÉEL)
@@ -233,9 +261,11 @@ static func pour_run(run: ExpeRun, data: Dictionary, sur_fermee: Callable) -> Co
 		sur_fermee.call())
 	return ui
 
-# Teinte le voile de prévisu (ShowRoom) — sans effet si appelé avant
-# `_construire()` (le voile n'existe pas encore) ; la ShowRoom l'appelle donc
-# après `add_child`, comme le reste de son overlay dev.
+# Surcharge le voile de lumière au-delà de son niveau ambiant par défaut
+# (VOILE_TEINTE_DEFAUT/VOILE_ALPHA_DEFAUT, posé par `_construire()`) — la
+# ShowRoom s'en sert pour comparer les 4 niveaux d'éclairage (B). Sans effet
+# si appelé avant `_construire()` (le voile n'existe pas encore) ; la
+# ShowRoom l'appelle donc après `add_child`, comme le reste de son overlay dev.
 func previsu_definir_voile(couleur: Color) -> void:
 	if _voile_previsu != null:
 		_voile_previsu.color = couleur
@@ -275,9 +305,16 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 		# `previsu_niveau_heros`/`previsu_cosmetique_heros`/`previsu_coiffure_
 		# heros` : surcharge dev ShowRoom, -1 = comportement réel (Nv1, la
 		# dotation de départ).
+		var niveau_heros := previsu_niveau_heros if previsu_niveau_heros > 0 else 1
 		sprite = SpriteSpinePersonnage.creer_heros(
-				previsu_niveau_heros if previsu_niveau_heros > 0 else 1,
-				previsu_cosmetique_heros, previsu_coiffure_heros)
+				niveau_heros, previsu_cosmetique_heros, previsu_coiffure_heros)
+		# Vignette de file d'initiative GÉNÉRÉE à la volée (retour Rhend
+		# 17/09/2026) : portrait_heros() n'a aucun fichier livré pour le héros
+		# à ce jour (contrairement aux ennemis) — tant que ça reste vrai,
+		# `_portrait_pour` retombe sur l'initiale. Fire-and-forget, EXACTEMENT
+		# la même apparence que le sprite ci-dessus.
+		_demarrer_generation_portrait_heros(niveau_heros, previsu_cosmetique_heros,
+				previsu_coiffure_heros)
 	else:
 		# Ennemi : même registre / même apparence que la ShowRoom, qui EST
 		# cet écran depuis 09/2026 (voir CLAUDE.md « la ShowRoom est un
@@ -363,11 +400,13 @@ func _construire() -> void:
 	add_child(_couche_scene)
 	CombatFondScinde.construire(_couche_scene, SOL_Y_FRAC, SOL_X_JOUEUR, BANDE_VS_PX)
 
-	# Voile de prévisu (ShowRoom) — posé APRÈS le décor, AVANT `_sol` (donc
-	# sous les personnages) : ordre d'ajout = ordre de dessin. Transparent tant
-	# que `previsu_definir_voile` n'est pas appelé.
+	# Voile de lumière — posé APRÈS le décor, AVANT `_sol` (donc sous les
+	# personnages) : ordre d'ajout = ordre de dessin. Part du niveau AMBIANT
+	# PAR DÉFAUT (voir VOILE_TEINTE_DEFAUT/VOILE_ALPHA_DEFAUT ci-dessus) — le
+	# jeu réel n'a plus besoin d'appeler quoi que ce soit pour être éclairé ;
+	# `previsu_definir_voile` (ShowRoom) reste libre de le régler PAR-DESSUS.
 	_voile_previsu = ColorRect.new()
-	_voile_previsu.color = Color(0.0, 0.0, 0.0, 0.0)
+	_voile_previsu.color = Color(VOILE_TEINTE_DEFAUT, VOILE_ALPHA_DEFAUT)
 	_voile_previsu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_voile_previsu.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_couche_scene.add_child(_voile_previsu)
@@ -547,17 +586,35 @@ func _palier_ennemi(cb: CtbCombattant) -> int:
 # Portrait d'UN combattant pour sa puce de file d'initiative — même source
 # que son sprite : le héros suit son niveau d'équipement prévisualisé/réel,
 # l'ennemi son palier réel/prévisualisé (`_palier_ennemi`, PARTAGÉ avec
-# `_creer_sprite_ennemi`). `null` si la livraison Turn_Icone n'a pas encore
-# ce personnage/ce palier — l'appelant (`_rafraichir_file`) retombe sur
-# l'initiale du nom.
+# `_creer_sprite_ennemi`). Héros : fichier livré prioritaire (`CombatUiSkin.
+# portrait_heros`, toujours null à ce jour — aucune livraison), sinon la
+# vignette GÉNÉRÉE (`_portrait_heros_genere`, voir _demarrer_generation_
+# portrait_heros). `null` si ni l'un ni l'autre n'est disponible — l'appelant
+# (`_rafraichir_file`) retombe sur l'initiale du nom.
 func _portrait_pour(cb: CtbCombattant) -> Texture2D:
 	if cb == moteur.avatar():
-		return CombatUiSkin.portrait_heros(
-				previsu_niveau_heros if previsu_niveau_heros > 0 else 1)
+		var niveau := previsu_niveau_heros if previsu_niveau_heros > 0 else 1
+		var livre := CombatUiSkin.portrait_heros(niveau)
+		return livre if livre != null else _portrait_heros_genere
 	var entree := SpinePersonnagesData.par_id(cb.data.id)
 	if entree.is_empty():
 		return null
 	return CombatUiSkin.portrait_ennemi(str(entree.get("nom", "")), _palier_ennemi(cb))
+
+# Lance en tâche de fond la génération de la vignette « tête/cou/cheveux » du
+# héros (retour Rhend 17/09/2026 — voir _portrait_heros_genere). Fire-and-
+# forget : le rendu SubViewport est DIFFÉRÉ d'au moins une frame
+# (CombatUiSkin.generer_portrait_heros), `_portrait_pour` retombe sur
+# l'initiale en attendant ; une fois prête, on rafraîchit juste la file pour
+# la faire apparaître, sans reconstruire l'écran. Mise en cache côté
+# CombatUiSkin (niveau/cosmétique/coiffure) : gratuit dès la 2e fois pour la
+# même apparence, y compris d'un combat à l'autre.
+func _demarrer_generation_portrait_heros(niveau: int, cosmetique: int, coiffure: int) -> void:
+	var tex := await CombatUiSkin.generer_portrait_heros(niveau, cosmetique, coiffure, self)
+	if tex == null or not is_inside_tree():
+		return
+	_portrait_heros_genere = tex
+	_rafraichir_file()
 
 # Panneau de stats : PLAQUÉ contre le bord bas-gauche de l'écran, sa largeur
 # forcée jusqu'au trait de séparation (retour Rhend : « doit prendre tout le

@@ -49,6 +49,12 @@ const MARQUEUR_NIVEAU := "_Nv"
 # occupait à elle seule la moitié du budget de hauteur, ce qui le rendait
 # visiblement plus petit que des monstres au corps monobloc.
 const MOTIFS_HORS_MESURE := ["Sword", "VFX"]
+# Slots GARDÉS pour la vignette de portrait (cf. motif_portrait) — INCLUSION,
+# pas exclusion : « tête et cou, sans l'épée, avec les cheveux » (retour
+# Rhend 17/09/2026). Testé sur les noms de slots Idle de Relic (« R_H_Idle_
+# Tete_Nv_3 », « R_H_Idle_Cou », « R_H_Idle_Cheveux1_Nv_3 »/« …Cheveux2… ») —
+# insensible à la casse, comme hors_mesure.
+const MOTIFS_PORTRAIT := ["Tete", "Cou", "Cheveux"]
 # Hauteur RENDUE (px) de l'ÉTALON de chara design — aujourd'hui WorkBot, à
 # 0 % (voir SpinePersonnagesData.taille_relative_pct). L'échelle de CHAQUE
 # personnage est déduite de sa hauteur MESURÉE au chargement (voir
@@ -283,6 +289,14 @@ static func hors_mesure(nom_slot: String) -> bool:
 			return true
 	return false
 
+# Ce slot fait-il partie du cadrage de la vignette de portrait (tête/cou/
+# cheveux SEULEMENT) ? INCLUSION, symétrique de hors_mesure ci-dessus.
+static func motif_portrait(nom_slot: String) -> bool:
+	for motif in MOTIFS_PORTRAIT:
+		if nom_slot.findn(motif) >= 0:
+			return true
+	return false
+
 # ─── Apparence ───────────────────────────────────────────────
 
 # Pose une apparence sur un sprite déjà construit (voir l'en-tête pour la
@@ -416,6 +430,21 @@ func position_os(nom_os: String) -> Vector2:
 	var monde: Vector2 = os.call("local_to_world", Vector2.ZERO)
 	return transform * ((_spine as Node2D).transform * monde)
 
+# Convertit un Rect2 en unités Spine RACINE (même repère que get_bounds()/
+# position_os() ci-dessus — celui que rend `poser_skin_portrait`) vers le
+# repère PIXEL local de CE nœud, même chaîne de transforms que le rendu.
+# Utilisé par la vignette de portrait (CombatUiSkin.generer_portrait_heros)
+# pour cadrer un SubViewport sur les bornes mesurées. Les DEUX coins sont
+# transformés puis reconstruits en Rect2 normalisé (`expand`) plutôt que
+# position+size seuls : robuste à une éventuelle orientation en miroir
+# (scale.x négatif, voir `orienter`), qui inverserait sinon le signe de la
+# largeur.
+func rect_local_depuis_bornes(bornes: Rect2) -> Rect2:
+	var t := transform * (_spine as Node2D).transform
+	var coin1 := t * bornes.position
+	var coin2 := t * (bornes.position + bornes.size)
+	return Rect2(coin1, Vector2.ZERO).expand(coin2)
+
 # Hauteur du CORPS RÉELLEMENT rendue à l'écran (px) : la pose courante mesurée,
 # puis l'échelle posée au chargement. C'est le seul contrôle qui attrape un
 # export qui ment sur sa taille — un héros deux fois trop grand devant les
@@ -491,6 +520,44 @@ func poser_skin_mesure(apparence: Dictionary) -> bool:
 	squelette.call("set_skin", corps)
 	squelette.call("set_slots_to_setup_pose")
 	return true
+
+# Pose la skin de PORTRAIT (tête/cou/cheveux SEULEMENT — voir MOTIFS_
+# PORTRAIT/motif_portrait) et l'y LAISSE, puis rend les bornes RÉELLEMENT
+# dessinées (Rect2, unités Spine racine — même repère que get_bounds()/
+# position_os(), à passer à `rect_local_depuis_bornes` pour cadrer un
+# SubViewport). Réservé au générateur de vignette de file d'initiative
+# (CombatUiSkin.generer_portrait_heros) : ce sprite est un JETABLE construit
+# pour cet unique usage, rien à restaurer ensuite (contrairement à
+# poser_skin_mesure, qui repose l'apparence réelle ailleurs dans le fichier).
+# Rect2() si la pose est impossible (pas de runtime, apparence non
+# composable) — l'appelant renonce alors à la vignette.
+func poser_skin_portrait(apparence: Dictionary) -> Rect2:
+	if _spine == null:
+		return Rect2()
+	var donnees: Resource = _spine.get("skeleton_data_res")
+	var squelette: Object = _spine.call("get_skeleton")
+	if donnees == null or squelette == null:
+		return Rect2()
+	var skins := _skins_demandees(apparence)
+	if skins.is_empty():
+		return Rect2()
+	var corps: Object = _composer_skin(skins, int(apparence.get("niveau", 0)))
+	if corps == null:
+		return Rect2()
+	_purger_hors_portrait(corps, donnees)
+	squelette.call("set_skin", corps)
+	squelette.call("set_slots_to_setup_pose")
+	return squelette.call("get_bounds") as Rect2
+
+# Retire de la skin tout ce qui n'est PAS tête/cou/cheveux — inverse de
+# _purger_hors_mesure (INCLUSION plutôt qu'exclusion).
+func _purger_hors_portrait(skin: Object, donnees: Resource) -> void:
+	var slots: Array = donnees.call("get_slots")
+	for i in slots.size():
+		if motif_portrait(str((slots[i] as Object).call("get_name"))):
+			continue
+		for nom in skin.call("find_names_for_slot", i):
+			skin.call("remove_attachment", i, str(nom))
 
 # ─── Animations ──────────────────────────────────────────────
 

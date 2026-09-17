@@ -115,7 +115,7 @@ func rafraichir() -> void:
 func _pill(texte: String, couleur: Color) -> Control:
 	var p := PanelContainer.new()
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_theme_stylebox_override("panel", ExpeStyle.style_chip(couleur))
+	p.add_theme_stylebox_override("panel", CombatUiSkin.style_pill(couleur))
 	var l := ExpeStyle.label_mono(texte, 8, couleur.lightened(0.45))
 	var m := UIHelpers.margin_of(2)
 	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
