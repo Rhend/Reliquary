@@ -395,6 +395,18 @@ static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
 	var img := vp.get_texture().get_image()
 	var tex: Texture2D = null
 	if img != null:
+		# Le cadrage ci-dessus (bornes Spine + marge) laisse une marge morte
+		# transparente bien plus large que la marge visée — les bornes
+		# `get_bounds()` des attachements débordent leur silhouette RÉELLE
+		# (constaté visuellement : la tête n'occupait qu'une fraction du
+		# canevas 96×96, contre un cadrage bord-à-bord sur les portraits
+		# d'ennemis livrés). On retaille donc sur le rectangle RÉELLEMENT
+		# peint (alpha non nul) après coup, plutôt que de fiabiliser la
+		# mesure Spine en amont — la puce (TextureRect, STRETCH_KEEP_ASPECT_
+		# COVERED) fait ensuite le reste, bord-à-bord comme les ennemis.
+		var used := img.get_used_rect()
+		if used.size.x > 0 and used.size.y > 0:
+			img = img.get_region(used)
 		tex = ImageTexture.create_from_image(img)
 		_cache_portraits_heros[cle] = tex
 	vp.queue_free()
