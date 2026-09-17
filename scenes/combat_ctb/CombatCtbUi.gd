@@ -68,15 +68,31 @@ const ACTIONS_BAS_FRAC := 0.30        # bord bas de l'étalement
 # Trait de liaison bouton → buste (asset Cyber_Line livré mais figé : la
 # géométrie ci-dessous est PROCÉDURALE, seule la couleur vient de l'asset —
 # voir CombatUiSkin.couleur_lien) : coude horizontal → diagonal → petit
-# cercle creux sur le buste, à LA MÊME HAUTEUR que le bouton.
+# cercle creux sur le POINT B. Depuis la livraison « Bone UI » (Christophe,
+# 17/09/2026), le point B est l'un des deux os d'ancrage RÉELS du squelette
+# (SpriteSpinePersonnage.position_os/OS_ANCRE_* — épée pour Attaquer,
+# ceinture pour Objet), donc plus forcément à la même hauteur que le bouton
+# (la diagonale devient un vrai segment, pas un artifice). LIEN_ANCRE_FRAC
+# ci-dessous reste le REPLI (os absent : export sans la livraison, runtime
+# spine-godot manquant, placeholder EnergyBoule).
+#
+# ⚠ RÉDUCTION TEMPORAIRE (retour Rhend 17/09/2026) : seuls DEUX os d'ancrage
+# existent à ce jour (épée, ceinture) — Défendre et les Compétences n'en ont
+# aucun à viser proprement. En attendant, `ACTIONS_LIMITEES_AUX_OS` MASQUE
+# ces actions (le bouton Défendre reste dans l'arbre, juste invisible ; les
+# boutons de Compétences ne sont simplement pas créés) — rien n'est
+# supprimé côté moteur/logique, seul l'affichage est réduit à Attaquer/Objet.
+# Repasser à false dès que d'autres os d'ancrage sont livrés.
+const ACTIONS_LIMITEES_AUX_OS := true
 const LIEN_EPAISSEUR_PX := 2.0
 const LIEN_COUDE_PX := 26.0
 const LIEN_RAYON_NOEUD_PX := 4.0
-# Ancre du trait sur le buste : fraction de la largeur rendue du héros,
-# depuis son centre — À L'INTÉRIEUR de la silhouette (pas à son bord).
-# `largeur_rendue_px()` EXCLUT l'arme/VFX (hors_mesure, voir
-# SpriteSpinePersonnage) : ACTIONS_MARGE_PX compense ce budget manquant pour
-# que le bouton ne chevauche pas l'épée tenue au-dessus du corps mesuré.
+# Ancre de REPLI sur le buste : fraction de la largeur rendue du héros,
+# depuis son centre — À L'INTÉRIEUR de la silhouette (pas à son bord), à LA
+# MÊME HAUTEUR que le bouton. `largeur_rendue_px()` EXCLUT l'arme/VFX
+# (hors_mesure, voir SpriteSpinePersonnage) : ACTIONS_MARGE_PX compense ce
+# budget manquant pour que le bouton ne chevauche pas l'épée tenue au-dessus
+# du corps mesuré.
 const LIEN_ANCRE_FRAC := 0.34
 # Puce carrée de la file d'initiative compacte (portraits, chantier UI_Concept2).
 const TAILLE_PUCE_TOUR := 30.0
@@ -114,11 +130,13 @@ var sur_objet_utilise := Callable()
 # Surcharges de PRÉVISUALISATION dev (ShowRoom UNIQUEMENT, 09/2026 — la
 # vitrine est désormais CET écran, pas une copie, voir CLAUDE.md « la
 # ShowRoom est un banc d'essai ») : posées par l'appelant avant `add_child`,
-# comme `embuscade`/`facteur_delais` ci-dessus. -1 (ou 0 pour le cosmétique)
-# = comportement du jeu réel — niveau d'équipement/Maîtrise RÉELS. N'affectent
-# QUE le sprite choisi à la construction, jamais les stats ni le déroulé.
+# comme `embuscade`/`facteur_delais` ci-dessus. -1 (ou 0 pour le cosmétique/
+# la coiffure) = comportement du jeu réel — niveau d'équipement/Maîtrise
+# RÉELS. N'affectent QUE le sprite choisi à la construction, jamais les
+# stats ni le déroulé.
 var previsu_niveau_heros := -1
 var previsu_cosmetique_heros := 0
+var previsu_coiffure_heros := 0
 var previsu_palier_ennemi := -1
 
 const SOL_Y_FRAC := 0.806          # ligne des pieds : MILIEU de la bande de sol du décor
@@ -129,6 +147,11 @@ const SOL_X_ADVERSE := 0.75        # ancrage du camp adverse — miroir exact du
 # sous la barre d'action, qui est du chrome dessiné PAR-DESSUS la scène.
 const SOL_PAS := Vector2(64, 22)
 const ORBE_TAILLE := Vector2(64, 64)
+# Barre de PV (CarteCombattantCtb) décalée plus BAS que son ancrage naturel
+# aux pieds (retour Rhend 17/09/2026) — fraction de la hauteur de la scène,
+# même dénominateur que SOL_Y_FRAC/ACTIONS_*_FRAC ci-dessus pour rester
+# cohérent quelle que soit la résolution.
+const CARTE_DECALAGE_BAS_FRAC := 0.05
 
 var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
 var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
@@ -167,7 +190,7 @@ var _liens_actions: Array[Dictionary] = []
 var _bandeaux: VBoxContainer
 var _btn_attaquer: Button
 var _btn_defendre: Button
-var _btn_objet: Button = null          # créé SEULEMENT si inventaire non vide
+var _btn_objet: Button = null          # créé au tour du joueur, grisé si inventaire vide
 # Compétences (chantier 16) : boutons recréés à chaque tour joueur — absents
 # si le combattant n'en a pas ; GRISÉS avec compteur pendant la recharge
 # (état temporaire d'un contenu possédé — ≠ contenu absent).
@@ -249,11 +272,12 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 	if cb == moteur.avatar():
 		# creer_heros() et pas creer() : l'apparence vient du registre —
 		# sans skin posée, l'export « costumes » de Relic est invisible.
-		# `previsu_niveau_heros`/`previsu_cosmetique_heros` : surcharge dev
-		# ShowRoom, -1 = comportement réel (Nv1, la dotation de départ).
+		# `previsu_niveau_heros`/`previsu_cosmetique_heros`/`previsu_coiffure_
+		# heros` : surcharge dev ShowRoom, -1 = comportement réel (Nv1, la
+		# dotation de départ).
 		sprite = SpriteSpinePersonnage.creer_heros(
 				previsu_niveau_heros if previsu_niveau_heros > 0 else 1,
-				previsu_cosmetique_heros)
+				previsu_cosmetique_heros, previsu_coiffure_heros)
 	else:
 		# Ennemi : même registre / même apparence que la ShowRoom, qui EST
 		# cet écran depuis 09/2026 (voir CLAUDE.md « la ShowRoom est un
@@ -467,8 +491,10 @@ func _construire() -> void:
 	_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_fx)
 
-	# Scanlines sobres (sous le voile de transition, au-dessus du jeu).
-	ExpeStyle.scanlines(self)
+	# PAS de scanlines ici (retiré 17/09/2026, retour Rhend : « enlève le
+	# [filtre scanlines] concernant les combats ») — le reste de la peau
+	# cyberpunk (expédition, panneau de lancement, écrans de message) les
+	# garde, voir ExpeStyle.scanlines.
 
 	# Voile de transition (début / fin de bataille) — au-dessus de tout.
 	_voile = ColorRect.new()
@@ -612,7 +638,7 @@ func _placer_orbes() -> void:
 				zone.position = pied - Vector2(zone.size.x * 0.5, zone.size.y - 12.0)
 			var carte: CarteCombattantCtb = _cartes.get(membres[i])
 			if carte != null:
-				carte.definir_position(pied)
+				carte.definir_position(pied, _sol.size.y * CARTE_DECALAGE_BAS_FRAC)
 	_sol.queue_redraw()
 
 # Sol de la scène : la ligne d'horizon + bande dégradée qui vivait ici avant
@@ -704,12 +730,18 @@ func _boucle() -> void:
 
 func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 	_btn_attaquer.visible = on
-	_btn_defendre.visible = on
+	# Défendre MASQUÉ tant qu'ACTIONS_LIMITEES_AUX_OS tient (voir la constante) :
+	# pas d'os d'ancrage à lui viser proprement pour l'instant.
+	_btn_defendre.visible = on and not ACTIONS_LIMITEES_AUX_OS
 	_objet_en_attente = null
 	_competence_en_attente = null
 	# Compétences (chantier 16) : un bouton par compétence du combattant
 	# actif — recréés à chaque tour (le cooldown a pu bouger), grisés « (n) »
-	# en recharge, ABSENTS si le combattant n'en a pas.
+	# en recharge, ABSENTS si le combattant n'en a pas. Toujours CRÉÉS (la
+	# logique/les tests qui les actionnent restent valables) mais MASQUÉS
+	# tant qu'ACTIONS_LIMITEES_AUX_OS tient — pas d'os d'ancrage pour eux —
+	# et exclus des colonnes/traits (voir plus bas), même traitement que
+	# Défendre.
 	for b in _btns_competences:
 		_rangee_boutons.remove_child(b)
 		b.queue_free()
@@ -721,25 +753,33 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 			var b := CombatUiSkin.bouton(
 					nom if prete else "%s (%d)" % [nom, acteur.cooldown_restant(comp)])
 			b.disabled = not prete
+			b.visible = not ACTIONS_LIMITEES_AUX_OS
 			b.pressed.connect(_sur_competence.bind(comp))
 			_rangee_boutons.add_child(b)
 			_btns_competences.append(b)
-	# Bouton Objet : n'existe que si l'inventaire de run est non vide
-	# (« contenu absent, pas grisé ») — retiré immédiatement sinon.
+	# Bouton Objet : TOUJOURS présent au tour du joueur (retour Rhend
+	# 17/09/2026 — supersède l'ancienne règle « contenu absent, pas grisé » :
+	# l'action a désormais un os d'ancrage réel à viser (la ceinture), un
+	# trait qui apparaît/disparaît avec le bouton n'a plus de sens). GRISÉ
+	# si l'inventaire de run est vide OU absent (ShowRoom/sandbox sans run
+	# réelle : `inventaire_fournisseur` invalide) — même langage que les
+	# compétences en recharge, recréé à chaque tour (le contenu a pu changer).
 	if _btn_objet != null:
 		_rangee_boutons.remove_child(_btn_objet)
 		_btn_objet.queue_free()
 		_btn_objet = null
-	if on and inventaire_fournisseur.is_valid():
-		var inv: Array = inventaire_fournisseur.call()
-		if not inv.is_empty():
-			_btn_objet = CombatUiSkin.bouton(Translations.T("ctb.objet"))
-			_btn_objet.pressed.connect(_sur_objet)
-			_rangee_boutons.add_child(_btn_objet)
+	if on:
+		var inv: Array = inventaire_fournisseur.call() if inventaire_fournisseur.is_valid() else []
+		_btn_objet = CombatUiSkin.bouton(Translations.T("ctb.objet"))
+		_btn_objet.disabled = inv.is_empty()
+		_btn_objet.pressed.connect(_sur_objet)
+		_rangee_boutons.add_child(_btn_objet)
 	UIHelpers.clear_children_now(_rangee_cibles)
 	if on:
-		var visibles: Array = [_btn_attaquer, _btn_defendre]
-		visibles.append_array(_btns_competences)
+		var visibles: Array = [_btn_attaquer]
+		if not ACTIONS_LIMITEES_AUX_OS:
+			visibles.append(_btn_defendre)
+			visibles.append_array(_btns_competences)
 		if _btn_objet != null:
 			visibles.append(_btn_objet)
 		_disposer_actions_deux_colonnes(visibles)
@@ -758,6 +798,17 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 # stocke un segment de trait par bouton (`_liens_actions`), peint ensuite par
 # `_dessiner_liens_actions` — `reset_size()` d'abord, la largeur des boutons
 # varie avec leur texte (compétences grisées « (n) », objets « ×N »).
+#
+# Point B RÉEL depuis la livraison « Bone UI » (Christophe, 17/09/2026) :
+# le trait de chaque bouton vise l'un des deux os d'ancrage du squelette
+# (SpriteSpinePersonnage.OS_ANCRE_* — épée pour Attaquer, ceinture pour
+# Objet — SEULES actions affichées tant qu'ACTIONS_LIMITEES_AUX_OS tient,
+# voir plus haut), chacun un point FIXE (là où le personnage porte
+# réellement son arme/sa ceinture), ce qui rend la seconde moitié du trait
+# (coude → point B) diagonale pour de vrai. Repli sur l'ancienne ancre
+# procédurale (fraction de largeur, à la hauteur du bouton) si l'os est
+# absent (export sans la livraison, runtime spine-godot manquant,
+# placeholder EnergyBoule).
 func _disposer_actions_deux_colonnes(boutons: Array) -> void:
 	_liens_actions.clear()
 	if boutons.is_empty() or _sol == null or _sol.size.x <= 0.0:
@@ -770,6 +821,8 @@ func _disposer_actions_deux_colonnes(boutons: Array) -> void:
 	var hauteur := ORBE_TAILLE.y
 	var largeur := ORBE_TAILLE.x
 	var sprite: SpriteSpinePersonnage = _sprites.get(avatar)
+	var ancre_attaque := Vector2.ZERO
+	var ancre_objet := Vector2.ZERO
 	if sprite != null:
 		var h := sprite.hauteur_rendue_px()
 		if h > 0.0:
@@ -777,6 +830,8 @@ func _disposer_actions_deux_colonnes(boutons: Array) -> void:
 		var l := sprite.largeur_rendue_px()
 		if l > 0.0:
 			largeur = l
+		ancre_attaque = sprite.position_os(SpriteSpinePersonnage.OS_ANCRE_ATTAQUE)
+		ancre_objet = sprite.position_os(SpriteSpinePersonnage.OS_ANCRE_OBJET)
 	var haut := pied.y - hauteur * ACTIONS_HAUT_FRAC
 	var bas := pied.y - hauteur * ACTIONS_BAS_FRAC
 	var n := boutons.size()
@@ -795,9 +850,13 @@ func _disposer_actions_deux_colonnes(boutons: Array) -> void:
 		var centre := Vector2(x, y)
 		b.position = centre - b.size * 0.5
 		var bord_x := centre.x - b.size.x * 0.5 if a_droite else centre.x + b.size.x * 0.5
-		var ancre_x := pied.x + (1.0 if a_droite else -1.0) * largeur * LIEN_ANCRE_FRAC
+		var ancre := ancre_objet if b == _btn_objet else ancre_attaque
+		var arrivee := ancre
+		if ancre == Vector2.ZERO:
+			var ancre_x := pied.x + (1.0 if a_droite else -1.0) * largeur * LIEN_ANCRE_FRAC
+			arrivee = Vector2(ancre_x, y)
 		_liens_actions.append({
-			"depart": Vector2(bord_x, y), "arrivee": Vector2(ancre_x, y), "a_droite": a_droite,
+			"depart": Vector2(bord_x, y), "arrivee": arrivee, "a_droite": a_droite,
 		})
 	if _rangee_boutons != null:
 		_rangee_boutons.queue_redraw()
@@ -894,7 +953,7 @@ func _montrer_choix_cibles(_vivants: Array[CtbCombattant]) -> void:
 # Choix d'un objet (chantier 7) : liste de l'inventaire (doublons regroupés
 # « ×n »), puis cible si l'effet en demande une.
 func _sur_objet() -> void:
-	if _btn_objet == null or not _btn_objet.visible:
+	if _btn_objet == null or not _btn_objet.visible or _btn_objet.disabled:
 		return
 	_objet_en_attente = null
 	UIHelpers.clear_children_now(_rangee_cibles)

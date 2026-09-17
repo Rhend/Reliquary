@@ -131,8 +131,11 @@ static func splash_ennemi_detecte() -> Control:
 # ── Curseur personnalisé (source 1032×1032 — Godot plafonne un curseur à
 # 256×256 ; redimensionné une fois, en cache).
 const CURSEUR_SOURCE := preload("res://assets/ui/UI_Cursor.png")
-const CURSEUR_TAILLE_PX := 48
-const CURSEUR_HOTSPOT := Vector2(4, 4)   # pointe de la flèche, coin haut-gauche
+# Taille réduite de MOITIÉ (retour Rhend 17/09/2026 : « le nouveau curseur est
+# trop gros ») — hotspot mis à l'échelle avec elle pour que la pointe de la
+# flèche reste au même coin relatif.
+const CURSEUR_TAILLE_PX := 24
+const CURSEUR_HOTSPOT := Vector2(2, 2)   # pointe de la flèche, coin haut-gauche
 
 static var _cache_textures: Dictionary = {}   # clé (String) → ImageTexture composée
 static var _curseur_texture: ImageTexture = null

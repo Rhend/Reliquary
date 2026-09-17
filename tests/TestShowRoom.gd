@@ -99,6 +99,26 @@ func _test_apparences() -> void:
 			PackedStringArray()) as PackedStringArray).is_empty(),
 			"index de cosmétique hors bornes → borné, jamais d'apparence vide")
 
+	# Coiffures : MÊME contrat que les accessoires, mais axe INDÉPENDANT — les
+	# deux se CUMULENT (17/09/2026, retour Rhend : raccourci dédié aux cheveux).
+	var jeux_coiffure := SpinePersonnagesData.coiffures(h)
+	_assert(jeux_coiffure.size() >= 2, "au moins 2 coiffures déclarées")
+	var ap_h3 := SpinePersonnagesData.apparences(h, 0, 1)
+	_assert(ap_h3.size() == ap_h.size(), "changer de coiffure ne change pas le nombre de niveaux")
+	var skins_h3 := ap_h3[0].get("skins", PackedStringArray()) as PackedStringArray
+	_assert(skins_h3 != skins_h, "changer de coiffure change bien la composition de skins")
+	var skins_h_deux_axes := SpinePersonnagesData.apparences(h, 1, 1)[0]\
+			.get("skins", PackedStringArray()) as PackedStringArray
+	_assert("Men_Global" in skins_h_deux_axes,
+			"visage ET coiffure choisis ENSEMBLE : le corps reste posé")
+	var skin_visage_1 := str((jeux[1]["skins"] as PackedStringArray)[0])
+	var skin_coiffure_1 := str((jeux_coiffure[1]["skins"] as PackedStringArray)[0])
+	_assert(skin_visage_1 in skins_h_deux_axes and skin_coiffure_1 in skins_h_deux_axes,
+			"visage ET coiffure choisis ENSEMBLE : les deux axes s'ajoutent, pas un remplace l'autre")
+	_assert(not (SpinePersonnagesData.apparences(h, 0, 99)[0].get("skins",
+			PackedStringArray()) as PackedStringArray).is_empty(),
+			"index de coiffure hors bornes → borné, jamais d'apparence vide")
+
 	# Variantes NOMMÉES (forme prévue pour le héros M/F) : elles priment sur
 	# les paliers. Garde le contrat en place avant que Christophe ne livre.
 	var factice := {"nom": "X", "prefixe_skin": "X_Nv",
@@ -348,6 +368,16 @@ func _test_costumes() -> void:
 		_assert(salle._idx_cosmetique != avant_cosmetique, "[V] change de jeu d'accessoires")
 	_assert(salle._combat_ui != null, "le combat reste peuplé après [V]")
 	_assert(salle._combat_ui == ui_avant_touches, "[V] ne reconstruit PAS l'écran (hot-reload)")
+	# [C] : même mécanique que [V], sur l'axe INDÉPENDANT des coiffures
+	# (17/09/2026, retour Rhend — un raccourci pour la coupe de cheveux comme
+	# pour le visage).
+	var jeux_coiffure := SpinePersonnagesData.coiffures(salle._heros)
+	var avant_coiffure := salle._idx_coiffure
+	salle._touche(KEY_C)
+	if jeux_coiffure.size() > 1:
+		_assert(salle._idx_coiffure != avant_coiffure, "[C] change de jeu de coiffure")
+	_assert(salle._combat_ui != null, "le combat reste peuplé après [C]")
+	_assert(salle._combat_ui == ui_avant_touches, "[C] ne reconstruit PAS l'écran (hot-reload)")
 	var avant_niveau := salle._idx_niveau_heros
 	salle._touche(KEY_H)
 	_assert(salle._idx_niveau_heros == wrapi(avant_niveau + 1, 0, ShowRoom.NB_NIVEAUX_HEROS),

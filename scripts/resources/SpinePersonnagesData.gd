@@ -36,12 +36,18 @@
 #   • `prefixe_skin`— les 5 paliers de rareté en skins (ennemis) ;
 #   • rien de tout ça → une apparence unique, sans skin à poser.
 #
-# COMPOSITION DE SKINS (`skins_base` + `cosmetiques`) : Relic n'a pas une skin
-# par apparence mais un corps (« Men_Global »), un jeu de pièces d'équipement
-# (« Men_Level », « Men_Level_Hit ») et des accessoires « Random » mutuellement
-# exclusifs. Ces skins se CUMULENT — SpriteSpinePersonnage en fabrique une skin
-# composée. `skins_base` est toujours posé ; `cosmetiques` est une liste de jeux
-# alternatifs (un seul à la fois), que la ShowRoom fait défiler.
+# COMPOSITION DE SKINS (`skins_base` + `cosmetiques` + `coiffures`) : Relic
+# n'a pas une skin par apparence mais un corps (« Men_Global »), un jeu de
+# pièces d'équipement (« Men_Level », « Men_Level_Hit ») et deux axes
+# « Random » mutuellement exclusifs CHACUN dans son axe (visage / coiffure).
+# Ces skins se CUMULENT — SpriteSpinePersonnage en fabrique une skin composée.
+# `skins_base` est toujours posé ; `cosmetiques` (visage) et `coiffures`
+# (17/09/2026, retour Rhend : « un raccourci pour changer de coupe de cheveux,
+# comme pour le visage ») sont chacun une liste de jeux alternatifs (un seul
+# posé par axe à la fois), que la ShowRoom fait défiler indépendamment — DEUX
+# axes nommés plutôt qu'un système générique à N axes : c'est tout ce que
+# Christophe a livré à ce jour (visage, cheveux), pas de raison d'anticiper
+# plus (le vêtement reste dans `skins_base`, une seule famille livrée).
 #
 # Header .tres requis :
 #   [gd_resource type="Resource" script_class="SpinePersonnagesData" ...]
@@ -58,7 +64,8 @@ extends Resource
 #     "atlas":        "res://…/FlameBot.atlas",
 #     "prefixe_skin": "FlameBot_Nv",             # "" si pas de skin de palier
 #     "skins_base":   [],                        # skins cumulées (Relic)
-#     "cosmetiques":  [],                        # [{nom, skins}] alternatifs
+#     "cosmetiques":  [],                        # [{nom, skins}] alternatifs (visage)
+#     "coiffures":    [],                        # [{nom, skins}] alternatifs (cheveux)
 #     "niveaux":      0,                         # paliers portés par les slots
 #     "ennemi":       true,
 #     "regarde_a_droite": true,                  # SENS D'EXPORT (voir plus bas)
@@ -171,24 +178,36 @@ static func skin_pour_palier(entree: Dictionary, palier: int) -> String:
 	return "%s%d" % [prefixe, palier + 1]   # Nv1 = Commun
 
 # Jeux cosmétiques ALTERNATIFS d'une entrée (un seul posé à la fois) : les
-# accessoires « Random » de Christophe. Vide = le personnage n'en a pas.
+# accessoires de VISAGE « Random » de Christophe. Vide = le personnage n'en a
+# pas. Voir `coiffures` pour l'axe équivalent côté cheveux.
 static func cosmetiques(entree: Dictionary) -> Array[Dictionary]:
+	return _jeux_alternatifs(entree, "cosmetiques")
+
+# Coiffures ALTERNATIVES d'une entrée (un seul jeu posé à la fois) : les
+# chevelures « Random » de Christophe (livraison du 25/08/2026 — Hair_1/
+# Hair_2). Axe indépendant de `cosmetiques` (visage) — les DEUX se cumulent
+# sur `skins_base`, voir `skins_composees`. Vide = le personnage n'en a pas.
+static func coiffures(entree: Dictionary) -> Array[Dictionary]:
+	return _jeux_alternatifs(entree, "coiffures")
+
+static func _jeux_alternatifs(entree: Dictionary, champ: String) -> Array[Dictionary]:
 	var sortie: Array[Dictionary] = []
-	for c in entree.get("cosmetiques", []):
+	for c in entree.get(champ, []):
 		var jeu := c as Dictionary
 		sortie.append({"nom": str(jeu.get("nom", "?")), "skins": _liste(jeu.get("skins", []))})
 	return sortie
 
 # Apparences d'une entrée, dans l'ordre d'affichage — voir l'en-tête pour la
-# règle de priorité. `cosmetique` choisit le jeu d'accessoires cumulé (index
-# dans `cosmetiques`, borné : 0 quand le personnage n'en a pas).
+# règle de priorité. `cosmetique`/`coiffure` choisissent chacun leur jeu
+# cumulé (index dans `cosmetiques`/`coiffures` respectivement, bornés : 0
+# quand le personnage n'a pas cet axe).
 # Chaque élément : {"skin": String, "skins": PackedStringArray, "niveau": int,
 # "nom": String, "palier": int} — `palier` vaut -1 hors échelle de rareté
 # (l'appelant colore alors en neutre), `niveau` vaut 0 quand les slots
 # d'équipement ne sont pas filtrés.
-static func apparences(entree: Dictionary, cosmetique: int = 0) -> Array[Dictionary]:
+static func apparences(entree: Dictionary, cosmetique: int = 0, coiffure: int = 0) -> Array[Dictionary]:
 	var sortie: Array[Dictionary] = []
-	var base := skins_composees(entree, cosmetique)
+	var base := skins_composees(entree, cosmetique, coiffure)
 
 	var nommees: Array = entree.get("variantes", [])
 	if not nommees.is_empty():
@@ -216,15 +235,21 @@ static func apparences(entree: Dictionary, cosmetique: int = 0) -> Array[Diction
 	sortie.append(_apparence("", base, 0, str(entree.get("nom", "?")), -1))
 	return _avec_decalage(sortie, entree)
 
-# Skins CUMULÉES d'une entrée : le socle `skins_base` plus le jeu cosmétique
-# choisi. Vide pour un personnage qui n'en déclare pas (ennemis).
-static func skins_composees(entree: Dictionary, cosmetique: int = 0) -> PackedStringArray:
+# Skins CUMULÉES d'une entrée : le socle `skins_base` plus le jeu de visage
+# ET le jeu de coiffure choisis (deux axes INDÉPENDANTS qui se cumulent tous
+# les deux — pas un choix entre les deux). Vide pour un personnage qui n'en
+# déclare aucun (ennemis).
+static func skins_composees(entree: Dictionary, cosmetique: int = 0, coiffure: int = 0) -> PackedStringArray:
 	var sortie := _liste(entree.get("skins_base", []))
-	var jeux := cosmetiques(entree)
-	if not jeux.is_empty():
-		var jeu: Dictionary = jeux[clampi(cosmetique, 0, jeux.size() - 1)]
-		sortie.append_array(jeu["skins"] as PackedStringArray)
+	sortie.append_array(_skins_du_jeu(cosmetiques(entree), cosmetique))
+	sortie.append_array(_skins_du_jeu(coiffures(entree), coiffure))
 	return sortie
+
+static func _skins_du_jeu(jeux: Array[Dictionary], idx: int) -> PackedStringArray:
+	if jeux.is_empty():
+		return PackedStringArray()
+	var jeu: Dictionary = jeux[clampi(idx, 0, jeux.size() - 1)]
+	return jeu["skins"] as PackedStringArray
 
 # Reporte le recentrage visuel de l'entrée sur toutes ses apparences. Il ne
 # dépend ni du palier ni du costume : c'est la POSE qui penche, et elle est la

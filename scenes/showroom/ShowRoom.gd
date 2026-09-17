@@ -12,7 +12,9 @@
 #
 # Reste propre à la vitrine (dev UNIQUEMENT, jamais dans le vrai combat) :
 #   • ←/→ / ↑/↓  — créature / palier de la créature previsualisée ;
-#   • H / V       — niveau d'équipement / accessoire de visage du héros ;
+#   • H / V / C   — niveau d'équipement / accessoire de visage / coiffure du
+#                   héros (C ajouté 17/09/2026, même mécanique que V — axe
+#                   INDÉPENDANT, voir SpinePersonnagesData.coiffures) ;
 #   • B           — éclairage du décor (ne module JAMAIS les personnages) ;
 #   • Tab         — bascule duel ⇄ décor de l'Usine seul (diagnostic) ;
 #   • F1          — affiche/masque ce mémo (masqué par défaut : la vitrine ne
@@ -67,6 +69,7 @@ var _idx_monstre := 0
 var _idx_palier := 0            # palier PRÉVISUALISÉ de la créature (previsu_palier_ennemi)
 var _idx_niveau_heros := 0      # 0-based ; niveau réel = +1 (previsu_niveau_heros)
 var _idx_cosmetique := 0
+var _idx_coiffure := 0
 var _idx_lumiere := LUMIERE_DEFAUT
 var _aide_visible := false
 
@@ -144,6 +147,7 @@ func _construire_aide(parent: CanvasLayer) -> void:
 		"↑ / ↓   palier de la créature",
 		"H       niveau d'équipement du héros",
 		"V       accessoire de visage du héros",
+		"C       coiffure du héros",
 		"B       éclairage du décor",
 		"Tab     décor Usine seul ⇄ duel",
 	]:
@@ -177,6 +181,7 @@ func _lancer_duel() -> void:
 	_combat_ui = CombatCtbUi.new(m, false)
 	_combat_ui.previsu_niveau_heros = _idx_niveau_heros + 1
 	_combat_ui.previsu_cosmetique_heros = _idx_cosmetique
+	_combat_ui.previsu_coiffure_heros = _idx_coiffure
 	_combat_ui.previsu_palier_ennemi = _idx_palier
 	# Rejouer un duel frais après victoire/défaite/clic de sortie : la
 	# vitrine reste sur la MÊME créature/le même palier, prête à rejouer —
@@ -270,7 +275,7 @@ func _touche(code: int) -> void:
 		KEY_F1:
 			_aide_visible = not _aide_visible
 			_aide.visible = _aide_visible
-		KEY_TAB, KEY_C:
+		KEY_TAB:
 			_mode = Mode.USINE if _mode == Mode.DUEL else Mode.DUEL
 			_appliquer_mode()
 		KEY_LEFT, KEY_RIGHT:
@@ -300,6 +305,14 @@ func _touche(code: int) -> void:
 				if jeux.size() > 1:
 					_idx_cosmetique = wrapi(_idx_cosmetique + 1, 0, jeux.size())
 					_combat_ui.previsu_cosmetique_heros = _idx_cosmetique
+					_combat_ui.previsu_rafraichir_visuel(false)
+					_rafraichir_hud()
+		KEY_C:
+			if _mode == Mode.DUEL and _combat_ui != null:
+				var jeux := SpinePersonnagesData.coiffures(_heros)
+				if jeux.size() > 1:
+					_idx_coiffure = wrapi(_idx_coiffure + 1, 0, jeux.size())
+					_combat_ui.previsu_coiffure_heros = _idx_coiffure
 					_combat_ui.previsu_rafraichir_visuel(false)
 					_rafraichir_hud()
 		KEY_B:

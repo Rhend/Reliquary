@@ -57,13 +57,23 @@ const MASK_SHADER := "res://scenes/combat_ctb/raster_split_mask_additif.gdshader
 # spatiales remontent donc franchement (×3 environ par rapport au réglage
 # précédent) — vitesse et gravité ENSEMBLE pour garder la même forme de
 # gerbe, juste beaucoup plus grande.
+#
+# ⚠ RE-CALIBRÉ le 17/09/2026 (retour Rhend : « le VFX d'étincelle est trop
+# gros, réduit-le de moitié, j'aimerais plutôt qu'elles soient fines et
+# giclent en l'air comme un feu d'artifice ») — SUPERSÈDE le ×3 du 30/08/2026
+# ci-dessus, dans l'autre sens cette fois. Portée (vitesse/gravité/longueur/
+# flash) divisée par 2 ENSEMBLE, comme toujours dans ce fichier, pour garder
+# la même forme de gerbe à demi-échelle. L'ÉPAISSEUR, elle, est réduite bien
+# plus qu'de moitié (60 → 14) : un trait FIN est la demande explicite, pas
+# juste un trait deux fois plus petit — c'est ce qui fait lire des étincelles
+# qui giclent plutôt que des blobs de soudure.
 const N_ETINCELLES := 46
-const VITESSE_MIN := 900.0
-const VITESSE_MAX := 2000.0
-const GRAVITE := 3100.0
-const EPAISSEUR := 60.0
-const LONGUEUR_TRAIT := 150.0
-const FLASH_RAYON := 260.0
+const VITESSE_MIN := 450.0
+const VITESSE_MAX := 1000.0
+const GRAVITE := 1550.0
+const EPAISSEUR := 14.0
+const LONGUEUR_TRAIT := 75.0
+const FLASH_RAYON := 130.0
 const FLASH_DUREE := 0.22
 const VIE_ETINCELLE_MIN := 0.32
 const VIE_ETINCELLE_MAX := 0.55

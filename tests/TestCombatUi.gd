@@ -2,8 +2,9 @@ extends Node
 # Tests de l'ÉCRAN DE COMBAT CTB jouable (Rework Combat — chantier 5).
 # Headless : facteur_delais = 0 (aucune pause, fermeture sans clic), boutons
 # pressés par signal (pas de picking souris). Vérifie :
-#   • boutons Attaquer / Défendre présents — AUCUN bouton Objet ni Compétence
-#     (contenu absent, pas grisé) ;
+#   • bouton Attaquer présent ; Défendre et Compétence MASQUÉS tant que
+#     CombatCtbUi.ACTIONS_LIMITEES_AUX_OS tient (pas d'os d'ancrage pour eux) ;
+#     Objet TOUJOURS présent, grisé si l'inventaire de run est vide/absent ;
 #   • file d'initiative affichée : N_FILE puces, ordre = moteur.prevoir_ordre ;
 #   • annonce d'embuscade à l'ouverture ;
 #   • combat complet joué via l'UI (Défendre puis Attaquer + choix de cible),
@@ -91,8 +92,12 @@ func _test_ecran_complet() -> void:
 
 	# Laisser l'intro passer et la boucle atteindre l'attente d'input joueur.
 	await _attendre_tour_joueur(ui)
-	_assert(ui._btn_attaquer.visible and ui._btn_defendre.visible,
-			"activation joueur : boutons Attaquer et Défendre visibles (moteur en attente)")
+	# Défendre reste MASQUÉ tant que CombatCtbUi.ACTIONS_LIMITEES_AUX_OS tient
+	# (retour Rhend 17/09/2026 : seuls Attaquer/épée et Objet/ceinture ont un
+	# os d'ancrage réel pour l'instant) — l'action reste jouable par ailleurs,
+	# voir le test plus bas qui l'actionne directement sur le bouton caché.
+	_assert(ui._btn_attaquer.visible and not ui._btn_defendre.visible,
+			"activation joueur : bouton Attaquer visible, Défendre masqué (pas d'os d'ancrage)")
 
 	# Le héros doit être VISIBLE. Depuis la livraison « costumes », l'export de
 	# Relic n'a plus de skin « default » : un sprite construit sans apparence
@@ -105,14 +110,18 @@ func _test_ecran_complet() -> void:
 		_assert(sprite_heros.a_animation(SpriteSpinePersonnage.ANIM_ATTACK_SHOOT),
 				"le héros de combat porte le geste à distance (Attack_Shoot)")
 
-	# AUCUN bouton Objet / Compétence : contenu absent, pas grisé.
+	# Objet TOUJOURS présent (retour Rhend 17/09/2026) mais GRISÉ ici (aucun
+	# inventaire_fournisseur câblé sur ce ui, traité comme vide) ; Compétence
+	# reste absent (cet avatar factice n'en porte aucune — sans lien avec
+	# ACTIONS_LIMITEES_AUX_OS, qui masquerait de toute façon les siennes).
 	var tous: Array = []
 	_boutons(ui, tous)
-	var interdits: Array = tous.filter(func(b: Button) -> bool:
-		var t := b.text.to_lower()
-		return t.contains("objet") or t.contains("item") or t.contains("compétence"))
-	_assert(interdits.is_empty(), "aucun bouton Objet (ni Compétence) dans l'écran",
-			str(interdits.map(func(b: Button) -> String: return b.text)))
+	_assert(ui._btn_objet != null and ui._btn_objet.disabled,
+			"bouton Objet présent mais grisé (aucun inventaire câblé)")
+	var competences: Array = tous.filter(func(b: Button) -> bool:
+		return b.text.to_lower().contains("compétence"))
+	_assert(competences.is_empty(), "aucun bouton Compétence dans l'écran",
+			str(competences.map(func(b: Button) -> String: return b.text)))
 
 	# File d'initiative compacte : N_FILE puces, ordre = prevoir_ordre. Les
 	# combattants factices d'ici ("gob_1"…) n'ont pas d'entrée au registre
@@ -239,10 +248,12 @@ func _textes_labels(n: Node) -> Array:
 		out.append_array(_textes_labels(enfant))
 	return out
 
-# ─── Bouton Objet (chantier 7) : n'existe que si inventaire non vide ──
+# ─── Bouton Objet (chantier 7 ; retour Rhend 17/09/2026 : TOUJOURS présent,
+# grisé si l'inventaire est vide — supersède l'ancienne règle « absent si
+# vide », l'action a désormais un os d'ancrage réel à viser (la ceinture)) ──
 
 func _test_bouton_objet() -> void:
-	print("\n[TEST] Bouton Objet — présent si inventaire, disparaît quand il se vide")
+	print("\n[TEST] Bouton Objet — présent au tour du joueur, grisé si l'inventaire se vide")
 	var m := CtbMoteur.new()
 	m.rng.seed = 42
 	m.ajouter(_data("avatar", {"vit": 40.0, "atk": 5.0, "pv_max": 10000.0}),
@@ -262,8 +273,9 @@ func _test_bouton_objet() -> void:
 	ui.sur_objet_utilise = func(o: ConsommableData) -> void: inv.erase(o)
 	add_child(ui)
 	await _attendre_tour_joueur(ui)
-	_assert(ui._btn_objet != null and ui._btn_objet.text == Translations.T("ctb.objet"),
-			"inventaire non vide : le bouton Objet EXISTE au tour du joueur")
+	_assert(ui._btn_objet != null and ui._btn_objet.text == Translations.T("ctb.objet")
+			and not ui._btn_objet.disabled,
+			"inventaire non vide : le bouton Objet EXISTE et n'est pas grisé")
 	# Utiliser la bombe : bouton Objet → bouton de l'objet (1 ennemi → direct).
 	var pv_avant := gob.pv
 	ui._btn_objet.pressed.emit()
@@ -280,14 +292,15 @@ func _test_bouton_objet() -> void:
 			"Bombe jouée via l'UI : 50 dégâts (DEF 40 ignorée)",
 			"delta=%.1f" % (pv_avant - gob.pv))
 	_assert(inv.is_empty(), "sur_objet_utilise appelé : inventaire décrémenté")
-	# Au tour suivant, l'inventaire est vide → le bouton n'existe plus.
+	# Au tour suivant, l'inventaire est vide → le bouton RESTE, mais grisé.
 	await _attendre_tour_joueur(ui)
-	_assert(ui._btn_objet == null, "inventaire vide : le bouton Objet a DISPARU")
+	_assert(ui._btn_objet != null and ui._btn_objet.disabled,
+			"inventaire vide : le bouton Objet reste affiché, GRISÉ")
 	var tous: Array = []
 	_boutons(ui, tous)
-	_assert(tous.all(func(b: Button) -> bool:
-			return b.text != Translations.T("ctb.objet")),
-			"aucun nœud bouton Objet résiduel dans l'arbre")
+	_assert(tous.filter(func(b: Button) -> bool:
+			return b.text == Translations.T("ctb.objet")).size() == 1,
+			"un seul nœud bouton Objet dans l'arbre (pas de doublon résiduel)")
 	# Terminer le combat proprement (pas de boucle UI abandonnée en attente).
 	gob.pv = 1.0
 	ui._btn_attaquer.pressed.emit()

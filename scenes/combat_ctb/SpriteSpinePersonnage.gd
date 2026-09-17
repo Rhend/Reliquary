@@ -72,6 +72,16 @@ const HAUTEUR_ETALON_PX := 220.0
 # hauteur cible désormais. Voir son usage plus bas.
 const HAUTEUR_CALIBRAGE_DECALAGE_PX := 276.0
 const HAUTEUR_SOURCE_DEFAUT := 2770.0   # dernier recours : ni mesure ni taille déclarée
+# Os d'ancrage UI (livraison « Bone UI », Christophe, 17/09/2026) : deux os
+# dédiés sur le squelette de Relic, sans attachement ni influence sur le
+# rendu — posés pour que le trait bouton → personnage (CombatCtbUi, chantier
+# UI_Concept2) vise un point RÉEL du corps au lieu d'une fraction de largeur
+# devinée à la même hauteur que le bouton (l'ancien souci de « point B » non
+# détectable). Jnt_UI_Combat_Attack = sur l'épée (Attaquer/Défendre/
+# Compétences, tout ce qui relève du combat) ; Jnt_UI_Combat_Object = sur la
+# ceinture (action Objet). Voir `position_os`.
+const OS_ANCRE_ATTAQUE := "Jnt_UI_Combat_Attack"
+const OS_ANCRE_OBJET := "Jnt_UI_Combat_Object"
 # Fondu par défaut entre deux animations Spine consécutives (26/08/2026) :
 # sans lui, l'extension enchaîne Idle→Attaque→Idle (et →Hit, →Mort) en cut
 # sec (mix par défaut = 0). Une valeur courte adoucit l'ENTRÉE dans chaque
@@ -120,16 +130,17 @@ static func creer(chemin_skel: String = CHEMIN_SKEL,
 # La hauteur cible n'est PLUS un paramètre : elle se résout depuis l'entrée du
 # registre (`SpinePersonnagesData.hauteur_cible_px`), donc du gabarit propre
 # de Relic (chara design), jamais celui d'un autre personnage.
-# `cosmetique` = jeu d'accessoires « Random » (défaut 0, le seul posé par le
-# jeu réel — voir SpinePersonnagesData.cosmetiques). Second paramètre ajouté
-# pour la ShowRoom (fusionnée dans CombatCtbUi, 09/2026), qui doit pouvoir
-# prévisualiser les jeux alternatifs sans dupliquer cette fabrique.
-static func creer_heros(niveau: int = 1, cosmetique: int = 0) -> SpriteSpinePersonnage:
+# `cosmetique`/`coiffure` = jeux « Random » de visage / de coiffure (défaut 0
+# chacun, le seul posé par le jeu réel — voir SpinePersonnagesData.
+# cosmetiques/coiffures). Paramètres ajoutés pour la ShowRoom (fusionnée dans
+# CombatCtbUi, 09/2026), qui doit pouvoir prévisualiser les jeux alternatifs
+# sans dupliquer cette fabrique.
+static func creer_heros(niveau: int = 1, cosmetique: int = 0, coiffure: int = 0) -> SpriteSpinePersonnage:
 	var registre := SpinePersonnagesData.charger()
 	var entree: Dictionary = registre.heros() if registre != null else {}
 	var apparences: Array[Dictionary] = []
 	if not entree.is_empty():
-		apparences = SpinePersonnagesData.apparences(entree, cosmetique)
+		apparences = SpinePersonnagesData.apparences(entree, cosmetique, coiffure)
 	var hauteur := SpinePersonnagesData.hauteur_cible_px(entree) if not entree.is_empty() \
 			else HAUTEUR_ETALON_PX
 	if apparences.is_empty():
@@ -377,6 +388,33 @@ func porte_attachement(nom_slot: String, nom_attachement: String) -> bool:
 	if squelette == null:
 		return false
 	return squelette.call("get_attachment_by_slot_name", nom_slot, nom_attachement) != null
+
+# Position d'un os nommé (voir OS_ANCRE_* ci-dessus), dans le repère du
+# PARENT de ce nœud — celui de `_pieds`/`_sol` côté CombatCtbUi, puisque ce
+# nœud y est posé pieds au sol par `position = pied` (CombatCtbUi._pos_
+# depuis_pied). `Bone.local_to_world` rend la position dans l'espace RACINE
+# du squelette (unités Spine natives, non mises à l'échelle) — la même
+# référence que `get_bounds()` (voir _mesurer_corps) : on lui fait donc
+# traverser la MÊME chaîne de transforms Godot que le rendu (l'échelle
+# interne du SpineSprite posée au chargement, PUIS l'échelle/orientation de
+# ce nœud lui-même) pour tomber juste, costume/palier/orientation confondus,
+# sans recalcul séparé côté appelant.
+# Vector2.ZERO si l'os n'existe pas (export sans la livraison « Bone UI »,
+# runtime spine-godot absent) : comme les autres mesures de ce script, ZERO
+# n'est jamais une position légitime d'un os posé sur le corps (l'origine du
+# squelette, aux pieds, n'a pas vocation à porter un os d'ancrage UI) — c'est
+# le signal de repli pour l'appelant.
+func position_os(nom_os: String) -> Vector2:
+	if _spine == null:
+		return Vector2.ZERO
+	var squelette: Object = _spine.call("get_skeleton")
+	if squelette == null:
+		return Vector2.ZERO
+	var os: Object = squelette.call("find_bone", nom_os)
+	if os == null:
+		return Vector2.ZERO
+	var monde: Vector2 = os.call("local_to_world", Vector2.ZERO)
+	return transform * ((_spine as Node2D).transform * monde)
 
 # Hauteur du CORPS RÉELLEMENT rendue à l'écran (px) : la pose courante mesurée,
 # puis l'échelle posée au chargement. C'est le seul contrôle qui attrape un
