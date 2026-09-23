@@ -366,12 +366,21 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 		var idx_min := 0
 		var idx_max := 0
 		if vitesse != 0.0 and cadre.size.x > 0.0:
-			# Copie(s) vers la droite pour couvrir l'écran + 1 copie vers la
-			# GAUCHE en réserve : le défilement peut faire croître OU décroître
-			# `origine.x` selon `sens`, donc les deux bords doivent avoir une
-			# marge, pas seulement celui que suit le défilement par défaut.
-			idx_min = -1
-			idx_max = maxi(int(ceil((larg - cadre.position.x) / cadre.size.x)), 1)
+			# Une SEULE réserve, du côté que ce calque révèle réellement :
+			# `sens` est une CONSTANTE de PLANS (jamais inversée en cours de
+			# partie), donc `origine.x` ne dérive JAMAIS que dans un seul sens
+			# pour un calque donné — `sens >= 0` la fait DÉCROÎTRE (dérive vers
+			# la gauche, le bord DROIT se découvre), `sens < 0` l'inverse. Poser
+			# les DEUX réserves inconditionnellement (avant ce correctif)
+			# doublait le nombre de copies plein écran de CHAQUE calque
+			# défilant — donc les sprites, les draw calls et les pixels passés
+			# au masque — pour un côté qui ne sert jamais tant que `sens` ne
+			# change pas, ce qu'il ne fait pas (mesuré : ce décor à lui seul
+			# faisait chuter le combat à ~15 FPS).
+			if sens >= 0.0:
+				idx_max = maxi(int(ceil((larg - cadre.position.x) / cadre.size.x)), 1)
+			else:
+				idx_min = -1
 		var noeud := Node2D.new()
 		noeud.modulate = _teinte_profondeur(float(plan["profondeur"]))
 		var est_bras := bool(plan["bras"])

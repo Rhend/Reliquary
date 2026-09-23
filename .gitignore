@@ -7,6 +7,19 @@
 /build/
 *.import
 
+# EXCEPTION (23/09/2026, perf combat) : décors de fond Ville/Usine VERSIONNÉS
+# malgré la règle ci-dessus — c'est le SEUL moyen de faire voyager avec le
+# dépôt le réglage `mipmaps/generate=true` qui a rendu le combat fluide (les
+# canevas 4770×2655 sont affichés à ~30 % de leur taille source ; sans
+# mipmaps, la minification à cette échelle coûtait ~25 % du temps de frame,
+# mesuré). Un `--import` frais régénérerait sinon ces .import avec les
+# réglages PAR DÉFAUT de Godot (mipmaps désactivés), et le gain disparaîtrait
+# à l'insu de tout le monde. Scoped à ces deux dossiers UNIQUEMENT : pas de
+# mipmaps sur les atlas Spine/UI packés (assets/personnages/, assets/ui/),
+# où le mipmapping peut faire baver les sprites voisins d'une même page.
+!assets/background/city/*.import
+!assets/background/Factory/*.import
+
 # Captures de l'outil dev ScreenshotTool
 tests/_shot_*.png
 
