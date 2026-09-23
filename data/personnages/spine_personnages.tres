@@ -10,11 +10,14 @@ script = ExtResource("1")
 ; se CUMULENT (skins_base + un jeu de `cosmetiques`), et les 6 paliers
 ; d'équipement sont portés par des SLOTS suffixés « _Nv1 » … « _Nv6 » — d'où
 ; `niveaux: 6` (voir SpriteSpinePersonnage pour la purge de skin).
-; Les versions masculine / féminine ne sont pas livrées : `variantes` reste
-; vide. Le jour où Christophe les nomme, il suffit de les ajouter ici —
-; la ShowRoom les montrera sans modification de code :
-;   "variantes": [{"skin": "Relic_M", "nom": "Masculin"},
-;                 {"skin": "Relic_F", "nom": "Féminin"}]
+; GENRE — livraison « Relic Femme » du 23/09/2026 : Christophe a ajouté un
+; second jeu de skins SYMÉTRIQUE, préfixé « Woman_ » au lieu de « Men_ »
+; (mêmes familles : Global/Level/Level_Hit/Clothing_1, Face_Accessory 1-3,
+; Hair 1-2 — vérifié via tools/inspect_spine_ennemis.gd). Les 6 niveaux
+; d'équipement (slots « _Nv<n> ») sont PARTAGÉS par les deux genres, donc
+; `genres` ne porte QUE le socle skins_base/cosmetiques/coiffures alternatif
+; (voir SpinePersonnagesData.avec_genre) — pas un `variantes`, qui aurait
+; remplacé les 6 niveaux au lieu de les cumuler avec le genre.
 ;
 ; CHEVEUX (livraison du 25/08/2026 ; axe `coiffures` séparé depuis le
 ; 17/09/2026, retour Rhend : un raccourci pour changer de coupe comme pour le
@@ -60,6 +63,7 @@ personnages = [{
 "atlas": "res://assets/personnages/relic/Relic.atlas",
 "prefixe_skin": "",
 "variantes": [],
+"nom_genre_defaut": "Masculin",
 "skins_base": ["Men_Global", "Men_Level", "Men_Level_Hit", "Men_Random_Level_Clothing_1"],
 "cosmetiques": [{
 "nom": "Visage 1",
@@ -77,6 +81,27 @@ personnages = [{
 }, {
 "nom": "Coiffure 2",
 "skins": ["Men_Random_Level_Hair_2"]
+}],
+"genres": [{
+"nom": "Féminin",
+"skins_base": ["Woman_Global", "Woman_Level", "Woman_Level_Hit", "Woman_Random_Level_Clothing_1"],
+"cosmetiques": [{
+"nom": "Visage 1",
+"skins": ["Woman_Random_Face_Accessory_1"]
+}, {
+"nom": "Visage 2",
+"skins": ["Woman_Random_Face_Accessory_2"]
+}, {
+"nom": "Visage 3",
+"skins": ["Woman_Random_Level_Face_Accessory_3"]
+}],
+"coiffures": [{
+"nom": "Coiffure 1",
+"skins": ["Woman_Random_Level_Hair_1"]
+}, {
+"nom": "Coiffure 2",
+"skins": ["Woman_Random_Level_Hair_2"]
+}]
 }],
 "decalage_x_px": 17.0,
 "niveaux": 6,

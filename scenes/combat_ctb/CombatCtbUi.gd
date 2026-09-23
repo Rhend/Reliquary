@@ -131,12 +131,15 @@ var sur_objet_utilise := Callable()
 # vitrine est désormais CET écran, pas une copie, voir CLAUDE.md « la
 # ShowRoom est un banc d'essai ») : posées par l'appelant avant `add_child`,
 # comme `embuscade`/`facteur_delais` ci-dessus. -1 (ou 0 pour le cosmétique/
-# la coiffure) = comportement du jeu réel — niveau d'équipement/Maîtrise
-# RÉELS. N'affectent QUE le sprite choisi à la construction, jamais les
-# stats ni le déroulé.
+# la coiffure/le genre) = comportement du jeu réel — niveau d'équipement/
+# Maîtrise RÉELS. N'affectent QUE le sprite choisi à la construction, jamais
+# les stats ni le déroulé.
 var previsu_niveau_heros := -1
 var previsu_cosmetique_heros := 0
 var previsu_coiffure_heros := 0
+# Genre du héros (0 = celui par défaut du registre — voir SpinePersonnagesData.
+# avec_genre ; « Relic Femme » livrée le 23/09/2026 en genre 1).
+var previsu_genre_heros := 0
 var previsu_palier_ennemi := -1
 
 const SOL_Y_FRAC := 0.806          # ligne des pieds : MILIEU de la bande de sol du décor
@@ -307,14 +310,15 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 		# dotation de départ).
 		var niveau_heros := previsu_niveau_heros if previsu_niveau_heros > 0 else 1
 		sprite = SpriteSpinePersonnage.creer_heros(
-				niveau_heros, previsu_cosmetique_heros, previsu_coiffure_heros)
+				niveau_heros, previsu_cosmetique_heros, previsu_coiffure_heros,
+				previsu_genre_heros)
 		# Vignette de file d'initiative GÉNÉRÉE à la volée (retour Rhend
 		# 17/09/2026) : portrait_heros() n'a aucun fichier livré pour le héros
 		# à ce jour (contrairement aux ennemis) — tant que ça reste vrai,
 		# `_portrait_pour` retombe sur l'initiale. Fire-and-forget, EXACTEMENT
 		# la même apparence que le sprite ci-dessus.
 		_demarrer_generation_portrait_heros(niveau_heros, previsu_cosmetique_heros,
-				previsu_coiffure_heros)
+				previsu_coiffure_heros, previsu_genre_heros)
 	else:
 		# Ennemi : même registre / même apparence que la ShowRoom, qui EST
 		# cet écran depuis 09/2026 (voir CLAUDE.md « la ShowRoom est un
@@ -609,8 +613,9 @@ func _portrait_pour(cb: CtbCombattant) -> Texture2D:
 # la faire apparaître, sans reconstruire l'écran. Mise en cache côté
 # CombatUiSkin (niveau/cosmétique/coiffure) : gratuit dès la 2e fois pour la
 # même apparence, y compris d'un combat à l'autre.
-func _demarrer_generation_portrait_heros(niveau: int, cosmetique: int, coiffure: int) -> void:
-	var tex := await CombatUiSkin.generer_portrait_heros(niveau, cosmetique, coiffure, self)
+func _demarrer_generation_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
+		genre: int = 0) -> void:
+	var tex := await CombatUiSkin.generer_portrait_heros(niveau, cosmetique, coiffure, self, genre)
 	if tex == null or not is_inside_tree():
 		return
 	_portrait_heros_genere = tex

@@ -15,6 +15,9 @@
 #   • H / V / C   — niveau d'équipement / accessoire de visage / coiffure du
 #                   héros (C ajouté 17/09/2026, même mécanique que V — axe
 #                   INDÉPENDANT, voir SpinePersonnagesData.coiffures) ;
+#   • G           — genre du héros (Masculin ⇄ Féminin, « Relic Femme »
+#                   livrée le 23/09/2026 — SpinePersonnagesData.avec_genre,
+#                   même mécanique de hot-reload que H/V/C) ;
 #   • B           — éclairage du décor (ne module JAMAIS les personnages) ;
 #   • Tab         — bascule duel ⇄ décor de l'Usine seul (diagnostic) ;
 #   • F1          — affiche/masque ce mémo (masqué par défaut : la vitrine ne
@@ -75,6 +78,7 @@ var _idx_palier := 0            # palier PRÉVISUALISÉ de la créature (previsu
 var _idx_niveau_heros := 0      # 0-based ; niveau réel = +1 (previsu_niveau_heros)
 var _idx_cosmetique := 0
 var _idx_coiffure := 0
+var _idx_genre := 0             # 0 = genre par défaut du registre (previsu_genre_heros)
 var _idx_lumiere := LUMIERE_DEFAUT
 var _aide_visible := false
 
@@ -153,6 +157,7 @@ func _construire_aide(parent: CanvasLayer) -> void:
 		"H       niveau d'équipement du héros",
 		"V       accessoire de visage du héros",
 		"C       coiffure du héros",
+		"G       genre du héros (Masculin ⇄ Féminin)",
 		"B       éclairage du décor",
 		"Tab     décor Usine seul ⇄ duel",
 	]:
@@ -187,6 +192,7 @@ func _lancer_duel() -> void:
 	_combat_ui.previsu_niveau_heros = _idx_niveau_heros + 1
 	_combat_ui.previsu_cosmetique_heros = _idx_cosmetique
 	_combat_ui.previsu_coiffure_heros = _idx_coiffure
+	_combat_ui.previsu_genre_heros = _idx_genre
 	_combat_ui.previsu_palier_ennemi = _idx_palier
 	# Rejouer un duel frais après victoire/défaite/clic de sortie : la
 	# vitrine reste sur la MÊME créature/le même palier, prête à rejouer —
@@ -219,6 +225,13 @@ func _ennemi_choisi() -> CombattantCtbData:
 # Spine (id COURT, ex. "flamebot") — sens INVERSE de `SpinePersonnagesData.
 # par_id`, qui va du bestiaire vers le registre. "" si la créature visuelle
 # n'a pas (encore) de fiche de stats — la vitrine retombe sur ENNEMI_FACTICE.
+# Entrée héros résolue au genre PRÉVISUALISÉ courant — c'est ELLE qu'il faut
+# interroger pour la taille des axes cosmétique/coiffure (potentiellement
+# différente d'un genre à l'autre), jamais `_heros` brut (son genre 0 par
+# défaut) une fois qu'un second genre est sélectionné.
+func _heros_effectif() -> Dictionary:
+	return SpinePersonnagesData.avec_genre(_heros, _idx_genre)
+
 func _entity_id_pour(entree: Dictionary) -> String:
 	var court := str(entree.get("id", ""))
 	for id in GameData.entities.keys():
@@ -253,8 +266,9 @@ func _rafraichir_hud() -> void:
 		_hud.text = "USINE SEULE — décor sans masque ni ville (diagnostic)    [Tab] duel    [F1] aide"
 		return
 	var nom_m := str(_ennemis[_idx_monstre].get("nom", "?"))
-	_hud.text = "%s · %s   vs   héros Nv%d    [F1] aide" % [
-			nom_m, GameData.get_tier_name(_idx_palier), _idx_niveau_heros + 1]
+	_hud.text = "%s · %s   vs   héros %s Nv%d    [F1] aide" % [
+			nom_m, GameData.get_tier_name(_idx_palier),
+			SpinePersonnagesData.nom_genre(_heros, _idx_genre), _idx_niveau_heros + 1]
 
 # Retour à la scène d'origine si la vitrine a été ouverte depuis le jeu,
 # sinon fermeture (elle est alors la scène racine).
@@ -306,7 +320,7 @@ func _touche(code: int) -> void:
 				_rafraichir_hud()
 		KEY_V:
 			if _mode == Mode.DUEL and _combat_ui != null:
-				var jeux := SpinePersonnagesData.cosmetiques(_heros)
+				var jeux := SpinePersonnagesData.cosmetiques(_heros_effectif())
 				if jeux.size() > 1:
 					_idx_cosmetique = wrapi(_idx_cosmetique + 1, 0, jeux.size())
 					_combat_ui.previsu_cosmetique_heros = _idx_cosmetique
@@ -314,10 +328,18 @@ func _touche(code: int) -> void:
 					_rafraichir_hud()
 		KEY_C:
 			if _mode == Mode.DUEL and _combat_ui != null:
-				var jeux := SpinePersonnagesData.coiffures(_heros)
+				var jeux := SpinePersonnagesData.coiffures(_heros_effectif())
 				if jeux.size() > 1:
 					_idx_coiffure = wrapi(_idx_coiffure + 1, 0, jeux.size())
 					_combat_ui.previsu_coiffure_heros = _idx_coiffure
+					_combat_ui.previsu_rafraichir_visuel(false)
+					_rafraichir_hud()
+		KEY_G:
+			if _mode == Mode.DUEL and _combat_ui != null:
+				var n := SpinePersonnagesData.nb_genres(_heros)
+				if n > 1:
+					_idx_genre = wrapi(_idx_genre + 1, 0, n)
+					_combat_ui.previsu_genre_heros = _idx_genre
 					_combat_ui.previsu_rafraichir_visuel(false)
 					_rafraichir_hud()
 		KEY_B:

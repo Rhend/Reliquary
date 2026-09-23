@@ -320,7 +320,7 @@ static func portrait_heros(niveau: int) -> Texture2D:
 # _demarrer_generation_portrait_heros). `hote` = un nœud DÉJÀ dans l'arbre,
 # utilisé UNIQUEMENT comme point d'attache temporaire du SubViewport (`hote.
 # add_child`) — retiré et libéré (`queue_free`) dès la capture faite, rien ne
-# persiste que la texture mise en CACHE (par niveau/cosmétique/coiffure :
+# persiste que la texture mise en CACHE (par niveau/cosmétique/coiffure/genre :
 # gratuit dès la 2e fois pour la même apparence, y compris d'un combat à
 # l'autre). `null` en tête headless (aucun contexte de rendu réel à capturer,
 # même garde que `installer_curseur`) ou si le runtime spine-godot/le
@@ -329,13 +329,13 @@ static func portrait_heros(niveau: int) -> Texture2D:
 const TAILLE_PORTRAIT_GENERE_PX := 96
 const MARGE_PORTRAIT_FRAC := 0.12   # marge de chaque côté du cadrage mesuré
 
-static var _cache_portraits_heros: Dictionary = {}   # "niv_cos_coif" → Texture2D
+static var _cache_portraits_heros: Dictionary = {}   # "niv_cos_coif_genre" → Texture2D
 
 static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
-		hote: Node) -> Texture2D:
+		hote: Node, genre: int = 0) -> Texture2D:
 	if DisplayServer.get_name() == "headless":
 		return null
-	var cle := "%d_%d_%d" % [niveau, cosmetique, coiffure]
+	var cle := "%d_%d_%d_%d" % [niveau, cosmetique, coiffure, genre]
 	if _cache_portraits_heros.has(cle):
 		# Un retour synchrone ici casserait le contrat "toujours différé d'au
 		# moins une frame" (voir doc au-dessus) : l'appelant fire-and-forget
@@ -353,6 +353,7 @@ static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
 	var entree: Dictionary = registre.heros() if registre != null else {}
 	if entree.is_empty():
 		return null
+	entree = SpinePersonnagesData.avec_genre(entree, genre)
 	var apparences := SpinePersonnagesData.apparences(entree, cosmetique, coiffure)
 	if apparences.is_empty():
 		return null

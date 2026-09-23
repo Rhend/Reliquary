@@ -141,9 +141,13 @@ static func creer(chemin_skel: String = CHEMIN_SKEL,
 # cosmetiques/coiffures). Paramètres ajoutés pour la ShowRoom (fusionnée dans
 # CombatCtbUi, 09/2026), qui doit pouvoir prévisualiser les jeux alternatifs
 # sans dupliquer cette fabrique.
-static func creer_heros(niveau: int = 1, cosmetique: int = 0, coiffure: int = 0) -> SpriteSpinePersonnage:
+# `genre` = version du héros (0 = celle du jeu réel, « Relic Femme »
+# livrée le 23/09/2026 en genre 1 — voir SpinePersonnagesData.avec_genre).
+static func creer_heros(niveau: int = 1, cosmetique: int = 0, coiffure: int = 0,
+		genre: int = 0) -> SpriteSpinePersonnage:
 	var registre := SpinePersonnagesData.charger()
 	var entree: Dictionary = registre.heros() if registre != null else {}
+	entree = SpinePersonnagesData.avec_genre(entree, genre)
 	var apparences: Array[Dictionary] = []
 	if not entree.is_empty():
 		apparences = SpinePersonnagesData.apparences(entree, cosmetique, coiffure)

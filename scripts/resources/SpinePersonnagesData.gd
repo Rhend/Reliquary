@@ -28,13 +28,18 @@
 #
 # TROIS façons pour un personnage de porter plusieurs apparences, de la plus
 # spécifique à la plus générale — l'appelant n'a jamais à savoir laquelle :
-#   • `variantes`   — liste explicite {skin, nom} (forme prévue pour les
-#                     versions masculine / féminine du héros, non livrées) ;
+#   • `variantes`   — liste explicite {skin, nom}, non utilisée à ce jour ;
 #   • `niveaux`     — n paliers d'ÉQUIPEMENT portés par des SLOTS suffixés
 #                     « _Nv<n> » (livraison Relic du 24/08/2026 : 6 niveaux,
 #                     cf. SpriteSpinePersonnage.niveaux_du_slot) ;
 #   • `prefixe_skin`— les 5 paliers de rareté en skins (ennemis) ;
 #   • rien de tout ça → une apparence unique, sans skin à poser.
+# ORTHOGONAL à ces trois formes : `genres`, un jeu ALTERNATIF complet de
+# `skins_base`/`cosmetiques`/`coiffures` (livraison « Relic Femme » du
+# 23/09/2026 — voir `avec_genre` plus bas). `variantes` avait été envisagé
+# pour porter les versions masculine/féminine du héros, mais il REMPLACE
+# entièrement les `niveaux` dans `apparences()` : incompatible avec Relic, qui
+# a besoin des deux axes (genre ET niveau d'équipement) en même temps.
 #
 # COMPOSITION DE SKINS (`skins_base` + `cosmetiques` + `coiffures`) : Relic
 # n'a pas une skin par apparence mais un corps (« Men_Global »), un jeu de
@@ -161,6 +166,64 @@ static func taille_relative_pct(entree: Dictionary) -> float:
 # mise à l'échelle qui consomme cette valeur.
 static func hauteur_cible_px(entree: Dictionary) -> float:
 	return SpriteSpinePersonnage.HAUTEUR_ETALON_PX * (1.0 + taille_relative_pct(entree) / 100.0)
+
+# ─── GENRE (livraison « Relic Femme », 23/09/2026) ────────────
+#
+# Deuxième version complète du héros : Christophe livre un jeu de skins
+# SYMÉTRIQUE au premier, préfixé « Woman_ » au lieu de « Men_ » (mêmes
+# familles : Global, Level, Level_Hit, Random_Level_Clothing_1,
+# Random_(Level_)Face_Accessory_1-3, Random_Level_Hair_1-2 — vérifié via
+# tools/inspect_spine_ennemis.gd). Les 6 niveaux d'équipement restent portés
+# par les MÊMES slots « _Nv<n> » pour les deux genres (aucune donnée
+# dupliquée à ce niveau, cf. SpriteSpinePersonnage.niveaux_du_slot) : seul le
+# socle skins_base/cosmetiques/coiffures change avec le genre.
+#
+# Plutôt qu'un axe `variantes` (qui remplacerait ENTIÈREMENT les 6 niveaux
+# d'équipement dans `apparences()`, incompatible avec le fait que Relic a
+# BESOIN des deux axes en même temps), `genres` porte un jeu ALTERNATIF
+# complet de ces trois champs. `avec_genre` le substitue à l'entrée AVANT
+# tout le reste du pipeline (apparences/cosmetiques/coiffures/skins_composees) :
+# aucun de ces appels n'a besoin de connaître le genre, ils reçoivent déjà une
+# entrée résolue. Genre 0 = comportement PAR DÉFAUT de l'entrée elle-même —
+# un personnage sans second genre n'a donc RIEN à changer.
+static func genres(entree: Dictionary) -> Array[Dictionary]:
+	var sortie: Array[Dictionary] = []
+	for g in entree.get("genres", []):
+		sortie.append(g as Dictionary)
+	return sortie
+
+# Nombre de genres jouables d'une entrée : 1 (son genre par défaut) si elle
+# ne déclare aucune alternative dans `genres`.
+static func nb_genres(entree: Dictionary) -> int:
+	return genres(entree).size() + 1
+
+# Entrée du registre avec le socle skins_base/cosmetiques/coiffures du genre
+# demandé substitué au sien. `genre` 0 = l'entrée telle quelle (rien à
+# résoudre) ; 1, 2… pique dans `genres` (1-based — l'entrée décrit déjà son
+# propre genre 0), clampé sur le dernier genre déclaré. Vide/hors bornes en
+# amont → l'entrée d'origine, comme un personnage sans second genre.
+static func avec_genre(entree: Dictionary, genre: int) -> Dictionary:
+	if genre <= 0:
+		return entree
+	var jeux := genres(entree)
+	if jeux.is_empty():
+		return entree
+	var choisi: Dictionary = jeux[clampi(genre - 1, 0, jeux.size() - 1)]
+	var sortie := entree.duplicate()
+	sortie["skins_base"] = choisi.get("skins_base", [])
+	sortie["cosmetiques"] = choisi.get("cosmetiques", [])
+	sortie["coiffures"] = choisi.get("coiffures", [])
+	return sortie
+
+# Nom d'affichage d'un genre (0 = l'entrée elle-même, via `nom_genre_defaut`
+# — "Masculin" si absent ; 1, 2… via `genres[n-1].nom`).
+static func nom_genre(entree: Dictionary, genre: int) -> String:
+	if genre <= 0:
+		return str(entree.get("nom_genre_defaut", "Masculin"))
+	var jeux := genres(entree)
+	if jeux.is_empty():
+		return str(entree.get("nom_genre_defaut", "Masculin"))
+	return str(jeux[clampi(genre - 1, 0, jeux.size() - 1)].get("nom", "?"))
 
 # Première entrée non ennemie = le héros (Relic) — le vis-à-vis du mode Combat.
 func heros() -> Dictionary:
