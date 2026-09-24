@@ -1201,6 +1201,12 @@ func _duel_interrompre() -> void:
 	_duel_restaurer_ordre()
 	if _couche_scene != null:
 		_couche_scene.scale = Vector2.ONE
+		# Filet de sécurité (24/09/2026) : Tween.kill() n'émet JAMAIS `finished`,
+		# donc le callback de fin de DuelZoomFx.jouer (qui rentre le décor dans
+		# le SubViewport réduit) ne tourne pas si un duel est interrompu en plein
+		# zoom — sans ce rappel ici, le décor resterait bloqué en plein-res
+		# (perte de perf silencieuse, voir CombatFondScinde.entrer_zoom).
+		CombatFondScinde.entrer_zoom(_couche_scene)
 	if not _duel_acteurs.is_empty():
 		_duel_acteurs = []
 		_rafraichir_orbes()   # réapplique le fondu différé d'un vaincu du duel
@@ -1244,12 +1250,17 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
 		_duel_ordre_restaure = [noeud_att, noeud_att.get_index()]
 		_sol.move_child(noeud_att, _sol.get_child_count() - 1)
 	_duel_acteurs = [att, cible]
+	# Décor Ville+Usine en PLEIN-RES le temps du zoom (voir CombatFondScinde,
+	# 24/09/2026) : le SubViewport réduit découpe tout ce qui dépasse le cadre
+	# nominal, or le zoom révèle la marge que les sprites ont pour ça.
+	CombatFondScinde.sortir_zoom(_couche_scene)
 	_duel_tween = DuelZoomFx.jouer(_couche_scene, foyer, noeud_att, pos_att, noeud_cib, pos_cib,
 			crit, converger, facteur_delais, func() -> void:
 				_duel_restaure.clear()
 				_duel_restaurer_ordre()
 				_duel_tween = null
 				_duel_acteurs = []
+				CombatFondScinde.entrer_zoom(_couche_scene)
 				_rafraichir_orbes())   # fondu différé du vaincu, une fois le duel joué
 
 # Replace l'attaquant à son rang d'origine dans `_sol` une fois le duel fini
