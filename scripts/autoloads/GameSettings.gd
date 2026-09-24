@@ -13,7 +13,7 @@ signal language_changed(lang: String)
 # Multiplicateur de durée par step de combat.
 # 1.0 = vitesse normale, 0.5 = x2, 0.25 = x4.
 var combat_speed:   float  = 1.0
-var fullscreen:     bool   = true   # défaut aligné sur window/size/mode=4
+var fullscreen:     bool   = true   # défaut aligné sur window/size/mode=3
 var volume_music:   float  = 1.0   # 0.0–1.0
 var volume_sfx:     float  = 1.0   # 0.0–1.0
 var language:       String = "fr"  # "fr" ou "en"
@@ -61,7 +61,16 @@ func set_language(lang: String) -> void:
 	language_changed.emit(lang)
 
 func _apply_fullscreen() -> void:
-	var mode := DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN \
+	# FULLSCREEN (bordure retirée, résolution native du moniteur INCHANGÉE) et
+	# non EXCLUSIVE_FULLSCREEN (24/09/2026, retour Rhend : « rendu pixelisé »)
+	# — l'exclusif change le MODE VIDÉO réel pour la résolution du projet
+	# (1280×720) et laisse le GPU/moniteur ré-agrandir l'image lui-même, un
+	# scaler matériel bien moins soigné que l'étirement natif de Godot
+	# (window/stretch/mode=canvas_items rend directement à la résolution du
+	# bureau). Avec FULLSCREEN, le signal reste toujours à la résolution
+	# native du moniteur, quelle qu'elle soit — c'est Godot qui agrandit le
+	# canevas 1280×720, pas l'écran.
+	var mode := DisplayServer.WINDOW_MODE_FULLSCREEN \
 			if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 	DisplayServer.window_set_mode(mode)
 

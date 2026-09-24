@@ -10,8 +10,41 @@
 > d'avant le 2026-08-25 sont orphelines — c'était la décision, aucune migration
 > n'a été écrite.
 
-Idle RPG de complétion sous **Godot 4.7** (GL Compatibility), GDScript, 1280×720.
+Idle RPG de complétion sous **Godot 4.7** (renderer **Mobile**, Vulkan —
+anciennement GL Compatibility, voir note ci-dessous), GDScript, 1280×720.
 Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `dev`.
+
+> ⚠ **Renderer passé de GL Compatibility à Mobile (24/09/2026)**, retour Rhend
+> (« rendu pixelisé », crénelage sur les bords des meshes Spine — lame,
+> highlights). Cause réelle CUMULÉE, deux problèmes distincts :
+> 1. `window/size/mode` était en PLEIN ÉCRAN EXCLUSIF (4) — le mode vidéo réel
+>    bascule alors à la résolution du projet (1280×720) et c'est le GPU/moniteur
+>    qui réagrandit lui-même l'image (scaler matériel médiocre), quelle que soit
+>    la résolution native du client. Passé en FULLSCREEN bordure retirée (3,
+>    `GameSettings._apply_fullscreen` utilise `WINDOW_MODE_FULLSCREEN` au lieu de
+>    `WINDOW_MODE_EXCLUSIVE_FULLSCREEN`) : le signal reste à la résolution native
+>    du moniteur, c'est Godot qui agrandit le canevas 1280×720 lui-même
+>    (`window/stretch/mode=canvas_items`, déjà en place).
+> 2. Le crénelage des bords de mesh (Spine : lame, contours) est de l'aliasing
+>    géométrique, pas un problème de résolution — GL Compatibility n'a AUCUNE
+>    solution d'AA en 2D (`2D MSAA is not yet supported for GLES3` ET
+>    `Screen-space AA is only available when using the Forward+ or Mobile
+>    renderer`, les deux confirmés par le moteur lui-même). D'où le changement
+>    de renderer vers **Mobile** (`renderer/rendering_method`), qui débloque
+>    `anti_aliasing/quality/msaa_2d=2` (4×) + `screen_space_aa=1` (FXAA), tous
+>    deux activés. Mobile reste un renderer Vulkan/D3D12/Metal (PAS OpenGL comme
+>    Compatibility) : validé sur la machine de dev (Intel iGPU récent, driver
+>    09/2025) — `Vulkan 1.4.325 - Forward Mobile` s'initialise sans repli, et les
+>    17 shaders custom du projet (holo_*, combat_coupure_holo, raster_split_mask*,
+>    cyber_scanlines, biome_background) compilent sans erreur (`ScreenshotTool`
+>    en modes combat/holo/showroom/adventure/village/neons/flux). ⚠ Risque
+>    RESTANT, pas testable depuis ce poste : une machine au driver Vulkan trop
+>    vieux/absent pourrait ne plus lancer le jeu du tout (c'était précisément ce
+>    que Compatibility évitait) — à surveiller si le jeu tourne un jour sur du
+>    matériel non maîtrisé (salle de classe, jury). Alternative écartée :
+>    supersampling manuel (SubViewport 2×) — restait en Compatibility mais coût
+>    GPU garanti (×4 pixels) sur du matériel modeste, et demandait de réécrire la
+>    gestion des clics/ciblage dans tout le projet (combat, HoloMap, UI).
 
 ## Règles d'or (à respecter dans toute modification)
 
