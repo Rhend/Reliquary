@@ -434,19 +434,29 @@ func _test_silhouettes_bakees() -> void:
 	for p in reg.personnages:
 		var id := str(p.get("id", "?"))
 		var skel := str(p.get("skel", ""))
-		_assert(float((bakees.mesures.get(skel, {}) as Dictionary).get("hauteur", 0.0)) > 0.0,
-				"%s : silhouette bakée présente" % id)
-		var app := SpinePersonnagesData.apparences(p)
-		var sprite := SpriteSpinePersonnage.creer(skel, str(p.get("atlas", "")), app[0])
-		if sprite == null:
-			continue
-		add_child(sprite)
-		await get_tree().process_frame
-		# hauteur() rend 0.0 — et warne — quand les bornes ont bougé depuis le
-		# bake : c'est le signal « asset livré, re-bake oublié ».
-		_assert(bakees.hauteur(skel, sprite.bornes_corps()) > 0.0,
-				"%s : le bake correspond encore au squelette livré" % id)
-		sprite.free()
+		# UN genre = une silhouette possible par squelette (Relic Femme,
+		# 23/09/2026 : même Relic.skel que le Masculin, corps différent) —
+		# chacune a besoin de SA propre mesure bakée, voir SilhouettesData.cle.
+		for genre in range(SpinePersonnagesData.nb_genres(p)):
+			var cle := SilhouettesData.cle(skel, genre)
+			_assert(float((bakees.mesures.get(cle, {}) as Dictionary).get("hauteur", 0.0)) > 0.0,
+					"%s genre %d : silhouette bakée présente" % [id, genre])
+			var resolue := SpinePersonnagesData.avec_genre(p, genre)
+			var app := SpinePersonnagesData.apparences(resolue)
+			# Tag le genre, comme creer_heros() : sinon _hauteur_source lit la
+			# mesure du genre 0 pour comparer un corps d'un autre genre — pas
+			# faux (juste un warning « PÉRIMÉ » parasite), voir mesurer_silhouettes.gd.
+			app[0]["genre"] = genre
+			var sprite := SpriteSpinePersonnage.creer(skel, str(p.get("atlas", "")), app[0])
+			if sprite == null:
+				continue
+			add_child(sprite)
+			await get_tree().process_frame
+			# hauteur() rend 0.0 — et warne — quand les bornes ont bougé depuis le
+			# bake : c'est le signal « asset livré, re-bake oublié ».
+			_assert(bakees.hauteur(skel, sprite.bornes_corps(), genre) > 0.0,
+					"%s genre %d : le bake correspond encore au squelette livré" % [id, genre])
+			sprite.free()
 
 func _test_echelle() -> void:
 	print("\n[TEST 6] Échelle : chaque entité à SON gabarit (WorkBot = étalon)")
@@ -485,6 +495,20 @@ func _test_echelle() -> void:
 		_assert(absf(nv6.hauteur_rendue_px() - cible_heros) <= cible_heros * ECART_ECHELLE_MAX,
 				"le héros Nv6 garde la taille du Nv1")
 		nv6.free()
+	# Un second genre du héros doit rendre à LA MÊME hauteur que le défaut —
+	# pas la taille du corps qui change avec le genre, seulement son costume/
+	# silhouette (régression « Relic Femme plus petite », 24/09/2026 : la
+	# mesure bakée du Masculin était appliquée à tort au corps Féminin).
+	var reg_heros := reg.heros()
+	if SpinePersonnagesData.nb_genres(reg_heros) > 1:
+		var nv1_genre1 := SpriteSpinePersonnage.creer_heros(1, 0, 0, 1)
+		if nv1_genre1 != null:
+			add_child(nv1_genre1)
+			await get_tree().process_frame
+			_assert(absf(nv1_genre1.hauteur_rendue_px() - cible_heros) <= cible_heros * ECART_ECHELLE_MAX,
+					"le héros genre 1 rend à la même hauteur que le genre 0 (%.0f px, cible %.0f)" %
+					[nv1_genre1.hauteur_rendue_px(), cible_heros])
+			nv1_genre1.free()
 	# L'ORDRE voulu par le chara design (ajusté 07/09/2026) : Relic < WorkBot
 	# (étalon) < FlameBot — Relic est passé sous l'étalon, ce n'est plus un
 	# simple ±20 %.

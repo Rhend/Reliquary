@@ -155,8 +155,14 @@ static func creer_heros(niveau: int = 1, cosmetique: int = 0, coiffure: int = 0,
 			else HAUTEUR_ETALON_PX
 	if apparences.is_empty():
 		return creer(CHEMIN_SKEL, CHEMIN_ATLAS, {}, hauteur)
+	# `genre` posé sur l'apparence choisie : c'est le seul endroit où le
+	# squelette (avec_genre l'a déjà résolu, mais `chemin_skel` reste le même
+	# pour tous les genres) sait encore quel genre est demandé — nécessaire à
+	# _hauteur_source pour lire la BONNE mesure bakée (voir SilhouettesData.cle).
+	var apparence: Dictionary = apparences[clampi(niveau - 1, 0, apparences.size() - 1)]
+	apparence["genre"] = genre
 	return creer(str(entree.get("skel", CHEMIN_SKEL)), str(entree.get("atlas", CHEMIN_ATLAS)),
-			apparences[clampi(niveau - 1, 0, apparences.size() - 1)], hauteur)
+			apparence, hauteur)
 
 func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 		chemin_atlas: String = CHEMIN_ATLAS,
@@ -234,7 +240,12 @@ func _hauteur_source(donnees: Resource, apparence: Dictionary = {},
 	if chemin_skel != "":
 		var bakees := SilhouettesData.charger()
 		if bakees != null:
-			var silhouette := bakees.hauteur(chemin_skel, mesure)
+			# `genre` posé par creer_heros() sur l'apparence choisie — absent
+			# (0) pour tout le monde sauf le héros en genre alternatif, voir
+			# SilhouettesData.cle pour pourquoi deux genres d'un même
+			# squelette ont chacun leur mesure.
+			var genre := int(apparence.get("genre", 0))
+			var silhouette := bakees.hauteur(chemin_skel, mesure, genre)
 			if silhouette > 0.0:
 				return silhouette
 	if mesure > 0.0:

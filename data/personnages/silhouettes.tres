@@ -16,5 +16,9 @@ mesures = {
 "res://assets/personnages/relic/Relic.skel": {
 "bornes": 1883.1344,
 "hauteur": 1787.1016002166607
+},
+"res://assets/personnages/relic/Relic.skel#g1": {
+"bornes": 1841.911,
+"hauteur": 1783.5838407563026
 }
 }

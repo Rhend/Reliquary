@@ -34,10 +34,15 @@
 class_name SilhouettesData
 extends Resource
 
-# Clé = chemin du .skel (identifie le squelette, pas le personnage : les 6
-# costumes de Relic partagent un squelette, donc une échelle — c'est déjà la
-# règle que TestShowRoom vérifie).
-#   "res://…/Relic.skel": {"hauteur": 1962.4, "bornes": 2916.0}
+# Clé = chemin du .skel, éventuellement suffixé « #g<n> » pour un GENRE (voir
+# `cle`) — un squelette partagé par plusieurs corps visuellement différents
+# (« Relic Femme », 23/09/2026 : skin Woman_* sur le même Relic.skel que
+# Men_*) a besoin d'UNE mesure par corps, pas une seule pour tous. Les 6
+# NIVEAUX d'équipement d'un même genre, eux, continuent de partager une seule
+# mesure (même silhouette globale) — c'est déjà la règle que TestShowRoom
+# vérifie.
+#   "res://…/Relic.skel":     {"hauteur": 1962.4, "bornes": 2916.0}   # genre 0 (défaut)
+#   "res://…/Relic.skel#g1":  {"hauteur": …,      "bornes": …}        # genre 1 (Féminin)
 #     • hauteur — corps SEUL, arme et VFX retirés, en unités Spine ;
 #     • bornes  — get_bounds().size.y au moment de la mesure (anti-périmé).
 @export var mesures: Dictionary = {}
@@ -53,11 +58,21 @@ static func charger() -> SilhouettesData:
 		return null
 	return load(CHEMIN) as SilhouettesData
 
-# Hauteur de corps bakée pour ce squelette, ou 0.0 s'il n'y en a pas / si elle
-# est périmée. `bornes_courantes` <= 0 saute le contrôle d'obsolescence (appelant
-# qui n'a pas la mesure sous la main).
-func hauteur(chemin_skel: String, bornes_courantes: float = 0.0) -> float:
-	var m := mesures.get(chemin_skel, {}) as Dictionary
+# Clé de `mesures` pour un squelette + un genre — SOURCE UNIQUE du format,
+# utilisée aussi bien par le bake (tools/mesurer_silhouettes.gd) que par la
+# lecture runtime (`hauteur`), pour qu'ils ne puissent jamais diverger.
+# genre 0 (défaut) garde la clé nue : un personnage sans second genre n'a donc
+# rien de changé dans son fichier baké.
+static func cle(chemin_skel: String, genre: int = 0) -> String:
+	return chemin_skel if genre <= 0 else "%s#g%d" % [chemin_skel, genre]
+
+# Hauteur de corps bakée pour ce squelette + ce genre, ou 0.0 s'il n'y en a
+# pas / si elle est périmée. `bornes_courantes` <= 0 saute le contrôle
+# d'obsolescence (appelant qui n'a pas la mesure sous la main). Un genre sans
+# mesure bakée (bake pas encore relancé après une livraison) rend 0.0 — même
+# repli propre qu'un squelette jamais baké, pas d'erreur.
+func hauteur(chemin_skel: String, bornes_courantes: float = 0.0, genre: int = 0) -> float:
+	var m := mesures.get(cle(chemin_skel, genre), {}) as Dictionary
 	var haut := float(m.get("hauteur", 0.0))
 	if haut <= 0.0:
 		return 0.0
@@ -66,6 +81,6 @@ func hauteur(chemin_skel: String, bornes_courantes: float = 0.0) -> float:
 			and absf(bornes_courantes - ref) > ref * ECART_BORNES_MAX:
 		push_warning(("SilhouettesData : mesure PÉRIMÉE pour %s (bornes %.0f, "
 				+ "bakées à %.0f) — re-baker avec tools/mesurer_silhouettes.tscn")
-				% [chemin_skel, bornes_courantes, ref])
+				% [cle(chemin_skel, genre), bornes_courantes, ref])
 		return 0.0
 	return haut

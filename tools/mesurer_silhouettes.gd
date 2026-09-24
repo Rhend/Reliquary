@@ -8,7 +8,11 @@
 # transparentes et l'arme, la silhouette non. Voir SilhouettesData pour le
 # pourquoi et le contrat d'obsolescence.
 #
-# Pour chaque entrée du registre Spine :
+# Pour chaque entrée du registre Spine, et pour CHAQUE GENRE qu'elle déclare
+# (`SpinePersonnagesData.nb_genres` — 1 par défaut, plus un par entrée de
+# `genres` : deux genres n'ont pas forcément la même silhouette sur le même
+# squelette, ex. « Relic Femme » du 23/09/2026 vs Masculin — voir
+# SilhouettesData.cle) :
 #   1. construit le personnage à sa PREMIÈRE apparence (Nv1 / Commun) ;
 #   2. lui pose la skin de mesure — arme et VFX retirés ;
 #   3. le rend dans un SubViewport transparent et scanne l'alpha ;
@@ -53,10 +57,14 @@ func _ready() -> void:
 	var mesures := {}
 	print("═══ Bake des silhouettes ═══")
 	for entree in registre.personnages:
-		var resultat := await _mesurer(entree)
-		if resultat.is_empty():
-			continue
-		mesures[str(entree.get("skel", ""))] = resultat
+		var chemin_skel := str(entree.get("skel", ""))
+		var nb := SpinePersonnagesData.nb_genres(entree)
+		for genre in range(nb):
+			var resolue := SpinePersonnagesData.avec_genre(entree, genre)
+			var resultat := await _mesurer(resolue, nb > 1, genre)
+			if resultat.is_empty():
+				continue
+			mesures[SilhouettesData.cle(chemin_skel, genre)] = resultat
 
 	if mesures.is_empty():
 		push_error("mesurer_silhouettes : aucune mesure — rien n'est écrit.")
@@ -66,13 +74,23 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 # Rend un personnage corps nu et rend {hauteur, bornes}, ou {} en cas d'échec.
-func _mesurer(entree: Dictionary) -> Dictionary:
+# `entree` est déjà résolue au genre voulu (SpinePersonnagesData.avec_genre) —
+# `afficher_genre` n'affecte que le libellé imprimé, pas la mesure.
+func _mesurer(entree: Dictionary, afficher_genre: bool = false, genre: int = 0) -> Dictionary:
 	var chemin_skel := str(entree.get("skel", ""))
 	var nom := str(entree.get("nom", "?"))
+	if afficher_genre:
+		nom = "%s (%s)" % [nom, SpinePersonnagesData.nom_genre(entree, genre)]
 	var apparences := SpinePersonnagesData.apparences(entree)
 	if apparences.is_empty():
 		print("  %-14s ignoré (aucune apparence)" % nom)
 		return {}
+	# Tag le genre sur l'apparence de mesure, comme creer_heros() le fait pour
+	# le jeu réel : sans ça, _hauteur_source lirait par erreur la mesure du
+	# genre 0 pour vérifier la sienne (mesure toujours correcte — elle est
+	# invariante à l'échelle — mais un warning « PÉRIMÉ » parasite à chaque
+	# bake tant que la sienne n'a jamais encore été écrite).
+	apparences[0]["genre"] = genre
 
 	var sprite := SpriteSpinePersonnage.creer(chemin_skel,
 			str(entree.get("atlas", "")), apparences[0], HAUTEUR_MESURE)
@@ -125,4 +143,4 @@ func _ecrire(mesures: Dictionary) -> void:
 	if err != OK:
 		push_error("mesurer_silhouettes : écriture impossible (%d)" % err)
 		return
-	print("→ ", SilhouettesData.CHEMIN, " écrit (", mesures.size(), " squelettes)")
+	print("→ ", SilhouettesData.CHEMIN, " écrit (", mesures.size(), " mesures)")
