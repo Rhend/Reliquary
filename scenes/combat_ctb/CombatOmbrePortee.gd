@@ -9,10 +9,10 @@
 #                    caché au repos, réservé au tour ACTIF (voir
 #                    `definir_actif`).
 #
-# `Background_City_Ombre*` sous les combattants du camp JOUEUR (posés sur le
-# trottoir de CombatDecorCity), `Background_Factory_Ombre*` sous l'ADVERSE
-# (posés sur le sol de l'Usine) — même logique que le choix de décor de
-# CombatFondScinde, la ville ne change jamais de camp aujourd'hui.
+# `Background_Factory_Ombre*` sous CHAQUE combattant (posés sur le sol de
+# l'Usine, désormais le seul décor de combat — voir CombatFondScinde, 02/10/2026).
+# `Background_City_Ombre*` existe toujours (livraison Christophe) mais n'est
+# plus référencé : la ville ne sert plus de fond à aucun camp.
 #
 # TAILLE PROPORTIONNELLE au personnage — corrections successives de Rhend
 # après vérification en jeu :
@@ -50,7 +50,6 @@
 class_name CombatOmbrePortee
 extends Node2D
 
-const DIR_CITY := "res://assets/background/city/"
 const DIR_FACTORY := "res://assets/background/Factory/"
 
 # Largeur de l'ombre = largeur RENDUE du personnage × cette marge (elle doit
@@ -61,9 +60,9 @@ const MARGE_LARGEUR := 1.1
 var _anneau: Sprite2D = null
 var _actif := false
 
-static func creer(camp_joueur: bool, largeur_ref_px: float) -> CombatOmbrePortee:
-	var dir := DIR_CITY if camp_joueur else DIR_FACTORY
-	var prefixe := "Background_City_Ombre" if camp_joueur else "Background_Factory_Ombre"
+static func creer(largeur_ref_px: float) -> CombatOmbrePortee:
+	var dir := DIR_FACTORY
+	var prefixe := "Background_Factory_Ombre"
 	var chemin_base := dir + prefixe + ".png"
 	if not ResourceLoader.exists(chemin_base):
 		return null   # dégradation propre : pas d'ombre plutôt qu'un nœud cassé

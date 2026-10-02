@@ -5,8 +5,9 @@
 # jeu, une fois lancé, reste rapide et fluide).
 #
 # Cible précisément ce que AssetCache existe déjà pour accélérer : le décor
-# de combat (ville + usine, ~12 calques chacun jusqu'à 4770×2655 px) et les
-# squelettes Spine (héros + ennemis du registre) — sans lui, ces fichiers
+# de combat (Usine, ~22 calques jusqu'à 4770×2655 px — seul décor affiché
+# depuis le 02/10/2026, la ville n'est plus warmée, voir CombatFondScinde) et
+# les squelettes Spine (héros + ennemis du registre) — sans lui, ces fichiers
 # n'étaient chargés/décodés qu'au PREMIER combat de la partie, avec le même
 # gel qu'avant le chantier d'AssetCache. Ici, ce coût est payé une seule fois,
 # à un moment où un temps de chargement est attendu, plutôt qu'en pleine
@@ -40,10 +41,7 @@ static func demarrer(parent: Control) -> void:
 static func _chemins_a_prechauffer() -> PackedStringArray:
 	var chemins: PackedStringArray = [
 		SpriteSpinePersonnage.CHEMIN_SKEL, SpriteSpinePersonnage.CHEMIN_ATLAS,
-		CombatDecorFactory.MASK_SHADER,
 	]
-	for plan in CombatDecorCity.PLANS:
-		chemins.append(CombatDecorCity.DECOR_DIR + str(plan["f"]))
 	for plan in CombatDecorFactory.PLANS:
 		chemins.append(CombatDecorFactory.DECOR_DIR + str(plan["f"]))
 	var registre := SpinePersonnagesData.charger()

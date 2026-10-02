@@ -2,12 +2,13 @@
 # CombatCtbUi — Écran de combat CTB JOUABLE (Rework Combat, chantier 5).
 #
 # Écran scindé (référence Advanced Wars) : camp joueur à gauche, camp adverse
-# à droite (jusqu'à 3 combattants par camp — architecture N-vs-N actée), fond
-# scindé en diagonale purement COSMÉTIQUE (`CombatFondScinde` — décor RÉEL de
-# Christophe côté joueur, biome placeholder `BiomeBackground` côté adverse,
-# le Lieu n'ayant pas encore son propre art — CONSERVÉ à la demande de Rhend,
+# à droite (jusqu'à 3 combattants par camp — architecture N-vs-N actée),
+# POSITIONS des sprites seulement — le fond, lui, est un décor UNIQUE plein
+# écran partagé par les deux camps (`CombatFondScinde` → `CombatDecorFactory`,
+# l'Usine réelle de Christophe ; plus de séparation au sol depuis le
+# 02/10/2026, retour Rhend — un seul Lieu existe à ce jour, voir CLAUDE.md) ;
 # la peau cyberpunk du chantier 10 habille le chrome par-dessus : panneaux
-# opaques, tokens UIColors.CYBER_*, ExpeStyle). Scène de
+# opaques, tokens UIColors.CYBER_*, ExpeStyle. Scène de
 # bataille : SOL + emplacements des sprites — le personnage principal est le
 # sprite Spine RÉEL de Christophe (SpriteSpinePersonnage : Idle en boucle,
 # Attack_CaC ou Attack_Shoot selon le GESTE de l'action ; retombe sur le
@@ -50,7 +51,6 @@ extends Control
 signal fermee(recap: Dictionary)
 
 const N_FILE := 6              # activations prédites affichées (proposition actée)
-const BANDE_VS_PX := 80.0      # largeur de la découpe diagonale des deux fonds
 # Splash d'ouverture (« ENNEMY DETECTED », voir _intro) : tenue fixe puis fondu
 # vers le combat (retour Rhend 07/09/2026 — 1 seconde, peu importe embuscade
 # ou mécanique de Lieu à annoncer).
@@ -333,7 +333,7 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 	# Ombre portée AVANT le sprite/orbe : l'ordre d'ajout EST l'ordre de
 	# dessin dans Godot, donc l'ombre reste sous le personnage sans jouer
 	# avec le z-index (voir CombatOmbrePortee).
-	var ombre := CombatOmbrePortee.creer(cb.est_joueur(), largeur_ref)
+	var ombre := CombatOmbrePortee.creer(largeur_ref)
 	if ombre != null:
 		_ombres[cb] = ombre
 		_sol.add_child(ombre)
@@ -390,19 +390,18 @@ func previsu_rafraichir_visuel(pour_ennemi: bool) -> void:
 	_rafraichir_file()
 
 func _construire() -> void:
-	# Fond scindé : décor RÉEL de Christophe côté joueur, biome placeholder
-	# côté adverse (`CombatFondScinde`, PARTAGÉ avec la vitrine ShowRoom —
-	# une seule source, jamais deux copies qui divergent). RESTAURÉ à la
-	# demande de Rhend après la passe cyberpunk : le fond reste visible, la
-	# peau habille le chrome PAR-DESSUS (panneaux opaques).
-	# Conteneur ZOOMABLE de la scène de bataille (fonds + diagonale + sol +
-	# sprites) : le zoom d'attaque façon Darkest Dungeon ne scale que lui —
-	# le chrome UI (file, cartes, actions, FX) reste fixe par-dessus.
+	# Fond : décor RÉEL de Christophe, PLEIN ÉCRAN pour les deux camps
+	# (`CombatFondScinde`, PARTAGÉ avec la vitrine ShowRoom — une seule
+	# source, jamais deux copies qui divergent). La peau cyberpunk habille le
+	# chrome PAR-DESSUS (panneaux opaques).
+	# Conteneur ZOOMABLE de la scène de bataille (fond + sol + sprites) : le
+	# zoom d'attaque façon Darkest Dungeon ne scale que lui — le chrome UI
+	# (file, cartes, actions, FX) reste fixe par-dessus.
 	_couche_scene = Control.new()
 	_couche_scene.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_couche_scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_couche_scene)
-	CombatFondScinde.construire(_couche_scene, SOL_Y_FRAC, SOL_X_JOUEUR, BANDE_VS_PX)
+	CombatFondScinde.construire(_couche_scene, SOL_Y_FRAC)
 
 	# Voile de lumière — posé APRÈS le décor, AVANT `_sol` (donc sous les
 	# personnages) : ordre d'ajout = ordre de dessin. Part du niveau AMBIANT
@@ -622,21 +621,20 @@ func _demarrer_generation_portrait_heros(niveau: int, cosmetique: int, coiffure:
 	_rafraichir_file()
 
 # Panneau de stats : PLAQUÉ contre le bord bas-gauche de l'écran, sa largeur
-# forcée jusqu'au trait de séparation (retour Rhend : « doit prendre tout le
-# bas de la partie de gauche et doit être coupé par le trait ») — même
-# formule que la coupure holographique (`CombatFondScinde.x_frontiere`),
-# évaluée à `size.y` (le bas de l'écran, où la diagonale est la PLUS À
-# GAUCHE) pour qu'AUCUNE portion du panneau ne déborde dans le camp adverse
-# sur toute sa hauteur. `reset_size()` d'abord pour la hauteur NATURELLE
-# (varie avec le nombre de statuts actifs de l'entité suivie), puis la
-# largeur est ÉCRASÉE — `clip_contents` (CombatPanneauStats) protège si le
-# contenu ne tenait quand même pas.
+# forcée à la MOITIÉ de l'écran (retour Rhend : « doit prendre tout le bas de
+# la partie de gauche ») — le fond n'a plus de diagonale depuis le 02/10/2026
+# (décor plein écran partagé, voir CombatFondScinde), mais le découpage
+# JOUEUR GAUCHE / ADVERSE DROITE reste le plan de l'écran (SOL_X_JOUEUR/
+# SOL_X_ADVERSE, positions des personnages) : la moitié gauche reste le bon
+# repère pour ne jamais déborder sur le camp adverse. `reset_size()` d'abord
+# pour la hauteur NATURELLE (varie avec le nombre de statuts actifs de
+# l'entité suivie), puis la largeur est ÉCRASÉE — `clip_contents`
+# (CombatPanneauStats) protège si le contenu ne tenait quand même pas.
 func _repositionner_panel_stats() -> void:
 	if _panneau_stats == null:
 		return
 	_panneau_stats.reset_size()
-	var largeur := CombatFondScinde.x_frontiere(size.y, size.y, size.x, BANDE_VS_PX)
-	_panneau_stats.size = Vector2(largeur, _panneau_stats.size.y)
+	_panneau_stats.size = Vector2(size.x * 0.5, _panneau_stats.size.y)
 	_panneau_stats.position = Vector2(0.0, size.y - _panneau_stats.size.y)
 
 # Recale la file d'initiative en HAUT-DROITE sur SA taille minimale COURANTE
@@ -705,10 +703,12 @@ func _placer_orbes() -> void:
 
 # Sol de la scène : la ligne d'horizon + bande dégradée qui vivait ici avant
 # (chrome peint par-dessus le décor, pensé pour un sol sans art réel) est
-# SUPPRIMÉE : posée sur le vrai décor de ville, elle se lisait comme un trait
-# diffus non voulu en travers de tout le côté joueur, pile sous les pieds de
-# Relic (signalé par Rhend). Le décor réel (`CombatDecorCity`) porte déjà son
-# propre trottoir. Même correctif déjà appliqué à la ShowRoom (26 et
+# SUPPRIMÉE : posée sur le vrai décor (alors la ville, `CombatDecorCity` —
+# depuis le 02/10/2026 l'Usine plein écran pour les deux camps, voir
+# CombatFondScinde), elle se lisait comme un trait diffus non voulu en
+# travers de l'écran, pile sous les pieds de Relic (signalé par Rhend). Le
+# décor réel porte déjà son propre trottoir/sol. Même correctif déjà
+# appliqué à la ShowRoom (26 et
 # 27/08/2026). L'ellipse-repère qui vivait ensuite ici sous chaque placeholder
 # EnergyBoule est ELLE AUSSI retirée (29/08/2026) : remplacée par la vraie
 # ombre portée de Christophe (`CombatOmbrePortee`, sprite au sol sous CHAQUE
@@ -1201,12 +1201,6 @@ func _duel_interrompre() -> void:
 	_duel_restaurer_ordre()
 	if _couche_scene != null:
 		_couche_scene.scale = Vector2.ONE
-		# Filet de sécurité (24/09/2026) : Tween.kill() n'émet JAMAIS `finished`,
-		# donc le callback de fin de DuelZoomFx.jouer (qui rentre le décor dans
-		# le SubViewport réduit) ne tourne pas si un duel est interrompu en plein
-		# zoom — sans ce rappel ici, le décor resterait bloqué en plein-res
-		# (perte de perf silencieuse, voir CombatFondScinde.entrer_zoom).
-		CombatFondScinde.entrer_zoom(_couche_scene)
 	if not _duel_acteurs.is_empty():
 		_duel_acteurs = []
 		_rafraichir_orbes()   # réapplique le fondu différé d'un vaincu du duel
@@ -1250,17 +1244,12 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
 		_duel_ordre_restaure = [noeud_att, noeud_att.get_index()]
 		_sol.move_child(noeud_att, _sol.get_child_count() - 1)
 	_duel_acteurs = [att, cible]
-	# Décor Ville+Usine en PLEIN-RES le temps du zoom (voir CombatFondScinde,
-	# 24/09/2026) : le SubViewport réduit découpe tout ce qui dépasse le cadre
-	# nominal, or le zoom révèle la marge que les sprites ont pour ça.
-	CombatFondScinde.sortir_zoom(_couche_scene)
 	_duel_tween = DuelZoomFx.jouer(_couche_scene, foyer, noeud_att, pos_att, noeud_cib, pos_cib,
 			crit, converger, facteur_delais, func() -> void:
 				_duel_restaure.clear()
 				_duel_restaurer_ordre()
 				_duel_tween = null
 				_duel_acteurs = []
-				CombatFondScinde.entrer_zoom(_couche_scene)
 				_rafraichir_orbes())   # fondu différé du vaincu, une fois le duel joué
 
 # Replace l'attaquant à son rang d'origine dans `_sol` une fois le duel fini
