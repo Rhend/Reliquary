@@ -80,6 +80,20 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	var vp := SubViewport.new()
 	vp.transparent_bg = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# `stretch_shrink` ne réduit QUE le buffer de rendu (`vp.size`, piloté par
+	# le conteneur) — sans ceci, les CanvasItem à l'intérieur se layout dans
+	# ce buffer réduit (640×360), alors que Ville+Usine font leur math en
+	# pixels ABSOLUS pour `vue` (1280×720) : contenu composé pour un canevas
+	# 2× plus grand que l'espace où il atterrit → un quart de l'image
+	# (coin haut-gauche) remplit tout le buffer, puis le conteneur le
+	# réétire ×2 sur tout l'écran — zoom ×4 constaté (régression du
+	# 24/09/2026, repérée aux captures ScreenshotTool le 02/10/2026).
+	# `size_2d_override` fixe l'espace logique des CanvasItem à `vue` quel
+	# que soit `vp.size` : le rendu logique reste 1280×720 (donc la math
+	# existante de CombatDecorCity/Factory continue de tomber juste), seul
+	# le nombre de pixels RASTÉRISÉS diminue — exactement le downscale visé.
+	vp.size_2d_override_stretch = true
+	vp.size_2d_override = vue
 	conteneur.add_child(vp)
 	parent.add_child(conteneur)
 	var interieur := Control.new()
