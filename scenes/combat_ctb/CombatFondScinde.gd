@@ -32,8 +32,8 @@ class_name CombatFondScinde
 # un souci de shader — testé : regrouper le masque de l'Usine dans un seul
 # CanvasGroup n'a RIEN gagné). Le vrai levier est le nombre de PIXELS à
 # calculer par calque, donc on rend Ville+Usine dans un SubViewport plus petit
-# puis on le réagrandit (`SubViewportContainer.stretch`, filtrage linéaire
-# natif) — un fond lointain n'a pas besoin du piqué natif qu'on vient de
+# puis on le réagrandit (`SubViewportContainer` mis à l'échelle, filtrage
+# linéaire natif) — un fond lointain n'a pas besoin du piqué natif qu'on vient de
 # donner aux sprites Spine au premier plan. `CombatCoupureHolo` (la coupure
 # holographique, fine et scrutée au centre de l'écran) reste EN DEHORS, à la
 # résolution native, pour ne pas la rendre floue.
@@ -50,7 +50,17 @@ class_name CombatFondScinde
 # plein-res, comme avant ce fix) pendant la brève fenêtre de zoom SEULEMENT,
 # appelés par `CombatCtbUi._duel_attaque`/`_duel_interrompre`. Le combat passe
 # l'essentiel de son temps au repos (zoom=1), c'est LÀ que le downscale compte.
-const RESOLUTION_DECOR_SHRINK := 2
+#
+# Retour Rhend (02/10/2026, après le fix du zoom ×4 ci-dessous) : "c'est tout
+# pixelisé, flou mal venu" — le ×2 (640×360, un quart des pixels) rendait le
+# fin détail du décor (néons, rivets) visiblement plus flou que les sprites
+# Spine au premier plan (ceux-ci en résolution native depuis le fix fullscreen
+# du 24/09/2026). Choix tranché par Rhend : un compromis plutôt que l'un des
+# deux extrêmes (retour natif = perd le gain FPS ; garder ×2 = flou gênant).
+# ×1,35 (≈55 % des pixels, contre 25 % à ×2) — RATIO FRACTIONNAIRE, donc piloté
+# à la main : `SubViewportContainer.stretch_shrink` est un `int`, aucune valeur
+# entre ×1 (natif) et ×2 n'est exprimable via cette seule propriété.
+const RESOLUTION_DECOR_SHRINK := 1.35
 const NOM_CONTENEUR_REDUIT := "DecorReduit"
 
 # `vue` = résolution de référence du projet (1280×720, fixe) : la math de
@@ -75,27 +85,36 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	conteneur.name = NOM_CONTENEUR_REDUIT
 	conteneur.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	conteneur.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	conteneur.stretch = true
-	conteneur.stretch_shrink = RESOLUTION_DECOR_SHRINK
+	conteneur.stretch = false
 	var vp := SubViewport.new()
 	vp.transparent_bg = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	# `stretch_shrink` ne réduit QUE le buffer de rendu (`vp.size`, piloté par
-	# le conteneur) — sans ceci, les CanvasItem à l'intérieur se layout dans
-	# ce buffer réduit (640×360), alors que Ville+Usine font leur math en
-	# pixels ABSOLUS pour `vue` (1280×720) : contenu composé pour un canevas
-	# 2× plus grand que l'espace où il atterrit → un quart de l'image
-	# (coin haut-gauche) remplit tout le buffer, puis le conteneur le
-	# réétire ×2 sur tout l'écran — zoom ×4 constaté (régression du
-	# 24/09/2026, repérée aux captures ScreenshotTool le 02/10/2026).
-	# `size_2d_override` fixe l'espace logique des CanvasItem à `vue` quel
-	# que soit `vp.size` : le rendu logique reste 1280×720 (donc la math
-	# existante de CombatDecorCity/Factory continue de tomber juste), seul
-	# le nombre de pixels RASTÉRISÉS diminue — exactement le downscale visé.
+	# Le layout des CanvasItem à l'intérieur (Ville/Usine, math en pixels
+	# ABSOLUS pour `vue` = 1280×720) doit rester calé sur `vue` quel que soit
+	# le buffer de rendu réellement alloué (`vp.size`, réduit juste en
+	# dessous) — sans ça, le contenu composé pour 1280×720 déborde du buffer
+	# réduit, et seul son coin haut-gauche s'y trouve, réétiré sur tout
+	# l'écran par le conteneur : zoom ×4 constaté (régression du 24/09/2026,
+	# repérée aux captures ScreenshotTool le 02/10/2026). `size_2d_override`
+	# fixe cet espace logique à `vue` indépendamment de `vp.size` : le rendu
+	# logique reste 1280×720 (la math existante retombe juste), seul le
+	# nombre de pixels RASTÉRISÉS diminue — le downscale visé.
 	vp.size_2d_override_stretch = true
 	vp.size_2d_override = vue
 	conteneur.add_child(vp)
 	parent.add_child(conteneur)
+	# `stretch = false` : le conteneur dessine alors le buffer du SubViewport
+	# TEL QUEL (taille native, aucun réétirement auto) — c'est ce qui laisse
+	# `vp.size` réglable à la main (avec `stretch = true`, Godot REFUSE
+	# silencieusement tout changement manuel : "Can't change the size of a
+	# SubViewport with a SubViewportContainer parent that has stretch
+	# enabled", constaté aux captures du 02/10/2026 — `stretch_shrink` est un
+	# `int`, aucune valeur entre ×1 et ×2 n'est exprimable par CETTE
+	# propriété). Sans réétirement auto, un ratio fractionnaire doit donc
+	# réétirer lui-même le conteneur ENTIER (texture comprise) via `scale` —
+	# pivot par défaut (0,0) = coin haut-gauche, déjà calé sur `parent`.
+	vp.size = Vector2i(roundi(vue.x / RESOLUTION_DECOR_SHRINK), roundi(vue.y / RESOLUTION_DECOR_SHRINK))
+	conteneur.scale = Vector2(vue.x / vp.size.x, vue.y / vp.size.y)
 	var interieur := Control.new()
 	interieur.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	vp.add_child(interieur)
