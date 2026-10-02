@@ -15,8 +15,6 @@
 class_name FactorySoudureVfx
 extends Node2D
 
-const MASK_SHADER := "res://scenes/combat_ctb/raster_split_mask_additif.gdshader"
-
 # Réglages 29/08/2026 (retour Rhend) : ×2 étincelles, traits et flash plus
 # intenses. Chaque étincelle a maintenant sa PROPRE vie COURTE (VIE_ETINCELLE_*,
 # indépendante de la durée totale du VFX) et les déclenchements s'étalent sur
@@ -83,17 +81,10 @@ var _duree := 1.0
 var _t := 0.0
 var _etincelles: Array = []   # {dir, vitesse, decalage, vie_max}
 
-# `split_tilt` : même bande VS que le reste du décor Usine, pour rester du
-# bon côté de l'écran si jamais un contact tombait près de la diagonale.
-static func declencher(parent: Node2D, position_locale: Vector2, duree: float,
-		split_tilt: float) -> FactorySoudureVfx:
+static func declencher(parent: Node2D, position_locale: Vector2, duree: float) -> FactorySoudureVfx:
 	var vfx := FactorySoudureVfx.new()
 	vfx.position = position_locale
 	vfx._duree = maxf(duree, 0.05)
-	var mat := ShaderMaterial.new()
-	mat.shader = load(MASK_SHADER)
-	mat.set_shader_parameter("split_tilt", split_tilt)
-	vfx.material = mat
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	for i in N_ETINCELLES:

@@ -42,7 +42,6 @@ const ENNEMI_FACTICE: CombattantCtbData = preload("res://data/combat_ctb/ennemi_
 
 # ─── Cadrage : LU de CombatCtbUi pour le décor Usine seul, jamais recopié ──
 const SOL_Y_FRAC := CombatCtbUi.SOL_Y_FRAC
-const BANDE_VS_PX := CombatCtbUi.BANDE_VS_PX
 
 # ─── Éclairage du décor (jamais des personnages) ─────────────
 # « Studio » = EXACTEMENT le niveau ambiant par défaut du jeu réel
@@ -105,7 +104,7 @@ func _construire_chrome() -> void:
 	_decor_usine.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_decor_usine.visible = false
 	add_child(_decor_usine)
-	_retirer_masques(CombatDecorFactory.construire(_decor_usine, SOL_Y_FRAC, 0.5, BANDE_VS_PX))
+	CombatDecorFactory.construire(_decor_usine, SOL_Y_FRAC, 0.5)
 
 	# CanvasLayer au-dessus de tout (y compris CombatCtbUi, ajouté/retiré au
 	# gré des rebuilds) — l'ordre d'ajout dans l'arbre n'a plus d'importance.
@@ -118,14 +117,6 @@ func _construire_chrome() -> void:
 	hud_layer.add_child(_hud)
 
 	_construire_aide(hud_layer)
-
-# Retire tout `material` (le masque d'écrêtage adverse) d'un sous-arbre : le
-# mode Usine veut voir le décor COMPLET, jamais coupé à la diagonale du combat.
-func _retirer_masques(racine: Node) -> void:
-	if racine is CanvasItem:
-		(racine as CanvasItem).material = null
-	for enfant in racine.get_children():
-		_retirer_masques(enfant)
 
 # Mémo des commandes propres à la vitrine — MASQUÉ par défaut : la vitrine ne
 # doit rien avoir de plus qu'un vrai combat tant qu'on n'a pas demandé l'aide
@@ -263,7 +254,7 @@ func _rafraichir_hud() -> void:
 		_hud.text = "AUCUN ASSET SPINE DISPONIBLE (registre vide)    [F1] aide"
 		return
 	if _mode == Mode.USINE:
-		_hud.text = "USINE SEULE — décor sans masque ni ville (diagnostic)    [Tab] duel    [F1] aide"
+		_hud.text = "USINE SEULE — décor sans personnages ni chrome (diagnostic)    [Tab] duel    [F1] aide"
 		return
 	var nom_m := str(_ennemis[_idx_monstre].get("nom", "?"))
 	_hud.text = "%s · %s   vs   héros %s Nv%d    [F1] aide" % [

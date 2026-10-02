@@ -861,8 +861,7 @@ func _shoot_factory() -> void:
 	# code réel — CombatCtbUi.SOL_X_ADVERSE par défaut.
 	var sol_x_env := OS.get_environment("SHOT_SOL_X")
 	var sol_x := CombatCtbUi.SOL_X_ADVERSE if sol_x_env == "" else float(sol_x_env)
-	var decor := CombatDecorFactory.construire(hote,
-			CombatCtbUi.SOL_Y_FRAC, sol_x, CombatCtbUi.BANDE_VS_PX)
+	var decor := CombatDecorFactory.construire(hote, CombatCtbUi.SOL_Y_FRAC, sol_x)
 	await get_tree().process_frame
 	for i in 4:
 		decor._process(1.0)   # +1s par capture : défilement et flicker visibles
@@ -874,21 +873,19 @@ func _shoot_factory() -> void:
 	crop.save_png("res://tests/_shot_factory_fourneau_zoom.png")
 	print("Screenshot -> res://tests/_shot_factory_fourneau_zoom.png")
 
-# ── Décor d'Usine SEUL, PLEIN ÉCRAN, SANS MASQUE ni ville ni séparateur ────
+# ── Décor d'Usine SEUL, PLEIN ÉCRAN ─────────────────────────────────────
 # Diagnostic demandé par Rhend (28/08/2026) : voir le travail COMPLET de
 # Christophe tel quel, pour juger si les plans (Fourneau, Armature, Chaîne_
-# Robotique, Soudeurs, Barrière, Sol) s'accordent entre eux à l'échelle réelle
-# — le split/masque adverse est un problème SÉPARÉ, à ne pas mélanger avec
-# "est-ce que le calque du dessus est correctement composé avec les autres".
-# Centré à l'écran (0.5, pas l'ancrage adverse 0.75) : un aperçu plein cadre
-# symétrique, pas la fenêtre de combat.
+# Robotique, Soudeurs, Barrière, Sol) s'accordent entre eux à l'échelle réelle.
+# Centré à l'écran (0.5) — depuis le 02/10/2026 c'est aussi le cadrage RÉEL du
+# combat (plus de split/masque adverse, voir CombatFondScinde), donc ce mode
+# n'est plus un diagnostic "sans le split" : c'est juste le décor seul, sans
+# les combattants ni le chrome.
 func _shoot_factory_full() -> void:
 	var hote := Control.new()
 	hote.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_vp.add_child(hote)
-	var decor := CombatDecorFactory.construire(hote,
-			CombatCtbUi.SOL_Y_FRAC, 0.5, CombatCtbUi.BANDE_VS_PX)
-	_retirer_masques(decor)
+	var decor := CombatDecorFactory.construire(hote, CombatCtbUi.SOL_Y_FRAC, 0.5)
 	await get_tree().process_frame
 	decor._process(0.0)
 	await RenderingServer.frame_post_draw
@@ -897,19 +894,16 @@ func _shoot_factory_full() -> void:
 # ── Bras soudeur SEUL, zoomé, repos ET contact ────────────────────────────
 # Diagnostic de calibrage (30/08/2026, découpage en 5 pièces livré par
 # Christophe) : juge le geste coude→avant-bras→poignet→main ET l'alignement
-# de la pointe sur un chariot, sans se soucier du reste du décor. Plein cadre
-# sans masque (même raison que `_shoot_factory_full`), zoomé sur la zone
-# Soudeur_2 + Chaîne_Soudure. `decor._process(t)` avance par un DELTA (pas un
-# temps absolu) : un unique grand pas reproduit fidèlement l'état atteint par
-# une vraie lecture image par image jusqu'à `t`, ce module n'ayant aucun état
-# dépendant de la vitesse (voir `_process`/`_process_bras`).
+# de la pointe sur un chariot, sans se soucier du reste du décor. Plein cadre,
+# zoomé sur la zone Soudeur_2 + Chaîne_Soudure. `decor._process(t)` avance par
+# un DELTA (pas un temps absolu) : un unique grand pas reproduit fidèlement
+# l'état atteint par une vraie lecture image par image jusqu'à `t`, ce module
+# n'ayant aucun état dépendant de la vitesse (voir `_process`/`_process_bras`).
 func _shoot_factory_bras() -> void:
 	var hote := Control.new()
 	hote.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_vp.add_child(hote)
-	var decor := CombatDecorFactory.construire(hote,
-			CombatCtbUi.SOL_Y_FRAC, 0.5, CombatCtbUi.BANDE_VS_PX)
-	_retirer_masques(decor)
+	var decor := CombatDecorFactory.construire(hote, CombatCtbUi.SOL_Y_FRAC, 0.5)
 	await get_tree().process_frame
 	decor._process(0.0)
 	await RenderingServer.frame_post_draw
@@ -948,12 +942,6 @@ func _capture_zoom_img(img: Image, path: String, centre: Vector2, facteur: int) 
 	region.resize(_vp.size.x, _vp.size.y, Image.INTERPOLATE_NEAREST)
 	region.save_png(path)
 	print("Screenshot -> ", path)
-
-func _retirer_masques(racine: Node) -> void:
-	if racine is CanvasItem:
-		(racine as CanvasItem).material = null
-	for enfant in racine.get_children():
-		_retirer_masques(enfant)
 
 # ── Capture des enseignes néon vivantes ────────────────────
 # Le décor de ville SEUL (ni combattants ni HUD), à trois instants, en plein

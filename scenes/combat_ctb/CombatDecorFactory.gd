@@ -12,6 +12,14 @@
 #    livré est le canevas COMPLET de la scène (pas une découpe d'immeuble à
 #    part), donc tous les plans se superposent avec exactement le même
 #    cadrage — pas de `REDUCTION_PLANS`/pivot à gérer.
+#  • FOND PLEIN ÉCRAN pour les DEUX camps (02/10/2026, retour Rhend : « gros
+#    changement », plus de séparation au sol) — `sol_x_frac` vaut TOUJOURS
+#    0.5 côté appel réel (`CombatFondScinde`, centré). Jusque-là écrêté à la
+#    moitié adverse par `raster_split_mask.gdshader` pour laisser transparaître
+#    `CombatDecorCity` (la ville) à gauche de la diagonale — ville + masque +
+#    couture holographique SUPPRIMÉS avec ce changement (voir l'historique git
+#    si besoin de les ressortir). `sol_x_frac` reste un paramètre (pas figé en
+#    dur) pour les diagnostics `ScreenshotTool` (`SHOT_SOL_X`).
 #  • HAUTEUR NATURELLE, pas la couverture "sans trou" de CombatDecorCity
 #    (28/08/2026, signalé par Rhend : plein écran ET sans masque, on ne
 #    voyait toujours pas tout le travail de Christophe). La formule de la
@@ -30,10 +38,6 @@
 #    sol de Christophe n'est plus assez étirée pour atteindre le bord de
 #    l'écran — comblé par un aplat de la couleur EXACTE du bas de
 #    Plan_2_Sol.png (mesurée : (38,11,12), plate, donc invisible en pratique).
-#  • ÉCRÊTAGE à la moitié adverse : ce décor est ajouté PAR-DESSUS le décor
-#    héros (CombatDecorCity, dessiné en dessous par CombatFondScinde), donc
-#    chaque sprite porte `raster_split_mask.gdshader` (alpha nul côté héros)
-#    pour laisser transparaître la ville à gauche de la diagonale VS.
 #  • DÉFILEMENT BIDIRECTIONNEL : `sens` (+1 droite→gauche comme la ville,
 #    -1 gauche→droite) inverse simplement le signe du décalage. Une copie de
 #    ruban SUPPLÉMENTAIRE est posée à gauche de la première (`idx_min = -1`)
@@ -84,7 +88,6 @@ class_name CombatDecorFactory
 extends Control
 
 const DECOR_DIR := "res://assets/background/Factory/"
-const MASK_SHADER := "res://scenes/combat_ctb/raster_split_mask.gdshader"
 
 # Bande de SOL, MESURÉE sur Background_Factory_Plan_2_Sol.png (contenu opaque
 # des lignes 1895 à 2655 sur 2655). MÊME convention que CombatDecorCity : les
@@ -297,22 +300,16 @@ var _bras_sprite: Sprite2D = null   # son sprite direct — pivote autour de PIV
 var _poignet_sprite: Sprite2D = null # ENFANT de _bras_sprite (Bras_4, rond du poignet) — solidaire de l'avant-bras, AUCUNE rotation propre
 var _main_sprite: Sprite2D = null   # ENFANT de _bras_sprite (Bras_5) — pivote autour de PIVOT_POIGNET, hérite du coude ; parent du VFX d'étincelles
 var _temps := 0.0
-var _mask_material: ShaderMaterial = null
-var _split_tilt := 0.0   # copie de bande_vs_px/vue.x — réutilisée par le VFX d'étincelles
 var _soudure_d0_tex := 0.0    # décalage-texture initial du cycle, voir `_calcule_d0_soudure`
 var _vfx_dernier_cycle := -1  # évite de redéclencher le VFX plusieurs fois dans le même cycle
 var _couvre := 1.0
 
 static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
-		bande_vs_px: float, vue: Vector2 = Vector2(1280, 720)) -> CombatDecorFactory:
+		vue: Vector2 = Vector2(1280, 720)) -> CombatDecorFactory:
 	var decor := CombatDecorFactory.new()
 	decor.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	decor.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	decor._noeud_zoom = parent
-	decor._mask_material = ShaderMaterial.new()
-	decor._mask_material.shader = AssetCache.charger(MASK_SHADER) as Shader
-	decor._split_tilt = bande_vs_px / maxf(vue.x, 1.0)
-	decor._mask_material.set_shader_parameter("split_tilt", decor._split_tilt)
 	# Hauteur NATURELLE (720, pas gonflée) : voir le commentaire de tête pour
 	# pourquoi la formule "couverture sans trou" de la ville ne convient pas
 	# ici. Le pivot du sol (DECOR_SOL_FRAC) reste inchangé — c'est lui qui
@@ -332,15 +329,14 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	parent.add_child(decor)
 	return decor
 
-# Aplat de secours masqué (même écrêtage adverse que le reste) : comble un
-# vide de couverture sans jamais recouvrir le contenu réel (ajouté APRÈS
-# `_batir`, donc par-dessus rien d'autre — il n'y a rien d'autre là où il est).
+# Aplat de secours : comble un vide de couverture sans jamais recouvrir le
+# contenu réel (ajouté APRÈS `_batir`, donc par-dessus rien d'autre — il n'y a
+# rien d'autre là où il est).
 func _patch_secours(rect: Rect2) -> void:
 	var r := ColorRect.new()
 	r.color = SOL_SECOURS_COLOR
 	r.position = rect.position
 	r.size = rect.size
-	r.material = _mask_material
 	add_child(r)
 
 func _batir(larg: float, haut: float, centre_x: float) -> void:
@@ -397,7 +393,6 @@ func _batir(larg: float, haut: float, centre_x: float) -> void:
 				# tête du fichier, section « GÉOMÉTRIE DU BRAS SOUDEUR »).
 				sp.offset = -PIVOT_COUDE
 				sp.position += PIVOT_COUDE * sp.scale
-			sp.material = _mask_material
 			noeud.add_child(sp)
 			derniere_copie = sp
 		add_child(noeud)
@@ -443,7 +438,6 @@ func _construire_enfant_bras(parent_sprite: Sprite2D, fichier: String) -> Sprite
 	sp.centered = false
 	sp.offset = -PIVOT_POIGNET
 	sp.position = PIVOT_POIGNET - PIVOT_COUDE
-	sp.material = _mask_material
 	parent_sprite.add_child(sp)
 	return sp
 
@@ -559,7 +553,7 @@ func _declencher_etincelles() -> void:
 	# recalcul : au moment du contact, le VFX apparaît pile là où retombe la
 	# pointe tournée en deux temps.
 	FactorySoudureVfx.declencher(_main_sprite, BRAS_POINTE_LOCAL - PIVOT_POIGNET,
-			VFX_ETINCELLES_DUREE_S, _split_tilt)
+			VFX_ETINCELLES_DUREE_S)
 
 # Ease-out quadratique : geste mécanique rapide au départ, adouci à l'arrivée
 # — pour la descente ET la remontée (celle-ci l'utilise inversé, voir plus haut).
