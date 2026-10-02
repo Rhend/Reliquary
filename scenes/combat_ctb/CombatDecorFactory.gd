@@ -113,28 +113,6 @@ const FEU_ECLAT_MAX := 0.35   # boost RGB au pic, pour un flamboiement plus chau
 # naturelle (voir commentaire de tête). Plate → indiscernable du vrai sol.
 const SOL_SECOURS_COLOR := Color8(38, 11, 12)
 
-# Dégradé vertical ÉCHANTILLONNÉ sur Background_Factory_Plan_Fond.png (colonne
-# centrale, mêmes fractions de hauteur que `DECOR_SOL_FRAC`/le reste du
-# fichier) — comble les bandes latérales qu'un fit CONTAIN peut laisser vides
-# (02/10/2026, voir `_cadre_couverture`). Une SEULE couleur plate (comme
-# `SOL_SECOURS_COLOR`, pensée pour une fine bande sous le sol) ferait un bloc
-# uni voyant sur toute la hauteur de l'écran ; ce dégradé épouse l'ambiance
-# du fond (sombre en haut, lueur de l'horizon vers 70-85 %, puis le sol) sans
-# jamais recopier le détail d'un calque réel.
-const DEGRADE_SECOURS_FRACTIONS: Array[float] = [0.00, 0.20, 0.50, 0.71, 1.00]
-const DEGRADE_SECOURS_COULEURS: Array[Color] = [
-	Color8(51, 6, 6),    # haut : quasi noir
-	Color8(84, 10, 10),
-	Color8(110, 13, 13),
-	Color8(190, 83, 44), # lueur de l'horizon (~71 % de la hauteur)
-	Color8(130, 16, 14), # bas : sol
-]
-
-# Marge du filet de sécurité zoom-duel (voir `construire()`) — généreuse à
-# dessein : un aplat ne coûte rien à rastériser, mieux vaut trop que de
-# revoir un bout de gris un jour sur un pivot/écart extrêmes.
-const MARGE_ZOOM_PX := 500.0
-
 # Chariots de la Chaîne_Soudure : espacement et phase MESURÉS directement sur
 # Background_Factory_Plan_5_Chaine_Soudure.png. RE-MESURÉS le 30/08/2026 :
 # Christophe a re-livré ce calque sur le canevas PLEIN CADRE 4770 px (avant :
@@ -332,54 +310,17 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	decor.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	decor.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	decor._noeud_zoom = parent
-	var h := vue.y
-	# Filet de sécurité AVANT tout (premier enfant = dessiné en PREMIER, donc
-	# DERRIÈRE l'art réel et les patches précis ci-dessous) : le fit CONTAIN +
-	# la contrainte sol (02/10/2026) font que l'image ne couvre plus forcément
-	# tout [0,vue.x]×[0,h] — zoom-duel compris, dont le `scale` sur `parent`
-	# peut révéler des pixels hors de ce rectangle nominal (pivot excentré,
-	# cible/tireur proches d'un bord). Un dégradé LARGEMENT surdimensionné
-	# (marge arbitraire mais généreuse, aucun coût réel — un aplat ne coûte
-	# rien à rastériser) garantit qu'il n'y a JAMAIS de gris derrière, quelle
-	# que soit la géométrie exacte du zoom.
-	decor._patch_secours_degrade(Rect2(-MARGE_ZOOM_PX, -MARGE_ZOOM_PX,
-			vue.x + 2.0 * MARGE_ZOOM_PX, h + 2.0 * MARGE_ZOOM_PX))
 	# Hauteur NATURELLE (720, pas gonflée) : voir le commentaire de tête pour
 	# pourquoi la formule "couverture sans trou" de la ville ne convient pas
 	# ici. Le pivot du sol (DECOR_SOL_FRAC) reste inchangé — c'est lui qui
 	# garantit l'alignement avec la ville, indépendamment de `h`.
-	# `cadre` est le rectangle RÉEL où `_batir` a dessiné l'image (fit CONTAIN
-	# + contrainte sol, voir `_cadre_couverture`) — il ne remplit plus
-	# forcément [0,vue.x]×[0,h] comme avant (02/10/2026, « dézoomer encore,
-	# 100% du sprite affiché »), donc `haut` (position VERTICALE du Control
-	# entier dans l'écran parent) se calcule maintenant à partir de la
-	# position RÉELLE du sol dans `cadre`, pas en supposant `cadre.size.y==h`.
-	var cadre := decor._batir(vue.x, h, vue.x * sol_x_frac, sol_y_frac)
-	var haut := vue.y * sol_y_frac - cadre.position.y - DECOR_SOL_FRAC * cadre.size.y
+	var h := vue.y
+	var haut := vue.y * sol_y_frac - DECOR_SOL_FRAC * h
 	decor.offset_top = haut
 	decor.offset_bottom = haut + h - vue.y
-	# Vide résiduel : un aplat par bord concerné. DEUX familles, jamais le
-	# même espace de coordonnées :
-	#  - EN LOCAL (0 = haut du cadre bâti par `_batir`, h/vue.x = ses bords
-	#    bas/droit) : les marges laissées par le fit CONTAIN autour de
-	#    `cadre` lui-même (jusqu'à 4 bords, depuis que `cadre` peut être plus
-	#    petit que [0,vue.x]×[0,h] sur CHAQUE axe).
-	#  - EN PARENT (espace écran) : le décalage `haut`/`bas` qui positionne
-	#    tout le Control (donc `cadre` compris) pour caler le sol — existait
-	#    déjà avant ce changement, inchangé dans son principe.
-	if cadre.position.y > 0.0:
-		decor._patch_secours(Rect2(0.0, 0.0, vue.x, cadre.position.y))
-	var bas_local := h - (cadre.position.y + cadre.size.y)
-	if bas_local > 0.0:
-		decor._patch_secours(Rect2(0.0, cadre.position.y + cadre.size.y, vue.x, bas_local))
-	# Bandes LATÉRALES : potentiellement hautes de tout l'écran (pas une fine
-	# bande comme en haut/bas), une couleur plate y serait un bloc uni voyant
-	# — dégradé vertical calé sur `h` (voir DEGRADE_SECOURS_*).
-	if cadre.position.x > 0.0:
-		decor._patch_secours_degrade(Rect2(0.0, 0.0, cadre.position.x, h))
-	var droite_local := vue.x - (cadre.position.x + cadre.size.x)
-	if droite_local > 0.0:
-		decor._patch_secours_degrade(Rect2(cadre.position.x + cadre.size.x, 0.0, droite_local, h))
+	decor._batir(vue.x, h, vue.x * sol_x_frac)
+	# Vide résiduel (voir commentaire de tête) : un aplat par bord concerné,
+	# en LOCAL (0 = haut du cadre bâti par `_batir`, h = son bas).
 	if haut > 0.0:
 		decor._patch_secours(Rect2(0.0, -haut, vue.x, haut))
 	var bas := vue.y - haut - h
@@ -398,31 +339,7 @@ func _patch_secours(rect: Rect2) -> void:
 	r.size = rect.size
 	add_child(r)
 
-# Variante dégradée de `_patch_secours` (02/10/2026) : `rect` est supposé
-# couvrir toute la hauteur locale `h` (0 en haut, `h` en bas) — les fractions
-# de `DEGRADE_SECOURS_FRACTIONS` s'appliquent donc directement à `rect.size.y`.
-func _patch_secours_degrade(rect: Rect2) -> void:
-	var grad := Gradient.new()
-	var offsets := PackedFloat32Array()
-	for f in DEGRADE_SECOURS_FRACTIONS:
-		offsets.append(f)
-	grad.offsets = offsets
-	grad.colors = DEGRADE_SECOURS_COULEURS
-	var tex := GradientTexture2D.new()
-	tex.gradient = grad
-	tex.width = 1
-	tex.height = maxi(int(rect.size.y), 1)
-	tex.fill = GradientTexture2D.FILL_LINEAR
-	tex.fill_from = Vector2(0.0, 0.0)
-	tex.fill_to = Vector2(0.0, 1.0)
-	var r := TextureRect.new()
-	r.texture = tex
-	r.position = rect.position
-	r.size = rect.size
-	r.stretch_mode = TextureRect.STRETCH_SCALE
-	add_child(r)
-
-func _batir(larg: float, haut: float, centre_x: float, sol_y_frac: float) -> Rect2:
+func _batir(larg: float, haut: float, centre_x: float) -> void:
 	# Un seul cadre de couverture : chaque .png EST le canevas complet de la
 	# scène, donc tous les plans partagent le même cadrage (pas de "reduit").
 	var cadre := Rect2()
@@ -434,7 +351,7 @@ func _batir(larg: float, haut: float, centre_x: float, sol_y_frac: float) -> Rec
 		if texture == null:
 			continue
 		if not cadre_pret:
-			cadre = _cadre_couverture(texture.get_size(), larg, haut, centre_x, sol_y_frac)
+			cadre = _cadre_couverture(texture.get_size(), larg, haut, centre_x)
 			cadre_pret = true
 			_couvre = cadre.size.x / maxf(texture.get_size().x, 1.0)
 		var vitesse := float(plan["vitesse"])
@@ -501,7 +418,6 @@ func _batir(larg: float, haut: float, centre_x: float, sol_y_frac: float) -> Rec
 					"Background_Factory_Plan_5_Soudeur_2_Bras_4.png")
 			_main_sprite = _construire_enfant_bras(derniere_copie,
 					"Background_Factory_Plan_5_Soudeur_2_Bras_5.png")
-	return cadre
 
 # Construit un calque (rond du poignet `_4`, ou main `_5`) en ENFANT du
 # sprite de l'avant-bras (le coude) — il hérite ainsi AUTOMATIQUEMENT de la
@@ -536,34 +452,10 @@ static func _calcule_d0_soudure(sens: float) -> float:
 		cible = fposmod(-cible, CHARIOT_PERIODE_TEX)
 	return cible
 
-# Retour Rhend (02/10/2026, après le passage en fond plein écran) : « dézoomer
-# encore, 100 % du sprite affiché, pas de perte ». Jusque-là `couvre` COUVRAIT
-# le cadre (`maxf`, comme un CSS `background-size: cover`) : ça garantit zéro
-# trou mais ROGNE l'axe qui dépasse — et l'alignement du sol (ci-dessous)
-# pousse en plus l'image vers le HAUT, ce qui sortait son sommet de l'écran.
-# Deux correctifs cumulés :
-#  1. `minf` au lieu de `maxf` (CONTAIN, pas cover) : l'image entière tient
-#     TOUJOURS dans `larg`×`haut`, aucun rognage possible sur cet axe-là.
-#  2. Contrainte SOL : la bande de sol de l'art tombe à DECOR_SOL_FRAC
-#     (85,7 %) de SA hauteur, alors qu'elle doit atterrir à `sol_y_frac`
-#     (80,6 %) de l'ÉCRAN — aligner les deux pousse l'image vers le HAUT
-#     (voir `construire()`) d'autant plus que l'image est grande. Le plafond
-#     ci-dessous est le plus grand `couvre` qui garde encore le SOMMET de
-#     l'image en écran (résolution de `sol_y_frac*haut − DECOR_SOL_FRAC ×
-#     (taille_texture.y×couvre) ≥ 0` pour `couvre`), avec une petite marge de
-#     sécurité (MARGE_SECURITE) pour ne jamais flirter avec le pixel pile.
-# Résultat : l'image est maintenant plus PETITE que le cadre sur au moins un
-# axe — les bords laissés vides (haut/bas/gauche/droite selon le cas) sont
-# comblés par `_patch_secours` dans `construire()`, jamais un trou visible.
-const MARGE_SECURITE := 0.97
-
-static func _cadre_couverture(taille_texture: Vector2, larg: float, haut: float, centre_x: float,
-		sol_y_frac: float) -> Rect2:
+static func _cadre_couverture(taille_texture: Vector2, larg: float, haut: float, centre_x: float) -> Rect2:
 	if taille_texture.x <= 0.0 or taille_texture.y <= 0.0:
 		return Rect2(Vector2.ZERO, Vector2(larg, haut))
-	var couvre := minf(larg / taille_texture.x, haut / taille_texture.y)
-	var couvre_max_sol := (sol_y_frac * haut) / (DECOR_SOL_FRAC * taille_texture.y)
-	couvre = minf(couvre, couvre_max_sol) * MARGE_SECURITE
+	var couvre := maxf(larg / taille_texture.x, haut / taille_texture.y)
 	var taille := taille_texture * couvre
 	return Rect2(Vector2(centre_x - taille.x * 0.5, (haut - taille.y) * 0.5), taille)
 
