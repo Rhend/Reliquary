@@ -290,6 +290,17 @@ const PLANS: Array[Dictionary] = [
 	{"f": "Background_Factory_Plan_3_Fourneau_Feu_3.png",   "profondeur": 0.70, "vitesse": 3.0,  "sens": -1.0, "feu": true,  "bras": false},
 	{"f": "Background_Factory_Plan_2_Barriere.png",         "profondeur": 1.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 	{"f": "Background_Factory_Plan_2_Sol.png",              "profondeur": 1.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
+	# Plan_1_Barriere : calque LIVRÉ (même canevas plein cadre) mais jamais
+	# branché ici — oubli repéré par Rhend (03/10/2026, « tu n'affiches pas
+	# l'ensemble des plans »), pas une exclusion volontaire (à l'inverse de
+	# Background_Factory_Reference.png, une planche de référence artiste, pas
+	# un calque de jeu). Posé PLUS BAS dans le canevas que Plan_2_Barriere
+	# (mesuré : rails vers 94-100 % de la hauteur, contre ~60-72 % pour
+	# Plan_2_Barriere), DANS la bande opaque de Plan_2_Sol (vérifié : alpha=1
+	# sur toute cette zone) — doit donc être APRÈS Plan_2_Sol dans l'ordre
+	# d'empilement, sinon le sol opaque le recouvre entièrement (constaté :
+	# calque invisible tant qu'il était posé avant Plan_2_Sol).
+	{"f": "Background_Factory_Plan_1_Barriere.png",         "profondeur": 1.00, "vitesse": 0.0,  "sens": 1.0,  "feu": false, "bras": false},
 ]
 
 var _noeud_zoom: Control = null
