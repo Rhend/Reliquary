@@ -19,7 +19,16 @@
 #                   livrée le 23/09/2026 — SpinePersonnagesData.avec_genre,
 #                   même mécanique de hot-reload que H/V/C) ;
 #   • B           — éclairage du décor (ne module JAMAIS les personnages) ;
-#   • Tab         — bascule duel ⇄ décor de l'Usine seul (diagnostic) ;
+#   • U           — CYCLE duel → décor Usine seul → décor Ville seule → duel
+#                   (10/2026, retour Rhend : vérifier d'un coup d'œil tous les
+#                   fonds possibles du jeu ; touche U — PAS Tab, qui déplace le
+#                   focus clavier entre les actions de combat réelles). La
+#                   Ville (`CombatDecorCity`) n'est BRANCHÉE NULLE PART ailleurs
+#                   depuis la fusion en décor plein écran (voir CLAUDE.md,
+#                   « table rase »/fusion Ville+Usine) — orpheline mais
+#                   intacte, prête pour un futur Lieu « ville » ; ce cycle est
+#                   le seul endroit du jeu qui la montre encore, à des fins de
+#                   vérification visuelle ;
 #   • F1          — affiche/masque ce mémo (masqué par défaut : la vitrine ne
 #                    doit pas avoir l'air différente du vrai combat tant
 #                    qu'on n'a pas demandé l'aide).
@@ -59,7 +68,7 @@ const TEINTE_VOILE := CombatCtbUi.VOILE_TEINTE_DEFAUT
 # Démarre en « Studio », désormais le même défaut que le jeu réel.
 const LUMIERE_DEFAUT := 1
 
-enum Mode { DUEL, USINE }
+enum Mode { DUEL, USINE, VILLE }
 
 # Scène à recharger en sortant. Posée par l'appelant AVANT le changement de
 # scène (cf. Village._ouvrir_showroom) ; vide quand la vitrine est lancée
@@ -83,6 +92,7 @@ var _aide_visible := false
 
 var _combat_ui: CombatCtbUi = null
 var _decor_usine: Control
+var _decor_ville: Control
 var _hud: Label
 var _aide: PanelContainer
 
@@ -105,6 +115,17 @@ func _construire_chrome() -> void:
 	_decor_usine.visible = false
 	add_child(_decor_usine)
 	CombatDecorFactory.construire(_decor_usine, SOL_Y_FRAC, 0.5)
+
+	# Ville (`CombatDecorCity`) : orpheline depuis la fusion en décor plein
+	# écran (voir l'en-tête du fichier) — code/assets intacts, jamais branchée
+	# ailleurs. Même ancrage centré que l'Usine ci-dessus pour une comparaison
+	# à l'identique.
+	_decor_ville = Control.new()
+	_decor_ville.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_decor_ville.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_decor_ville.visible = false
+	add_child(_decor_ville)
+	CombatDecorCity.construire(_decor_ville, SOL_Y_FRAC, 0.5)
 
 	# CanvasLayer au-dessus de tout (y compris CombatCtbUi, ajouté/retiré au
 	# gré des rebuilds) — l'ordre d'ajout dans l'arbre n'a plus d'importance.
@@ -150,7 +171,7 @@ func _construire_aide(parent: CanvasLayer) -> void:
 		"C       coiffure du héros",
 		"G       genre du héros (Masculin ⇄ Féminin)",
 		"B       éclairage du décor",
-		"Tab     décor Usine seul ⇄ duel",
+		"U       cycle duel → Usine seule → Ville seule → duel",
 	]:
 		vb.add_child(UIHelpers.label(ligne, 12, UIColors.TEXT_MUTED))
 	var note := UIHelpers.label(
@@ -244,7 +265,8 @@ func _appliquer_mode() -> void:
 	var duel: bool = _mode == Mode.DUEL
 	if _combat_ui != null:
 		_combat_ui.visible = duel
-	_decor_usine.visible = not duel
+	_decor_usine.visible = _mode == Mode.USINE
+	_decor_ville.visible = _mode == Mode.VILLE
 	_rafraichir_hud()
 
 func _rafraichir_hud() -> void:
@@ -254,10 +276,13 @@ func _rafraichir_hud() -> void:
 		_hud.text = "AUCUN ASSET SPINE DISPONIBLE (registre vide)    [F1] aide"
 		return
 	if _mode == Mode.USINE:
-		_hud.text = "USINE SEULE — décor sans personnages ni chrome (diagnostic)    [Tab] duel    [F1] aide"
+		_hud.text = "USINE SEULE — décor réel du jeu (diagnostic)    [U] décor suivant (Ville)    [F1] aide"
+		return
+	if _mode == Mode.VILLE:
+		_hud.text = "VILLE SEULE — orpheline, non branchée en jeu (diagnostic)    [U] décor suivant (duel)    [F1] aide"
 		return
 	var nom_m := str(_ennemis[_idx_monstre].get("nom", "?"))
-	_hud.text = "%s · %s   vs   héros %s Nv%d    [F1] aide" % [
+	_hud.text = "%s · %s   vs   héros %s Nv%d    [U] décor seul    [F1] aide" % [
 			nom_m, GameData.get_tier_name(_idx_palier),
 			SpinePersonnagesData.nom_genre(_heros, _idx_genre), _idx_niveau_heros + 1]
 
@@ -285,8 +310,11 @@ func _touche(code: int) -> void:
 		KEY_F1:
 			_aide_visible = not _aide_visible
 			_aide.visible = _aide_visible
-		KEY_TAB:
-			_mode = Mode.USINE if _mode == Mode.DUEL else Mode.DUEL
+		KEY_U:
+			# PAS KEY_TAB (retour Rhend, 10/2026) : Tab déplace le focus clavier
+			# entre les boutons d'action du VRAI combat (Attaquer/Défendre/…),
+			# donc perturbe le mode DUEL au lieu de juste changer de décor.
+			_mode = wrapi(_mode + 1, 0, Mode.size())
 			_appliquer_mode()
 		KEY_LEFT, KEY_RIGHT:
 			if _mode == Mode.DUEL and not _ennemis.is_empty():

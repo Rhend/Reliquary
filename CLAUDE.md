@@ -102,7 +102,10 @@ Scène principale : `res://scenes/village/village.tscn`. Branche de travail : `d
   `CombatCtbUi.previsu_palier_ennemi`/`previsu_niveau_heros`/`previsu_cosmetique_heros`,
   -1/0 = comportement réel, ignorées par le jeu), `H`/`V` (niveau/visage du héros),
   `B` (éclairage du décor via `CombatCtbUi.previsu_definir_voile`, jamais les
-  personnages), `Tab` (décor Usine seul ⇄ duel), et `F1` — un mémo des commandes
+  personnages), `U` (cycle duel → décor Usine seul → décor Ville seule
+  (orpheline depuis la fusion plein écran, voir plus bas — diagnostic
+  uniquement) → duel, 10/2026 — PAS `Tab`, qui déplace le focus clavier entre
+  les boutons d'action du vrai combat), et `F1` — un mémo des commandes
   ci-dessus, MASQUÉ par défaut pour que la vitrine n'ait l'air différent du vrai
   combat que si on le demande. Le mode LIBRE (toutes les créatures en rangées) a
   été SUPPRIMÉ : aucun équivalent possible dans un écran de combat réel, jugé par
