@@ -142,7 +142,17 @@ var previsu_coiffure_heros := 0
 var previsu_genre_heros := 0
 var previsu_palier_ennemi := -1
 
-const SOL_Y_FRAC := 0.806          # ligne des pieds : MILIEU de la bande de sol du décor
+## ligne des pieds : MILIEU de la bande de sol du décor — ALIGNÉ sur
+## CombatDecorFactory.DECOR_SOL_FRAC (10/2026, retour Rhend : la grille du
+## premier plan ne touchait pas le bas de l'écran). Avant la fusion Ville+
+## Usine en un seul décor plein écran, cette valeur (0.806) était calée sur
+## la bande de sol de la VILLE, différente de celle de l'Usine (0.857) — cet
+## écart décalait tout le décor Usine vers le haut d'environ 37px, laissant
+## un vide en bas comblé par un aplat de secours. L'Usine étant désormais le
+## seul décor, plus aucune raison de s'écarter de SA propre bande de sol :
+## source unique, zéro décalage, zéro vide. Effet de bord attendu et voulu :
+## pieds/ombre/pivot du zoom-duel descendent d'environ 37px à l'écran.
+const SOL_Y_FRAC := CombatDecorFactory.DECOR_SOL_FRAC
 const SOL_X_JOUEUR := 0.25         # ancrage des emplacements du camp joueur : CENTRE de sa moitié
 const SOL_X_ADVERSE := 0.75        # ancrage du camp adverse — miroir exact du joueur
 # Pas diagonal entre emplacements. Y RÉDUIT (46 -> 22) le 26/08/2026 : les pieds
