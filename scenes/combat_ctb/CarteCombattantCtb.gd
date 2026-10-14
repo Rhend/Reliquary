@@ -4,8 +4,8 @@
 # foi : plus de carte en colonne latérale, un mini-HUD ancré au personnage).
 #
 # Contenu : pills de statut compactes (garde, DoT — mêmes données qu'avant,
-# juste rétrécies) au-dessus d'une barre de PV (chrome RÉEL de Christophe,
-# `CombatUiSkin.barre_pv`). Pas de nom : le nom vit désormais dans
+# juste rétrécies). La barre de PV a été retirée le 14/10/2026 (les PV vivent
+# dans `CombatPanneauStats`). Pas de nom : le nom vit aussi dans
 # `CombatPanneauStats`, pas ici.
 #
 # Ni clic ni survol : le ciblage à la souris (anneau or + réticule) est DÉJÀ
@@ -21,13 +21,8 @@
 class_name CarteCombattantCtb
 extends VBoxContainer
 
-const LARGEUR_BARRE_PX := 100.0
-const HAUTEUR_BARRE_PX := 13.0
-
 var cb: CtbCombattant
 
-var _barre_pv: TextureProgressBar
-var _pv_txt: Label
 var _pills: HFlowContainer
 
 # Nom d'affichage localisé d'un combattant CTB — TOUJOURS via Translations
@@ -48,22 +43,9 @@ func _init(combattant: CtbCombattant) -> void:
 	_pills.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_pills)
 
-	_barre_pv = CombatUiSkin.barre_pv(cb.est_joueur())
-	_barre_pv.custom_minimum_size = Vector2(LARGEUR_BARRE_PX, HAUTEUR_BARRE_PX)
-	_barre_pv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_barre_pv)
-
-	# Score DANS la barre (même recette que l'ancienne carte) : Label enfant
-	# de la TextureProgressBar, étalé sur tout son rect et centré.
-	_pv_txt = ExpeStyle.label_mono("", 9, UIColors.CYBER_TEXTE)
-	_pv_txt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_pv_txt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_pv_txt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_pv_txt.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pv_txt.add_theme_constant_override("outline_size", 2)
-	_pv_txt.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-	_barre_pv.add_child(_pv_txt)
-
+	# Barre de PV SUPPRIMÉE sous les pieds (retour Rhend 14/10/2026) : le
+	# panneau de stats du bas (`CombatPanneauStats`) porte désormais les PV.
+	# Reste ici les pills de statut/garde, et le point d'ancrage des dégâts.
 	rafraichir()
 
 # Centre le widget au-dessus du point « pied » (même point que l'ombre
@@ -85,13 +67,6 @@ func centre_fx() -> Vector2:
 # pills de statuts regroupées par type (stacks ×N, durée max restante en
 # activations), pill de garde si en défense, grisé si mort.
 func rafraichir() -> void:
-	var pv_max := cb.stat_finale("pv_max")
-	var frac := cb.pv / maxf(pv_max, 0.001)
-	_barre_pv.value = frac
-	_pv_txt.text = "%d / %d" % [int(roundf(cb.pv)), int(roundf(pv_max))]
-	# La barre elle-même reste au chrome de Christophe (non teintée par la
-	# fraction — choix DA) : le texte porte seul l'alerte de PV bas.
-	_pv_txt.add_theme_color_override("font_color", _couleur_pv(frac))
 	modulate = Color(1, 1, 1, 1.0) if cb.est_vivant() else Color(0.45, 0.45, 0.45, 0.75)
 
 	UIHelpers.clear_children_now(_pills)
@@ -122,12 +97,3 @@ func _pill(texte: String, couleur: Color) -> Control:
 	m.add_child(l)
 	p.add_child(m)
 	return p
-
-func _couleur_pv(frac: float) -> Color:
-	if frac > 0.60:
-		return UIColors.HP_HIGH
-	if frac > 0.30:
-		return UIColors.HP_MID
-	if frac > 0.15:
-		return UIColors.HP_LOW
-	return UIColors.HP_CRITICAL

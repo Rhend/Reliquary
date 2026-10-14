@@ -3,7 +3,7 @@
 #
 # L'ordre des voies est FIXE (ch.13 : 1 Sceau libre = 1 voie, compteur
 # `player.voies_ouvertes`). Ce .tres dit ce que chaque voie OUVRE :
-#   voie 1 — l'Atelier/Forge (câblé en dur ch.13 : GameData.atelier_ouvert) ;
+#   voie 1 — plus liée à l'Atelier (disponible d'emblée depuis le 14/10/2026) ;
 #   voies 2-4 — un LIEU SECONDAIRE révélé sur la HoloMap (chantier 17 :
 #     `lieux_par_voie`, appliqué par GameData.ouvrir_voie_suivante — le
 #     flag est_decouvert est persisté, le Game Over le recule avec le

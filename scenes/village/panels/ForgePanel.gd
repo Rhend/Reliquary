@@ -6,12 +6,11 @@
 # d'XP/palier, ses points de Forge, le bouton d'évolution (rituel) si prêt, et
 # l'accès à l'arbre spatial (ForgeTreeOverlay).
 #
-# VERROUILLÉ derrière la VOIE 1 (chantier 13, supersède l'ouverture d'emblée
-# du ch.12) : l'hex Forge/Atelier est ABSENT du hub tant que la voie 1 n'est
-# pas ouverte (GameData.atelier_ouvert) — le verrou ci-dessous est une
-# défense en profondeur (l'ancien verrou par palier de Village reste mort).
-# L'équipement Commun de départ couvre le joueur d'ici là ; la progression
-# d'équipement passe par son amélioration ici, débloquée au premier Sceau.
+# DISPONIBLE D'EMBLÉE (14/10/2026, supersède le verrou derrière la voie 1 du
+# chantier 13) : l'hex Forge/Atelier est présent dès le départ ; la voie 1
+# redevient un quartier à contenu à venir comme les voies 2-6. La vue
+# principale est l'INVENTAIRE (`InventairePanel`), la Forge (palier, arbre)
+# s'ouvre depuis une pièce d'équipement.
 # ============================================================
 class_name ForgePanel
 
@@ -23,23 +22,30 @@ const EQUIPS: Array = [
 ]
 
 static func build(host: Village) -> void:
-	if not GameData.atelier_ouvert():
-		var lbl := UIHelpers.label(Translations.T("forge.scelle"), 12, UIColors.TEXT_MUTED)
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		host.rp_content.add_child(lbl)
-		return
+	# Vue principale de l'Atelier = l'INVENTAIRE (14/10/2026) ; la Forge
+	# (palier, évolution, arbre) s'ouvre depuis le détail d'une pièce
+	# d'équipement via `section_equipement`.
+	InventairePanel.build(host)
+
+# Section Forge d'UN équipement (carte d'XP/palier + arbre), posée dans
+# `parent` — appelée par le détail de l'inventaire.
+static func section_equipement(host: Village, equip_id: String, parent: Control) -> void:
+	var icone := "⚙"
 	for e in EQUIPS:
-		_build_equip_section(host, e[0] as String, e[1] as String)
+		if str(e[0]) == equip_id:
+			icone = str(e[1])
+	_build_equip_section(host, equip_id, icone, parent)
 
 # ─── Section par équipement ──────────────────────────────────
 
-static func _build_equip_section(host: Village, equip_id: String, icon: String) -> void:
+static func _build_equip_section(host: Village, equip_id: String, icon: String,
+		parent: Control = null) -> void:
+	var cible: Control = parent if parent != null else host.rp_content
 	var equip := GameData.get_entity(equip_id)
 	if equip.is_empty():
 		return
 	if not equip.get("est_debloque", false):
-		host.rp_content.add_child(_locked_equip_card(equip, equip_id))
+		cible.add_child(_locked_equip_card(equip, equip_id))
 		return
 
 	var tier   := int(equip.get("maitrise_actuelle", 0))
@@ -57,7 +63,7 @@ static func _build_equip_section(host: Village, equip_id: String, icon: String) 
 	# remplace l'ancien bouton ÉVOLUER). Fond rempli par la progression d'XP.
 	var card := UIHelpers.xp_panel(ec, frac, 0.08, 0.60, 1, 6, XPCard.motif_for_type(Enums.EntityType.EQUIPMENT))
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	host.rp_content.add_child(card)
+	cible.add_child(card)
 
 	var m := UIHelpers.margin_of(10)
 	card.add_child(m)
@@ -136,7 +142,7 @@ static func _build_equip_section(host: Village, equip_id: String, icon: String) 
 			overlay.equipment_id = equip_id
 			host.add_child(overlay)
 		)
-	host.rp_content.add_child(tree_btn)
+	cible.add_child(tree_btn)
 
 # Formate des stats d'équipement en string (réutilisé par HeroDoll pour ses tooltips).
 static func _stats_line(stats: Dictionary) -> String:

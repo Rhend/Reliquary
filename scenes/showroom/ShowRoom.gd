@@ -11,7 +11,8 @@
 # rien à resynchroniser.
 #
 # Reste propre à la vitrine (dev UNIQUEMENT, jamais dans le vrai combat) :
-#   • ←/→ / ↑/↓  — créature / palier de la créature previsualisée ;
+#   • ↑/↓         — palier des créatures prévisualisées (camp adverse FIXE :
+#                   1 FlameBot + 2 WorkBot, 14/10/2026) ;
 #   • H / V / C   — niveau d'équipement / accessoire de visage / coiffure du
 #                   héros (C ajouté 17/09/2026, même mécanique que V — axe
 #                   INDÉPENDANT, voir SpinePersonnagesData.coiffures) ;
@@ -47,7 +48,10 @@ const NB_PALIERS := SpinePersonnagesData.NB_PALIERS               # paliers d'un
 const NB_NIVEAUX_HEROS := SpinePersonnagesData.NB_PALIERS_RARETE  # niveaux d'équipement du héros (6)
 
 const AVATAR_FACTICE: CombattantCtbData = preload("res://data/combat_ctb/avatar.tres")
-const ENNEMI_FACTICE: CombattantCtbData = preload("res://data/combat_ctb/ennemi_moyen.tres")
+# Camp adverse FIXE de la vitrine (retour Rhend 14/10/2026) : 1 FlameBot + 2
+# WorkBot, pour juger ciblage et lisibilité d'un combat à plusieurs.
+const EQUIPE_ADVERSE: Array[String] = ["creature_flamebot", "creature_workbot", "creature_workbot"]
+const ENNEMI_FACTICE:CombattantCtbData = preload("res://data/combat_ctb/ennemi_moyen.tres")
 
 # ─── Cadrage : LU de CombatCtbUi pour le décor Usine seul, jamais recopié ──
 const SOL_Y_FRAC := CombatCtbUi.SOL_Y_FRAC
@@ -81,7 +85,6 @@ var _ennemis: Array[Dictionary] = []
 var _heros: Dictionary = {}
 
 var _mode: int = Mode.DUEL
-var _idx_monstre := 0
 var _idx_palier := 0            # palier PRÉVISUALISÉ de la créature (previsu_palier_ennemi)
 var _idx_niveau_heros := 0      # 0-based ; niveau réel = +1 (previsu_niveau_heros)
 var _idx_cosmetique := 0
@@ -164,7 +167,6 @@ func _construire_aide(parent: CanvasLayer) -> void:
 	var titre := UIHelpers.label("COMMANDES VITRINE (F1 pour fermer)", 12, UIColors.TEXT_HEADER)
 	vb.add_child(titre)
 	for ligne in [
-		"← / →   créature",
 		"↑ / ↓   palier de la créature",
 		"H       niveau d'équipement du héros",
 		"V       accessoire de visage du héros",
@@ -197,8 +199,13 @@ func _lancer_duel() -> void:
 		_rafraichir_hud()
 		return
 	var m := CtbMoteur.new()
-	m.ajouter(_avatar_choisi(), Enums.CampCtb.JOUEUR)
-	m.ajouter(_ennemi_choisi(), Enums.CampCtb.ADVERSE)
+	var avatar := _avatar_choisi()
+	m.ajouter(avatar, Enums.CampCtb.JOUEUR)
+	# Deux Relic femmes aux positions arrières (essai de formation 14/10/2026).
+	m.ajouter(avatar, Enums.CampCtb.JOUEUR)
+	m.ajouter(avatar, Enums.CampCtb.JOUEUR)
+	for entite_id in EQUIPE_ADVERSE:
+		m.ajouter(_ennemi_pour(entite_id), Enums.CampCtb.ADVERSE)
 	m.demarrer()
 	_combat_ui = CombatCtbUi.new(m, false)
 	_combat_ui.previsu_niveau_heros = _idx_niveau_heros + 1
@@ -224,12 +231,7 @@ func _avatar_choisi() -> CombattantCtbData:
 	var heros := CtbPont.combattant_depuis_heros()
 	return heros if heros != null else AVATAR_FACTICE
 
-func _ennemi_choisi() -> CombattantCtbData:
-	if _ennemis.is_empty():
-		return ENNEMI_FACTICE
-	var entite_id := _entity_id_pour(_ennemis[clampi(_idx_monstre, 0, _ennemis.size() - 1)])
-	if entite_id == "":
-		return ENNEMI_FACTICE
+func _ennemi_pour(entite_id: String) -> CombattantCtbData:
 	var d := CtbPont.combattant_depuis_entite(entite_id)
 	return d if d != null else ENNEMI_FACTICE
 
@@ -281,7 +283,7 @@ func _rafraichir_hud() -> void:
 	if _mode == Mode.VILLE:
 		_hud.text = "VILLE SEULE — orpheline, non branchée en jeu (diagnostic)    [U] décor suivant (duel)    [F1] aide"
 		return
-	var nom_m := str(_ennemis[_idx_monstre].get("nom", "?"))
+	var nom_m := "FlameBot + 2 WorkBot"
 	_hud.text = "%s · %s   vs   héros %s Nv%d    [U] décor seul    [F1] aide" % [
 			nom_m, GameData.get_tier_name(_idx_palier),
 			SpinePersonnagesData.nom_genre(_heros, _idx_genre), _idx_niveau_heros + 1]
@@ -316,11 +318,6 @@ func _touche(code: int) -> void:
 			# donc perturbe le mode DUEL au lieu de juste changer de décor.
 			_mode = wrapi(_mode + 1, 0, Mode.size())
 			_appliquer_mode()
-		KEY_LEFT, KEY_RIGHT:
-			if _mode == Mode.DUEL and not _ennemis.is_empty():
-				_idx_monstre = wrapi(_idx_monstre + (1 if code == KEY_RIGHT else -1),
-						0, _ennemis.size())
-				_lancer_duel()
 		KEY_UP, KEY_DOWN:
 			# Hot-reload (pas de _lancer_duel) : le palier prévisualisé ne
 			# change QUE le skin de l'ennemi, jamais ses stats — inutile de

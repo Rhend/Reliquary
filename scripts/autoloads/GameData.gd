@@ -351,6 +351,50 @@ func unlock_biome_equipment(biome_id: String) -> void:
 		EventBus.equipment_unlocked.emit(eid)
 		EventBus.equipment_changed.emit()
 
+# ─── Équiper / déséquiper (inventaire de l'Atelier, 14/10/2026) ───────────
+# `player.equipped` : slot → id (« » = vide). Une pièce déséquipée rejoint
+# `player.equipment_inventory` ; en équiper une dans un slot occupé échange.
+
+# Clé de slot où va l'équipement `equip_id` ("" si inconnu / hors slots).
+func slot_key_pour(equip_id: String) -> String:
+	var equip: Dictionary = entities.get(equip_id, {})
+	if equip.is_empty():
+		return ""
+	var slot_idx := int(equip.get("slot", 0))
+	return EQUIP_SLOT_KEYS[slot_idx] if slot_idx >= 0 and slot_idx < EQUIP_SLOT_KEYS.size() else ""
+
+# Pièces possédées mais non portées (ids).
+func equipement_en_reserve() -> Array:
+	var out: Array = []
+	for id in player.get("equipment_inventory", []):
+		out.append(str(id))
+	return out
+
+func desequiper(slot_key: String) -> bool:
+	var id := str(player["equipped"].get(slot_key, ""))
+	if id == "":
+		return false
+	player["equipped"][slot_key] = ""
+	if not player["equipment_inventory"].has(id):
+		player["equipment_inventory"].append(id)
+	EventBus.equipment_changed.emit()
+	return true
+
+# Équipe une pièce possédée (réserve) dans son slot ; l'ancienne repart en réserve.
+func equiper(equip_id: String) -> bool:
+	if not player["equipment_inventory"].has(equip_id):
+		return false
+	var slot_key := slot_key_pour(equip_id)
+	if slot_key == "":
+		return false
+	var ancien := str(player["equipped"].get(slot_key, ""))
+	player["equipment_inventory"].erase(equip_id)
+	player["equipped"][slot_key] = equip_id
+	if ancien != "" and not player["equipment_inventory"].has(ancien):
+		player["equipment_inventory"].append(ancien)
+	EventBus.equipment_changed.emit()
+	return true
+
 # (Le rattrapage reconcile_equipment_unlocks — « biome Peu Commun →
 # équipement livré / repris » — a été SUPPRIMÉ au chantier 13 : l'équipement
 # Commun est présent dès la partie neuve (appliquer_equipement_depart) et sa
@@ -637,7 +681,6 @@ func nb_lieutenants_vaincus() -> int:
 # ═══════════════════════════════════════════════════════════
 
 const NB_VOIES := 6       # une voie par Lieutenant (même compte que l'Alarme)
-const VOIE_ATELIER := 1   # la voie 1 est l'Atelier/Forge (acté 06/07/2026)
 
 # Le joueur possède-t-il l'objet unique du Lieutenant d'un Lieu (« Sceau du
 # <Lieu> », placeholder — nommage réel à la session narration) ? Accordé au
@@ -666,10 +709,6 @@ func nb_voies_ouvertes() -> int:
 # ouverte ssi n ≤ nb_voies_ouvertes().
 func voie_ouverte(numero: int) -> bool:
 	return numero >= 1 and numero <= nb_voies_ouvertes()
-
-# L'Atelier (Forge) est-il déverrouillé ? = la voie 1 est ouverte.
-func atelier_ouvert() -> bool:
-	return voie_ouverte(VOIE_ATELIER)
 
 # La voie suivante est-elle ouvrable ? (pas toutes ouvertes + 1 Sceau libre)
 func peut_ouvrir_voie_suivante() -> bool:

@@ -72,10 +72,14 @@ const ICONE_ARTEFACT   := preload(DOSSIER_ICONES + "UI_Icone_Artefact.png")
 const RETICULE := preload(DOSSIER_ICONES + "UI_Icone_Arrow_2.png")
 
 # ── Soulignements décoratifs du panneau de stats (CombatPanneauStats) —
-# posés sous les labels DMG/PROT/le titre Status, HÉRO uniquement livré.
+# posés sous les labels DMG/PROT/le titre Status — une variante par camp
+# (`separateur(n, camp_joueur)`).
 const SEPARATEUR_01 := preload(DOSSIER + "UI_Combat_Panel_Separator_01_Hero.png")
 const SEPARATEUR_02 := preload(DOSSIER + "UI_Combat_Panel_Separator_02_Hero.png")
 const SEPARATEUR_03 := preload(DOSSIER + "UI_Combat_Panel_Separator_03_Hero.png")
+const SEPARATEUR_01_ENNEMI := preload(DOSSIER + "UI_Combat_Panel_Separator_01_Ennemis.png")
+const SEPARATEUR_02_ENNEMI := preload(DOSSIER + "UI_Combat_Panel_Separator_02_Ennemis.png")
+const SEPARATEUR_03_ENNEMI := preload(DOSSIER + "UI_Combat_Panel_Separator_03_Ennemis.png")
 
 # ── Chevron compact (compteur de tour de la file d'initiative).
 const CHEVRON := preload(DOSSIER_ICONES + "UI_Icone_Arrow_1.png")
@@ -430,6 +434,12 @@ static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
 # sans Aura : ce sont déjà de simples rectangles étirables (validé sur la
 # carte, qui les étire de 2485×541 à 240×~80 sans 9-slice), donc directement
 # réutilisables à l'aspect ratio du panneau bas, plus large.
+static func separateur(n: int, camp_joueur: bool) -> Texture2D:
+	var hero: Array[Texture2D] = [SEPARATEUR_01, SEPARATEUR_02, SEPARATEUR_03]
+	var ennemi: Array[Texture2D] = [SEPARATEUR_01_ENNEMI, SEPARATEUR_02_ENNEMI,
+			SEPARATEUR_03_ENNEMI]
+	return (hero if camp_joueur else ennemi)[clampi(n - 1, 0, 2)]
+
 static func style_panneau_stats(camp_joueur: bool) -> StyleBoxTexture:
 	var back: Texture2D = PANEL_BACK_HERO if camp_joueur else PANEL_BACK_ENNEMI
 	var border: Texture2D = PANEL_BORDER_HERO if camp_joueur else PANEL_BORDER_ENNEMI

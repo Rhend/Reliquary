@@ -321,6 +321,7 @@ static func construire(parent: Control, sol_y_frac: float, sol_x_frac: float,
 	decor.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	decor.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	decor._noeud_zoom = parent
+	parent.set_meta(&"zoom_suivi", Callable(decor, "_appliquer_compensation"))
 	# Hauteur NATURELLE (720, pas gonflée) : voir le commentaire de tête pour
 	# pourquoi la formule "couverture sans trou" de la ville ne convient pas
 	# ici. Le pivot du sol (DECOR_SOL_FRAC) reste inchangé — c'est lui qui
@@ -483,37 +484,26 @@ static func _calque(texture: Texture2D, taille: Vector2, decalage: Vector2) -> S
 		sp.scale = taille / source
 	return sp
 
+func _ready() -> void:
+	# Le zoom du duel est animé par un Tween, mis à jour APRÈS les `_process`
+	# des nœuds dans la frame : lue depuis `_process`, la compensation avait
+	# une frame de retard (calques à ~5 % de la bonne échelle pendant le
+	# dézoom, recalés d'un coup à la fin — retour Rhend 14/10/2026). Le
+	# changement de transform d'un ancêtre (le `scale` du zoom) notifie ce
+	# nœud dans la MÊME frame, avant le rendu : on recompense à ce moment-là.
+	set_notify_transform(true)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSFORM_CHANGED:
+		_appliquer_compensation()
+
 func _process(delta: float) -> void:
 	_temps += delta
-	var zoom := 1.0
-	var foyer := Vector2.ZERO
-	if is_instance_valid(_noeud_zoom):
-		zoom = maxf(_noeud_zoom.scale.y, 0.001)
-		foyer = _noeud_zoom.pivot_offset - position
+	_appliquer_compensation()
 
 	var t_defilement_s := CYCLE_PERIODE_S - BRAS_ARRET_S
 	var cycle_index := floori(_temps / CYCLE_PERIODE_S)
 	var t_cycle := fposmod(_temps, CYCLE_PERIODE_S)
-	# Progression du défilement DANS ce cycle : 0→1 pendant la fenêtre de
-	# défilement, puis PLAFONNÉE à 1 (chaîne figée) pendant l'arrêt.
-	var progres := clampf(t_cycle / maxf(t_defilement_s, 0.0001), 0.0, 1.0)
-	var d_soudure_tex := _soudure_d0_tex + (float(cycle_index) + progres) * CHARIOT_PERIODE_TEX
-
-	for couche in _couches:
-		var noeud: Node2D = couche["noeud"]
-		var origine: Vector2 = couche["origine"]
-		var boucle: float = couche["boucle_px"]
-		if bool(couche.get("soudure", false)):
-			# La Chaîne_Soudure ne suit plus `vitesse` : son défilement est
-			# entièrement piloté par le cycle d'arrêt (voir plus haut).
-			origine.x -= fmod(d_soudure_tex * _couvre, boucle) * float(couche["sens"])
-		else:
-			var vitesse: float = couche["vitesse"]
-			if vitesse != 0.0 and boucle > 0.0:
-				origine.x -= fmod(_temps * vitesse, boucle) * float(couche["sens"])
-		var echelle := (1.0 + (zoom - 1.0) * float(couche["profondeur"])) / zoom
-		noeud.position = foyer + (origine - foyer) * echelle
-		noeud.scale = Vector2.ONE * echelle
 
 	for feu in _feux:
 		var noeud: Node2D = feu["noeud"]
@@ -578,3 +568,36 @@ static func _flicker(t: float, phase: float) -> float:
 	var s1 := 0.5 + 0.5 * sin(t * 1.7 + phase)
 	var s2 := 0.5 + 0.5 * sin(t * 4.3 + phase * 1.7)
 	return clampf(0.55 * s1 + 0.45 * s2, 0.0, 1.0)
+
+# Défilement + compensation de zoom de chaque calque (voir _ready).
+func _appliquer_compensation() -> void:
+	var zoom := 1.0
+	var foyer := Vector2.ZERO
+	if is_instance_valid(_noeud_zoom):
+		zoom = maxf(_noeud_zoom.scale.y, 0.001)
+		foyer = _noeud_zoom.pivot_offset - position
+
+	var t_defilement_s := CYCLE_PERIODE_S - BRAS_ARRET_S
+	var cycle_index := floori(_temps / CYCLE_PERIODE_S)
+	var t_cycle := fposmod(_temps, CYCLE_PERIODE_S)
+	# Progression du défilement DANS ce cycle : 0→1 pendant la fenêtre de
+	# défilement, puis PLAFONNÉE à 1 (chaîne figée) pendant l'arrêt.
+	var progres := clampf(t_cycle / maxf(t_defilement_s, 0.0001), 0.0, 1.0)
+	var d_soudure_tex := _soudure_d0_tex + (float(cycle_index) + progres) * CHARIOT_PERIODE_TEX
+
+	for couche in _couches:
+		var noeud: Node2D = couche["noeud"]
+		var origine: Vector2 = couche["origine"]
+		var boucle: float = couche["boucle_px"]
+		if bool(couche.get("soudure", false)):
+			# La Chaîne_Soudure ne suit plus `vitesse` : son défilement est
+			# entièrement piloté par le cycle d'arrêt (voir plus haut).
+			origine.x -= fmod(d_soudure_tex * _couvre, boucle) * float(couche["sens"])
+		else:
+			var vitesse: float = couche["vitesse"]
+			if vitesse != 0.0 and boucle > 0.0:
+				origine.x -= fmod(_temps * vitesse, boucle) * float(couche["sens"])
+		var echelle := (1.0 + (zoom - 1.0) * float(couche["profondeur"])) / zoom
+		noeud.position = foyer + (origine - foyer) * echelle
+		noeud.scale = Vector2.ONE * echelle
+

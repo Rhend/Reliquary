@@ -51,15 +51,15 @@ const TIER_0_COLOR := UIColors.VILLAGE_NASCENT
 # tier_min = palier de Maîtrise du VILLAGE requis pour afficher l'hexagone
 # (filtrage via _hex_disponible dans _build_hub). Chantier 13 (supersède
 # l'ouverture d'emblée du ch.12) : quartiers de base = Héros/Avatar et
-# Expéditions SEULEMENT — l'hex FORGE/Atelier n'apparaît que la VOIE 1
-# ouverte (GameData.atelier_ouvert — ABSENT avant, jamais grisé ; l'ancien
+# Expéditions + FORGE/Atelier (14/10/2026 : l'Atelier est DISPONIBLE D'EMBLÉE, plus
+# derrière la voie 1 ; l'ancien
 # gating par palier de Village reste mort). L'équipement Commun de départ
 # (chantier 13) couvre le joueur d'ici là. VOIES = les 6 voies à ordre fixe
 # (renames Avatar/Atelier = chantier DA).
 const MENU_ITEMS: Array = [
 	["HÉROS",       "👤", 0, "_go_hero",      "hero"      ],
 	["EXPÉDITIONS", "⚔",  0, "_go_adventure", "adventure" ],
-	["FORGE",       "🔨", 0, "_go_forge",     "forge"     ],
+	["ATELIER",     "🔨", 0, "_go_forge",     "forge"     ],
 	["VOIES",       "🔒", 0, "_go_voies",     "voies"     ],
 	["SANCTUAIRE",  "✦",  2, "_go_sanctuary", "sanctuary" ],
 	["RELIQUE",     "◈",  3, "_go_relic",     "relic"     ],
@@ -69,7 +69,7 @@ const MENU_ITEMS: Array = [
 const PANEL_TITLES: Dictionary = {
 	"hero":      "HÉROS",
 	"adventure": "EXPÉDITIONS",
-	"forge":     "FORGE",
+	"forge":     "ATELIER",
 	"voies":     "VOIES",
 	"sanctuary": "SANCTUAIRE",
 	"relic":     "RELIQUE",
@@ -194,17 +194,10 @@ func _ready() -> void:
 	# Alarme 6/6 (chantier 11) : le signal part en PLEINE run d'assaut (victoire
 	# de boss) — l'annonce est différée au retour au QG (par-dessus le recap fermé).
 	EventBus.alarme_sonnee.connect(func() -> void: _alarme_a_annoncer = true)
-	# Voie ouverte (chantiers 12-13) : la voie 1 fait APPARAÎTRE l'hex
-	# Forge/Atelier → hub reconstruit et panneau courant rouvert (pattern
-	# langue) ; les autres voies rafraîchissent le panneau et les pastilles.
-	EventBus.voie_ouverte.connect(func(numero: int) -> void:
-		if numero == GameData.VOIE_ATELIER:
-			var was := _active_panel_id
-			_rebuild_hub()
-			if was != "":
-				_open_panel(was)
-		else:
-			_refresh_active_panel()
+	# Voie ouverte (chantiers 12-13) : le panneau courant et les pastilles se
+	# rafraîchissent (l'Atelier n'est plus lié à la voie 1 depuis le 14/10/2026).
+	EventBus.voie_ouverte.connect(func(_numero: int) -> void:
+		_refresh_active_panel()
 		_update_badges())
 	EventBus.adventure_cycle_ended.connect(func(_s): _update_badges())
 	EventBus.adventure_stopped.connect(_update_badges)
@@ -261,8 +254,6 @@ func village_tier() -> int:
 # que la voie n'est pas restaurée — jamais grisé). Statique et pur : testé
 # directement par les suites headless.
 static func _hex_disponible(d: Array, village_maitrise: int) -> bool:
-	if (d[4] as String) == "forge" and not GameData.atelier_ouvert():
-		return false
 	return (d[2] as int) <= village_maitrise
 
 # ─── Construction principale ──────────────────────────────────
