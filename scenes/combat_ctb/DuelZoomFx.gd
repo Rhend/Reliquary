@@ -40,8 +40,8 @@ const DUREE_IN := 0.14
 # CombatCtbUi — sinon le coup ennemi se jouerait pendant le dé-zoom,
 # contredisant « ennemis sans effet de caméra »). Toucher ces valeurs
 # implique de revérifier ce calage.
-const TENUE := 0.45
-const DUREE_OUT := 0.30
+const TENUE := 0.2      # image FIGÉE (zoom rapide, gel 0,2 s après l'animation d'attaque, dézoom rapide)
+const DUREE_OUT := 0.14   # dézoom RAPIDE (symétrique de DUREE_IN) — total 0,78 s < 0,90 s de pause
 
 # Rejoue l'effet. `crit` accentue le punch-in ; `converger` = false (tir) :
 # personne ne bouge, seul le punch-in reste, recentré sur `foyer`.
@@ -50,7 +50,7 @@ const DUREE_OUT := 0.30
 static func jouer(couche_scene: Control, foyer: Vector2,
 		att: CanvasItem, pos_att: Vector2, cible: CanvasItem, pos_cib: Vector2,
 		crit: bool, converger: bool, facteur_delais: float,
-		fin: Callable = Callable()) -> Tween:
+		fin: Callable = Callable(), tenue_s: float = -1.0) -> Tween:
 	if facteur_delais <= 0.0 or couche_scene == null or att == null or cible == null:
 		return null
 	# CanvasItem n'a PAS de `position` propre (Node2D et Control la déclarent
@@ -62,15 +62,17 @@ static func jouer(couche_scene: Control, foyer: Vector2,
 	var zoom := ZOOM_CRIT if crit else ZOOM
 	var f := facteur_delais
 	var tw := couche_scene.create_tween()
-	tw.tween_property(couche_scene, "scale", Vector2.ONE * zoom,
+	tw.tween_method(poser_echelle.bind(couche_scene), couche_scene.scale, Vector2.ONE * zoom,
 			DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	if converger:
 		tw.parallel().tween_property(att, "position", pos_att,
 				DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		tw.parallel().tween_property(cible, "position", pos_cib,
 				DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_interval(TENUE * f)
-	tw.tween_property(couche_scene, "scale", Vector2.ONE,
+	# Tenue DYNAMIQUE : l'appelant fournit (secondes réelles) attente de la fin
+	# de l'animation + gel ; sans elle, la tenue fixe d'origine.
+	tw.tween_interval(tenue_s if tenue_s >= 0.0 else TENUE * f)
+	tw.tween_method(poser_echelle.bind(couche_scene), Vector2.ONE * zoom, Vector2.ONE,
 			DUREE_OUT * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	if converger:
 		tw.parallel().tween_property(att, "position", origine_att,
@@ -80,3 +82,17 @@ static func jouer(couche_scene: Control, foyer: Vector2,
 	if fin.is_valid():
 		tw.finished.connect(fin)
 	return tw
+
+# Pose l'échelle du punch-in ET prévient aussitôt ce qui la compense (le décor
+# en parallaxe, voir CombatDecorFactory : méta `zoom_suivi`). Un Tween met à
+# jour `scale` APRÈS les `_process` des nœuds : sans ce rappel synchrone, le
+# décor compensait le zoom de la frame précédente (bump + fond gris visible
+# aux bords, retour Rhend 14/10/2026).
+static func poser_echelle(s: Vector2, couche_scene: Control) -> void:
+	if not is_instance_valid(couche_scene):
+		return
+	couche_scene.scale = s
+	if couche_scene.has_meta(&"zoom_suivi"):
+		var suivi: Callable = couche_scene.get_meta(&"zoom_suivi")
+		if suivi.is_valid():
+			suivi.call()

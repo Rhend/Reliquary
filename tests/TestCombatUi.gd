@@ -94,10 +94,10 @@ func _test_ecran_complet() -> void:
 	await _attendre_tour_joueur(ui)
 	# Défendre est de nouveau VISIBLE (13/10/2026) : sans os d'ancrage dédié il
 	# prend l'ancre procédurale de repli, voir CombatCtbUi.LIEN_ANCRE_FRAC.
-	_assert(ui._btn_attaquer.visible and ui._btn_defendre.visible,
-			"activation joueur : boutons Attaquer et Défendre visibles")
-	_assert(ui._liens_actions.size() >= 3,
-			"un trait par action visible (Attaquer, Défendre, Objet)",
+	_assert(ui._btn_attaquer.visible and ui._btn_objet != null,
+			"activation joueur : seuls Attaquer et Objet sont proposés")
+	_assert(ui._liens_actions.size() >= 2,
+			"un trait par action visible (Attaquer, Objet)",
 			"liens=%d" % ui._liens_actions.size())
 
 	# Panneau de stats ennemi (bas-droite) : montre un ennemi vivant par défaut,
@@ -154,9 +154,9 @@ func _test_ecran_complet() -> void:
 			% CombatCtbUi.N_FILE)
 
 	# Tour 1 : DÉFENDRE via le bouton (joué synchrone sur le signal pressed).
-	ui._btn_defendre.pressed.emit()
+	ui._valider_action({"type": Enums.ActionCtb.DEFENDRE})
 	_assert("\n".join(m.journal).contains("se met en garde"),
-			"action Défendre jouée via le bouton (garde posée au journal du moteur)")
+			"action Défendre jouée (plus de bouton, 14/10/2026) (garde posée au journal du moteur)")
 	_assert(av.en_defense or m.nb_activations >= 2,
 			"garde visible (ou déjà expirée à sa prochaine activation)")
 	await _frames(4)

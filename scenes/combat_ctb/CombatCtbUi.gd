@@ -157,6 +157,18 @@ const SOL_X_ADVERSE := 0.75        # ancrage du camp adverse — miroir exact du
 # étant descendus au milieu du sol, un pas de 46 poussait le 3e ennemi (2 x 46)
 # sous la barre d'action, qui est du chrome dessiné PAR-DESSUS la scène.
 const SOL_PAS := Vector2(64, 22)
+# FORMATION en TRIANGLE (schéma ASCII dessiné par Rhend le 14/10/2026). Rang 0 =
+# POINTE (devant), rang 1 = arrière HAUT, rang 2 = arrière BAS. Chaque entrée =
+# (x en FRACTION de la largeur d'écran, y en px par rapport à la ligne de
+# sol) — lues sur le schéma : 64 colonnes ↔ 1280 px, 10 rangées ↔ la bande de
+# sol. Alliés = MIROIR exact des ennemis (x → 1 − x), demandé par Rhend le
+# 14/10/2026. 1 combattant = rang 0 ; 2 = côte à côte en profondeur (± DY) ;
+# > 3 = ancienne ligne.
+const FORMATION_DY := 48.0
+const FORMATION_ALLIES: Array[Vector2] = [
+	Vector2(0.367, -11.0), Vector2(0.180, -72.0), Vector2(0.117, 31.0)]
+const FORMATION_ENNEMIS: Array[Vector2] = [
+	Vector2(0.633, -11.0), Vector2(0.820, -72.0), Vector2(0.883, 31.0)]
 const ORBE_TAILLE := Vector2(64, 64)
 # Barre de PV (CarteCombattantCtb) décalée plus BAS que son ancrage naturel
 # aux pieds (retour Rhend 17/09/2026) — fraction de la hauteur de la scène,
@@ -186,6 +198,15 @@ var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
 var _portrait_heros_genere: Texture2D = null
 var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
 var _duel_tween: Tween = null
+const SHADER_BRUME_DUEL := preload("res://scenes/combat_ctb/brume_duel.gdshader")
+# Part de chaque bord de l'écran plongée dans la brume noire pendant un duel
+# (retour Rhend 14/10/2026 : 15 % puis 30 %, à régler à l'œil).
+const BRUME_DUEL_LARGEUR := 0.30
+const FONDU_BRUME_S := 0.2         # fondu de sortie, APRÈS la fin du dézoom
+var _brume_duel: ColorRect = null
+var _duel_fx_tween: Tween = null
+var _duel_att_tenu: SpriteSpinePersonnage = null   # attaquant dont le geste est TENU
+var _duel_masques: Array = []       # nœuds des non-acteurs masqués pendant le duel
 var _duel_restaure: Array = []      # paires [CanvasItem, position d'origine]
 var _duel_acteurs: Array = []       # [attaquant, cible] du duel en cours
 var _duel_ordre_restaure: Array = []   # [CanvasItem attaquant, index d'origine dans _sol]
@@ -227,19 +248,15 @@ var _entite_alliee_selectionnee: CtbCombattant = null
 # par priorité (`_ennemi_affiche`) : survolé > dernier inspecté (cible
 # cliquée, ou ennemi qui vient d'agir) > premier vivant > rien (masqué).
 var _panneau_stats_ennemi: CombatPanneauStats
-var _ennemi_survole: CtbCombattant = null
+var _ennemi_survole: CtbCombattant = null   # SURLIGNAGE COLLANT : reste jusqu'au survol d'un autre ennemi ou son choix comme cible
+var _acteur_actif: CtbCombattant = null    # combattant dont c'est le tour d'initiative
 var _ennemi_inspecte: CtbCombattant = null
 # Traits bouton → buste calculés par `_disposer_actions_deux_colonnes`,
 # peints par `_dessiner_liens_actions` (voir CombatUiSkin.couleur_lien).
 var _liens_actions: Array[Dictionary] = []
 var _bandeaux: VBoxContainer
 var _btn_attaquer: Button
-var _btn_defendre: Button
 var _btn_objet: Button = null          # créé au tour du joueur, grisé si inventaire vide
-# Compétences (chantier 16) : boutons recréés à chaque tour joueur — absents
-# si le combattant n'en a pas ; GRISÉS avec compteur pendant la recharge
-# (état temporaire d'un contenu possédé — ≠ contenu absent).
-var _btns_competences: Array[Button] = []
 # Boutons d'action : Control de positionnement LIBRE (retour Rhend
 # 07/09/2026, 2 colonnes encadrant le héros — voir
 # _disposer_actions_deux_colonnes), plus une HBoxContainer classique.
@@ -331,8 +348,17 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 		# à ce jour (contrairement aux ennemis) — tant que ça reste vrai,
 		# `_portrait_pour` retombe sur l'initiale. Fire-and-forget, EXACTEMENT
 		# la même apparence que le sprite ci-dessus.
+		if sprite != null:
+			sprite.preparer_contour()   # liseré BLEU au tour de l'allié (`_maj_contours`)
 		_demarrer_generation_portrait_heros(niveau_heros, previsu_cosmetique_heros,
 				previsu_coiffure_heros, previsu_genre_heros)
+	elif cb.est_joueur():
+		# Allié SUPPLÉMENTAIRE (essai de formation, 14/10/2026) : une Relic
+		# FEMME (genre 1), pour voir le triangle à trois alliés.
+		sprite = SpriteSpinePersonnage.creer_heros(
+				previsu_niveau_heros if previsu_niveau_heros > 0 else 1, 0, 0, 1)
+		if sprite != null:
+			sprite.preparer_contour()
 	else:
 		# Ennemi : même registre / même apparence que la ShowRoom, qui EST
 		# cet écran depuis 09/2026 (voir CLAUDE.md « la ShowRoom est un
@@ -354,6 +380,13 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 	if sprite != null:
 		_sprites[cb] = sprite
 		_sol.add_child(sprite)
+		# Mort finie : le personnage disparaît, son ombre et sa carte avec.
+		sprite.disparu.connect(func() -> void:
+			if is_instance_valid(ombre):
+				ombre.visible = false
+			var carte_cb: Control = _cartes.get(cb)
+			if is_instance_valid(carte_cb):
+				carte_cb.visible = false)
 	else:
 		var orbe := EnergyBoule.new()
 		orbe.accent = ExpeStyle.accent_camp(cb.est_joueur())
@@ -402,6 +435,7 @@ func previsu_rafraichir_visuel(pour_ennemi: bool) -> void:
 	# que son sprite (`_portrait_pour`) : sans ce rafraîchissement, elle
 	# resterait sur l'ancien palier/niveau après un hot-reload.
 	_rafraichir_file()
+	_maj_contours()   # les sprites reconstruits ont perdu leur liseré
 
 func _construire() -> void:
 	# Fond : décor RÉEL de Christophe, PLEIN ÉCRAN pour les deux camps
@@ -415,6 +449,19 @@ func _construire() -> void:
 	_couche_scene.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_couche_scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_couche_scene)
+	# Brume noire de bordure du zoom-duel : AU-DESSUS de la scène zoomée (elle
+	# ne zoome pas avec elle), SOUS tout le chrome ajouté ensuite.
+	_brume_duel = ColorRect.new()
+	_brume_duel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_brume_duel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_brume_duel.color = Color.WHITE
+	var mat_brume := ShaderMaterial.new()
+	mat_brume.shader = SHADER_BRUME_DUEL
+	mat_brume.set_shader_parameter("largeur", BRUME_DUEL_LARGEUR)
+	mat_brume.set_shader_parameter("intensite", 0.0)
+	_brume_duel.material = mat_brume
+	_brume_duel.visible = false
+	add_child(_brume_duel)
 	CombatFondScinde.construire(_couche_scene, SOL_Y_FRAC)
 
 	# Voile de lumière — posé APRÈS le décor, AVANT `_sol` (donc sous les
@@ -527,10 +574,9 @@ func _construire() -> void:
 	_btn_attaquer = CombatUiSkin.bouton(Translations.T("ctb.attaquer"))
 	_btn_attaquer.pressed.connect(_sur_attaquer)
 	_rangee_boutons.add_child(_btn_attaquer)
-	_btn_defendre = CombatUiSkin.bouton(Translations.T("ctb.defendre"))
-	_btn_defendre.pressed.connect(func() -> void:
-		_valider_action({"type": Enums.ActionCtb.DEFENDRE}))
-	_rangee_boutons.add_child(_btn_defendre)
+	# Seules Attaquer et Objet existent à l'écran (retour Rhend 14/10/2026) :
+	# une action sans os d'ancrage n'apparaît pas — ni Défendre, ni compétences
+	# (le moteur les gère toujours, l'UI ne les expose plus).
 	# PAS de bouton Objet ici : il n'existe que si l'inventaire de run est
 	# non vide, recréé à chaque tour joueur (_montrer_actions).
 
@@ -664,13 +710,22 @@ func _repositionner_panel_stats() -> void:
 
 # Ennemi à montrer dans le panneau de droite — voir `_panneau_stats_ennemi`.
 func _ennemi_affiche() -> CtbCombattant:
-	if _ennemi_survole != null and _ennemi_survole.est_vivant():
-		return _ennemi_survole
+	var rouge := _ennemi_surligne()
+	if rouge != null:
+		return rouge
 	if _ennemi_inspecte != null and _ennemi_inspecte.est_vivant():
 		return _ennemi_inspecte
 	var vivants := _ennemis_vivants()
 	return vivants[0] if not vivants.is_empty() else null
 
+# Ennemi surligné en ROUGE : celui dont c'est le tour d'initiative ; sinon le
+# dernier survolé (surlignage collant — voir `_ennemi_survole`).
+func _ennemi_surligne() -> CtbCombattant:
+	if _acteur_actif != null and not _acteur_actif.est_joueur() and _acteur_actif.est_vivant():
+		return _acteur_actif
+	if _ennemi_survole != null and _ennemi_survole.est_vivant():
+		return _ennemi_survole
+	return null
 func _rafraichir_panel_ennemi() -> void:
 	if _panneau_stats_ennemi == null:
 		return
@@ -711,6 +766,44 @@ func _repositionner_bandeaux() -> void:
 
 # ─── Scène de bataille : sol + emplacements (placeholder sprites) ──
 
+# Décalage (par rapport au centre du camp, au niveau de la ligne de sol) du
+# `rang`-ième membre d'un camp de `n` : voir FORMATION_*. Vector2.INF = pas de
+# formation (ancienne ligne).
+func _decalage_formation(n: int, rang: int, camp_joueur: bool) -> Vector2:
+	var table := FORMATION_ALLIES if camp_joueur else FORMATION_ENNEMIS
+	var base_x: float = _sol.size.x * (SOL_X_JOUEUR if camp_joueur else SOL_X_ADVERSE)
+	match n:
+		1, 3:
+			var p: Vector2 = table[rang]
+			return Vector2(_sol.size.x * p.x - base_x, p.y)
+		2:
+			return Vector2(0.0, FORMATION_DY * (-1.0 if rang == 0 else 1.0))
+	return Vector2.INF
+
+# Ordre de dessin = profondeur : plus un pied est BAS à l'écran, plus il passe
+# devant. Ombres au fond, puis (sprite, carte) du plus loin au plus proche,
+# zones de clic tout au-dessus. Les z_index ne sont pas utilisés : le duel
+# remonte l'attaquant par `move_child` (voir _duel_*).
+func _trier_profondeur() -> void:
+	var tries: Array = _pieds.keys()
+	tries.sort_custom(func(a: CtbCombattant, b: CtbCombattant) -> bool:
+		return (_pieds[a] as Vector2).y < (_pieds[b] as Vector2).y)
+	for cb: CtbCombattant in tries:
+		var ombre: Node = _ombres.get(cb)
+		if ombre != null:
+			_sol.move_child(ombre, _sol.get_child_count() - 1)
+	for cb: CtbCombattant in tries:
+		var noeud := _noeud_bataille(cb)
+		if noeud != null:
+			_sol.move_child(noeud, _sol.get_child_count() - 1)
+		var carte: Node = _cartes.get(cb)
+		if carte != null:
+			_sol.move_child(carte, _sol.get_child_count() - 1)
+	for cb: CtbCombattant in tries:
+		var zone: Node = _zones_cible.get(cb)
+		if zone != null:
+			_sol.move_child(zone, _sol.get_child_count() - 1)
+
 # Emplacements des FUTURS sprites de personnages, posés sur le sol —
 # placeholder : boules de lumière (EnergyBoule) aux accents de camp.
 func _placer_orbes() -> void:
@@ -732,6 +825,9 @@ func _placer_orbes() -> void:
 			var t := float(i) - float(membres.size() - 1) * 0.5
 			var pied := Vector2(base_x + dir * t * SOL_PAS.x,
 					_sol.size.y * SOL_Y_FRAC + t * SOL_PAS.y)
+			var formation := _decalage_formation(membres.size(), i, camp_joueur)
+			if formation != Vector2.INF:
+				pied = Vector2(base_x, _sol.size.y * SOL_Y_FRAC) + formation
 			_pieds[membres[i]] = pied
 			var noeud := _noeud_bataille(membres[i])
 			if noeud != null:
@@ -741,10 +837,22 @@ func _placer_orbes() -> void:
 				ombre.position = pied
 			var zone: Control = _zones_cible.get(membres[i])
 			if zone != null:
+				# La zone épouse le CORPS RENDU du personnage (retour Rhend
+				# 14/10/2026 : seule la zone des jambes réagissait — 96×116
+				# fixe, très en dessous d'un FlameBot). Plancher = ancienne
+				# taille, pour l'EnergyBoule de repli.
+				var spr: SpriteSpinePersonnage = _sprites.get(membres[i])
+				var zw := 96.0
+				var zh := 116.0
+				if spr != null:
+					zw = maxf(zw, spr.largeur_rendue_px() * 1.1)
+					zh = maxf(zh, spr.hauteur_rendue_px() * 1.1)
+				zone.size = Vector2(zw, zh)
 				zone.position = pied - Vector2(zone.size.x * 0.5, zone.size.y - 12.0)
 			var carte: CarteCombattantCtb = _cartes.get(membres[i])
 			if carte != null:
 				carte.definir_position(pied, _sol.size.y * CARTE_DECALAGE_BAS_FRAC)
+	_trier_profondeur()
 	_sol.queue_redraw()
 
 # Sol de la scène : la ligne d'horizon + bande dégradée qui vivait ici avant
@@ -784,8 +892,18 @@ func _dessiner_sol() -> void:
 				# Réticule RÉEL (Icone_Arrow_2, Christophe) — remplace le "▼"
 				# ASCII ; couleur native de l'icône, l'anneau or ci-dessus
 				# reste le signal « ciblable » du langage projet.
+				# Flèche AU-DESSUS DE LA TÊTE, pointant vers le BAS (retour Rhend
+				# 14/10/2026 : elle pointait vers le haut, à hauteur des jambes).
+				# L'icône est livrée pointe en haut → retournée verticalement.
+				var spr_r: SpriteSpinePersonnage = _sprites.get(cb)
+				var haut_r := ORBE_TAILLE.y
+				if spr_r != null and spr_r.hauteur_rendue_px() > 0.0:
+					haut_r = spr_r.hauteur_rendue_px()
+				var tete_y := pied.y - haut_r
+				_sol.draw_set_transform(Vector2(pied.x, tete_y - 6.0), 0.0, Vector2(1.0, -1.0))
 				_sol.draw_texture_rect(CombatUiSkin.RETICULE,
-						Rect2(pied + Vector2(-12.0, -92.0), Vector2(24.0, 24.0)), false)
+						Rect2(Vector2(-12.0, 0.0), Vector2(24.0, 24.0)), false)
+				_sol.draw_set_transform(Vector2.ZERO)
 
 # Un personnage mort disparaît de la scène (l'ellipse d'emplacement reste) ;
 # un sprite Spine joue son animation Death et TIENT la pose (pas de fondu) —
@@ -823,6 +941,10 @@ func _boucle() -> void:
 				return
 			_montrer_actions(false)
 			moteur.jouer(_action_en_attente)
+			# Le duel peut durer (animation d'attaque + gel) : l'activation
+			# suivante attend sa fin (sondage : un tween tué n'émet pas finished).
+			while _duel_tween != null and _duel_tween.is_valid() and is_inside_tree():
+				await get_tree().process_frame
 		else:
 			await _pause(0.55)   # séquencement lisible des activations ennemies
 			if not is_inside_tree():
@@ -838,26 +960,8 @@ func _boucle() -> void:
 
 func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 	_btn_attaquer.visible = on
-	_btn_defendre.visible = on
 	_objet_en_attente = null
 	_competence_en_attente = null
-	# Compétences (chantier 16) : un bouton par compétence du combattant
-	# actif — recréés à chaque tour (le cooldown a pu bouger), grisés « (n) »
-	# en recharge, ABSENTS si le combattant n'en a pas.
-	for b in _btns_competences:
-		_rangee_boutons.remove_child(b)
-		b.queue_free()
-	_btns_competences.clear()
-	if on and acteur != null:
-		for comp: CompetenceCtbData in acteur.data.competences:
-			var nom := Translations.resource_name(comp, comp.id)
-			var prete := acteur.competence_prete(comp)
-			var b := CombatUiSkin.bouton(
-					nom if prete else "%s (%d)" % [nom, acteur.cooldown_restant(comp)])
-			b.disabled = not prete
-			b.pressed.connect(_sur_competence.bind(comp))
-			_rangee_boutons.add_child(b)
-			_btns_competences.append(b)
 	# Bouton Objet : TOUJOURS présent au tour du joueur (retour Rhend
 	# 17/09/2026 — supersède l'ancienne règle « contenu absent, pas grisé » :
 	# l'action a désormais un os d'ancrage réel à viser (la ceinture), un
@@ -877,8 +981,7 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 		_rangee_boutons.add_child(_btn_objet)
 	UIHelpers.clear_children_now(_rangee_cibles)
 	if on:
-		var visibles: Array = [_btn_attaquer, _btn_defendre]
-		visibles.append_array(_btns_competences)
+		var visibles: Array = [_btn_attaquer]
 		if _btn_objet != null:
 			visibles.append(_btn_objet)
 		_disposer_actions_deux_colonnes(visibles)
@@ -1014,24 +1117,6 @@ func _sur_attaquer() -> void:
 		return
 	_montrer_choix_cibles(vivants)
 
-# Compétence (chantier 16) : sans cible requise → validée direct (soin) ;
-# sinon même rangée de choix de cible que l'attaque et l'objet.
-func _sur_competence(comp: CompetenceCtbData) -> void:
-	if not _btn_attaquer.visible:
-		return
-	_objet_en_attente = null
-	_competence_en_attente = null
-	if not comp.cible_requise():
-		_valider_action({"type": Enums.ActionCtb.COMPETENCE, "competence": comp})
-		return
-	var vivants: Array[CtbCombattant] = _ennemis_vivants()
-	if vivants.size() <= 1:
-		_valider_action({"type": Enums.ActionCtb.COMPETENCE, "competence": comp,
-				"cible": vivants[0] if vivants.size() == 1 else null})
-		return
-	_competence_en_attente = comp
-	_montrer_choix_cibles(vivants)
-
 # Mode ciblage (attaque, compétence ou objet ciblé) : l'ennemi se choisit
 # À LA SOURIS — clic sur son personnage DANS LA SCÈNE (zone + réticule or)
 # ou sur sa carte. Plus de boutons nominatifs (retour Rhend 07/2026) :
@@ -1101,7 +1186,9 @@ func _sur_objet_choisi(objet: ConsommableData) -> void:
 	_montrer_choix_cibles(vivants)
 
 func _sur_cible_cliquee(cible: CtbCombattant) -> void:
-	if not _btn_attaquer.visible or not cible.est_vivant():
+	# Clic sur une unité SANS action choisie au préalable (Attaquer/Objet) : rien
+	# ne se passe (retour Rhend 14/10/2026) — seul le mode ciblage valide.
+	if not _ciblage_actif or not _btn_attaquer.visible or not cible.est_vivant():
 		return
 	_ennemi_inspecte = cible   # tenu pendant la résolution du coup
 	if _competence_en_attente != null:
@@ -1115,6 +1202,7 @@ func _sur_cible_cliquee(cible: CtbCombattant) -> void:
 	_valider_action({"type": Enums.ActionCtb.ATTAQUER, "cible": cible})
 
 func _valider_action(action: Dictionary) -> void:
+	_ennemi_survole = null   # cible choisie : le surlignage collant est levé
 	AudioManager.play_sfx("ui_select", -8.0)
 	# Objet : l'inventaire (chez l'appelant) est décrémenté AU MOMENT où
 	# l'action est validée — le moteur reste agnostique.
@@ -1154,19 +1242,22 @@ func _sur_zone_input(ev: InputEvent, cb: CtbCombattant) -> void:
 			_rafraichir_panel_ennemi()
 		_sur_cible_cliquee(cb)
 
-# Contour rouge de 2 px autour de la silhouette de l'ennemi SURVOLÉ.
+# Liseré de 2 px autour de la silhouette : BLEU = l'allié dont c'est le tour
+# d'initiative, ROUGE = l'ennemi surligné (son tour, sinon le dernier survolé).
 func _maj_contours() -> void:
+	var rouge := _ennemi_surligne()
 	for cb: CtbCombattant in _sprites:
+		var spr := _sprites[cb] as SpriteSpinePersonnage
 		if cb.est_joueur():
-			continue
-		(_sprites[cb] as SpriteSpinePersonnage).definir_contour(
-				cb == _ennemi_survole and cb.est_vivant(), UIColors.CONTOUR_SURVOL_ENNEMI, 2.0)
+			spr.definir_contour(cb == _acteur_actif and cb.est_vivant(),
+					UIColors.CONTOUR_TOUR_ALLIE, 2.0)
+		else:
+			spr.definir_contour(cb == rouge and cb.est_vivant(),
+					UIColors.CONTOUR_SURVOL_ENNEMI, 2.0)
 
 func _sur_zone_survol(cb: CtbCombattant, actif: bool) -> void:
 	if actif:
 		_ennemi_survole = cb
-	elif _ennemi_survole == cb:
-		_ennemi_survole = null
 	_rafraichir_panel_ennemi()
 	if actif:
 		_cible_survolee = cb
@@ -1232,11 +1323,18 @@ func _rafraichir_file() -> void:
 	_repositionner_panneau_file()
 
 func _marquer_actif(c: CtbCombattant) -> void:
-	if c != null and not c.est_joueur():
-		_ennemi_inspecte = c   # tour d'un ennemi : le panneau le suit
-		_rafraichir_panel_ennemi()
-	# Le halo « c'est ton tour » vit sur l'ombre portée (CombatOmbrePortee) —
-	# plus de doublon sur une carte depuis le chantier UI_Concept2.
+	_acteur_actif = c
+	if c != null and c.est_joueur():
+		# Allié actif : son panneau (bas-gauche) le suit.
+		_entite_alliee_selectionnee = c
+		if _panneau_stats != null:
+			_panneau_stats.definir_combattant(c)
+	elif c != null:
+		_ennemi_inspecte = c   # tour d'un ennemi : le panneau (rouge) le suit
+		_ennemi_survole = null  # son tour prend le surlignage rouge
+	_rafraichir_panel_ennemi()   # met aussi les contours à jour
+	# Le halo « c'est ton tour » vit sur l'ombre portée (CombatOmbrePortee).
+	# Le contour coloré (bleu allié / rouge ennemi) est posé par `_maj_contours`.
 	for cb: CtbCombattant in _ombres:
 		(_ombres[cb] as CombatOmbrePortee).definir_actif(cb == c)
 
@@ -1265,8 +1363,9 @@ func _duel_interrompre() -> void:
 		(paire[0] as CanvasItem).position = paire[1]
 	_duel_restaure.clear()
 	_duel_restaurer_ordre()
+	_duel_ambiance_couper()
 	if _couche_scene != null:
-		_couche_scene.scale = Vector2.ONE
+		DuelZoomFx.poser_echelle(Vector2.ONE, _couche_scene)
 	if not _duel_acteurs.is_empty():
 		_duel_acteurs = []
 		_rafraichir_orbes()   # réapplique le fondu différé d'un vaincu du duel
@@ -1310,13 +1409,96 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
 		_duel_ordre_restaure = [noeud_att, noeud_att.get_index()]
 		_sol.move_child(noeud_att, _sol.get_child_count() - 1)
 	_duel_acteurs = [att, cible]
+	# Tenue DYNAMIQUE : la caméra zoome en DUREE_IN, l'animation d'attaque joue
+	# le reste, puis sa DERNIÈRE IMAGE (épée au sol) est tenue TENUE secondes ;
+	# le dézoom démarre alors et c'est à ce moment seulement que Relic repasse en Idle.
+	var spr_att: SpriteSpinePersonnage = _sprites.get(att)
+	var attente := 0.0
+	if spr_att != null:
+		attente = maxf(0.0, spr_att.duree_attaque(not converger) - DuelZoomFx.DUREE_IN * facteur_delais)
+	_duel_ambiance_jouer(att, cible, attente)
+	_duel_att_tenu = spr_att   # relâché au dézoom (`_duel_relacher`)
 	_duel_tween = DuelZoomFx.jouer(_couche_scene, foyer, noeud_att, pos_att, noeud_cib, pos_cib,
-			crit, converger, facteur_delais, func() -> void:
-				_duel_restaure.clear()
-				_duel_restaurer_ordre()
-				_duel_tween = null
-				_duel_acteurs = []
-				_rafraichir_orbes())   # fondu différé du vaincu, une fois le duel joué
+			crit, converger, facteur_delais, _duel_fin,
+			attente + DuelZoomFx.TENUE * facteur_delais)
+
+# Fin du duel : ordre de dessin, positions et fondu du vaincu (différé
+# jusque-là) reviennent à la normale.
+func _duel_fin() -> void:
+	_duel_restaure.clear()
+	_duel_restaurer_ordre()
+	_duel_tween = null
+	_duel_acteurs = []
+	_rafraichir_orbes()
+
+# Ambiance du duel (retour Rhend 14/10/2026) : les combattants qui ne
+# participent PAS à l'attaque s'effacent le temps du coup, et le pourtour de
+# l'écran plonge dans une brume noire pour concentrer le regard. Même
+# chronologie que `DuelZoomFx` (entrée, tenue, sortie) — mêmes constantes.
+func _duel_ambiance_jouer(att: CtbCombattant, cible: CtbCombattant,
+		attente_s: float) -> void:
+	_duel_ambiance_couper()
+	var f := facteur_delais
+	for cb: CtbCombattant in moteur.combattants:
+		if cb == att or cb == cible or not cb.est_vivant():
+			continue
+		for n in [_noeud_bataille(cb), _ombres.get(cb), _cartes.get(cb)]:
+			if n != null:
+				_duel_masques.append(n)
+	var tw := create_tween()
+	_duel_fx_tween = tw
+	var premier := true
+	for n: CanvasItem in _duel_masques:
+		if not premier:
+			tw.parallel()
+		tw.tween_property(n, "modulate:a", 0.0, DuelZoomFx.DUREE_IN * f)
+		premier = false
+	if _brume_duel != null:
+		_brume_duel.visible = true
+		if not premier:
+			tw.parallel()
+		tw.tween_method(_regler_brume, 0.0, 1.0, DuelZoomFx.DUREE_IN * f)
+	tw.tween_interval(attente_s)
+	tw.tween_interval(DuelZoomFx.TENUE * f)
+	tw.tween_callback(_duel_relacher)
+	premier = true
+	for n: CanvasItem in _duel_masques:
+		if not premier:
+			tw.parallel()
+		tw.tween_property(n, "modulate:a", 1.0, DuelZoomFx.DUREE_OUT * f)
+		premier = false
+	if premier:
+		tw.tween_interval(DuelZoomFx.DUREE_OUT * f)   # pas de masque : tenir la durée du dézoom
+	# La brume RESTE pendant tout le dézoom et ne s'efface qu'une fois celui-ci
+	# fini (retour Rhend 14/10/2026) — fondu court, après coup.
+	if _brume_duel != null:
+		tw.tween_method(_regler_brume, 1.0, 0.0, FONDU_BRUME_S * f)
+	tw.finished.connect(_duel_ambiance_couper)
+
+# Fin de la tenue : l'attaquant, resté sur la dernière image de son geste
+# (épée au sol), reprend sa pose de repos — au moment du dézoom, pas avant.
+func _duel_relacher() -> void:
+	if _duel_att_tenu != null and is_instance_valid(_duel_att_tenu):
+		_duel_att_tenu.reprendre_idle()
+	_duel_att_tenu = null
+
+func _regler_brume(v: float) -> void:
+	if _brume_duel != null:
+		(_brume_duel.material as ShaderMaterial).set_shader_parameter("intensite", v)
+
+# Coupe net l'ambiance : non-acteurs réaffichés, brume éteinte.
+func _duel_ambiance_couper() -> void:
+	if _duel_fx_tween != null and _duel_fx_tween.is_valid():
+		_duel_fx_tween.kill()
+	_duel_fx_tween = null
+	_duel_relacher()
+	for n in _duel_masques:
+		if is_instance_valid(n):
+			(n as CanvasItem).modulate.a = 1.0
+	_duel_masques.clear()
+	if _brume_duel != null:
+		_regler_brume(0.0)
+		_brume_duel.visible = false
 
 # Replace l'attaquant à son rang d'origine dans `_sol` une fois le duel fini
 # (ou interrompu) — le z-order ne doit servir que le temps du geste, jamais
@@ -1342,9 +1524,16 @@ func _sur_evenement(e: Dictionary) -> void:
 			var a_distance: bool = int(e.get("animation",
 					Enums.AnimationAttaque.MELEE)) == Enums.AnimationAttaque.DISTANCE
 			var sprite_att: SpriteSpinePersonnage = _sprites.get(e["attaquant"])
-			if sprite_att != null:
-				sprite_att.jouer_attaque(a_distance)
 			var cible := e["cible"] as CtbCombattant
+			# Attaque du joueur avec duel : le geste est TENU sur sa dernière
+			# image (épée au sol) pendant tout le zoom ; le repos ne revient
+			# qu'au dézoom (`_duel_relacher`). Sinon : geste + Idle enchaîné.
+			_duel_relacher()   # un geste tenu précédent ne doit pas écraser celui-ci
+			var duel_tenu: bool = (e["attaquant"] as CtbCombattant).est_joueur() \
+					and facteur_delais > 0.0 and _couche_scene != null \
+					and _pieds.has(e["attaquant"]) and _pieds.has(cible)
+			if sprite_att != null:
+				sprite_att.jouer_attaque(a_distance, duel_tenu)
 			var sprite_cible: SpriteSpinePersonnage = _sprites.get(cible)
 			if sprite_cible != null:
 				if bool(e["mort"]):
@@ -1404,10 +1593,32 @@ func _sur_evenement(e: Dictionary) -> void:
 
 func _flotter(cb: CtbCombattant, texte: String, taille: int, couleur: Color,
 		punch: bool) -> void:
-	var carte := _cartes.get(cb) as CarteCombattantCtb
-	if carte == null or _fx == null:
+	if _fx == null or _sol == null:
 		return
-	var pos := carte.centre_fx() - _fx.global_position
+	# Le chiffre naît au niveau du TORSE, décalé HORS de la silhouette, côté
+	# opposé à l'adversaire (retour Rhend 14/10/2026 : aux pieds on ne le
+	# voyait pas). Point calculé depuis la position RÉELLE du nœud (il peut
+	# être en plein duel, déplacé au centre) puis converti en global : suit
+	# donc aussi le zoom de la scène.
+	var noeud := _noeud_bataille(cb)
+	var carte := _cartes.get(cb) as CarteCombattantCtb
+	if noeud == null and carte == null:
+		return
+	var pied: Vector2 = _pieds.get(cb, Vector2.ZERO)
+	var haut := ORBE_TAILLE.y
+	var larg := ORBE_TAILLE.x
+	if noeud != null:
+		pied = noeud.position if _sprites.has(cb) \
+				else noeud.position + Vector2(ORBE_TAILLE.x * 0.5, ORBE_TAILLE.y - 10.0)
+		var spr: SpriteSpinePersonnage = _sprites.get(cb)
+		if spr != null:
+			if spr.hauteur_rendue_px() > 0.0:
+				haut = spr.hauteur_rendue_px()
+			if spr.largeur_rendue_px() > 0.0:
+				larg = spr.largeur_rendue_px()
+	var cote := -1.0 if cb.est_joueur() else 1.0   # héros à gauche, ennemis à droite
+	var local := pied + Vector2(cote * (larg * 0.5 + 24.0), -haut * 0.55)
+	var pos := _sol.get_global_transform() * local - _fx.global_position
 	UIHelpers.float_text(_fx, texte, taille, couleur, pos, 46.0, punch)
 
 # ─── Transitions de bataille (placeholder assumé) ────────────

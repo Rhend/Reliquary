@@ -221,10 +221,10 @@ func _dernier_attaque(vus: Array[Dictionary]) -> Dictionary:
 			return vus[i]
 	return {}
 
-# ─── 6. Écran de combat : boutons ────────────────────────────
+# ─── 6. Écran de combat : aucune action sans os d'ancrage ────
 
 func _test_ui() -> void:
-	print("\n[6] Écran de combat : boutons présents / grisés en recharge / absents")
+	print("\n[6] Écran de combat : seules Attaquer et Objet apparaissent")
 	get_tree().root.size = Vector2i(1280, 720)
 	var m := _moteur(1.0, [_frappe(1.6, 3), _soin(0.25, 4)])
 	var ui := CombatCtbUi.new(m, false)
@@ -232,42 +232,17 @@ func _test_ui() -> void:
 	add_child(ui)
 	await get_tree().process_frame
 	await get_tree().process_frame   # _boucle : tour du héros (VIT 100) ouvert
-	var btns := _boutons_competences(ui)
-	_check("2 boutons de compétence au tour du héros", btns.size() == 2)
-	_check("aucun grisé (tout est prêt)", btns.all(
-			func(b: Button) -> bool: return not b.disabled))
-	# Lancer le soin → au tour suivant du héros, il est grisé avec compteur.
-	var idx_soin := -1
-	for i in btns.size():
-		if btns[i].text.begins_with("Second"):
-			idx_soin = i
-	_check("bouton du soin identifiable", idx_soin >= 0)
-	if idx_soin >= 0:
-		btns[idx_soin].pressed.emit()   # sans cible requise → action validée
-		for i in 8:
-			await get_tree().process_frame   # l'ennemi joue, retour au héros
-		var btns2 := _boutons_competences(ui)
-		var grises := btns2.filter(func(b: Button) -> bool: return b.disabled)
-		_check("au tour suivant : le soin est grisé avec compteur",
-				grises.size() == 1 and grises[0].text.contains("("))
+	# Retour Rhend 14/10/2026 : une action reliée à aucun joint n'apparaît pas —
+	# Frappe lourde, Tir de lame, Second souffle et Défendre sont absentes
+	# de l'UI (le moteur, lui, les gère toujours : sections 1-5).
+	var boutons: Array[Button] = []
+	for n in ui._rangee_boutons.get_children():
+		if n is Button and (n as Button).visible:
+			boutons.append(n as Button)
+	_check("2 boutons au tour du héros malgré 2 compétences (Attaquer + Objet)",
+			boutons.size() == 2, str(boutons.size()))
 	ui.queue_free()
 	await get_tree().process_frame
-	# Combattant SANS compétence : aucun bouton (absent, pas grisé).
-	var m2 := _moteur(1.0, [])
-	var ui2 := CombatCtbUi.new(m2, false)
-	ui2.facteur_delais = 0.0
-	add_child(ui2)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	_check("sans compétence : aucun bouton", _boutons_competences(ui2).is_empty())
-	ui2.queue_free()
-	await get_tree().process_frame
-
-func _boutons_competences(ui: CombatCtbUi) -> Array[Button]:
-	var out: Array[Button] = []
-	for b in ui._btns_competences:
-		out.append(b as Button)
-	return out
 
 # ─── Helpers ─────────────────────────────────────────────────
 

@@ -103,6 +103,12 @@ var _groupe_contour: CanvasGroup = null
 var _mat_contour: ShaderMaterial = null
 const SHADER_CONTOUR := preload("res://scenes/combat_ctb/contour_survol.gdshader")
 var _mort := false        # Death jouée : plus aucune autre animation
+var _duree_mort := 0.0    # durée (s) de l'animation Death de l'export
+var _durees: Dictionary = {}   # nom d'animation → durée (s), lue de l'export
+var _tween_disparition: Tween = null
+## Émis quand l'animation de mort est finie et le sprite retiré de l'écran
+## (l'appelant retire alors ce qui l'accompagne : ombre au sol…).
+signal disparu
 var _animations := PackedStringArray()   # ce que l'export sait vraiment jouer
 var _apparence: Dictionary = {}          # dernière apparence posée (mesure d'échelle)
 var _chemin_skel := ""                   # clé de la silhouette bakée
@@ -198,6 +204,9 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 	add_child(_spine)
 	for a in donnees.call("get_animations"):
 		_animations.append(str(a.call("get_name")))
+		_durees[str(a.call("get_name"))] = float(a.call("get_duration"))
+		if str(a.call("get_name")) == ANIM_DEATH:
+			_duree_mort = float(a.call("get_duration"))
 	# Apparence (skin de palier, costume, niveau d'équipement) : posée AVANT la
 	# 1re animation pour que la pose de repos s'affiche d'emblée avec les bons
 	# attachements.
@@ -619,7 +628,18 @@ func a_animation(nom: String) -> bool:
 # `a_distance` demande le geste de TIR (Attack_Shoot) : il RETOMBE sur la
 # mêlée quand l'export ne le porte pas — les ennemis n'ont pas Attack_Shoot,
 # et une action jouée doit toujours s'animer.
-func jouer_attaque(a_distance: bool = false) -> void:
+func jouer_attaque(a_distance: bool = false, tenir: bool = false) -> void:
+	# `tenir` : SANS retour Idle enchaîné — la dernière image reste à l'écran
+	# jusqu'à `reprendre_idle()` (zoom-duel : l'épée reste au sol tant que la
+	# caméra est zoomée, le repos ne revient qu'au dézoom).
+	var nom_geste := ANIM_ATTACK_SHOOT if a_distance and a_animation(ANIM_ATTACK_SHOOT) else ANIM_ATTACK
+	if tenir:
+		if _mort or not a_animation(nom_geste):
+			return
+		var etat_t := _etat_animation()
+		if etat_t != null:
+			etat_t.call("set_animation", nom_geste, false, 0)
+		return
 	if a_distance and a_animation(ANIM_ATTACK_SHOOT):
 		_one_shot_puis_idle(ANIM_ATTACK_SHOOT)
 		return
@@ -640,10 +660,34 @@ func jouer_mort() -> void:
 		return
 	_mort = true
 	etat.call("set_animation", ANIM_DEATH, false, 0)
+	# Fin de l'animation → le personnage DISPARAÎT (retour Rhend 14/10/2026) :
+	# plus de cadavre tenu à l'écran. Durée lue de l'export, jamais devinée.
+	if is_inside_tree():
+		_tween_disparition = create_tween()
+		_tween_disparition.tween_interval(maxf(_duree_mort, 0.05))
+		_tween_disparition.tween_callback(func() -> void:
+			visible = false
+			disparu.emit())
+
+# Durée (s) du geste d'attaque que `jouer_attaque(a_distance)` va lancer —
+# même repli (tir → mêlée si l'export n'a pas Attack_Shoot). 0 si inconnue.
+func duree_attaque(a_distance: bool = false) -> float:
+	var nom := ANIM_ATTACK_SHOOT if a_distance and a_animation(ANIM_ATTACK_SHOOT) \
+			else ANIM_ATTACK
+	return float(_durees.get(nom, 0.0))
+
+# Fige / relance toutes les animations (arrêt sur image du zoom-duel).
+func figer(on: bool) -> void:
+	if _spine != null:
+		_spine.set("time_scale", 0.0 if on else 1.0)
 
 # Sort de la pose de mort et reprend le repos. RÉSERVÉ AUX OUTILS DE DEV
 # (vitrine ShowRoom) : en combat, une mort est définitive.
 func reprendre_repos() -> void:
+	if _tween_disparition != null and _tween_disparition.is_valid():
+		_tween_disparition.kill()
+	_tween_disparition = null
+	visible = true
 	_mort = false
 	_jouer(ANIM_IDLE, true)
 
@@ -667,3 +711,10 @@ func _etat_animation() -> Object:
 	if _spine == null:
 		return null
 	return _spine.call("get_animation_state") as Object
+
+# Retour au repos après un geste TENU (`jouer_attaque(…, true)`) : lance Idle
+# en boucle, sauf si le personnage est mort entre-temps.
+func reprendre_idle() -> void:
+	if _mort:
+		return
+	_jouer(ANIM_IDLE, true)

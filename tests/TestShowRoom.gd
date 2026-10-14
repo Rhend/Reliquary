@@ -176,7 +176,6 @@ func _test_aller_retour_qg() -> void:
 	# la Maîtrise réelle du joueur (TestCombatUi.gd couvre déjà le rendu et le
 	# zoom-duel de CombatCtbUi lui-même, pas la peine de le rejouer ici).
 	salle._idx_palier = SpinePersonnagesData.NB_PALIERS - 1
-	salle._idx_monstre = salle._ennemis.size() - 1
 	salle._lancer_duel()
 	_assert(salle._combat_ui != null, "duel reconstruit après changement de cible")
 	_assert(salle._combat_ui.previsu_palier_ennemi == SpinePersonnagesData.NB_PALIERS - 1,

@@ -759,7 +759,6 @@ func _shoot_showroom() -> void:
 	salle._idx_lumiere = ShowRoom.LUMIERE_DEFAUT
 	salle._appliquer_lumiere()
 	# Deuxième monstre, palier Légendaire : vérifie la commutation de skin.
-	salle._idx_monstre = 1
 	salle._idx_palier = 4
 	salle._lancer_duel()
 	await get_tree().create_timer(0.6).timeout
