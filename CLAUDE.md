@@ -285,6 +285,16 @@ verrou de défense dans ForgePanel) ; quartiers de base d'emblée = Avatar et
 Expéditions SEULEMENT. La progression d'équipement passe par la Forge,
 débloquée au premier Sceau.
 
+⚠ SUPERSÉDÉ 14/10/2026 (chantier 13) — L'ATELIER EST DISPONIBLE D'EMBLÉE : l'hex
+FORGE est présent dès le départ, `GameData.atelier_ouvert()`/`VOIE_ATELIER` sont
+SUPPRIMÉS ; la voie 1 redevient un quartier scellé générique (contenu à venir,
+comme les voies 2-6). Le panneau Atelier = `InventairePanel` (onglets
+Équipement/Matériaux/Consommables, équiper/déséquiper, fabrication) ; la Forge
+(palier, arbre) s'ouvre depuis le détail d'une pièce
+(`ForgePanel.section_equipement`). Les consommables sont un STOCK PERSISTANT
+(`StockConsommables`, `player.consommables`) : tout part en run, ce qui reste est
+rapporté à la sortie normale (défaite = stock inchangé).
+
 Forge (Chantier 5) : l'équipement évolue par XP (MasterySystem, buffer DÉSACTIVÉ pour
 l'équipement) — PLUS d'ingrédient pour le palier (`recettes_evolution` est mort). Le
 passage de palier ouvre une strate de l'arbre + octroie des points (lot + conversion de

@@ -368,14 +368,13 @@ func _test_voies_ordre_fixe() -> void:
 	# 2 Sceaux (2 Lieutenants distincts) → 2 voies ouvrables, SÉQUENTIELLEMENT.
 	GameData.player["objets_lieutenants"] = {"biome_foret": true, "biome_montagne": true}
 	_assert(GameData.sceaux_libres() == 2, "2 Sceaux libres")
-	_assert(not GameData.atelier_ouvert(),
-			"voie 2 impossible avant la voie 1 : même avec 2 Sceaux, rien n'est ouvert")
+	_assert(GameData.nb_voies_ouvertes() == 0, "voie 2 impossible avant la voie 1 : même avec 2 Sceaux, rien n'est ouvert")
 	var signaux: Array = []
 	var cb := func(numero: int) -> void: signaux.append(numero)
 	EventBus.voie_ouverte.connect(cb)
 	_assert(GameData.ouvrir_voie_suivante(), "1er clic → une voie s'ouvre")
 	_assert(signaux == [1], "c'est la voie 1 (ordre fixe — jamais la 2 d'abord)")
-	_assert(GameData.atelier_ouvert(), "voie 1 = Atelier déverrouillé")
+	_assert(GameData.voie_ouverte(1), "voie 1 ouverte")
 	_assert(GameData.sceaux_libres() == 1, "1 Sceau engagé, 1 libre")
 	_assert(GameData.ouvrir_voie_suivante(), "2e clic → voie 2 (2e Sceau)")
 	_assert(signaux == [1, 2], "ouvertures dans l'ordre 1 puis 2")
@@ -402,36 +401,21 @@ func _test_voies_ordre_fixe() -> void:
 # ─── 9. Atelier scellé derrière la voie 1 (chantier 13) ─────
 
 func _test_atelier_scelle() -> void:
-	print("\n[TEST 9] Atelier SCELLÉ : hex absent sans voie 1, déverrouillé après")
+	print("\n[TEST 9] Atelier DISPONIBLE D'EMBLÉE : hex présent et panneau actif sans voie")
 	_reset_etat()
 	var forge_def: Array = []
-	var voies_min := -1
 	for d: Array in Village.MENU_ITEMS:
 		if d[4] == "forge":
 			forge_def = d
-		if d[4] == "voies":
-			voies_min = int(d[2])
 	_assert(not forge_def.is_empty(), "entrée FORGE au menu (précondition)")
-	_assert(voies_min == 0, "hex VOIES présent dès le Village T0 (tier_min 0)")
-	_assert(not Village._hex_disponible(forge_def, 5),
-			"0 voie ouverte → hex FORGE ABSENT (même Village T5 — jamais grisé)")
-	# Panneau : verrou propre indexé sur la voie 1 (défense en profondeur).
+	_assert(GameData.nb_voies_ouvertes() == 0, "aucune voie ouverte (précondition)")
+	_assert(Village._hex_disponible(forge_def, 0),
+			"0 voie ouverte → hex FORGE présent dès Village T0")
 	var v := Village.new()
 	v.rp_content = VBoxContainer.new()
 	ForgePanel.build(v)
-	_assert(_contient_label(v.rp_content, Translations.T("forge.scelle")),
-			"panneau Forge → message de verrou (voie 1 requise)")
-	v.rp_content.free()
-	# Voie 1 ouverte → hex présent + panneau fonctionnel.
-	GameData.player["objets_lieutenants"] = {"biome_foret": true}
-	GameData.ouvrir_voie_suivante()
-	_assert(Village._hex_disponible(forge_def, 0),
-			"voie 1 ouverte → hex FORGE présent dès Village T0")
-	v.rp_content = VBoxContainer.new()
-	ForgePanel.build(v)
-	_assert(not _contient_label(v.rp_content, Translations.T("forge.scelle"))
-			and v.rp_content.get_child_count() > 0,
-			"panneau Forge déverrouillé (contenu, plus de verrou)")
+	_assert(v.rp_content.get_child_count() > 0,
+			"panneau Forge construit sans voie (inventaire de l'Atelier)")
 	v.rp_content.free()
 	v.free()
 	_reset_etat()
@@ -448,8 +432,7 @@ func _test_panneau_voies() -> void:
 	_assert(GameData.NB_VOIES == 6, "6 voies (une par Lieutenant)")
 	_assert(_bouton_contenant(v.rp_content, Translations.T("voies.restaurer_btn")) == null,
 			"sans Sceau libre : aucun bouton Restaurer")
-	_assert(_contient_label(v.rp_content, Translations.T("voies.nom_atelier")),
-			"la voie 1 est nommée Atelier (Forge)")
+	_assert(_contient_label(v.rp_content, Translations.T("voies.nom_generique")),			"la voie 1 est un quartier scellé générique (plus l'Atelier)")
 	v.rp_content.free()
 
 	GameData.player["objets_lieutenants"] = {"biome_foret": true}
@@ -459,14 +442,13 @@ func _test_panneau_voies() -> void:
 	_assert(btn != null, "avec 1 Sceau libre : bouton Restaurer présent (prêt → clic)")
 	if btn != null:
 		btn.pressed.emit()
-		_assert(GameData.nb_voies_ouvertes() == 1 and GameData.atelier_ouvert(),
-				"clic → voie 1 ouverte (Atelier)")
+		_assert(GameData.nb_voies_ouvertes() == 1 and GameData.voie_ouverte(1),
+				"clic → voie 1 ouverte")
 	v.rp_content.free()
 	# Re-rendu : la voie 1 restaurée, plus de bouton (0 Sceau libre), voie 2 en attente.
 	v.rp_content = VBoxContainer.new()
 	VoiesPanel.build(v)
-	_assert(_contient_label(v.rp_content, Translations.T("voies.atelier_restaure")),
-			"re-rendu : Atelier affiché restauré")
+	_assert(_contient_label(v.rp_content, Translations.T("voies.restauree")),			"re-rendu : la voie 1 est affichée restaurée")
 	_assert(_bouton_contenant(v.rp_content, Translations.T("voies.restaurer_btn")) == null,
 			"0 Sceau libre restant → plus de bouton Restaurer")
 	v.rp_content.free()

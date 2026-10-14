@@ -53,6 +53,7 @@ func _ready() -> void:
 		"evolution": await _shoot_evolution()
 		"hero":      await _shoot_hero_panel()
 		"forge":     await _shoot_forge()
+		"inventaire": await _shoot_inventaire()
 		"adventure": await _shoot_adventure()
 		"tooltip":   await _shoot_tooltip()
 		"maxtier_hero":    await _shoot_maxtier_hero()
@@ -632,6 +633,39 @@ func _shoot_forge() -> void:
 	village._open_panel("forge")
 	await get_tree().create_timer(1.2).timeout
 	_capture("res://tests/_shot_forge_panel.png")
+
+# ── Capture de l'inventaire de l'Atelier (14/10/2026) ───────
+# Six états : équipement sans sélection, arme portée, pièce en réserve,
+# consommable possédé, consommable à 0 (fabricable), matériau.
+func _shoot_inventaire() -> void:
+	var village: Node = (load("res://scenes/village/village.tscn") as PackedScene).instantiate()
+	_vp.add_child(village)
+	await get_tree().create_timer(1.0).timeout
+	GameData.player["voies_ouvertes"] = 1
+	if str(GameData.player["equipped"].get("arme", "")) == "":
+		GameData.appliquer_equipement_depart()
+	GameData.player["resources"] = {"res_ferraille": 37, "res_puce": 4}
+	GameData.player["consommables"] = {"consommable_bombe": 3}
+	if OS.get_environment("SHOT_TIER") != "":		GameData.village["maitrise_actuelle"] = int(OS.get_environment("SHOT_TIER"))
+	GameData.player["euren"] = 100.0
+	GameData.desequiper("anneau")
+	village._open_panel("forge")
+	await get_tree().create_timer(0.8).timeout
+	var st: Dictionary = village.panel_ui_state()
+	var etapes := [
+		["equip_vide", Array([0, ""])],
+		["equip_arme", [0, "slot:arme"]],
+		["equip_reserve", [0, "res:equipment_anneau"]],
+		["conso_possede", [2, "conso:consommable_bombe"]],
+		["conso_zero", [2, "conso:consommable_nano_soigneur"]],
+		["materiau", [1, "mat:res_ferraille"]],
+	]
+	for e in etapes:
+		st["onglet"] = int(e[1][0])
+		st["sel"] = str(e[1][1])
+		village._refresh_active_panel()
+		await get_tree().create_timer(0.6).timeout
+		await _capture("res://tests/_shot_inv_%s.png" % str(e[0]))
 
 # ── Capture du panneau Expéditions ──────────────────────────
 # Biome sélectionné (liseré or + luciole) avec accordéon déplié :

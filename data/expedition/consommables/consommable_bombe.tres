@@ -9,3 +9,7 @@ nom_affichage_fr = "Bombe"
 nom_affichage_en = "Bomb"
 effet = 0
 valeur = 50.0
+cout_euren = 30.0
+cout_materiaux = {
+"res_ferraille": 5
+}

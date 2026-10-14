@@ -172,6 +172,8 @@ func demarrer() -> void:
 	assert(pool != null and not pool.creature_ids.is_empty(), "pool d'ennemis requis")
 	assert(cfg_combat != null, "config de combat requise")
 	assert(not est_assaut or lieutenant != null, "assaut : Lieutenant requis")
+	# Stock persistant du QG : TOUT part en run (StockConsommables, 14/10/2026).
+	inventaire = StockConsommables.pour_la_run()
 	# PV pleins au lancement — provisoire : la gestion hors expédition n'existe pas.
 	pv_avatar = avatar_data.pv_max
 	_log("═ %s : %s — palier %s (×%.1f), %d étage(s)" % [
@@ -764,11 +766,15 @@ func _terminer(extraction: bool) -> void:
 				palier.nom_journal(), lieu_id,
 				GameData.nb_strates_completees(lieu_id)])
 	var recap := _recap(extraction)
-	# Purge systématique (chantier 7) : affixes ET consommables sont « de
-	# run » — rien ne persiste, quelle que soit la sortie (le recap garde
-	# leurs ids à titre d'information).
+	# Affixes : « de run », purgés quelle que soit la sortie (chantier 7). Les
+	# consommables, eux, rejoignent le stock du QG (voir ci-dessous) — le recap
+	# garde leurs ids à titre d'information.
+	# Sortie normale : ce qui reste en poche rejoint le STOCK du QG ; seule la
+	# défaite le laisse intact (Game Over = rechargement du lancement).
+	if not defaite:
+		StockConsommables.enregistrer_fin_de_run(inventaire)
 	if not affixes.is_empty() or not inventaire.is_empty():
-		_log("✦ Purge de fin de run : %d affixe(s), %d consommable(s) perdus" % [
+		_log("✦ Fin de run : %d affixe(s) perdu(s), %d consommable(s) rapporté(s) au stock" % [
 				affixes.size(), inventaire.size()])
 	affixes.clear()
 	inventaire.clear()

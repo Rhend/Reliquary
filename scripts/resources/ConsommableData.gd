@@ -33,3 +33,13 @@ func cible_requise() -> bool:
 
 func nom_journal() -> String:
 	return nom_affichage_fr if nom_affichage_fr != "" else id
+
+# ─── Craft à l'Atelier (inventaire du QG, 14/10/2026) ─────────
+# Coût de fabrication d'UN exemplaire — data-driven, PROVISOIRE. Tout à 0/vide
+# = non fabricable (le consommable ne s'obtient alors qu'en coffre).
+@export var cout_euren := 0.0
+@export var cout_modules := 0
+@export var cout_materiaux: Dictionary = {}   # res_id → quantité
+
+func fabricable() -> bool:
+	return cout_euren > 0.0 or cout_modules > 0 or not cout_materiaux.is_empty()

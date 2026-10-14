@@ -109,3 +109,60 @@ static func scanlines(hote: Control, force := 0.10) -> ColorRect:
 # Couleur d'accent d'un CAMP de combat (joueur = cyan, adverse = magenta).
 static func accent_camp(est_joueur: bool) -> Color:
 	return UIColors.CYBER_ACCENT if est_joueur else UIColors.CYBER_ACCENT_2
+
+# ─── Variante NÉON appuyée (inventaire de l'Atelier, 14/10/2026) ──────────
+# Même peau, effets plus francs : bordure de 2 px pleinement lumineuse + halo
+# large. `intensite` pilote l'alpha du halo (0 = aucun, 1 = normal, >1 fort).
+
+static func style_neon(accent: Color, intensite := 1.0, alpha_fond := 0.90,
+		epaisseur := 2) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(UIColors.CYBER_BG_PANEL, alpha_fond)
+	s.border_color = Color(accent, 1.0)
+	s.set_border_width_all(epaisseur)
+	s.set_corner_radius_all(3)
+	s.shadow_color = Color(accent, clampf(0.34 * intensite, 0.0, 0.8))
+	s.shadow_size = 14
+	s.set_content_margin_all(10)
+	return s
+
+# Bouton néon à halo (cases d'inventaire, onglets actifs) : même habillage que
+# `habiller_bouton`, plus un halo qui s'allume au survol / à la sélection.
+static func habiller_bouton_neon(b: Button, accent: Color, taille_police := 15,
+		halo := 0.25) -> Button:
+	habiller_bouton(b, accent, taille_police)
+	for etat: String in ["normal", "hover", "pressed"]:
+		var s := b.get_theme_stylebox(etat) as StyleBoxFlat
+		if s == null:
+			continue
+		s = s.duplicate() as StyleBoxFlat
+		# Fond OPAQUE (mélange accent/fond) : le halo est dessiné SOUS le fond, un
+		# fond translucide laisserait toute la case teintée par son ombre.
+		s.bg_color = Color(UIColors.CYBER_BG_PANEL_2).lerp(Color(accent, 1.0), s.bg_color.a)
+		s.border_color = Color(accent, 1.0)
+		s.set_border_width_all(2 if etat != "normal" else 1)
+		s.shadow_color = Color(accent, halo * (1.6 if etat != "normal" else 1.0))
+		s.shadow_size = 8 if etat == "normal" else 12
+		b.add_theme_stylebox_override(etat, s)
+	return b
+
+# Titre à halo néon (contour + ombre diffuse de la couleur d'accent).
+static func label_neon(texte: String, taille: int, accent: Color) -> Label:
+	var l := label_mono(texte, taille, accent.lightened(0.25))
+	l.add_theme_constant_override("outline_size", 2)
+	l.add_theme_color_override("font_outline_color", Color(accent, 0.22))
+	l.add_theme_color_override("font_shadow_color", Color(accent, 0.65))
+	l.add_theme_constant_override("shadow_offset_x", 0)
+	l.add_theme_constant_override("shadow_offset_y", 0)
+	l.add_theme_constant_override("shadow_outline_size", 8)
+	return l
+
+# Pulsation douce de la luminosité d'un nœud (sélection « vivante »). Le tween
+# est lié au nœud : il meurt avec lui.
+static func pulser(noeud: CanvasItem, amplitude := 0.30, periode := 1.1) -> void:
+	var haut := Color(1.0 + amplitude, 1.0 + amplitude, 1.0 + amplitude, 1.0)
+	var tw := noeud.create_tween().set_loops()
+	tw.tween_property(noeud, "modulate", haut, periode * 0.5) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(noeud, "modulate", Color.WHITE, periode * 0.5) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
