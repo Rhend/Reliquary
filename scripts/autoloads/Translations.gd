@@ -324,6 +324,8 @@ const STRINGS: Dictionary = {
 		"ctb.stats.prot":         "PROT",
 		"ctb.stats.speed":        "SPEED",
 		"ctb.stats.status_titre": "/ Statuts /",
+		"ctb.stats.dodge":        "DODGE",
+		"ctb.stats.abilities_titre": "/ Capacités /",
 
 		# ── Expédition réelle (Rework Combat — chantier 8) ────
 		"expe.lancement_titre":     "PARTIR EN EXPÉDITION",
@@ -804,6 +806,8 @@ const STRINGS: Dictionary = {
 		"ctb.stats.prot":         "PROT",
 		"ctb.stats.speed":        "SPEED",
 		"ctb.stats.status_titre": "/ Status /",
+		"ctb.stats.dodge":        "DODGE",
+		"ctb.stats.abilities_titre": "/ Ability /",
 
 		# ── Expédition réelle (Rework Combat — chantier 8) ────
 		"expe.lancement_titre":     "START EXPEDITION",

@@ -117,6 +117,7 @@ const DMG_BY_HERO   := Color(1.00, 0.92, 0.05)   # dégâts infligés par le hé
 const DMG_BY_ENEMY  := Color(1.00, 0.30, 0.15)   # dégâts reçus par le héros (faible)
 const DMG_HEAVY_HERO  := Color(1.00, 0.50, 0.08)   # orange éclatant — dégâts forts par le héros
 const DMG_HEAVY_ENEMY := Color(1.00, 0.08, 0.08)   # rouge vif — dégâts forts par l'ennemi
+const CONTOUR_SURVOL_ENNEMI := Color(1.00, 0.10, 0.10)   # liseré de survol d'un ennemi en combat
 
 # ── Peau cyberpunk INTÉRIMAIRE — pipeline expédition (chantier 10) ──
 # TOKENS centralisés de l'habillage (avec les factories d'ExpeStyle) : la DA

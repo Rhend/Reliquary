@@ -96,6 +96,12 @@ const OS_ANCRE_OBJET := "Jnt_UI_Combat_Object"
 const DUREE_FONDU := 0.12
 
 var _spine: Node = null   # SpineSprite — jamais typé (extension optionnelle)
+# Contour de survol (opt-in, voir `preparer_contour`) : le SpineSprite est alors
+# logé dans un CanvasGroup (transform identité — position_os & co. inchangés)
+# dont le matériau, posé seulement au survol, dessine le liseré.
+var _groupe_contour: CanvasGroup = null
+var _mat_contour: ShaderMaterial = null
+const SHADER_CONTOUR := preload("res://scenes/combat_ctb/contour_survol.gdshader")
 var _mort := false        # Death jouée : plus aucune autre animation
 var _animations := PackedStringArray()   # ce que l'export sait vraiment jouer
 var _apparence: Dictionary = {}          # dernière apparence posée (mesure d'échelle)
@@ -417,6 +423,34 @@ func porte_attachement(nom_slot: String, nom_attachement: String) -> bool:
 	if squelette == null:
 		return false
 	return squelette.call("get_attachment_by_slot_name", nom_slot, nom_attachement) != null
+
+# Loge le SpineSprite dans un CanvasGroup pour pouvoir lui poser un contour de
+# survol (`definir_contour`). Opt-in : seuls les ennemis du combat l'appellent.
+func preparer_contour() -> void:
+	if _spine == null or _groupe_contour != null:
+		return
+	_groupe_contour = CanvasGroup.new()
+	_groupe_contour.fit_margin = 8.0   # de la place pour le liseré hors silhouette
+	add_child(_groupe_contour)
+	(_spine as Node).reparent(_groupe_contour, false)
+
+# Allume/éteint le contour (`px` = épaisseur voulue À L'ÉCRAN, en pixels de
+# maquette ; convertie en pixels physiques par l'échelle courante du nœud —
+# stretch de fenêtre et zoom-duel compris). Sans `preparer_contour` : no-op.
+func definir_contour(on: bool, couleur: Color = Color.RED, px: float = 2.0) -> void:
+	if _groupe_contour == null:
+		return
+	if not on:
+		_groupe_contour.material = null
+		return
+	if _mat_contour == null:
+		_mat_contour = ShaderMaterial.new()
+		_mat_contour.shader = SHADER_CONTOUR
+	var echelle := absf(get_global_transform_with_canvas().get_scale().x)
+	_mat_contour.set_shader_parameter("couleur", couleur)
+	_mat_contour.set_shader_parameter("epaisseur", px * maxf(echelle, 0.01))
+	_groupe_contour.material = _mat_contour
+
 
 # Position d'un os nommé (voir OS_ANCRE_* ci-dessus), dans le repère du
 # PARENT de ce nœud — celui de `_pieds`/`_sol` côté CombatCtbUi, puisque ce

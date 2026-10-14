@@ -76,14 +76,12 @@ const ACTIONS_BAS_FRAC := 0.30        # bord bas de l'étalement
 # ci-dessous reste le REPLI (os absent : export sans la livraison, runtime
 # spine-godot manquant, placeholder EnergyBoule).
 #
-# ⚠ RÉDUCTION TEMPORAIRE (retour Rhend 17/09/2026) : seuls DEUX os d'ancrage
-# existent à ce jour (épée, ceinture) — Défendre et les Compétences n'en ont
-# aucun à viser proprement. En attendant, `ACTIONS_LIMITEES_AUX_OS` MASQUE
-# ces actions (le bouton Défendre reste dans l'arbre, juste invisible ; les
-# boutons de Compétences ne sont simplement pas créés) — rien n'est
-# supprimé côté moteur/logique, seul l'affichage est réduit à Attaquer/Objet.
-# Repasser à false dès que d'autres os d'ancrage sont livrés.
-const ACTIONS_LIMITEES_AUX_OS := true
+# Défendre et les Compétences n'ont PAS d'os d'ancrage à ce jour (le squelette
+# de Relic n'en porte que deux : épée, ceinture ; `Jnt_General` coïncide avec
+# `root`, aux pieds) — ils prennent l'ancre PROCÉDURALE (LIEN_ANCRE_FRAC,
+# 13/10/2026 : supersède le masquage `ACTIONS_LIMITEES_AUX_OS` du 17/09). Le
+# jour où Christophe livre un os par action, ajouter son OS_ANCRE_* dans
+# `_disposer_actions_deux_colonnes` — une ligne par os, rien d'autre à toucher.
 const LIEN_EPAISSEUR_PX := 2.0
 const LIEN_COUDE_PX := 26.0
 const LIEN_RAYON_NOEUD_PX := 4.0
@@ -225,6 +223,12 @@ var _panneau_stats: CombatPanneauStats
 # aujourd'hui (l'avatar), câblé ici pour qu'un futur multi-héros n'ait qu'à
 # réassigner CETTE variable (voir CombatPanneauStats).
 var _entite_alliee_selectionnee: CtbCombattant = null
+# Panneau de stats ENNEMI (bas-droite, UI_Concept4). L'ennemi montré se décide
+# par priorité (`_ennemi_affiche`) : survolé > dernier inspecté (cible
+# cliquée, ou ennemi qui vient d'agir) > premier vivant > rien (masqué).
+var _panneau_stats_ennemi: CombatPanneauStats
+var _ennemi_survole: CtbCombattant = null
+var _ennemi_inspecte: CtbCombattant = null
 # Traits bouton → buste calculés par `_disposer_actions_deux_colonnes`,
 # peints par `_dessiner_liens_actions` (voir CombatUiSkin.couleur_lien).
 var _liens_actions: Array[Dictionary] = []
@@ -464,7 +468,10 @@ func _construire() -> void:
 	_panneau_stats = CombatPanneauStats.creer(true)
 	add_child(_panneau_stats)
 	_panneau_stats.definir_combattant(_entite_alliee_selectionnee)
-	_repositionner_panel_stats()
+	# Pendant ennemi, bas-droite (UI_Concept4) : même widget, camp rouge.
+	_panneau_stats_ennemi = CombatPanneauStats.creer(false)
+	add_child(_panneau_stats_ennemi)
+	_rafraichir_panel_ennemi()
 
 	# File d'initiative compacte, HAUT-DROITE (chantier UI_Concept2 : rangée
 	# HORIZONTALE de puces carrées façon portraits, plus de colonne de noms en
@@ -586,6 +593,7 @@ func _creer_sprite_ennemi(cb: CtbCombattant) -> SpriteSpinePersonnage:
 			SpinePersonnagesData.hauteur_cible_px(entree))
 	if sprite != null:
 		sprite.orienter(SpinePersonnagesData.echelle_x(entree, false))
+		sprite.preparer_contour()   # liseré rouge au survol (`_maj_contours`)
 	return sprite
 
 # Palier AFFICHÉ d'un ennemi (skin Spine ET portrait de file) : la Maîtrise
@@ -646,6 +654,32 @@ func _repositionner_panel_stats() -> void:
 	_panneau_stats.reset_size()
 	_panneau_stats.size = Vector2(size.x * 0.5, _panneau_stats.size.y)
 	_panneau_stats.position = Vector2(0.0, size.y - _panneau_stats.size.y)
+	if _panneau_stats_ennemi != null:
+		# Miroir : moitié DROITE de l'écran, collé au bord droit.
+		_panneau_stats_ennemi.reset_size()
+		var l := size.x * 0.5
+		_panneau_stats_ennemi.size = Vector2(l, _panneau_stats_ennemi.size.y)
+		_panneau_stats_ennemi.position = Vector2(size.x - l,
+				size.y - _panneau_stats_ennemi.size.y)
+
+# Ennemi à montrer dans le panneau de droite — voir `_panneau_stats_ennemi`.
+func _ennemi_affiche() -> CtbCombattant:
+	if _ennemi_survole != null and _ennemi_survole.est_vivant():
+		return _ennemi_survole
+	if _ennemi_inspecte != null and _ennemi_inspecte.est_vivant():
+		return _ennemi_inspecte
+	var vivants := _ennemis_vivants()
+	return vivants[0] if not vivants.is_empty() else null
+
+func _rafraichir_panel_ennemi() -> void:
+	if _panneau_stats_ennemi == null:
+		return
+	var cb := _ennemi_affiche()
+	_panneau_stats_ennemi.visible = cb != null
+	if cb != null:
+		_panneau_stats_ennemi.definir_combattant(cb, _palier_ennemi(cb))
+	_repositionner_panel_stats()
+	_maj_contours()
 
 # Recale la file d'initiative en HAUT-DROITE sur SA taille minimale COURANTE
 # (`reset_size()`) — appelé à chaque changement de contenu (`_rafraichir_
@@ -671,6 +705,8 @@ func _repositionner_bandeaux() -> void:
 	var marge_bas := 12.0
 	if _panneau_stats != null:
 		marge_bas = _panneau_stats.size.y + 20.0
+	if _panneau_stats_ennemi != null and _panneau_stats_ennemi.visible:
+		marge_bas = maxf(marge_bas, _panneau_stats_ennemi.size.y + 20.0)
 	_bandeaux.position = Vector2((size.x - _bandeaux.size.x) * 0.5, size.y - _bandeaux.size.y - marge_bas)
 
 # ─── Scène de bataille : sol + emplacements (placeholder sprites) ──
@@ -802,18 +838,12 @@ func _boucle() -> void:
 
 func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 	_btn_attaquer.visible = on
-	# Défendre MASQUÉ tant qu'ACTIONS_LIMITEES_AUX_OS tient (voir la constante) :
-	# pas d'os d'ancrage à lui viser proprement pour l'instant.
-	_btn_defendre.visible = on and not ACTIONS_LIMITEES_AUX_OS
+	_btn_defendre.visible = on
 	_objet_en_attente = null
 	_competence_en_attente = null
 	# Compétences (chantier 16) : un bouton par compétence du combattant
 	# actif — recréés à chaque tour (le cooldown a pu bouger), grisés « (n) »
-	# en recharge, ABSENTS si le combattant n'en a pas. Toujours CRÉÉS (la
-	# logique/les tests qui les actionnent restent valables) mais MASQUÉS
-	# tant qu'ACTIONS_LIMITEES_AUX_OS tient — pas d'os d'ancrage pour eux —
-	# et exclus des colonnes/traits (voir plus bas), même traitement que
-	# Défendre.
+	# en recharge, ABSENTS si le combattant n'en a pas.
 	for b in _btns_competences:
 		_rangee_boutons.remove_child(b)
 		b.queue_free()
@@ -825,7 +855,6 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 			var b := CombatUiSkin.bouton(
 					nom if prete else "%s (%d)" % [nom, acteur.cooldown_restant(comp)])
 			b.disabled = not prete
-			b.visible = not ACTIONS_LIMITEES_AUX_OS
 			b.pressed.connect(_sur_competence.bind(comp))
 			_rangee_boutons.add_child(b)
 			_btns_competences.append(b)
@@ -848,10 +877,8 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 		_rangee_boutons.add_child(_btn_objet)
 	UIHelpers.clear_children_now(_rangee_cibles)
 	if on:
-		var visibles: Array = [_btn_attaquer]
-		if not ACTIONS_LIMITEES_AUX_OS:
-			visibles.append(_btn_defendre)
-			visibles.append_array(_btns_competences)
+		var visibles: Array = [_btn_attaquer, _btn_defendre]
+		visibles.append_array(_btns_competences)
 		if _btn_objet != null:
 			visibles.append(_btn_objet)
 		_disposer_actions_deux_colonnes(visibles)
@@ -874,8 +901,8 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 # Point B RÉEL depuis la livraison « Bone UI » (Christophe, 17/09/2026) :
 # le trait de chaque bouton vise l'un des deux os d'ancrage du squelette
 # (SpriteSpinePersonnage.OS_ANCRE_* — épée pour Attaquer, ceinture pour
-# Objet — SEULES actions affichées tant qu'ACTIONS_LIMITEES_AUX_OS tient,
-# voir plus haut), chacun un point FIXE (là où le personnage porte
+# Objet ; Défendre et Compétences retombent sur l'ancre procédurale, voir plus
+# haut), chacun un point FIXE (là où le personnage porte
 # réellement son arme/sa ceinture), ce qui rend la seconde moitié du trait
 # (coude → point B) diagonale pour de vrai. Repli sur l'ancienne ancre
 # procédurale (fraction de largeur, à la hauteur du bouton) si l'os est
@@ -922,7 +949,12 @@ func _disposer_actions_deux_colonnes(boutons: Array) -> void:
 		var centre := Vector2(x, y)
 		b.position = centre - b.size * 0.5
 		var bord_x := centre.x - b.size.x * 0.5 if a_droite else centre.x + b.size.x * 0.5
-		var ancre := ancre_objet if b == _btn_objet else ancre_attaque
+		# Seuls Attaquer et Objet ont un os ; les autres → ZERO = ancre de repli.
+		var ancre := Vector2.ZERO
+		if b == _btn_attaquer:
+			ancre = ancre_attaque
+		elif b == _btn_objet:
+			ancre = ancre_objet
 		var arrivee := ancre
 		if ancre == Vector2.ZERO:
 			var ancre_x := pied.x + (1.0 if a_droite else -1.0) * largeur * LIEN_ANCRE_FRAC
@@ -1071,6 +1103,7 @@ func _sur_objet_choisi(objet: ConsommableData) -> void:
 func _sur_cible_cliquee(cible: CtbCombattant) -> void:
 	if not _btn_attaquer.visible or not cible.est_vivant():
 		return
+	_ennemi_inspecte = cible   # tenu pendant la résolution du coup
 	if _competence_en_attente != null:
 		_valider_action({"type": Enums.ActionCtb.COMPETENCE,
 				"competence": _competence_en_attente, "cible": cible})
@@ -1098,11 +1131,13 @@ func _mettre_cibles_en_avant(on: bool) -> void:
 	# L'anneau or « ciblable » vit dans la scène (_dessiner_sol) — plus de
 	# liseré dupliqué sur une carte depuis que le HUD par combattant a quitté
 	# la colonne latérale (chantier UI_Concept2).
-	# Zones de clic de la scène : ACTIVES seulement en mode ciblage (le reste
-	# du temps la scène est purement décorative — souris ignorée).
+	# Zones de clic de la scène : STOP seulement en mode ciblage ; hors
+	# ciblage elles restent PASS (le survol alimente le panneau de stats
+	# ennemi, le clic est de toute façon ignoré par `_sur_cible_cliquee`).
 	for cb: CtbCombattant in _zones_cible:
 		(_zones_cible[cb] as Control).mouse_filter = Control.MOUSE_FILTER_STOP \
-				if on and cb.est_vivant() else Control.MOUSE_FILTER_IGNORE
+				if on and cb.est_vivant() else (Control.MOUSE_FILTER_PASS \
+				if cb.est_vivant() else Control.MOUSE_FILTER_IGNORE)
 	if not on:
 		_cible_survolee = null
 	if _sol != null:
@@ -1112,9 +1147,27 @@ func _mettre_cibles_en_avant(on: bool) -> void:
 # (_sur_cible_cliquee ignore hors mode ciblage — seule garde nécessaire).
 func _sur_zone_input(ev: InputEvent, cb: CtbCombattant) -> void:
 	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
+		# Clic gauche = SÉLECTION à tout moment (le panneau de stats ennemi le
+		# montre), qu'on soit en ciblage ou non ; en ciblage il valide aussi.
+		if cb.est_vivant():
+			_ennemi_inspecte = cb
+			_rafraichir_panel_ennemi()
 		_sur_cible_cliquee(cb)
 
+# Contour rouge de 2 px autour de la silhouette de l'ennemi SURVOLÉ.
+func _maj_contours() -> void:
+	for cb: CtbCombattant in _sprites:
+		if cb.est_joueur():
+			continue
+		(_sprites[cb] as SpriteSpinePersonnage).definir_contour(
+				cb == _ennemi_survole and cb.est_vivant(), UIColors.CONTOUR_SURVOL_ENNEMI, 2.0)
+
 func _sur_zone_survol(cb: CtbCombattant, actif: bool) -> void:
+	if actif:
+		_ennemi_survole = cb
+	elif _ennemi_survole == cb:
+		_ennemi_survole = null
+	_rafraichir_panel_ennemi()
 	if actif:
 		_cible_survolee = cb
 	elif _cible_survolee == cb:
@@ -1136,7 +1189,7 @@ func _rafraichir_tout() -> void:
 		(_cartes[cb] as CarteCombattantCtb).rafraichir()
 	if _panneau_stats != null:
 		_panneau_stats.rafraichir()
-		_repositionner_panel_stats()
+	_rafraichir_panel_ennemi()
 	_rafraichir_file()
 	_rafraichir_orbes()
 
@@ -1179,6 +1232,9 @@ func _rafraichir_file() -> void:
 	_repositionner_panneau_file()
 
 func _marquer_actif(c: CtbCombattant) -> void:
+	if c != null and not c.est_joueur():
+		_ennemi_inspecte = c   # tour d'un ennemi : le panneau le suit
+		_rafraichir_panel_ennemi()
 	# Le halo « c'est ton tour » vit sur l'ombre portée (CombatOmbrePortee) —
 	# plus de doublon sur une carte depuis le chantier UI_Concept2.
 	for cb: CtbCombattant in _ombres:

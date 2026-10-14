@@ -2,9 +2,9 @@ extends Node
 # Tests de l'ÉCRAN DE COMBAT CTB jouable (Rework Combat — chantier 5).
 # Headless : facteur_delais = 0 (aucune pause, fermeture sans clic), boutons
 # pressés par signal (pas de picking souris). Vérifie :
-#   • bouton Attaquer présent ; Défendre et Compétence MASQUÉS tant que
-#     CombatCtbUi.ACTIONS_LIMITEES_AUX_OS tient (pas d'os d'ancrage pour eux) ;
-#     Objet TOUJOURS présent, grisé si l'inventaire de run est vide/absent ;
+#   • boutons Attaquer et Défendre visibles (ancre procédurale de repli pour
+#     Défendre) ; Objet TOUJOURS présent, grisé si l'inventaire est vide/absent ;
+#   • panneau de stats ennemi : défaut = premier vivant, survol prioritaire ;
 #   • file d'initiative affichée : N_FILE puces, ordre = moteur.prevoir_ordre ;
 #   • annonce d'embuscade à l'ouverture ;
 #   • combat complet joué via l'UI (Défendre puis Attaquer + choix de cible),
@@ -92,12 +92,26 @@ func _test_ecran_complet() -> void:
 
 	# Laisser l'intro passer et la boucle atteindre l'attente d'input joueur.
 	await _attendre_tour_joueur(ui)
-	# Défendre reste MASQUÉ tant que CombatCtbUi.ACTIONS_LIMITEES_AUX_OS tient
-	# (retour Rhend 17/09/2026 : seuls Attaquer/épée et Objet/ceinture ont un
-	# os d'ancrage réel pour l'instant) — l'action reste jouable par ailleurs,
-	# voir le test plus bas qui l'actionne directement sur le bouton caché.
-	_assert(ui._btn_attaquer.visible and not ui._btn_defendre.visible,
-			"activation joueur : bouton Attaquer visible, Défendre masqué (pas d'os d'ancrage)")
+	# Défendre est de nouveau VISIBLE (13/10/2026) : sans os d'ancrage dédié il
+	# prend l'ancre procédurale de repli, voir CombatCtbUi.LIEN_ANCRE_FRAC.
+	_assert(ui._btn_attaquer.visible and ui._btn_defendre.visible,
+			"activation joueur : boutons Attaquer et Défendre visibles")
+	_assert(ui._liens_actions.size() >= 3,
+			"un trait par action visible (Attaquer, Défendre, Objet)",
+			"liens=%d" % ui._liens_actions.size())
+
+	# Panneau de stats ennemi (bas-droite) : montre un ennemi vivant par défaut,
+	# suit le survol, retombe sur le dernier inspecté, se masque sans ennemi.
+	_assert(ui._panneau_stats_ennemi != null and ui._panneau_stats_ennemi.visible,
+			"panneau de stats ennemi présent et visible")
+	var ennemis: Array = ui._ennemis_vivants()
+	_assert(ennemis.size() > 0 and ui._ennemi_affiche() == ennemis[0],
+			"par défaut : le premier ennemi vivant")
+	if ennemis.size() > 1:
+		ui._sur_zone_survol(ennemis[1], true)
+		_assert(ui._ennemi_affiche() == ennemis[1], "le survol prend la priorité")
+		ui._sur_zone_survol(ennemis[1], false)
+		_assert(ui._ennemi_affiche() == ennemis[0], "fin de survol : retour au défaut")
 
 	# Le héros doit être VISIBLE. Depuis la livraison « costumes », l'export de
 	# Relic n'a plus de skin « default » : un sprite construit sans apparence
@@ -112,8 +126,7 @@ func _test_ecran_complet() -> void:
 
 	# Objet TOUJOURS présent (retour Rhend 17/09/2026) mais GRISÉ ici (aucun
 	# inventaire_fournisseur câblé sur ce ui, traité comme vide) ; Compétence
-	# reste absent (cet avatar factice n'en porte aucune — sans lien avec
-	# ACTIONS_LIMITEES_AUX_OS, qui masquerait de toute façon les siennes).
+	# reste absent (cet avatar factice n'en porte aucune).
 	var tous: Array = []
 	_boutons(ui, tous)
 	_assert(ui._btn_objet != null and ui._btn_objet.disabled,
