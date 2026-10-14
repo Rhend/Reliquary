@@ -240,7 +240,7 @@ func _test_ui() -> void:
 		if n is Button and (n as Button).visible:
 			boutons.append(n as Button)
 	_check("2 boutons au tour du héros malgré 2 compétences (Attaquer + Objet)",
-			boutons.size() == 2, str(boutons.size()))
+			boutons.size() == 2)
 	ui.queue_free()
 	await get_tree().process_frame
 

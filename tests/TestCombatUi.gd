@@ -110,8 +110,14 @@ func _test_ecran_complet() -> void:
 	if ennemis.size() > 1:
 		ui._sur_zone_survol(ennemis[1], true)
 		_assert(ui._ennemi_affiche() == ennemis[1], "le survol prend la priorité")
+		# Surlignage COLLANT (14/10/2026) : la sortie de la souris ne retire pas
+		# le surlignage ; il part au choix d'une cible ou à un autre survol.
 		ui._sur_zone_survol(ennemis[1], false)
-		_assert(ui._ennemi_affiche() == ennemis[0], "fin de survol : retour au défaut")
+		_assert(ui._ennemi_affiche() == ennemis[1], "fin de survol : le surlignage reste (collant)")
+		ui._sur_zone_survol(ennemis[0], true)
+		_assert(ui._ennemi_affiche() == ennemis[0], "un autre survol remplace le surlignage")
+		ui._sur_zone_survol(ennemis[0], false)
+		ui._ennemi_survole = null   # levé comme le fait _valider_action
 
 	# Le héros doit être VISIBLE. Depuis la livraison « costumes », l'export de
 	# Relic n'a plus de skin « default » : un sprite construit sans apparence

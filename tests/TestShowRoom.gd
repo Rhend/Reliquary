@@ -144,8 +144,8 @@ func _test_aller_retour_qg() -> void:
 	_assert(salle._mode == ShowRoom.Mode.DUEL, "démarre en mode duel (09/2026 : le vrai combat)")
 	_assert(salle._combat_ui != null,
 			"le VRAI CombatCtbUi est instancié — plus une copie de son rendu")
-	_assert(salle._combat_ui.moteur.combattants.size() == 2,
-			"le faux combat oppose le héros à la créature choisie")
+	_assert(salle._combat_ui.moteur.combattants.size() == 6,
+			"le faux combat : 3 alliés (héros + 2 Relic femmes) vs FlameBot + 2 WorkBot")
 	# Rien ne doit pouvoir « gagner » quoi que ce soit depuis la vitrine —
 	# les mêmes garde-fous que le sandbox dev, jamais d'écriture indirecte.
 	_assert(not salle._combat_ui.recompenses_fournisseur.is_valid()
@@ -209,14 +209,16 @@ func _test_aller_retour_qg() -> void:
 	# Mode Usine (diagnostic) : bascule de visibilité, PAS une reconstruction
 	# — le duel en cours n'a aucune raison d'être perdu pour regarder le décor.
 	var meme_combat_ui := salle._combat_ui
-	salle._touche(KEY_TAB)
-	_assert(salle._mode == ShowRoom.Mode.USINE, "[Tab] bascule vers Usine seul")
+	salle._touche(KEY_U)
+	_assert(salle._mode == ShowRoom.Mode.USINE, "[U] bascule vers Usine seul")
 	_assert(salle._decor_usine.visible, "Usine : décor seul visible")
 	_assert(not salle._combat_ui.visible, "Usine : le duel se masque")
 	_assert(salle._combat_ui == meme_combat_ui, "Usine ne reconstruit rien, juste une bascule")
-	salle._touche(KEY_TAB)
+	salle._touche(KEY_U)
+	_assert(salle._mode == ShowRoom.Mode.VILLE, "[U] enchaîne sur la Ville seule (orpheline)")
+	salle._touche(KEY_U)
 	_assert(salle._mode == ShowRoom.Mode.DUEL and salle._combat_ui.visible,
-			"[Tab] revient au duel, redevenu visible")
+			"[U] revient au duel, redevenu visible")
 
 	# Contrat de sortie : avec une destination posée, Échap n'éteint PAS le jeu.
 	ShowRoom.scene_retour = "res://scenes/village/village.tscn"
