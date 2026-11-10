@@ -12,15 +12,14 @@
 #   • les ENNEMIS portent leurs PALIERS par des SKINS Spine nommées
 #     <prefixe_skin><n>, n = 1..5, dans l'ordre Commun(0) → Légendaire(4).
 #
-# ANNONCÉ PAR CHRISTOPHE (25/08/2026), pas encore livré — deux formes à
-# prévoir, toutes deux documentées dans ChristopheAnimationWIP/SPECS_SPINE.md :
-#   • ENNEMI DÉCOUPÉ : ses 5 paliers sur des SLOTS « …_Nv1 » … « _Nv5 »
-#     (« WorkBot_Bras_D_Nv1 ») au lieu de 5 skins. La route existe déjà —
-#     `niveaux: 5` au lieu de `prefixe_skin` — mais ⚠ la PURGE des autres
-#     paliers ne tourne QUE dans `SpriteSpinePersonnage._composer_skin`, donc
-#     seulement si l'entrée déclare des `skins` (`skins_base`). Un export dont
-#     toutes les pièces vivent dans la skin « default » sortirait avec les 5
-#     paliers EMPILÉS : c'est le point à traiter à la première livraison.
+#   • ENNEMI DÉCOUPÉ (livraison « WorkBot avec Rig » du 15/10/2026) : un socle
+#     commun (`skins_base` : WorkBot_Global + WorkBot_Level) PLUS une skin par
+#     palier (`prefixe_skin` : WorkBot_Nv_1…5), et des SLOTS suffixés
+#     « _Nv_<n> » dont certains mutualisés (« _Nv_2_3_4_5 »). L'entrée déclare
+#     donc `niveaux: 5` ET `prefixe_skin` : chaque palier cumule le socle et SA
+#     skin, puis la purge des slots des autres paliers tourne comme pour Relic.
+#
+# ANNONCÉ PAR CHRISTOPHE (25/08/2026), pas encore livré :
 #   • BOSS À VFX PERMANENT (aura posée dans la pose de repos) : la mesure
 #     automatique compterait l'aura comme du corps et le rendrait trop petit.
 #     `SpriteSpinePersonnage.creer()` prend déjà `hauteur_cible_px` ; il
@@ -286,7 +285,12 @@ static func apparences(entree: Dictionary, cosmetique: int = 0, coiffure: int = 
 			# l'échelle de rareté (6 paliers), le niveau se nomme lui-même.
 			var palier: int = n - 1 if n <= NB_PALIERS_RARETE else -1
 			var nom: String = GameData.get_tier_name(palier) if palier >= 0 else "Nv %d" % n
-			sortie.append(_apparence("", base, n, nom, palier))
+			# Ennemi découpé : le socle + la skin propre à CE palier (voir l'en-tête).
+			var skins_n := base
+			if str(entree.get("prefixe_skin", "")) != "":
+				skins_n = base.duplicate()
+				skins_n.append(skin_pour_palier(entree, n - 1))
+			sortie.append(_apparence("", skins_n, n, nom, palier))
 		return _avec_decalage(sortie, entree)
 
 	if str(entree.get("prefixe_skin", "")) != "":

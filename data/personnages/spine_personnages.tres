@@ -122,7 +122,9 @@ personnages = [{
 "nom": "WorkBot",
 "skel": "res://assets/personnages/ennemis/workbot/WorkBot.skel",
 "atlas": "res://assets/personnages/ennemis/workbot/WorkBot.atlas",
-"prefixe_skin": "WorkBot_Nv",
+"prefixe_skin": "WorkBot_Nv_",
+"skins_base": ["WorkBot_Global", "WorkBot_Level"],
+"niveaux": 5,
 "regarde_a_droite": false,
 "taille_relative_pct": 0.0,
 "ennemi": true

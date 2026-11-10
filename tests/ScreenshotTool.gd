@@ -748,7 +748,7 @@ func _shoot_maxtier_village() -> void:
 func _shoot_showroom() -> void:
 	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
 	_vp.add_child(salle)
-	await get_tree().create_timer(0.6).timeout   # laisse jouer l'Idle + le splash d'ouverture
+	await get_tree().create_timer(1.8).timeout   # laisse passer le splash d'ouverture (1 s + fondu)
 	await _capture("res://tests/_shot_showroom_duel.png")
 	# Niveau « Jour » : vérifie que le décor reste lisible quand il s'éclaircit
 	# (les personnages, eux, ne sont jamais modulés).
@@ -762,7 +762,7 @@ func _shoot_showroom() -> void:
 	# Deuxième monstre, palier Légendaire : vérifie la commutation de skin.
 	salle._idx_palier = 4
 	salle._lancer_duel()
-	await get_tree().create_timer(0.6).timeout
+	await get_tree().create_timer(1.8).timeout
 	await _capture("res://tests/_shot_showroom_duel_leg.png")
 	# Mode USINE (diagnostic 28/08/2026) : décor seul, plein écran, sans masque.
 	salle._mode = ShowRoom.Mode.USINE
