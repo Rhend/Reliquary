@@ -260,6 +260,7 @@ static func barre_pv(camp_joueur: bool) -> TextureProgressBar:
 	var b := TextureProgressBar.new()
 	b.min_value = 0.0
 	b.max_value = 1.0
+	b.step = 0.0   # fraction continue : le pas par défaut (1) arrondissait à vide/plein
 	b.fill_mode = TextureProgressBar.FILL_LEFT_TO_RIGHT
 	b.texture_under = HP_BACK
 	b.texture_progress = HP_LIFE
