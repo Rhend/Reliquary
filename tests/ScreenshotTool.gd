@@ -42,6 +42,7 @@ func _ready() -> void:
 		"holo_pins": await _shoot_holo_pins()
 		"showroom":  await _shoot_showroom()
 		"showroom_coup": await _shoot_showroom_coup()
+		"portraits": await _shoot_portraits()
 		"compare_ennemis": await _shoot_compare_ennemis()
 		"factory":   await _shoot_factory()
 		"factory_full": await _shoot_factory_full()
@@ -769,6 +770,32 @@ func _shoot_showroom() -> void:
 	salle._appliquer_mode()
 	await get_tree().create_timer(0.6).timeout
 	await _capture("res://tests/_shot_showroom_usine.png")
+
+# ── Planche des portraits générés de la file d'initiative ───────────────────
+# Chaque entrée du registre à son premier et dernier palier (+ le héros dans
+# ses deux genres) : sert à régler `portrait_cadre` dans spine_personnages.tres.
+func _shoot_portraits() -> void:
+	var registre := SpinePersonnagesData.charger()
+	var textures: Array[Texture2D] = []
+	for genre in SpinePersonnagesData.nb_genres(registre.heros()):
+		for niveau: int in [1, 6]:
+			textures.append(await CombatUiSkin.generer_portrait_heros(niveau, 0, 0, self, genre))
+	for entree in registre.ennemis():
+		var apparences := SpinePersonnagesData.apparences(entree)
+		for palier: int in [0, apparences.size() - 1]:
+			textures.append(await CombatUiSkin.generer_portrait(entree, apparences[palier], self))
+	var cote := CombatUiSkin.TAILLE_PORTRAIT_GENERE_PX
+	var planche := Image.create(cote * textures.size(), cote, false, Image.FORMAT_RGBA8)
+	planche.fill(Color(0.10, 0.07, 0.10))
+	for i in textures.size():
+		if textures[i] == null:
+			continue
+		var img := textures[i].get_image()
+		img.clear_mipmaps()
+		img.convert(Image.FORMAT_RGBA8)
+		planche.blend_rect(img, Rect2i(0, 0, cote, cote), Vector2i(i * cote, 0))
+	planche.save_png("res://tests/_shot_portraits.png")
+	print("Screenshot -> res://tests/_shot_portraits.png")
 
 # ── Coup du joueur en conditions RÉELLES (délais actifs) ────────────────────
 # Trois tours alliés de suite dans la vitrine : capture des boutons d'action

@@ -367,6 +367,8 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 		# banc d'essai ») — {} tant que sa livraison Spine n'existe pas
 		# encore, repli sur EnergyBoule ci-dessous.
 		sprite = _creer_sprite_ennemi(cb)
+		_portraits_generes.erase(cb)   # hot-reload de palier : l'ancien portrait est périmé
+		_demarrer_generation_portrait_ennemi(cb)
 	var largeur_ref := ORBE_TAILLE.x
 	if sprite != null:
 		var l := sprite.largeur_rendue_px()
@@ -678,6 +680,10 @@ func _portrait_pour(cb: CtbCombattant) -> Texture2D:
 	if cb.est_joueur():
 		var livre := CombatUiSkin.portrait_heros(_apparence_allie(cb)[0])
 		return livre if livre != null else _portraits_generes.get(cb)
+	# Ennemi : le portrait GÉNÉRÉ d'abord (net, même cadrage que les alliés) ;
+	# le fichier livré ne sert plus que de repli (génération en cours, headless).
+	if _portraits_generes.has(cb):
+		return _portraits_generes[cb]
 	var entree := SpinePersonnagesData.par_id(cb.data.id)
 	if entree.is_empty():
 		return null
@@ -694,6 +700,21 @@ func _portrait_pour(cb: CtbCombattant) -> Texture2D:
 # même apparence, y compris d'un combat à l'autre.
 func _demarrer_generation_portrait(cb: CtbCombattant, a: Array[int]) -> void:
 	var tex := await CombatUiSkin.generer_portrait_heros(a[0], a[1], a[2], self, a[3])
+	if tex == null or not is_inside_tree():
+		return
+	_portraits_generes[cb] = tex
+	_rafraichir_file()
+
+# Même chose pour un ENNEMI, au palier affiché par son sprite.
+func _demarrer_generation_portrait_ennemi(cb: CtbCombattant) -> void:
+	var entree := SpinePersonnagesData.par_id(cb.data.id)
+	if entree.is_empty():
+		return
+	var apparences := SpinePersonnagesData.apparences(entree)
+	if apparences.is_empty():
+		return
+	var tex := await CombatUiSkin.generer_portrait(entree,
+			apparences[clampi(_palier_ennemi(cb), 0, apparences.size() - 1)], self)
 	if tex == null or not is_inside_tree():
 		return
 	_portraits_generes[cb] = tex
@@ -1344,6 +1365,7 @@ func _rafraichir_file() -> void:
 			tr.texture = portrait
 			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			chip.add_child(tr)
 			var lisere := Panel.new()

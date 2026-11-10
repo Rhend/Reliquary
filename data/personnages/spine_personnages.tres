@@ -104,6 +104,7 @@ personnages = [{
 }]
 }],
 "decalage_x_px": 17.0,
+"portrait_cadre": [0.0, 0.83, 0.40],
 "niveaux": 6,
 "regarde_a_droite": true,
 "taille_relative_pct": -4.0,
@@ -114,6 +115,7 @@ personnages = [{
 "skel": "res://assets/personnages/ennemis/flamebot/FlameBot.skel",
 "atlas": "res://assets/personnages/ennemis/flamebot/FlameBot.atlas",
 "prefixe_skin": "FlameBot_Nv",
+"portrait_cadre": [-0.01, 0.81, 0.48],
 "regarde_a_droite": false,
 "taille_relative_pct": 32.0,
 "ennemi": true
@@ -123,6 +125,7 @@ personnages = [{
 "skel": "res://assets/personnages/ennemis/workbot/WorkBot.skel",
 "atlas": "res://assets/personnages/ennemis/workbot/WorkBot.atlas",
 "prefixe_skin": "WorkBot_Nv_",
+"portrait_cadre": [-0.03, 0.88, 0.38],
 "skins_base": ["WorkBot_Global", "WorkBot_Level"],
 "niveaux": 5,
 "regarde_a_droite": false,

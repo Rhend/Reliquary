@@ -166,6 +166,20 @@ static func taille_relative_pct(entree: Dictionary) -> float:
 static func hauteur_cible_px(entree: Dictionary) -> float:
 	return SpriteSpinePersonnage.HAUTEUR_ETALON_PX * (1.0 + taille_relative_pct(entree) / 100.0)
 
+# Cadrage du PORTRAIT généré (file d'initiative, CombatUiSkin.generer_portrait) :
+# un carré en FRACTIONS de la hauteur du corps — x = décalage horizontal du
+# centre (+ = vers la droite de l'écran), y = hauteur du centre au-dessus des
+# pieds, z = côté du carré. Champ `portrait_cadre: [x, y, côté]` de l'entrée ;
+# le défaut vise le buste d'un bipède debout. Réglé à l'œil par personnage
+# (`SHOT_MODE=portraits`) : c'est là qu'est sa tête, pas une mesure.
+const PORTRAIT_CADRE_DEFAUT := Vector3(0.0, 0.84, 0.38)
+
+static func portrait_cadre(entree: Dictionary) -> Vector3:
+	var brut: Array = entree.get("portrait_cadre", [])
+	if brut.size() != 3:
+		return PORTRAIT_CADRE_DEFAUT
+	return Vector3(float(brut[0]), float(brut[1]), float(brut[2]))
+
 # ─── GENRE (livraison « Relic Femme », 23/09/2026) ────────────
 #
 # Deuxième version complète du héros : Christophe livre un jeu de skins

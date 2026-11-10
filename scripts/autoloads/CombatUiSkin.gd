@@ -325,90 +325,75 @@ static func portrait_heros(niveau: int) -> Texture2D:
 		return null
 	return load(chemin) as Texture2D
 
-# ─── Portrait du héros GÉNÉRÉ à la volée (aucun fichier livré) ────────
+# ─── Portraits GÉNÉRÉS à la volée (file d'initiative) ─────────────────
 #
-# `portrait_heros` ci-dessus n'a AUCUNE livraison pour le héros à ce jour —
-# retour Rhend 17/09/2026 : au lieu d'attendre, on rend nous-mêmes une
-# vignette via un SubViewport isolé, avec un sprite Spine JETABLE monté pour
-# l'occasion. Cadrage demandé : « juste la tête et le cou sans l'épée avec
-# les cheveux » — `SpriteSpinePersonnage.poser_skin_portrait` purge tout le
-# reste (torse, bras, jambes, épée, VFX) et rend les BORNES RÉELLEMENT
-# dessinées de ce qui reste ; ce sont CES bornes qui cadrent le SubViewport,
-# pas un ratio deviné à la main — robuste à n'importe quel niveau
-# d'équipement/coiffure/visage.
+# REFONTE 11/2026 (retour Rhend : « les portraits sont vraiment moches ») :
+# TOUS les portraits — héros, alliés, ennemis — sont rendus depuis le VRAI
+# sprite Spine du combattant, à son apparence exacte (palier, niveau, costume,
+# genre), dans un SubViewport isolé :
+#   • en BUSTE (tête + épaules) et non plus une tête détourée flottante ;
+#   • à 256 px avec MSAA + mipmaps — l'ancienne vignette faisait 96 px sans
+#     anti-crénelage, et les fichiers livrés pour les ennemis sont des
+#     agrandissements flous ;
+#   • même cadrage et même rendu pour les deux camps.
+# Le CADRAGE vient du registre (`portrait_cadre`, voir SpinePersonnagesData) :
+# un carré exprimé en fractions de la hauteur du corps, donc indépendant de
+# l'échelle et du palier. L'arme est retirée quand la skin le permet (skin de
+# mesure), sinon l'épée de Relic barrerait le cadre.
 #
 # ASYNCHRONE : le rendu d'un SubViewport est DIFFÉRÉ d'au moins une frame —
 # l'appelant doit `await` (ou lancer en fire-and-forget, voir CombatCtbUi.
-# _demarrer_generation_portrait_heros). `hote` = un nœud DÉJÀ dans l'arbre,
-# utilisé UNIQUEMENT comme point d'attache temporaire du SubViewport (`hote.
-# add_child`) — retiré et libéré (`queue_free`) dès la capture faite, rien ne
-# persiste que la texture mise en CACHE (par niveau/cosmétique/coiffure/genre :
-# gratuit dès la 2e fois pour la même apparence, y compris d'un combat à
-# l'autre). `null` en tête headless (aucun contexte de rendu réel à capturer,
-# même garde que `installer_curseur`) ou si le runtime spine-godot/le
-# registre/l'apparence manquent — dégradation propre, comme le reste de ce
-# fichier face à un export absent.
-const TAILLE_PORTRAIT_GENERE_PX := 96
-const MARGE_PORTRAIT_FRAC := 0.12   # marge de chaque côté du cadrage mesuré
+# _demarrer_generation_portrait). `hote` = un nœud DÉJÀ dans l'arbre, point
+# d'attache temporaire du SubViewport, libéré dès la capture faite ; seule la
+# texture reste, en CACHE par squelette + apparence (gratuit dès la 2e fois, y
+# compris d'un combat à l'autre). `null` en tête headless (rien à capturer) ou
+# si le runtime spine-godot/l'apparence manquent — l'appelant garde alors son
+# repli (fichier livré, puis initiale du nom).
+const TAILLE_PORTRAIT_GENERE_PX := 256
 
-static var _cache_portraits_heros: Dictionary = {}   # "niv_cos_coif_genre" → Texture2D
+static var _cache_portraits: Dictionary = {}   # clé squelette+apparence → Texture2D
 
-static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
-		hote: Node, genre: int = 0) -> Texture2D:
-	if DisplayServer.get_name() == "headless":
+static func generer_portrait(entree: Dictionary, apparence: Dictionary,
+		hote: Node) -> Texture2D:
+	if DisplayServer.get_name() == "headless" or entree.is_empty():
 		return null
-	var cle := "%d_%d_%d_%d" % [niveau, cosmetique, coiffure, genre]
-	if _cache_portraits_heros.has(cle):
-		# Un retour synchrone ici casserait le contrat "toujours différé d'au
-		# moins une frame" (voir doc au-dessus) : l'appelant fire-and-forget
-		# (CombatCtbUi._demarrer_generation_portrait_heros) le suppose pour
-		# rafraîchir la file APRÈS la construction en cours — un cache hit
-		# pendant `_construire()` (2e combat avec la même apparence, ex.
-		# ScreenshotTool) rappellerait sinon `_rafraichir_file()` alors que
-		# `_file_box` n'existe pas encore.
+	var skel := str(entree.get("skel", ""))
+	var cle := "%s|%s|%s|%d|%d" % [skel, str(apparence.get("skin", "")),
+			",".join(apparence.get("skins", PackedStringArray())),
+			int(apparence.get("niveau", 0)), int(apparence.get("genre", 0))]
+	if _cache_portraits.has(cle):
+		# Jamais de retour synchrone : l'appelant fire-and-forget suppose un
+		# résultat différé d'au moins une frame (il rafraîchit la file APRÈS la
+		# construction en cours — `_file_box` n'existe pas encore pendant).
 		await Engine.get_main_loop().process_frame
-		return _cache_portraits_heros[cle]
-	if not SpriteSpinePersonnage.disponible() or not is_instance_valid(hote) \
+		return _cache_portraits[cle]
+	var atlas := str(entree.get("atlas", ""))
+	if not SpriteSpinePersonnage.disponible(skel, atlas) or not is_instance_valid(hote) \
 			or not hote.is_inside_tree():
 		return null
-	var registre := SpinePersonnagesData.charger()
-	var entree: Dictionary = registre.heros() if registre != null else {}
-	if entree.is_empty():
-		return null
-	entree = SpinePersonnagesData.avec_genre(entree, genre)
-	var apparences := SpinePersonnagesData.apparences(entree, cosmetique, coiffure)
-	if apparences.is_empty():
-		return null
-	var apparence: Dictionary = apparences[clampi(niveau - 1, 0, apparences.size() - 1)]
-	var sprite := SpriteSpinePersonnage.creer(str(entree.get("skel", "")),
-			str(entree.get("atlas", "")), apparence,
+	var sprite := SpriteSpinePersonnage.creer(skel, atlas, apparence,
 			SpinePersonnagesData.hauteur_cible_px(entree))
 	if sprite == null:
 		return null
-	var bornes := sprite.poser_skin_portrait(apparence)
-	if bornes.size.x <= 0.0 or bornes.size.y <= 0.0:
+	# Hauteur AVANT la skin de mesure : la mesurer repose l'apparence complète.
+	var hauteur := sprite.hauteur_rendue_px()
+	if hauteur <= 0.0:
 		sprite.free()
 		return null
-	var rect_local := sprite.rect_local_depuis_bornes(bornes)
-	var cote := maxf(rect_local.size.x, rect_local.size.y) * (1.0 + MARGE_PORTRAIT_FRAC * 2.0)
-	if cote <= 0.0:
-		sprite.free()
-		return null
+	sprite.poser_skin_mesure(apparence)   # sans arme ni VFX quand c'est possible
+	var cadre := SpinePersonnagesData.portrait_cadre(entree)
+	var cote := hauteur * cadre.z
+	var centre := Vector2(hauteur * cadre.x, -hauteur * cadre.y)   # origine = pieds
 
 	var vp := SubViewport.new()
 	vp.size = Vector2i(TAILLE_PORTRAIT_GENERE_PX, TAILLE_PORTRAIT_GENERE_PX)
 	vp.transparent_bg = true
+	vp.msaa_2d = Viewport.MSAA_4X
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	vp.add_child(sprite)
 	hote.add_child(vp)
-
-	# Cadre le rect mesuré, CENTRÉ, SANS étirement anisotrope : le plus grand
-	# côté du rect pilote l'échelle des DEUX axes (un visage déformé se
-	# verrait immédiatement) — TextureRect (CombatCtbUi._rafraichir_file)
-	# complète ensuite en STRETCH_KEEP_ASPECT_COVERED, comme les ennemis.
 	var echelle := float(TAILLE_PORTRAIT_GENERE_PX) / cote
 	sprite.scale = Vector2.ONE * echelle
-	var centre := rect_local.position + rect_local.size * 0.5
 	sprite.position = Vector2.ONE * (float(TAILLE_PORTRAIT_GENERE_PX) * 0.5) - centre * echelle
 
 	await RenderingServer.frame_post_draw
@@ -418,33 +403,27 @@ static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
 	var img := vp.get_texture().get_image()
 	var tex: Texture2D = null
 	if img != null:
-		# Le cadrage par bornes Spine (get_bounds() des slots Tete/Cou/
-		# Cheveux) laisse une marge morte transparente bien plus large que la
-		# marge visée : on retaille donc sur le rectangle RÉELLEMENT peint
-		# (alpha non nul) après coup, plutôt que de fiabiliser la mesure Spine
-		# en amont. ⚠ Ce rectangle est PORTRAIT (plus haut que large, la
-		# coiffure dépasse en hauteur) — le recadrer tel quel dans la puce
-		# CARRÉE (TextureRect, STRETCH_KEEP_ASPECT_COVERED) aurait coupé le
-		# haut de la coiffure et le bas du menton (retour Rhend : « on veut
-		# voir toute la coiffure », « dézoomer un peu »). On étend donc le
-		# rectangle au CARRÉ centré sur son propre centre, côté = sa plus
-		# grande dimension : ça n'ajoute de la marge transparente QUE sur
-		# l'axe le plus court (largeur), sans jamais rogner le contenu — la
-		# puce le couvre ensuite 1:1, sans recadrage résiduel de son côté.
-		var used := img.get_used_rect()
-		if used.size.x > 0 and used.size.y > 0:
-			var cote_carre := maxi(used.size.x, used.size.y)
-			var origine := Vector2i(
-					used.position.x + used.size.x / 2 - cote_carre / 2,
-					used.position.y + used.size.y / 2 - cote_carre / 2)
-			origine.x = clampi(origine.x, 0, maxi(img.get_width() - cote_carre, 0))
-			origine.y = clampi(origine.y, 0, maxi(img.get_height() - cote_carre, 0))
-			cote_carre = mini(cote_carre, mini(img.get_width(), img.get_height()))
-			img = img.get_region(Rect2i(origine, Vector2i(cote_carre, cote_carre)))
+		img.generate_mipmaps()   # affiché ~5× plus petit : sans eux, ça scintille
 		tex = ImageTexture.create_from_image(img)
-		_cache_portraits_heros[cle] = tex
+		_cache_portraits[cle] = tex
 	vp.queue_free()
 	return tex
+
+# Portrait d'un allié à l'apparence du HÉROS (mêmes paramètres que
+# `SpriteSpinePersonnage.creer_heros`).
+static func generer_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
+		hote: Node, genre: int = 0) -> Texture2D:
+	var registre := SpinePersonnagesData.charger()
+	var entree: Dictionary = registre.heros() if registre != null else {}
+	if entree.is_empty():
+		return null
+	entree = SpinePersonnagesData.avec_genre(entree, genre)
+	var apparences := SpinePersonnagesData.apparences(entree, cosmetique, coiffure)
+	if apparences.is_empty():
+		return null
+	var apparence: Dictionary = apparences[clampi(niveau - 1, 0, apparences.size() - 1)]
+	apparence["genre"] = genre
+	return await generer_portrait(entree, apparence, hote)
 
 # ─── Panneau de stats détaillé (bas d'écran, CombatPanneauStats) ─────
 
