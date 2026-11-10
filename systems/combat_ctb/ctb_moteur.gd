@@ -203,10 +203,24 @@ func jouer(action: Dictionary) -> void:
 		c.horloge += k_ctb / _vit_sure(c)
 		_log("    ⟳ %s réarme son horloge → %.1f" % [c.nom_journal(), c.horloge])
 
-# Action par défaut (IA minimale / sandbox) : attaquer la première cible
-# vivante du camp opposé.
+# Action par défaut (IA minimale / sandbox) : attaquer. Le camp JOUEUR en auto
+# vise la première cible vivante (focus) ; l'IA ADVERSE tire sa cible au
+# hasard parmi les joueurs vivants — sinon elle ne frapperait jamais que
+# l'Avatar. Aucun tirage tant qu'il n'y a qu'une cible possible : les suites
+# seedées à un seul héros restent exactes.
 func action_auto(c: CtbCombattant) -> Dictionary:
-	return {"type": Enums.ActionCtb.ATTAQUER, "cible": _premiere_cible(c)}
+	return {"type": Enums.ActionCtb.ATTAQUER, "cible": _cible_auto(c)}
+
+func _cible_auto(att: CtbCombattant) -> CtbCombattant:
+	if att.est_joueur():
+		return _premiere_cible(att)
+	var vivants: Array[CtbCombattant] = []
+	for c in combattants:
+		if c.camp != att.camp and c.est_vivant():
+			vivants.append(c)
+	if vivants.size() <= 1:
+		return vivants[0] if vivants.size() == 1 else null
+	return vivants[rng.randi_range(0, vivants.size() - 1)]
 
 # Prédit l'ordre des `n` PROCHAINES activations sans muter l'état : horloges
 # simulées (réarmement à la VIT courante), même départage d'égalité que la

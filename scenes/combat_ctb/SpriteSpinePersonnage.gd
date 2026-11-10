@@ -94,6 +94,12 @@ const OS_ANCRE_OBJET := "Jnt_UI_Combat_Object"
 # clip livré, sans en ajouter un seul — la pose finale de Mort reste TENUE
 # (aucune animation ne joue après elle : rien à en faire sortir en fondu).
 const DUREE_FONDU := 0.12
+# Instant de l'IMPACT dans un geste d'attaque, en fraction de sa durée (voir
+# `delai_impact`). Le jour où Christophe pose un événement Spine sur la frame
+# d'impact, le lire à la place de cette constante. 0.3 = ~0,2 s sur les gestes
+# livrés (0,67 s) : mesuré sur `SHOT_MODE=showroom_coup`, la lame de Relic est
+# déjà au sol à 0,2 s.
+const IMPACT_FRAC := 0.3
 
 var _spine: Node = null   # SpineSprite — jamais typé (extension optionnelle)
 # Contour de survol (opt-in, voir `preparer_contour`) : le SpineSprite est alors
@@ -101,6 +107,7 @@ var _spine: Node = null   # SpineSprite — jamais typé (extension optionnelle)
 # dont le matériau, posé seulement au survol, dessine le liseré.
 var _groupe_contour: CanvasGroup = null
 var _mat_contour: ShaderMaterial = null
+var _contour_px := 0.0    # épaisseur demandée (px de maquette) ; 0 = contour éteint
 const SHADER_CONTOUR := preload("res://scenes/combat_ctb/contour_survol.gdshader")
 var _mort := false        # Death jouée : plus aucune autre animation
 var _duree_mort := 0.0    # durée (s) de l'animation Death de l'export
@@ -442,6 +449,19 @@ func preparer_contour() -> void:
 	_groupe_contour.fit_margin = 8.0   # de la place pour le liseré hors silhouette
 	add_child(_groupe_contour)
 	(_spine as Node).reparent(_groupe_contour, false)
+	# L'épaisseur du liseré dépend de l'échelle à l'écran : la recalculer quand
+	# un ancêtre change d'échelle (zoom-duel), pas seulement à la pose.
+	set_notify_transform(true)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSFORM_CHANGED and _contour_px > 0.0:
+		_maj_epaisseur_contour()
+
+func _maj_epaisseur_contour() -> void:
+	if _mat_contour == null or not is_inside_tree():
+		return
+	var echelle := absf(get_global_transform_with_canvas().get_scale().x)
+	_mat_contour.set_shader_parameter("epaisseur", _contour_px * maxf(echelle, 0.01))
 
 # Allume/éteint le contour (`px` = épaisseur voulue À L'ÉCRAN, en pixels de
 # maquette ; convertie en pixels physiques par l'échelle courante du nœud —
@@ -450,14 +470,15 @@ func definir_contour(on: bool, couleur: Color = Color.RED, px: float = 2.0) -> v
 	if _groupe_contour == null:
 		return
 	if not on:
+		_contour_px = 0.0
 		_groupe_contour.material = null
 		return
 	if _mat_contour == null:
 		_mat_contour = ShaderMaterial.new()
 		_mat_contour.shader = SHADER_CONTOUR
-	var echelle := absf(get_global_transform_with_canvas().get_scale().x)
+	_contour_px = px
 	_mat_contour.set_shader_parameter("couleur", couleur)
-	_mat_contour.set_shader_parameter("epaisseur", px * maxf(echelle, 0.01))
+	_maj_epaisseur_contour()
 	_groupe_contour.material = _mat_contour
 
 
@@ -675,6 +696,13 @@ func duree_attaque(a_distance: bool = false) -> float:
 	var nom := ANIM_ATTACK_SHOOT if a_distance and a_animation(ANIM_ATTACK_SHOOT) \
 			else ANIM_ATTACK
 	return float(_durees.get(nom, 0.0))
+
+# Délai (s) entre le lancement du geste d'attaque et l'instant où le coup
+# PORTE — c'est là que la cible réagit (Hit/Death, chiffre, son). Les exports
+# ne portent aucun événement Spine : fraction de la durée du geste, à régler à
+# l'œil (IMPACT_FRAC). 0 si la durée est inconnue.
+func delai_impact(a_distance: bool = false) -> float:
+	return duree_attaque(a_distance) * IMPACT_FRAC
 
 # Fige / relance toutes les animations (arrêt sur image du zoom-duel).
 func figer(on: bool) -> void:

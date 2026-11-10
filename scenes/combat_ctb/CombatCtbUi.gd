@@ -12,8 +12,8 @@
 # bataille : SOL + emplacements des sprites — le personnage principal est le
 # sprite Spine RÉEL de Christophe (SpriteSpinePersonnage : Idle en boucle,
 # Attack_CaC ou Attack_Shoot selon le GESTE de l'action ; retombe sur le
-# placeholder si le runtime spine-godot manque) ; les adversaires restent des
-# boules de lumière (EnergyBoule) en attendant leurs assets. L'attaque du
+# placeholder si le runtime spine-godot manque) ; les adversaires ont le leur
+# dès qu'ils sont au registre Spine (EnergyBoule en repli sinon). L'attaque du
 # JOUEUR déclenche un ZOOM-DUEL façon Darkest Dungeon : les deux personnages
 # glissent au centre de l'écran face à face, punch-in fort (crit = plus
 # marqué), puis retour — activations ennemies SANS effet de caméra ; seule la
@@ -22,12 +22,11 @@
 # DA finale hors scope (Christophe).
 #
 # Pilote un CtbMoteur DÉJÀ démarré, en pull-based :
-#   • activation du camp joueur → attend l'input : Attaquer / Défendre /
-#     COMPÉTENCES (chantier 16 — un bouton par compétence du combattant,
-#     grisé « (n) » en recharge, absent s'il n'en a pas) / Objet (chantier 7 —
-#     n'existe que si l'inventaire de run est non vide) ; Attaquer, une
-#     compétence ciblée ou un objet ciblé → choix de cible parmi les ennemis
-#     vivants (boutons ou clic sur la carte ennemie) ;
+#   • activation du camp joueur → attend l'input : Attaquer / Objet (grisé si
+#     l'inventaire de run est vide) — Défendre et les compétences ne sont PLUS
+#     exposés depuis le 14/10/2026 (le moteur les gère toujours) ; Attaquer ou
+#     un objet ciblé → choix de cible À LA SOURIS parmi les ennemis vivants ;
+#     les boutons encadrent le combattant dont c'est le tour ;
 #   • activations ennemies : auto-résolues (IA du moteur), séquencées par de
 #     courtes pauses pour rester lisibles.
 #
@@ -63,6 +62,7 @@ const DUREE_FONDU_SPLASH_S := 0.45
 # GAUCHE, impairs → DROITE (5 boutons ⇒ 3 gauche/2 droite, comme le mockup),
 # chacune étalée verticalement entre l'épaule et la hanche du héros.
 const ACTIONS_MARGE_PX := 64.0        # écart horizontal buste ↔ colonne de boutons
+const ACTIONS_MARGE_ECRAN_PX := 8.0   # un bouton ne s'approche pas plus du bord de l'écran
 const ACTIONS_HAUT_FRAC := 0.88       # bord haut de l'étalement (fraction de la hauteur rendue)
 const ACTIONS_BAS_FRAC := 0.30        # bord bas de l'étalement
 # Trait de liaison bouton → buste (asset Cyber_Line livré mais figé : la
@@ -138,6 +138,10 @@ var previsu_coiffure_heros := 0
 # Genre du héros (0 = celui par défaut du registre — voir SpinePersonnagesData.
 # avec_genre ; « Relic Femme » livrée le 23/09/2026 en genre 1).
 var previsu_genre_heros := 0
+# Genre des alliés AUTRES que l'avatar (-1 = le même que le héros). Il n'existe
+# aucun système d'alliés dans le jeu à ce jour : un allié supplémentaire prend
+# l'apparence du héros, sans cosmétique ni coiffure.
+var previsu_genre_allies := -1
 var previsu_palier_ennemi := -1
 
 ## ligne des pieds : MILIEU de la bande de sol du décor — ALIGNÉ sur
@@ -189,13 +193,16 @@ const VOILE_TEINTE_DEFAUT := Color(0.78, 0.82, 0.90)
 const VOILE_ALPHA_DEFAUT := 0.14
 
 var _cartes: Dictionary = {}   # CtbCombattant → CarteCombattantCtb
-# Vignette « tête/cou/cheveux » du héros GÉNÉRÉE à la volée pour la file
-# d'initiative (voir _demarrer_generation_portrait_heros) — null tant que le
+# Vignettes « tête/cou/cheveux » des alliés GÉNÉRÉES à la volée pour la file
+# d'initiative (voir _demarrer_generation_portrait) — absente tant que le
 # rendu SubViewport (différé d'au moins une frame) n'est pas prêt, ou si
 # aucun runtime spine-godot. Repli SOUS le fichier livré (`CombatUiSkin.
 # portrait_heros`, prioritaire s'il existe un jour), lui-même au-dessus de
 # l'initiale du nom (voir _portrait_pour).
-var _portrait_heros_genere: Texture2D = null
+var _portraits_generes: Dictionary = {}   # CtbCombattant → Texture2D
+# Cibles dont la réaction au coup (Hit/Death, chiffre) attend l'instant
+# d'impact du geste de l'attaquant — voir `_sur_evenement` / `_resoudre_impact`.
+var _impacts_en_attente: Array[CtbCombattant] = []
 var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
 var _duel_tween: Tween = null
 const SHADER_BRUME_DUEL := preload("res://scenes/combat_ctb/brume_duel.gdshader")
@@ -333,32 +340,20 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 	# corrélation entre la taille du sprite et l'ombre », puis « elle doit
 	# englober la taille de l'entité »).
 	var sprite: SpriteSpinePersonnage = null
-	if cb == moteur.avatar():
+	if cb.est_joueur():
 		# creer_heros() et pas creer() : l'apparence vient du registre —
 		# sans skin posée, l'export « costumes » de Relic est invisible.
-		# `previsu_niveau_heros`/`previsu_cosmetique_heros`/`previsu_coiffure_
-		# heros` : surcharge dev ShowRoom, -1 = comportement réel (Nv1, la
-		# dotation de départ).
-		var niveau_heros := previsu_niveau_heros if previsu_niveau_heros > 0 else 1
-		sprite = SpriteSpinePersonnage.creer_heros(
-				niveau_heros, previsu_cosmetique_heros, previsu_coiffure_heros,
-				previsu_genre_heros)
+		# Avatar comme allié supplémentaire : voir `_apparence_allie`.
+		var a := _apparence_allie(cb)
+		sprite = SpriteSpinePersonnage.creer_heros(a[0], a[1], a[2], a[3])
+		if sprite != null:
+			sprite.preparer_contour()   # liseré BLEU au tour de l'allié (`_maj_contours`)
 		# Vignette de file d'initiative GÉNÉRÉE à la volée (retour Rhend
 		# 17/09/2026) : portrait_heros() n'a aucun fichier livré pour le héros
 		# à ce jour (contrairement aux ennemis) — tant que ça reste vrai,
 		# `_portrait_pour` retombe sur l'initiale. Fire-and-forget, EXACTEMENT
 		# la même apparence que le sprite ci-dessus.
-		if sprite != null:
-			sprite.preparer_contour()   # liseré BLEU au tour de l'allié (`_maj_contours`)
-		_demarrer_generation_portrait_heros(niveau_heros, previsu_cosmetique_heros,
-				previsu_coiffure_heros, previsu_genre_heros)
-	elif cb.est_joueur():
-		# Allié SUPPLÉMENTAIRE (essai de formation, 14/10/2026) : une Relic
-		# FEMME (genre 1), pour voir le triangle à trois alliés.
-		sprite = SpriteSpinePersonnage.creer_heros(
-				previsu_niveau_heros if previsu_niveau_heros > 0 else 1, 0, 0, 1)
-		if sprite != null:
-			sprite.preparer_contour()
+		_demarrer_generation_portrait(cb, a)
 	else:
 		# Ennemi : même registre / même apparence que la ShowRoom, qui EST
 		# cet écran depuis 09/2026 (voir CLAUDE.md « la ShowRoom est un
@@ -396,6 +391,17 @@ func _construire_visuel(cb: CtbCombattant) -> void:
 		# Placeholder de sprite, pas un élément interactif (EnergyBoule
 		# est cliquable par défaut au Village) : souris ignorée.
 		orbe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+# Apparence d'un combattant du camp JOUEUR : [niveau, cosmétique, coiffure,
+# genre] — SOURCE UNIQUE du sprite et du portrait de file. Avatar : surcharges
+# dev ShowRoom (`previsu_*`), -1/0 = comportement réel (Nv1, la dotation de
+# départ). Autre allié : voir `previsu_genre_allies`.
+func _apparence_allie(cb: CtbCombattant) -> Array[int]:
+	var niveau := previsu_niveau_heros if previsu_niveau_heros > 0 else 1
+	if cb == moteur.avatar():
+		return [niveau, previsu_cosmetique_heros, previsu_coiffure_heros, previsu_genre_heros]
+	return [niveau, 0, 0,
+			previsu_genre_allies if previsu_genre_allies >= 0 else previsu_genre_heros]
 
 # Hot-reload du VISUEL prévisualisé (ShowRoom UNIQUEMENT, retour Rhend :
 # « t'es obligé de reload le combat ? ») : ↑/↓/H/V ne changent QUE le skin
@@ -653,35 +659,34 @@ func _palier_ennemi(cb: CtbCombattant) -> int:
 # Portrait d'UN combattant pour sa puce de file d'initiative — même source
 # que son sprite : le héros suit son niveau d'équipement prévisualisé/réel,
 # l'ennemi son palier réel/prévisualisé (`_palier_ennemi`, PARTAGÉ avec
-# `_creer_sprite_ennemi`). Héros : fichier livré prioritaire (`CombatUiSkin.
-# portrait_heros`, toujours null à ce jour — aucune livraison), sinon la
-# vignette GÉNÉRÉE (`_portrait_heros_genere`, voir _demarrer_generation_
-# portrait_heros). `null` si ni l'un ni l'autre n'est disponible — l'appelant
+# `_creer_sprite_ennemi`). Camp joueur : fichier livré prioritaire
+# (`CombatUiSkin.portrait_heros`, toujours null à ce jour — aucune livraison),
+# sinon la vignette GÉNÉRÉE (`_portraits_generes`, voir _demarrer_generation_
+# portrait). `null` si ni l'un ni l'autre n'est disponible — l'appelant
 # (`_rafraichir_file`) retombe sur l'initiale du nom.
 func _portrait_pour(cb: CtbCombattant) -> Texture2D:
-	if cb == moteur.avatar():
-		var niveau := previsu_niveau_heros if previsu_niveau_heros > 0 else 1
-		var livre := CombatUiSkin.portrait_heros(niveau)
-		return livre if livre != null else _portrait_heros_genere
+	if cb.est_joueur():
+		var livre := CombatUiSkin.portrait_heros(_apparence_allie(cb)[0])
+		return livre if livre != null else _portraits_generes.get(cb)
 	var entree := SpinePersonnagesData.par_id(cb.data.id)
 	if entree.is_empty():
 		return null
 	return CombatUiSkin.portrait_ennemi(str(entree.get("nom", "")), _palier_ennemi(cb))
 
-# Lance en tâche de fond la génération de la vignette « tête/cou/cheveux » du
-# héros (retour Rhend 17/09/2026 — voir _portrait_heros_genere). Fire-and-
+# Lance en tâche de fond la génération de la vignette « tête/cou/cheveux »
+# d'un allié (retour Rhend 17/09/2026 — voir _portraits_generes ; `a` =
+# `_apparence_allie(cb)`). Fire-and-
 # forget : le rendu SubViewport est DIFFÉRÉ d'au moins une frame
 # (CombatUiSkin.generer_portrait_heros), `_portrait_pour` retombe sur
 # l'initiale en attendant ; une fois prête, on rafraîchit juste la file pour
 # la faire apparaître, sans reconstruire l'écran. Mise en cache côté
 # CombatUiSkin (niveau/cosmétique/coiffure) : gratuit dès la 2e fois pour la
 # même apparence, y compris d'un combat à l'autre.
-func _demarrer_generation_portrait_heros(niveau: int, cosmetique: int, coiffure: int,
-		genre: int = 0) -> void:
-	var tex := await CombatUiSkin.generer_portrait_heros(niveau, cosmetique, coiffure, self, genre)
+func _demarrer_generation_portrait(cb: CtbCombattant, a: Array[int]) -> void:
+	var tex := await CombatUiSkin.generer_portrait_heros(a[0], a[1], a[2], self, a[3])
 	if tex == null or not is_inside_tree():
 		return
-	_portrait_heros_genere = tex
+	_portraits_generes[cb] = tex
 	_rafraichir_file()
 
 # Panneau de stats : PLAQUÉ contre le bord bas-gauche de l'écran, sa largeur
@@ -913,11 +918,12 @@ func _dessiner_sol() -> void:
 # la fin du duel (tween.finished → _rafraichir_orbes).
 func _rafraichir_orbes() -> void:
 	for cb: CtbCombattant in _orbes:
-		if _duel_tween != null and cb in _duel_acteurs:
+		if (_duel_tween != null and cb in _duel_acteurs) or cb in _impacts_en_attente:
 			continue
 		(_orbes[cb] as EnergyBoule).modulate.a = 1.0 if cb.est_vivant() else 0.10
 	for cb: CtbCombattant in _sprites:
-		if not cb.est_vivant():
+		# Coup fatal pas encore porté à l'écran : la mort attend l'impact.
+		if not cb.est_vivant() and not cb in _impacts_en_attente:
 			(_sprites[cb] as SpriteSpinePersonnage).jouer_mort()
 
 # ─── Boucle de combat (pull-based, asynchrone) ───────────────
@@ -950,6 +956,11 @@ func _boucle() -> void:
 			if not is_inside_tree():
 				return
 			moteur.jouer(moteur.action_auto(c))
+		# Le coup doit avoir PORTÉ à l'écran avant de passer à la suite.
+		while not _impacts_en_attente.is_empty() and is_inside_tree():
+			await get_tree().process_frame
+		if not is_inside_tree():
+			return
 		_marquer_actif(null)
 		_rafraichir_tout()
 		await _pause(0.35)
@@ -984,7 +995,7 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 		var visibles: Array = [_btn_attaquer]
 		if _btn_objet != null:
 			visibles.append(_btn_objet)
-		_disposer_actions_deux_colonnes(visibles)
+		_disposer_actions_deux_colonnes(visibles, acteur)
 	if not on:
 		_mettre_cibles_en_avant(false)
 		_liens_actions.clear()
@@ -1011,13 +1022,17 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 # procédurale (fraction de largeur, à la hauteur du bouton) si l'os est
 # absent (export sans la livraison, runtime spine-godot manquant,
 # placeholder EnergyBoule).
-func _disposer_actions_deux_colonnes(boutons: Array) -> void:
+#
+# Les boutons encadrent le combattant dont c'est le TOUR (`acteur` ; l'avatar
+# par défaut). Si une colonne sortirait de l'écran (allié du fond, collé au
+# bord), tous les boutons passent de l'autre côté.
+func _disposer_actions_deux_colonnes(boutons: Array, acteur: CtbCombattant = null) -> void:
 	_liens_actions.clear()
 	if boutons.is_empty() or _sol == null or _sol.size.x <= 0.0:
 		if _rangee_boutons != null:
 			_rangee_boutons.queue_redraw()
 		return
-	var avatar := moteur.avatar()
+	var avatar := acteur if acteur != null else moteur.avatar()
 	var pied: Vector2 = _pieds.get(avatar,
 			Vector2(_sol.size.x * SOL_X_JOUEUR, _sol.size.y * SOL_Y_FRAC))
 	var hauteur := ORBE_TAILLE.y
@@ -1037,6 +1052,13 @@ func _disposer_actions_deux_colonnes(boutons: Array) -> void:
 	var haut := pied.y - hauteur * ACTIONS_HAUT_FRAC
 	var bas := pied.y - hauteur * ACTIONS_BAS_FRAC
 	var n := boutons.size()
+	var larg_max := 0.0
+	for b: Control in boutons:
+		b.reset_size()
+		larg_max = maxf(larg_max, b.size.x)
+	var deport := largeur * 0.5 + ACTIONS_MARGE_PX
+	var gauche_ok := pied.x - deport - larg_max * 0.5 >= ACTIONS_MARGE_ECRAN_PX
+	var droite_ok := pied.x + deport + larg_max * 0.5 <= _sol.size.x - ACTIONS_MARGE_ECRAN_PX
 	# Hauteur tirée de l'index GLOBAL (pas d'un compteur par colonne) : les
 	# deux colonnes échantillonnent des crans ALTERNÉS sur le même étalement
 	# vertical, donc se décalent naturellement l'une par rapport à l'autre —
@@ -1044,11 +1066,14 @@ func _disposer_actions_deux_colonnes(boutons: Array) -> void:
 	# mockup, où les colonnes sont visiblement décalées (retour Rhend).
 	for i in n:
 		var a_droite := i % 2 == 1
+		if not gauche_ok:
+			a_droite = true
+		elif not droite_ok:
+			a_droite = false
 		var t := 0.5 if n == 1 else float(i) / float(n - 1)
 		var y := lerpf(haut, bas, t)
-		var x := pied.x + (1.0 if a_droite else -1.0) * (largeur * 0.5 + ACTIONS_MARGE_PX)
+		var x := pied.x + (1.0 if a_droite else -1.0) * deport
 		var b: Control = boutons[i]
-		b.reset_size()
 		var centre := Vector2(x, y)
 		b.position = centre - b.size * 0.5
 		var bord_x := centre.x - b.size.x * 0.5 if a_droite else centre.x + b.size.x * 0.5
@@ -1534,28 +1559,22 @@ func _sur_evenement(e: Dictionary) -> void:
 					and _pieds.has(e["attaquant"]) and _pieds.has(cible)
 			if sprite_att != null:
 				sprite_att.jouer_attaque(a_distance, duel_tenu)
-			var sprite_cible: SpriteSpinePersonnage = _sprites.get(cible)
-			if sprite_cible != null:
-				if bool(e["mort"]):
-					sprite_cible.jouer_mort()
-				else:
-					sprite_cible.jouer_hit()
-			var degats := int(e["degats"])
-			var crit := bool(e["crit"])
 			# Mise en scène de duel UNIQUEMENT sur l'attaque du joueur —
 			# les activations ennemies restent sobres (retour Rhend). Un TIR
 			# ne fait converger personne : le zoom se recentre sur la cible.
 			var attaquant := e["attaquant"] as CtbCombattant
 			if attaquant.est_joueur():
-				_duel_attaque(attaquant, cible, crit, not a_distance)
-			var couleur: Color
-			if cible.est_joueur():
-				couleur = UIColors.DMG_HEAVY_ENEMY if crit else UIColors.DMG_BY_ENEMY
+				_duel_attaque(attaquant, cible, bool(e["crit"]), not a_distance)
+			# La RÉACTION de la cible (Hit/Death, chiffre, son) attend l'instant
+			# où le geste porte — sinon elle encaisse avant que l'arme ne touche.
+			var delai := 0.0
+			if sprite_att != null and facteur_delais > 0.0:
+				delai = sprite_att.delai_impact(a_distance)
+			if delai > 0.0:
+				_impacts_en_attente.append(cible)
+				get_tree().create_timer(delai).timeout.connect(_impact_differe.bind(e))
 			else:
-				couleur = UIColors.DMG_HEAVY_HERO if crit else UIColors.DMG_BY_HERO
-			var texte := (Translations.T("ctb.crit_float") % degats) if crit else str(degats)
-			AudioManager.play_sfx("attack", -6.0)
-			_flotter(cible, texte, 22 if crit else 17, couleur, crit)
+				_resoudre_impact(e)
 		"tick_statut":
 			# Tick de DoT : distinct des coups (violet, préfixe du statut).
 			_flotter(e["cible"] as CtbCombattant, "−%d %s" % [int(e["degats"]),
@@ -1590,6 +1609,35 @@ func _sur_evenement(e: Dictionary) -> void:
 				_flotter(e["cible"] as CtbCombattant,
 						"+%d" % int(roundf(float(e["soin"]))), 18,
 						UIColors.HEAL_COLOR, true)
+
+# Le coup PORTE : réaction de la cible, chiffre de dégâts, son. Appelé à
+# l'instant d'impact du geste (`_impact_differe`), ou tout de suite quand il
+# n'y a ni sprite ni délai (placeholder, tests headless).
+func _resoudre_impact(e: Dictionary) -> void:
+	var cible := e["cible"] as CtbCombattant
+	var sprite_cible: SpriteSpinePersonnage = _sprites.get(cible)
+	if sprite_cible != null:
+		if bool(e["mort"]):
+			sprite_cible.jouer_mort()
+		else:
+			sprite_cible.jouer_hit()
+	var degats := int(e["degats"])
+	var crit := bool(e["crit"])
+	var couleur: Color
+	if cible.est_joueur():
+		couleur = UIColors.DMG_HEAVY_ENEMY if crit else UIColors.DMG_BY_ENEMY
+	else:
+		couleur = UIColors.DMG_HEAVY_HERO if crit else UIColors.DMG_BY_HERO
+	var texte := (Translations.T("ctb.crit_float") % degats) if crit else str(degats)
+	AudioManager.play_sfx("attack", -6.0)
+	_flotter(cible, texte, 22 if crit else 17, couleur, crit)
+
+func _impact_differe(e: Dictionary) -> void:
+	_impacts_en_attente.erase(e["cible"])
+	if not is_inside_tree():
+		return
+	_resoudre_impact(e)
+	_rafraichir_tout()   # PV, statuts et file suivent le coup, pas la fin du duel
 
 func _flotter(cb: CtbCombattant, texte: String, taille: int, couleur: Color,
 		punch: bool) -> void:
@@ -1686,6 +1734,10 @@ func _outro() -> void:
 		await _duel_tween.finished
 		if not is_inside_tree():
 			return
+	while not _impacts_en_attente.is_empty() and is_inside_tree():
+		await get_tree().process_frame
+	if not is_inside_tree():
+		return
 	_duel_interrompre()
 	_rafraichir_tout()
 	var gagne := moteur.victoire_joueur

@@ -34,14 +34,12 @@ const ZOOM_CRIT := 1.55       # un crit frappe plus fort → caméra aussi
 const ECART_PX := 240.0
 const FOCUS_HAUT_PX := 60.0   # remonte le pivot des pieds vers les torses
 const DUREE_IN := 0.14
-# Tenue calibrée pour qu'en COMBAT RÉEL le duel (in + tenue + out = 0.89 s)
-# soit ENTIÈREMENT retombé avant la première activation ennemie qui suit
-# (pause post-action 0.35 s + pause de bandeau 0.55 s = 0.90 s dans
-# CombatCtbUi — sinon le coup ennemi se jouerait pendant le dé-zoom,
-# contredisant « ennemis sans effet de caméra »). Toucher ces valeurs
-# implique de revérifier ce calage.
-const TENUE := 0.2      # image FIGÉE (zoom rapide, gel 0,2 s après l'animation d'attaque, dézoom rapide)
-const DUREE_OUT := 0.14   # dézoom RAPIDE (symétrique de DUREE_IN) — total 0,78 s < 0,90 s de pause
+# Gel sur la DERNIÈRE image du geste, après la fin de l'animation d'attaque
+# (la tenue totale est dynamique : l'appelant passe `tenue_s`). Plus de calage
+# à tenir avec les pauses de CombatCtbUi : sa boucle attend la fin du tween
+# avant d'ouvrir l'activation suivante.
+const TENUE := 0.2
+const DUREE_OUT := 0.14   # dézoom RAPIDE (symétrique de DUREE_IN)
 
 # Rejoue l'effet. `crit` accentue le punch-in ; `converger` = false (tir) :
 # personne ne bouge, seul le punch-in reste, recentré sur `foyer`.

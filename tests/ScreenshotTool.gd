@@ -41,6 +41,7 @@ func _ready() -> void:
 		"holo_prop": await _shoot_holo_prop()
 		"holo_pins": await _shoot_holo_pins()
 		"showroom":  await _shoot_showroom()
+		"showroom_coup": await _shoot_showroom_coup()
 		"compare_ennemis": await _shoot_compare_ennemis()
 		"factory":   await _shoot_factory()
 		"factory_full": await _shoot_factory_full()
@@ -768,6 +769,31 @@ func _shoot_showroom() -> void:
 	salle._appliquer_mode()
 	await get_tree().create_timer(0.6).timeout
 	await _capture("res://tests/_shot_showroom_usine.png")
+
+# ── Coup du joueur en conditions RÉELLES (délais actifs) ────────────────────
+# Trois tours alliés de suite dans la vitrine : capture des boutons d'action
+# (ils doivent encadrer le combattant DONT C'EST LE TOUR), puis du coup AVANT
+# et APRÈS l'instant d'impact — la cible ne doit réagir (Hit, chiffre) qu'à la
+# seconde capture. Sert à calibrer SpriteSpinePersonnage.IMPACT_FRAC.
+func _shoot_showroom_coup() -> void:
+	var salle: ShowRoom = (load("res://scenes/showroom/ShowRoom.tscn") as PackedScene).instantiate()
+	_vp.add_child(salle)
+	for tour in 3:
+		var ui: CombatCtbUi = salle._combat_ui
+		var garde := 0
+		while not ui._btn_attaquer.visible and garde < 1200:
+			await get_tree().process_frame
+			garde += 1
+		await _capture("res://tests/_shot_coup_%d_boutons.png" % tour)
+		ui._sur_attaquer()
+		ui._sur_cible_cliquee(ui._ennemis_vivants()[0])
+		var impact := (ui._sprites[ui._acteur_actif] as SpriteSpinePersonnage).delai_impact()
+		await get_tree().create_timer(impact * 0.6).timeout
+		await _capture("res://tests/_shot_coup_%d_avant_impact.png" % tour)
+		await get_tree().create_timer(impact * 0.4 + 0.12).timeout
+		await _capture("res://tests/_shot_coup_%d_apres_impact.png" % tour)
+		while ui._btn_attaquer.visible:
+			await get_tree().process_frame
 
 # ── Comparaison de taille : FlameBot et WorkBot sur une même ligne ──────────
 # Diagnostic demandé par Rhend (09/2026, chara design des tailles relatives) :

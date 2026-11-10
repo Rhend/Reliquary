@@ -212,6 +212,7 @@ func _lancer_duel() -> void:
 	_combat_ui.previsu_cosmetique_heros = _idx_cosmetique
 	_combat_ui.previsu_coiffure_heros = _idx_coiffure
 	_combat_ui.previsu_genre_heros = _idx_genre
+	_combat_ui.previsu_genre_allies = 1   # les deux alliées de test : Relic femme
 	_combat_ui.previsu_palier_ennemi = _idx_palier
 	# Rejouer un duel frais après victoire/défaite/clic de sortie : la
 	# vitrine reste sur la MÊME créature/le même palier, prête à rejouer —
