@@ -28,7 +28,7 @@ extends PanelContainer
 
 const LARGEUR_MIN := 480.0
 # Hauteur FIXE : les deux panneaux restent alignés quel que soit leur contenu.
-const HAUTEUR := 78.0
+const HAUTEUR := 64.0   # au-delà, le panneau mord les pieds du rang arrière-bas
 const MARGE_BORD_PX := 18      # côté bord d'écran
 const MARGE_CENTRE_PX := 34    # côté centre : l'arête du panneau y est biseautée
 const LARGEUR_IDENTITE := 236.0
@@ -67,8 +67,8 @@ func _construire() -> void:
 
 	var marge := MarginContainer.new()
 	marge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	marge.add_theme_constant_override("margin_top", 8)
-	marge.add_theme_constant_override("margin_bottom", 8)
+	marge.add_theme_constant_override("margin_top", 5)
+	marge.add_theme_constant_override("margin_bottom", 5)
 	marge.add_theme_constant_override("margin_left",
 			MARGE_BORD_PX if camp_joueur else MARGE_CENTRE_PX)
 	marge.add_theme_constant_override("margin_right",
@@ -91,7 +91,7 @@ func _bloc_identite() -> Control:
 	var col := VBoxContainer.new()
 	col.custom_minimum_size = Vector2(LARGEUR_IDENTITE, 0.0)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 3)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var ligne := HBoxContainer.new()
@@ -140,7 +140,7 @@ func _bloc_stats() -> Control:
 			["def", "ctb.stats.prot"], ["vit", "ctb.stats.speed"]]:
 		var col := VBoxContainer.new()
 		col.alignment = BoxContainer.ALIGNMENT_CENTER
-		col.add_theme_constant_override("separation", 2)
+		col.add_theme_constant_override("separation", 0)
 		col.custom_minimum_size = Vector2(44, 0)
 		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var titre := ExpeStyle.label_mono(Translations.T(paire[1]), 10, Color(_accent(), 0.85))
@@ -157,7 +157,7 @@ func _bloc_stats() -> Control:
 func _bloc_effets() -> Control:
 	var col := VBoxContainer.new()
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", 3)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var titre := ExpeStyle.label_mono(Translations.T("ctb.stats.status_titre"), 10,

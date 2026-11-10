@@ -92,8 +92,13 @@ const LIEN_RAYON_NOEUD_PX := 4.0
 # budget manquant pour que le bouton ne chevauche pas l'épée tenue au-dessus
 # du corps mesuré.
 const LIEN_ANCRE_FRAC := 0.34
-# Puce carrée de la file d'initiative compacte (portraits, chantier UI_Concept2).
-const TAILLE_PUCE_TOUR := 30.0
+# File d'initiative (haut-droite).
+const FILE_PUCE_TETE_PX := 62.0       # le combattant qui joue
+const FILE_PUCE_PX := 46.0            # les activations suivantes
+const FILE_SEPARATION_PX := 5
+const FILE_ALPHA_QUEUE := 0.55        # opacité de la dernière puce de la file
+const FILE_LIGNE_HAUTEUR_PX := 36     # trait Cyber_Line sous la file
+const FILE_PIED_HAUTEUR_PX := 38.0
 
 # Zoom-DUEL sur l'attaque du JOUEUR uniquement (recette Darkest Dungeon 1,
 # resserrée — retour Rhend) : l'attaquant et sa cible GLISSENT au centre de
@@ -244,7 +249,9 @@ var _ombres: Dictionary = {}   # CtbCombattant → CombatOmbrePortee (ombre au s
 var _pieds: Dictionary = {}    # CtbCombattant → point d'appui au sol (dessin)
 var _panneau_file: VBoxContainer
 var _file_box: HBoxContainer
-var _soulignement_file: Control
+var _pied_file: Control
+var _ligne_file: NinePatchRect
+var _chevron_file: TextureRect
 var _lbl_tour: Label
 var _panneau_stats: CombatPanneauStats
 # « Entité alliée en sélection » du panneau de stats — un seul allié possible
@@ -533,36 +540,39 @@ func _construire() -> void:
 	# posé une fois) : son contenu n'existe pas encore ici, il arrive via
 	# `_rafraichir_file()` — un ancrage figé se serait retrouvé à agrandir la
 	# boîte HORS ÉCRAN vers la droite au premier remplissage.
+	# REFONTE 11/2026 (retour Rhend, mockup UI_Concept4 à l'appui) : portraits
+	# nettement plus grands, la puce de TÊTE = le combattant qui joue (plus
+	# grande, halo), les suivantes s'estompent avec la distance ; dessous, le
+	# chevron sous la tête, « Tour : N » et le VRAI trait Cyber_Line de Christophe.
 	_panneau_file = VBoxContainer.new()
-	_panneau_file.add_theme_constant_override("separation", 4)
+	_panneau_file.add_theme_constant_override("separation", 3)
 	_panneau_file.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_panneau_file)
 	_file_box = HBoxContainer.new()
-	_file_box.add_theme_constant_override("separation", 4)
+	_file_box.add_theme_constant_override("separation", FILE_SEPARATION_PX)
 	_file_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panneau_file.add_child(_file_box)
-	# Soulignement décoratif (retour Rhend : « il manque le sprite qui
-	# souligne la zone d'initiative ») — même langage que les traits
-	# bouton → buste (coude + cercle creux, couleur de Cyber_Line), pour lier
-	# visuellement la rangée de puces au compteur de tour en dessous.
-	_soulignement_file = Control.new()
-	_soulignement_file.custom_minimum_size = Vector2(TAILLE_PUCE_TOUR + LIEN_COUDE_PX, 12.0)
-	_soulignement_file.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_soulignement_file.draw.connect(_dessiner_soulignement_file)
-	_panneau_file.add_child(_soulignement_file)
-	var tour_box := HBoxContainer.new()
-	tour_box.add_theme_constant_override("separation", 4)
-	tour_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_panneau_file.add_child(tour_box)
-	var chevron := TextureRect.new()
-	chevron.texture = CombatUiSkin.CHEVRON
-	chevron.custom_minimum_size = Vector2(14, 14)
-	chevron.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	chevron.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	chevron.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tour_box.add_child(chevron)
-	_lbl_tour = ExpeStyle.label_mono("", 13, UIColors.CYBER_ACCENT)
-	tour_box.add_child(_lbl_tour)
+	# Pied de la file : enfants posés À LA MAIN (`_repositionner_panneau_file`).
+	_pied_file = Control.new()
+	_pied_file.custom_minimum_size = Vector2(0.0, FILE_PIED_HAUTEUR_PX)
+	_pied_file.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_panneau_file.add_child(_pied_file)
+	_ligne_file = NinePatchRect.new()
+	_ligne_file.texture = CombatUiSkin.ligne_cyber(FILE_LIGNE_HAUTEUR_PX)
+	# Seul le segment horizontal s'étire ; la descente et le cercle (≈ dernier
+	# tiers de l'asset) gardent leurs proportions.
+	_ligne_file.patch_margin_left = 2
+	_ligne_file.patch_margin_right = int(_ligne_file.texture.get_width() * 0.36)
+	_ligne_file.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pied_file.add_child(_ligne_file)
+	_chevron_file = TextureRect.new()
+	_chevron_file.texture = CombatUiSkin.CHEVRON
+	_chevron_file.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_chevron_file.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_chevron_file.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pied_file.add_child(_chevron_file)
+	_lbl_tour = ExpeStyle.label_mono("", 17, UIColors.CYBER_ACCENT)
+	_pied_file.add_child(_lbl_tour)
 	_repositionner_panneau_file()
 
 	# Boutons d'action : Control à positionnement LIBRE, en 2 colonnes
@@ -751,7 +761,16 @@ func _repositionner_panneau_file() -> void:
 	if _panneau_file == null:
 		return
 	_panneau_file.reset_size()
-	_panneau_file.position = Vector2(size.x - _panneau_file.size.x - 10.0, 10.0)
+	_panneau_file.position = Vector2(size.x - _panneau_file.size.x - 8.0, 6.0)
+	# Pied : chevron centré sous la puce de tête, trait de la tête au bord
+	# droit, compteur de tour sous le segment horizontal du trait.
+	var largeur := _panneau_file.size.x
+	_chevron_file.size = Vector2(20, 18)
+	_chevron_file.position = Vector2((FILE_PUCE_TETE_PX - _chevron_file.size.x) * 0.5, 5.0)
+	_ligne_file.position = Vector2(FILE_PUCE_TETE_PX - 4.0, 0.0)
+	_ligne_file.size = Vector2(maxf(largeur - FILE_PUCE_TETE_PX - 2.0, 1.0), FILE_LIGNE_HAUTEUR_PX)
+	_lbl_tour.reset_size()
+	_lbl_tour.position = Vector2(FILE_PUCE_TETE_PX + 6.0, 8.0)
 
 # Même correctif pour le bandeau de tour + la rangée de ciblage : centré en
 # bas, recalé à chaque changement (texte du tour, invite/Annuler, liste
@@ -1114,22 +1133,6 @@ func _dessiner_liens_actions() -> void:
 		_rangee_boutons.draw_arc(arrivee, LIEN_RAYON_NOEUD_PX, 0.0, TAU, 16, couleur,
 				LIEN_EPAISSEUR_PX, true)
 
-# Même langage visuel (coude + cercle creux) que les traits d'action, réduit
-# pour lier la rangée de puces de la file d'initiative à « Tour : N » en
-# dessous (retour Rhend — décoration statique, pas besoin de recalcul).
-func _dessiner_soulignement_file() -> void:
-	if _soulignement_file == null:
-		return
-	var couleur := CombatUiSkin.couleur_lien()
-	var h := _soulignement_file.size.y
-	var depart := Vector2(0.0, 2.0)
-	var coude := Vector2(TAILLE_PUCE_TOUR * 0.5, 2.0)
-	var arrivee := Vector2(coude.x + LIEN_COUDE_PX, h - 2.0)
-	_soulignement_file.draw_line(depart, coude, couleur, LIEN_EPAISSEUR_PX, true)
-	_soulignement_file.draw_line(coude, arrivee, couleur, LIEN_EPAISSEUR_PX, true)
-	_soulignement_file.draw_arc(arrivee, LIEN_RAYON_NOEUD_PX, 0.0, TAU, 16, couleur,
-			LIEN_EPAISSEUR_PX, true)
-
 func _sur_attaquer() -> void:
 	if not _btn_attaquer.visible:
 		return   # pas d'activation joueur ouverte (press programmatique hors tour)
@@ -1317,15 +1320,24 @@ func _rafraichir_tout() -> void:
 # des N_FILE prochaines activations, recalculé après chaque action.
 func _rafraichir_file() -> void:
 	UIHelpers.clear_children_now(_file_box)
-	var predits := moteur.prevoir_ordre(N_FILE)
+	var predits := _ordre_file()
+	var surligne := _ennemi_surligne()
 	for i in predits.size():
 		var cb: CtbCombattant = predits[i]
 		var chip := PanelContainer.new()
-		chip.custom_minimum_size = Vector2(TAILLE_PUCE_TOUR, TAILLE_PUCE_TOUR)
-		# Cadre RÉEL de Christophe (Turn_back/Border) : halo (Aura) sur la
-		# PROCHAINE activation (i == 0) pour la faire ressortir de la file.
+		var cote := FILE_PUCE_TETE_PX if i == 0 else FILE_PUCE_PX
+		chip.custom_minimum_size = Vector2(cote, cote)
+		chip.size_flags_vertical = Control.SIZE_SHRINK_END   # toutes posées sur le trait
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Cadre RÉEL de Christophe (Turn_back/Border), halo (Aura) sur la TÊTE
+		# de file et sur les puces de l'ennemi surligné en scène — avec deux
+		# WorkBot identiques, c'est le seul moyen de savoir lequel joue quand.
+		var en_avant := i == 0 or cb == surligne
 		chip.add_theme_stylebox_override("panel",
-				CombatUiSkin.style_chip_tour(cb.est_joueur(), i == 0))
+				CombatUiSkin.style_chip_tour(cb.est_joueur(), en_avant))
+		# Plus une activation est lointaine, plus sa puce s'estompe.
+		if not en_avant and predits.size() > 2:
+			chip.modulate.a = lerpf(1.0, FILE_ALPHA_QUEUE, float(i - 1) / float(predits.size() - 2))
 		var portrait := _portrait_pour(cb)
 		if portrait != null:
 			var tr := TextureRect.new()
@@ -1334,9 +1346,14 @@ func _rafraichir_file() -> void:
 			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 			tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			chip.add_child(tr)
+			var lisere := Panel.new()
+			lisere.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			lisere.add_theme_stylebox_override("panel",
+					CombatUiSkin.style_bordure_tour(cb.est_joueur()))
+			chip.add_child(lisere)
 		else:
 			var initiale := CarteCombattantCtb.nom_ui(cb.data).left(1).to_upper()
-			var lbl := ExpeStyle.label_mono(initiale, 13,
+			var lbl := ExpeStyle.label_mono(initiale, 22 if i == 0 else 17,
 					ExpeStyle.accent_camp(cb.est_joueur()).lightened(0.35))
 			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1347,8 +1364,18 @@ func _rafraichir_file() -> void:
 		_lbl_tour.text = Translations.T("ctb.tour_compteur") % moteur.nb_activations
 	_repositionner_panneau_file()
 
+# Ordre affiché par la file : le combattant QUI JOUE en tête (s'il y en a un),
+# puis les prochaines activations prédites par le moteur — N_FILE puces en tout.
+func _ordre_file() -> Array[CtbCombattant]:
+	if _acteur_actif == null or not _acteur_actif.est_vivant():
+		return moteur.prevoir_ordre(N_FILE)
+	var ordre: Array[CtbCombattant] = [_acteur_actif]
+	ordre.append_array(moteur.prevoir_ordre(N_FILE - 1))
+	return ordre
+
 func _marquer_actif(c: CtbCombattant) -> void:
 	_acteur_actif = c
+	_rafraichir_file()   # la tête de file suit le combattant qui joue
 	if c != null and c.est_joueur():
 		# Allié actif : son panneau (bas-gauche) le suit.
 		_entite_alliee_selectionnee = c

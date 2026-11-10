@@ -281,6 +281,12 @@ static func style_chip_tour(camp_joueur: bool, en_tete: bool) -> StyleBoxTexture
 	couches.append(border)
 	return _style_texture(cle, couches)
 
+# Liseré SEUL du cadre de file, à reposer PAR-DESSUS le portrait : celui-ci
+# remplit toute la puce et recouvrirait sinon la bordure de camp.
+static func style_bordure_tour(camp_joueur: bool) -> StyleBoxTexture:
+	return _style_texture("tour_bordure_%s" % str(camp_joueur),
+			[TOUR_BORDER_HERO if camp_joueur else TOUR_BORDER_ENNEMI])
+
 # Portrait d'un ENNEMI pour sa puce de file d'initiative, au palier affiché
 # (0 = Commun … 4 = Légendaire, mêmes indices que ses skins Spine de palier —
 # `nom` et `palier` viennent de `SpinePersonnagesData`/`CombatCtbUi.
@@ -292,7 +298,18 @@ static func portrait_ennemi(nom: String, palier: int) -> Texture2D:
 	var chemin := "%sUI_Combat_Turn_back_%s_Nv_%d.png" % [DOSSIER_TOUR_ICONE, nom, palier + 1]
 	if not ResourceLoader.exists(chemin):
 		return null
-	return load(chemin) as Texture2D
+	if not _cache_portraits_ennemis.has(chemin):
+		# Recadré sur son contenu PEINT : le fichier porte la même marge morte
+		# que les cadres (voir `_composer`), sans quoi le portrait flotte, plus
+		# petit que celui du héros, au milieu de sa puce.
+		var tex := load(chemin) as Texture2D
+		var recadre := AtlasTexture.new()
+		recadre.atlas = tex
+		recadre.region = Rect2(_image_de(tex).get_used_rect())
+		_cache_portraits_ennemis[chemin] = recadre
+	return _cache_portraits_ennemis[chemin]
+
+static var _cache_portraits_ennemis: Dictionary = {}   # chemin → AtlasTexture recadrée
 
 # Portrait du HÉROS, même contrat, indexé par NIVEAU D'ÉQUIPEMENT (1..6, pas
 # un palier de rareté 0-based — cohérent avec `SpriteSpinePersonnage.
@@ -494,6 +511,18 @@ static func couleur_lien() -> Color:
 		if _couleur_lien_cache.a <= 0.0:
 			_couleur_lien_cache = UIColors.CYBER_ACCENT   # repli si l'asset venait à manquer
 	return _couleur_lien_cache
+
+# Trait `CYBER_LINE` RÉEL, réduit à `hauteur_px` (proportions gardées) — pour un
+# NinePatchRect dont seul le segment horizontal s'étire (file d'initiative).
+# Mis en cache : la réduction Lanczos n'est faite qu'une fois par hauteur.
+static func ligne_cyber(hauteur_px: int) -> ImageTexture:
+	var cle := "ligne_cyber_%d" % hauteur_px
+	if not _cache_textures.has(cle):
+		var img := _image_de(CYBER_LINE)
+		img.resize(int(roundf(float(img.get_width()) * hauteur_px / img.get_height())),
+				hauteur_px, Image.INTERPOLATE_LANCZOS)
+		_cache_textures[cle] = ImageTexture.create_from_image(img)
+	return _cache_textures[cle]
 
 # ─── Curseur personnalisé ─────────────────────────────────────
 

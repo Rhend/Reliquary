@@ -146,7 +146,9 @@ func _test_ecran_complet() -> void:
 	# combattants factices d'ici ("gob_1"…) n'ont pas d'entrée au registre
 	# Spine → repli sur l'initiale du nom (voir CombatCtbUi._portrait_pour),
 	# la seule chose qu'un Label expose ici.
-	var predit := m.prevoir_ordre(CombatCtbUi.N_FILE)
+	# En tête : le combattant qui joue (activation ouverte), puis la prédiction.
+	var predit: Array[CtbCombattant] = [ui._acteur_actif]
+	predit.append_array(m.prevoir_ordre(CombatCtbUi.N_FILE - 1))
 	var puces := ui._file_box.get_child_count()
 	_assert(puces == CombatCtbUi.N_FILE,
 			"file d'initiative : %d puces affichées" % CombatCtbUi.N_FILE, "puces=%d" % puces)
@@ -156,7 +158,7 @@ func _test_ecran_complet() -> void:
 		var attendu := CarteCombattantCtb.nom_ui(predit[i].data).left(1).to_upper()
 		if lbl == null or lbl.text != attendu:
 			ordre_ok = false
-	_assert(ordre_ok, "ordre affiché de la file = moteur.prevoir_ordre (N=%d)"
+	_assert(ordre_ok, "ordre affiché de la file = acteur + moteur.prevoir_ordre (N=%d)"
 			% CombatCtbUi.N_FILE)
 
 	# Tour 1 : DÉFENDRE via le bouton (joué synchrone sur le signal pressed).
