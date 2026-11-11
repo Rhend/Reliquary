@@ -114,8 +114,17 @@ personnages = [{
 "nom": "FlameBot",
 "skel": "res://assets/personnages/ennemis/flamebot/FlameBot.skel",
 "atlas": "res://assets/personnages/ennemis/flamebot/FlameBot.atlas",
-"prefixe_skin": "FlameBot_Nv",
+"prefixe_skin": "FlameBot_Nv_",
 "portrait_cadre": [-0.01, 0.81, 0.48],
+"skins_base": ["FlameBot_Global", "FlameBot_Level"],
+"niveaux": 5,
+"animations": {
+"Idle": "FB_Idle_Neutre",
+"Attack_CaC": ["FB_Attack_Before_Flamme", "FB_Attack_Flamme", "FB_Attack_After_Flamme"],
+"Hit": ["FB_Hit", "FB_Hit_After"],
+"Death": "FB_Death"
+},
+"impact_attaque_s": 1.17,
 "regarde_a_droite": false,
 "taille_relative_pct": 32.0,
 "ennemi": true

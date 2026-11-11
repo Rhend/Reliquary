@@ -68,9 +68,26 @@ func _test_apparences() -> void:
 	var ap_mob := SpinePersonnagesData.apparences(mob)
 	_assert(ap_mob.size() == SpinePersonnagesData.NB_PALIERS,
 			"ennemi → %d apparences (une par palier)" % SpinePersonnagesData.NB_PALIERS)
-	_assert(str(ap_mob[0].get("skin", "")).ends_with("Nv1"), "1re apparence = Nv1 (Commun)")
+	# Ennemi DÉCOUPÉ (WorkBot 15/10/2026, FlameBot 11/11/2026) : socle cumulé +
+	# la skin du palier en DERNIER, et le niveau qui purge les slots des autres.
+	var skins_1 := ap_mob[0].get("skins", PackedStringArray()) as PackedStringArray
+	var skins_5 := ap_mob[4].get("skins", PackedStringArray()) as PackedStringArray
+	_assert(not skins_1.is_empty() and skins_1[-1].ends_with("Nv_1")
+			and int(ap_mob[0].get("niveau", 0)) == 1, "1re apparence = Nv1 (Commun)")
 	_assert(int(ap_mob[0].get("palier", -1)) == 0, "1re apparence portée par le palier 0")
-	_assert(str(ap_mob[4].get("skin", "")).ends_with("Nv5"), "5e apparence = Nv5 (Légendaire)")
+	_assert(not skins_5.is_empty() and skins_5[-1].ends_with("Nv_5")
+			and int(ap_mob[4].get("niveau", 0)) == 5, "5e apparence = Nv5 (Légendaire)")
+	# Animations renommées « FB_* » : le contrat (Idle/Attack/Hit/Death) doit
+	# rester jouable via la table `animations` du registre.
+	var spr_mob := SpriteSpinePersonnage.creer(str(mob.get("skel", "")),
+			str(mob.get("atlas", "")), ap_mob[0])
+	if spr_mob != null:
+		for anim in [SpriteSpinePersonnage.ANIM_IDLE, SpriteSpinePersonnage.ANIM_ATTACK,
+				SpriteSpinePersonnage.ANIM_HIT, SpriteSpinePersonnage.ANIM_DEATH]:
+			_assert(spr_mob.a_animation(anim), "%s sait jouer « %s »" % [mob.get("nom", "?"), anim])
+		_assert(spr_mob.delai_impact() > 0.0 and spr_mob.delai_impact() < spr_mob.duree_attaque(),
+				"l'impact tombe pendant le geste d'attaque")
+		spr_mob.free()
 
 	# Héros (livraison « costumes » du 24/08/2026) : ses paliers ne sont PAS
 	# des skins mais des SLOTS « _Nv<n> », posés sur une composition de skins.

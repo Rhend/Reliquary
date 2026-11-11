@@ -14,7 +14,9 @@
 #     (attaque à distance, livrée 24/08/2026) et « Hit » (one-shot — retour
 #     Idle enchaîné automatiquement), « Death » (one-shot, la pose finale est
 #     TENUE — pas de fondu placeholder). Une animation absente est IGNORÉE
-#     (les ennemis n'ont pas Attack_Shoot) ;
+#     (les ennemis n'ont pas Attack_Shoot). Ce sont les noms du CONTRAT : un
+#     export qui nomme ses clips autrement (FlameBot « FB_* », 11/11/2026) les
+#     fait correspondre dans le registre — voir `_table_anims` ;
 #   • l'origine du squelette = les PIEDS du personnage → position de ce
 #     nœud = point d'appui au sol (_pieds de CombatCtbUi), comme l'ellipse.
 # La 1re ligne du .atlas doit nommer le .png RÉEL du dossier (l'export de
@@ -111,6 +113,12 @@ var _tween_disparition: Tween = null
 ## (l'appelant retire alors ce qui l'accompagne : ombre au sol…).
 signal disparu
 var _animations := PackedStringArray()   # ce que l'export sait vraiment jouer
+# Table nom du CONTRAT (ANIM_*) → clip(s) réels de l'export, posée par le
+# registre (`animations` de l'entrée, voir SpinePersonnagesData._avec_decalage).
+# Vide = l'export suit le contrat. Une valeur peut être une LISTE de clips à
+# enchaîner (FlameBot « FB_* », 11/11/2026 : préparation → flamme → retour).
+var _table_anims: Dictionary = {}
+var _impact_attaque_s := -1.0            # instant d'impact imposé par le registre (< 0 = IMPACT_FRAC)
 var _apparence: Dictionary = {}          # dernière apparence posée (mesure d'échelle)
 var _chemin_skel := ""                   # clé de la silhouette bakée
 
@@ -206,8 +214,9 @@ func _construire_spine(chemin_skel: String = CHEMIN_SKEL,
 	for a in donnees.call("get_animations"):
 		_animations.append(str(a.call("get_name")))
 		_durees[str(a.call("get_name"))] = float(a.call("get_duration"))
-		if str(a.call("get_name")) == ANIM_DEATH:
-			_duree_mort = float(a.call("get_duration"))
+	_table_anims = apparence.get("animations", {})
+	_impact_attaque_s = float(apparence.get("impact_attaque_s", -1.0))
+	_duree_mort = _duree(ANIM_DEATH)
 	# Apparence (skin de palier, costume, niveau d'équipement) : posée AVANT la
 	# 1re animation pour que la pose de repos s'affiche d'emblée avec les bons
 	# attachements.
@@ -286,10 +295,17 @@ func _mesurer_corps(donnees: Resource, apparence: Dictionary) -> Vector2:
 	var squelette: Object = _spine.call("get_skeleton")
 	if squelette == null or not squelette.has_method("get_bounds"):
 		return Vector2.ZERO
-	var skins := _skins_demandees(apparence)
+	# Le gabarit se juge sur l'apparence de RÉFÉRENCE de l'entrée (son 1er
+	# palier, `mesure` posée par le registre), pas sur celle affichée : le
+	# FlameBot découpé (11/11/2026) gagne bras de soudure, tuyaux et
+	# échappements en montant de palier — mesurés, ils rétrécissaient le corps
+	# aux paliers hauts (bornes +15 % au Nv5) et déclaraient périmée la
+	# silhouette bakée, elle-même mesurée au 1er palier.
+	var ref: Dictionary = apparence.get("mesure", apparence)
+	var skins := _skins_demandees(ref)
 	var mesure_posee := false
 	if not skins.is_empty():
-		var corps: Object = _composer_skin(skins, int(apparence.get("niveau", 0)))
+		var corps: Object = _composer_skin(skins, int(ref.get("niveau", 0)))
 		if corps != null:
 			_purger_hors_mesure(corps, donnees)
 			squelette.call("set_skin", corps)
@@ -576,7 +592,48 @@ func poser_skin_mesure(apparence: Dictionary) -> bool:
 # L'export sait-il jouer cette animation ? (Attack_Shoot n'existe que pour
 # Relic : la demander à un ennemi doit être sans effet, pas une erreur.)
 func a_animation(nom: String) -> bool:
-	return nom in _animations
+	return not _clips(nom).is_empty()
+
+# Clips RÉELS de l'export derrière un nom du contrat : ceux de la table du
+# registre s'il en déclare, sinon le nom lui-même. Seuls les clips que l'export
+# porte vraiment sont rendus — vide = animation absente, l'appelant l'ignore.
+func _clips(nom: String) -> PackedStringArray:
+	var sortie := PackedStringArray()
+	var brut: Variant = _table_anims.get(nom, nom)
+	var liste: Array = brut if brut is Array else [brut]
+	for clip in liste:
+		if str(clip) in _animations:
+			sortie.append(str(clip))
+	return sortie
+
+# Durée totale (s) des clips d'une animation du contrat. 0 si absente.
+func _duree(nom: String) -> float:
+	var total := 0.0
+	for clip in _clips(nom):
+		total += float(_durees.get(clip, 0.0))
+	return total
+
+# Lance les clips d'une animation du contrat à la suite sur la piste 0 (le
+# dernier en boucle si `boucle`). false si l'export ne la porte pas.
+func _lancer(nom: String, boucle: bool) -> bool:
+	var clips := _clips(nom)
+	var etat := _etat_animation()
+	if clips.is_empty() or etat == null:
+		return false
+	for i in clips.size():
+		var en_boucle := boucle and i == clips.size() - 1
+		if i == 0:
+			etat.call("set_animation", clips[i], en_boucle, 0)
+		else:
+			etat.call("add_animation", clips[i], 0.0, en_boucle, 0)
+	return true
+
+# Met le repos en file derrière ce qui joue.
+func _puis_idle() -> void:
+	var repos := _clips(ANIM_IDLE)
+	var etat := _etat_animation()
+	if not repos.is_empty() and etat != null:
+		etat.call("add_animation", repos[0], 0.0, true, 0)
 
 # Attaque one-shot, retour Idle enchaîné (file d'animations Spine, piste 0).
 # `a_distance` demande le geste de TIR (Attack_Shoot) : il RETOMBE sur la
@@ -588,11 +645,8 @@ func jouer_attaque(a_distance: bool = false, tenir: bool = false) -> void:
 	# caméra est zoomée, le repos ne revient qu'au dézoom).
 	var nom_geste := ANIM_ATTACK_SHOOT if a_distance and a_animation(ANIM_ATTACK_SHOOT) else ANIM_ATTACK
 	if tenir:
-		if _mort or not a_animation(nom_geste):
-			return
-		var etat_t := _etat_animation()
-		if etat_t != null:
-			etat_t.call("set_animation", nom_geste, false, 0)
+		if not _mort:
+			_lancer(nom_geste, false)
 		return
 	if a_distance and a_animation(ANIM_ATTACK_SHOOT):
 		_one_shot_puis_idle(ANIM_ATTACK_SHOOT)
@@ -607,13 +661,9 @@ func jouer_hit() -> void:
 # aucune animation n'est acceptée ensuite (idempotent : rafraîchi à chaque
 # _rafraichir_orbes de l'écran de combat).
 func jouer_mort() -> void:
-	if _mort or not a_animation(ANIM_DEATH):
-		return
-	var etat := _etat_animation()
-	if etat == null:
+	if _mort or not _lancer(ANIM_DEATH, false):
 		return
 	_mort = true
-	etat.call("set_animation", ANIM_DEATH, false, 0)
 	# Fin de l'animation → le personnage DISPARAÎT (retour Rhend 14/10/2026) :
 	# plus de cadavre tenu à l'écran. Durée lue de l'export, jamais devinée.
 	if is_inside_tree():
@@ -628,13 +678,15 @@ func jouer_mort() -> void:
 func duree_attaque(a_distance: bool = false) -> float:
 	var nom := ANIM_ATTACK_SHOOT if a_distance and a_animation(ANIM_ATTACK_SHOOT) \
 			else ANIM_ATTACK
-	return float(_durees.get(nom, 0.0))
+	return _duree(nom)
 
 # Délai (s) entre le lancement du geste d'attaque et l'instant où le coup
 # PORTE — c'est là que la cible réagit (Hit/Death, chiffre, son). Les exports
 # ne portent aucun événement Spine : fraction de la durée du geste, à régler à
 # l'œil (IMPACT_FRAC). 0 si la durée est inconnue.
 func delai_impact(a_distance: bool = false) -> float:
+	if _impact_attaque_s >= 0.0:
+		return minf(_impact_attaque_s, duree_attaque(a_distance))
 	return duree_attaque(a_distance) * IMPACT_FRAC
 
 # Fige / relance toutes les animations (arrêt sur image du zoom-duel).
@@ -653,20 +705,11 @@ func reprendre_repos() -> void:
 	_jouer(ANIM_IDLE, true)
 
 func _one_shot_puis_idle(nom: String) -> void:
-	if _mort or not a_animation(nom):
-		return
-	var etat := _etat_animation()
-	if etat == null:
-		return
-	etat.call("set_animation", nom, false, 0)
-	etat.call("add_animation", ANIM_IDLE, 0.0, true, 0)
+	if not _mort and _lancer(nom, false):
+		_puis_idle()
 
 func _jouer(nom: String, boucle: bool) -> void:
-	if not a_animation(nom):
-		return
-	var etat := _etat_animation()
-	if etat != null:
-		etat.call("set_animation", nom, boucle, 0)
+	_lancer(nom, boucle)
 
 func _etat_animation() -> Object:
 	if _spine == null:

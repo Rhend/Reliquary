@@ -8,7 +8,10 @@
 #
 # Contrat d'export (vérifié par tools/inspect_spine_ennemis.gd) :
 #   • animations « Idle », « Attack_CaC », « Hit », « Death » — plus
-#     « Attack_Shoot » pour Relic, qui a une attaque à distance ;
+#     « Attack_Shoot » pour Relic, qui a une attaque à distance. Un export qui
+#     nomme les siennes autrement les déclare dans `animations` (FlameBot :
+#     clips « FB_* », au modèle découpé ci-dessous depuis le 11/11/2026 —
+#     voir `_avec_decalage`) ;
 #   • les ENNEMIS portent leurs PALIERS par des SKINS Spine nommées
 #     <prefixe_skin><n>, n = 1..5, dans l'ordre Commun(0) → Légendaire(4).
 #
@@ -332,16 +335,35 @@ static func _skins_du_jeu(jeux: Array[Dictionary], idx: int) -> PackedStringArra
 	var jeu: Dictionary = jeux[clampi(idx, 0, jeux.size() - 1)]
 	return jeu["skins"] as PackedStringArray
 
-# Reporte le recentrage visuel de l'entrée sur toutes ses apparences. Il ne
-# dépend ni du palier ni du costume : c'est la POSE qui penche, et elle est la
-# même partout. Les 6 niveaux de Relic partagent donc une seule valeur.
+# Reporte sur toutes les apparences ce qui tient à l'ENTRÉE et pas au palier :
+#   • le recentrage visuel (`decalage_x_px`) — c'est la POSE qui penche, et elle
+#     est la même partout (les 6 niveaux de Relic partagent une seule valeur) ;
+#   • la table des ANIMATIONS (`animations`, livraison « FlameBot Anim V1 » du
+#     11/11/2026) : nom du contrat (« Idle », « Attack_CaC », « Hit », « Death »)
+#     → clip réel de l'export, ou LISTE de clips enchaînés (l'attaque du
+#     FlameBot = préparation → flamme → retour). Absente = l'export suit le
+#     contrat tel quel. `impact_attaque_s` = instant (s) où le coup porte dans
+#     ce geste, quand la fraction par défaut (IMPACT_FRAC) ne convient pas.
+# L'apparence est le seul Dictionary que reçoit SpriteSpinePersonnage.creer().
 static func _avec_decalage(apparences_: Array[Dictionary],
 		entree: Dictionary) -> Array[Dictionary]:
 	var dx := float(entree.get("decalage_x_px", 0.0))
-	if dx == 0.0:
-		return apparences_
+	var anims: Dictionary = entree.get("animations", {})
+	# Apparence de RÉFÉRENCE pour la mesure d'échelle : le 1er palier, celui que
+	# bake tools/mesurer_silhouettes — voir SpriteSpinePersonnage._mesurer_corps.
+	var mesure := {}
+	if apparences_.size() > 1:
+		mesure = {"skin": apparences_[0]["skin"], "skins": apparences_[0]["skins"],
+				"niveau": apparences_[0]["niveau"]}
 	for a in apparences_:
-		a["decalage_x_px"] = dx
+		if not mesure.is_empty():
+			a["mesure"] = mesure
+		if dx != 0.0:
+			a["decalage_x_px"] = dx
+		if not anims.is_empty():
+			a["animations"] = anims
+			if entree.has("impact_attaque_s"):
+				a["impact_attaque_s"] = float(entree["impact_attaque_s"])
 	return apparences_
 
 static func _apparence(skin: String, skins: PackedStringArray, niveau: int,
