@@ -217,14 +217,24 @@ var _couche_secousse: Control = null
 const DEGATS_FX := preload("res://scenes/combat_ctb/CombatDegatsFx.gd")
 # Feel des coups (demande Rhend 11/11/2026). Secousse : [amplitude px, durée s]
 # — un coup encaissé par le HÉROS secoue plus qu'un coup porté ; un coup fatal
-# ajoute `SECOUSSE_MORT_PX`. Hit-stop en secondes réelles (critique / fatal).
+# ajoute `SECOUSSE_MORT_PX`. Contact gelé (`_geler_contact`) : secondes pendant
+# lesquelles les deux corps restent figés sur l'image d'impact.
 const SECOUSSE_COUP := [3.0, 0.16]
 const SECOUSSE_COUP_SUBI := [5.5, 0.22]
 const SECOUSSE_CRIT := [13.0, 0.40]
 const SECOUSSE_CRIT_SUBI := [16.0, 0.46]
 const SECOUSSE_MORT_PX := 4.0
-const GEL_CRIT_S := 0.07
-const GEL_MORT_S := 0.09
+const GEL_COUP_S := 0.05
+const GEL_CRIT_S := 0.11
+const GEL_MORT_S := 0.14
+# Chronologie d'un coup (voir `_sur_evenement`, « attaque ») : délai entre le
+# début de l'approche du duel et le départ du geste de l'attaquant.
+const DUEL_DELAI_GESTE := 0.16
+# Respirations de la boucle (× facteur_delais) : avant qu'un ennemi n'agisse,
+# entre deux activations, et avant l'écran d'issue (le coup fatal se lit).
+const PAUSE_AVANT_ENNEMI_S := 0.45
+const PAUSE_ENTRE_ACTIVATIONS_S := 0.30
+const PAUSE_AVANT_ISSUE_S := 0.45
 # Chiffre de dégâts : taille de base + bonus selon la part des PV max de la
 # cible emportée par le coup (plafonnée à `DEGATS_PART_PLEINE`).
 const DEGATS_TAILLE := [26, 10]
@@ -232,6 +242,7 @@ const DEGATS_TAILLE_CRIT := [42, 12]
 const DEGATS_PART_PLEINE := 0.5
 const DEGATS_MARGE_TETE := 20.0   # px au-dessus du sommet de la silhouette
 var _duel_tween: Tween = null
+var _fin_geste_ms := 0   # horloge (ms) de fin du geste d'attaque en cours
 const SHADER_BRUME_DUEL := preload("res://scenes/combat_ctb/brume_duel.gdshader")
 # Part de chaque bord de l'écran plongée dans la brume noire pendant un duel
 # (retour Rhend 14/10/2026 : 15 % puis 30 %, à régler à l'œil).
@@ -1022,18 +1033,23 @@ func _boucle() -> void:
 			while _duel_tween != null and _duel_tween.is_valid() and is_inside_tree():
 				await get_tree().process_frame
 		else:
-			await _pause(0.55)   # séquencement lisible des activations ennemies
+			await _pause(PAUSE_AVANT_ENNEMI_S)   # séquencement lisible des activations ennemies
 			if not is_inside_tree():
 				return
 			moteur.jouer(moteur.action_auto(c))
 		# Le coup doit avoir PORTÉ à l'écran avant de passer à la suite.
 		while not _impacts_en_attente.is_empty() and is_inside_tree():
 			await get_tree().process_frame
+		# … et le GESTE être allé à son terme : sans cela les boutons du tour
+		# suivant apparaissaient pendant qu'un ennemi finissait de frapper.
+		while facteur_delais > 0.0 and Time.get_ticks_msec() < _fin_geste_ms \
+				and is_inside_tree():
+			await get_tree().process_frame
 		if not is_inside_tree():
 			return
 		_marquer_actif(null)
 		_rafraichir_tout()
-		await _pause(0.35)
+		await _pause(PAUSE_ENTRE_ACTIVATIONS_S)
 	if is_inside_tree():
 		await _outro()
 
@@ -1524,16 +1540,16 @@ func _duel_interrompre() -> void:
 # contredirait le geste — mais le punch-in reste, recentré sur la CIBLE :
 # c'est là que le coup arrive, et c'est ce qu'il faut regarder.
 func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
-		converger: bool = true) -> void:
+		converger: bool = true, avance_s: float = 0.0) -> bool:
 	if facteur_delais <= 0.0 or _couche_scene == null or _sol == null:
-		return   # tests headless : aucun délai, aucun tween
+		return false   # tests headless : aucun délai, aucun tween
 	if not _pieds.has(att) or not _pieds.has(cible):
-		return
+		return false
 	_duel_interrompre()
 	var noeud_att := _noeud_bataille(att)
 	var noeud_cib := _noeud_bataille(cible)
 	if noeud_att == null or noeud_cib == null:
-		return
+		return false
 	var centre := Vector2(_sol.size.x * 0.5, _sol.size.y * SOL_Y_FRAC)
 	# Point regardé : le centre de l'écran en mêlée (les deux corps y viennent),
 	# le MILIEU du couple tireur/cible en tir — personne ne bouge, et pivoter
@@ -1561,12 +1577,16 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
 	var spr_att: SpriteSpinePersonnage = _sprites.get(att)
 	var attente := 0.0
 	if spr_att != null:
-		attente = maxf(0.0, spr_att.duree_attaque(not converger) - DuelZoomFx.DUREE_IN * facteur_delais)
+		# `avance_s` : le geste ne part qu'après ce délai (son élan chevauche la
+		# fin de l'approche) — la tenue l'attend.
+		attente = maxf(0.0, avance_s + spr_att.duree_attaque(not converger)
+				- DuelZoomFx.DUREE_IN * facteur_delais)
 	_duel_ambiance_jouer(att, cible, attente)
 	_duel_att_tenu = spr_att   # relâché au dézoom (`_duel_relacher`)
 	_duel_tween = DuelZoomFx.jouer(_couche_scene, foyer, noeud_att, pos_att, noeud_cib, pos_cib,
 			crit, converger, facteur_delais, _duel_fin,
 			attente + DuelZoomFx.TENUE * facteur_delais)
+	return _duel_tween != null
 
 # Fin du duel : ordre de dessin, positions et fondu du vaincu (différé
 # jusque-là) reviennent à la normale.
@@ -1675,22 +1695,43 @@ func _sur_evenement(e: Dictionary) -> void:
 			# image (épée au sol) pendant tout le zoom ; le repos ne revient
 			# qu'au dézoom (`_duel_relacher`). Sinon : geste + Idle enchaîné.
 			_duel_relacher()   # un geste tenu précédent ne doit pas écraser celui-ci
-			var duel_tenu: bool = (e["attaquant"] as CtbCombattant).est_joueur() \
-					and facteur_delais > 0.0 and _couche_scene != null \
-					and _pieds.has(e["attaquant"]) and _pieds.has(cible)
-			if sprite_att != null:
-				sprite_att.jouer_attaque(a_distance, duel_tenu)
+			# CHRONOLOGIE D'UN COUP (11/11/2026, retour Rhend : « tout se passe
+			# d'un coup et se finit d'un coup ») — chaque temps a sa place :
+			#   1. APPROCHE  — la caméra zoome, les corps convergent, la brume
+			#                  tombe (DuelZoomFx.DUREE_IN) ;
+			#   2. FRAPPE    — le geste ne part qu'après DUEL_DELAI_GESTE : son
+			#                  élan chevauche la FIN de l'approche, l'arme
+			#                  s'abat une fois les corps en place ;
+			#   3. IMPACT    — à `delai_impact` du geste : contact gelé, son,
+			#                  chiffre, réaction de la cible (`_resoudre_impact`) ;
+			#   4. TENUE     — fin du geste + DuelZoomFx.TENUE sur sa dernière
+			#                  image : le temps de LIRE le chiffre ;
+			#   5. RETOUR    — dézoom et retour en place (DuelZoomFx.DUREE_OUT),
+			#                  puis la brume se lève.
 			# Mise en scène de duel UNIQUEMENT sur l'attaque du joueur —
 			# les activations ennemies restent sobres (retour Rhend). Un TIR
 			# ne fait converger personne : le zoom se recentre sur la cible.
 			var attaquant := e["attaquant"] as CtbCombattant
-			if attaquant.est_joueur():
-				_duel_attaque(attaquant, cible, bool(e["crit"]), not a_distance)
+			var avance := DUEL_DELAI_GESTE * facteur_delais
+			var duel := attaquant.est_joueur() \
+					and _duel_attaque(attaquant, cible, bool(e["crit"]), not a_distance, avance)
+			if not duel:
+				avance = 0.0
+			var duree_geste := 0.0
+			if sprite_att != null and facteur_delais > 0.0:
+				duree_geste = sprite_att.duree_attaque(a_distance)
+			# La boucle n'ouvre pas l'activation suivante avant la fin du geste.
+			_fin_geste_ms = Time.get_ticks_msec() + int((avance + duree_geste) * 1000.0)
+			if avance > 0.0:
+				get_tree().create_timer(avance).timeout.connect(
+						_lancer_geste.bind(sprite_att, a_distance, duel))
+			else:
+				_lancer_geste(sprite_att, a_distance, duel)
 			# La RÉACTION de la cible (Hit/Death, chiffre, son) attend l'instant
 			# où le geste porte — sinon elle encaisse avant que l'arme ne touche.
 			var delai := 0.0
 			if sprite_att != null and facteur_delais > 0.0:
-				delai = sprite_att.delai_impact(a_distance)
+				delai = avance + sprite_att.delai_impact(a_distance)
 			if delai > 0.0:
 				_impacts_en_attente.append(cible)
 				get_tree().create_timer(delai).timeout.connect(_impact_differe.bind(e))
@@ -1733,6 +1774,16 @@ func _sur_evenement(e: Dictionary) -> void:
 						"+%d" % int(roundf(float(e["soin"]))), DEGATS_FX.Style.SOIN,
 						UIColors.HEAL_COLOR, 26)
 
+# Départ du GESTE de l'attaquant (temps 2 de la chronologie d'un coup) : le
+# souffle de l'arme part avec lui — le choc, lui, sonne à l'impact. `tenir` :
+# dernière image gardée jusqu'au dézoom du duel (`_duel_relacher`).
+func _lancer_geste(sprite_att: SpriteSpinePersonnage, a_distance: bool, tenir: bool) -> void:
+	if not is_inside_tree():
+		return
+	AudioManager.play_sfx("attack", -9.0, randf_range(0.92, 1.08))
+	if is_instance_valid(sprite_att):
+		sprite_att.jouer_attaque(a_distance, tenir)
+
 # Le coup PORTE : réaction de la cible, chiffre de dégâts, son. Appelé à
 # l'instant d'impact du geste (`_impact_differe`), ou tout de suite quand il
 # n'y a ni sprite ni délai (placeholder, tests headless).
@@ -1751,7 +1802,9 @@ func _resoudre_impact(e: Dictionary) -> void:
 		couleur = UIColors.DMG_HEAVY_ENEMY if crit else UIColors.DMG_BY_ENEMY
 	else:
 		couleur = UIColors.DMG_HEAVY_HERO if crit else UIColors.DMG_BY_HERO
-	AudioManager.play_sfx("attack", -6.0)
+	# Choc sourd au CONTACT (le souffle de l'arme est parti avec le geste).
+	AudioManager.play_sfx("impact_crit" if crit else "impact",
+			-3.0 if crit else -6.0, randf_range(0.94, 1.06))
 	# Le chiffre grossit avec la part des PV max emportée : un gros coup se lit
 	# à sa taille avant même d'être lu.
 	var part := clampf(float(degats) / maxf(1.0, cible.stat_finale("pv_max")),
@@ -1762,15 +1815,19 @@ func _resoudre_impact(e: Dictionary) -> void:
 	_flotter(cible, str(degats), style, couleur, taille,
 			Translations.T("ctb.crit_tag") if crit else "")
 	var sens := 1.0 if (e["attaquant"] as CtbCombattant).est_joueur() else -1.0
-	_feel_impact(cible, sens, crit, bool(e["mort"]), couleur)
+	_feel_impact(cible, sens, crit, bool(e["mort"]), couleur,
+			_sprites.get(e["attaquant"]))
 
-# Feel d'un coup qui porte — gerbe sur le torse, secousse caméra dans le sens
-# du coup, et sur un critique/coup fatal : hit-stop + voile bref. Purement
-# visuel, jamais attendu par la boucle ; rien en `facteur_delais = 0` (tests).
+# Feel d'un coup qui porte — CONTACT GELÉ (les deux corps se figent un instant
+# sur l'image d'impact pendant que les effets, eux, éclatent), gerbe sur le
+# torse, secousse caméra dans le sens du coup, voile bref sur un critique.
+# Purement visuel, jamais attendu par la boucle ; rien en `facteur_delais = 0`.
 func _feel_impact(cible: CtbCombattant, sens: float, crit: bool, mort: bool,
-		couleur: Color) -> void:
+		couleur: Color, sprite_att: SpriteSpinePersonnage = null) -> void:
 	if facteur_delais <= 0.0 or _fx == null or _sol == null:
 		return
+	_geler_contact([sprite_att, _sprites.get(cible)],
+			GEL_MORT_S if mort else (GEL_CRIT_S if crit else GEL_COUP_S))
 	if _noeud_bataille(cible) != null:
 		_fx.eclat(_point_fx(cible, _hauteur_visuelle(cible) * 0.55), couleur, sens, crit)
 	var subi := cible.est_joueur()
@@ -1785,15 +1842,34 @@ func _feel_impact(cible: CtbCombattant, sens: float, crit: bool, mort: bool,
 	if crit:
 		_fx.flash(UIColors.DMG_HEAVY_ENEMY if subi else Color.WHITE,
 				0.20 if subi else 0.13)
-	if crit or mort:
-		_fx.gel(GEL_MORT_S if mort else GEL_CRIT_S)
+
+# Hit-stop LOCAL : seuls les personnages du coup se figent sur l'image de
+# contact — jamais `Engine.time_scale`, qui gelait aussi le chiffre, la gerbe
+# et la caméra et se lisait comme un à-coup de framerate (11/11/2026).
+func _geler_contact(sprites: Array, duree: float) -> void:
+	var figes: Array[SpriteSpinePersonnage] = []
+	for s: Variant in sprites:
+		if s != null and is_instance_valid(s):
+			(s as SpriteSpinePersonnage).figer(true)
+			figes.append(s as SpriteSpinePersonnage)
+	if figes.is_empty():
+		return
+	get_tree().create_timer(duree).timeout.connect(func() -> void:
+		for s in figes:
+			if is_instance_valid(s):
+				s.figer(false))
 
 func _impact_differe(e: Dictionary) -> void:
 	_impacts_en_attente.erase(e["cible"])
 	if not is_inside_tree():
 		return
 	_resoudre_impact(e)
-	_rafraichir_tout()   # PV, statuts et file suivent le coup, pas la fin du duel
+	# PV, statuts et file suivent le coup, pas la fin du duel — mais UNE image
+	# plus tard : la file d'initiative est reconstruite en entier, et l'image
+	# d'impact (effets créés, animations lancées) est déjà la plus chargée.
+	await get_tree().process_frame
+	if is_inside_tree():
+		_rafraichir_tout()
 
 # Texte flottant AU-DESSUS DE LA TÊTE du combattant (retour Rhend 11/11/2026 —
 # il naissait à hauteur de torse, décalé hors de la silhouette : « loin à
@@ -1900,6 +1976,12 @@ func _outro() -> void:
 		await get_tree().process_frame
 	if not is_inside_tree():
 		return
+	# Respiration : le coup fatal (chiffre, chute du vaincu) se lit AVANT que
+	# l'écran d'issue ne tombe dessus.
+	if facteur_delais > 0.0:
+		await _pause(PAUSE_AVANT_ISSUE_S)
+		if not is_inside_tree():
+			return
 	_duel_interrompre()
 	_rafraichir_tout()
 	var gagne := moteur.victoire_joueur

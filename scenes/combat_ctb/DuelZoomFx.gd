@@ -33,13 +33,18 @@ const ZOOM_CRIT := 1.55       # un crit frappe plus fort → caméra aussi
 # 60 px de chaque côté du foyer.
 const ECART_PX := 240.0
 const FOCUS_HAUT_PX := 60.0   # remonte le pivot des pieds vers les torses
-const DUREE_IN := 0.14
+# APPROCHE : assez longue pour être VUE (0,14 s à l'origine : la caméra et les
+# corps se téléportaient, « tout se passe d'un coup » — retour Rhend
+# 11/11/2026). Départ vif, arrivée amortie (QUART/OUT).
+const DUREE_IN := 0.28
 # Gel sur la DERNIÈRE image du geste, après la fin de l'animation d'attaque
 # (la tenue totale est dynamique : l'appelant passe `tenue_s`). Plus de calage
 # à tenir avec les pauses de CombatCtbUi : sa boucle attend la fin du tween
 # avant d'ouvrir l'activation suivante.
-const TENUE := 0.2
-const DUREE_OUT := 0.14   # dézoom RAPIDE (symétrique de DUREE_IN)
+const TENUE := 0.30
+# RETOUR : plus lent que l'approche, départ ET arrivée amortis — le coup
+# retombe, il ne se coupe pas.
+const DUREE_OUT := 0.36
 
 # Rejoue l'effet. `crit` accentue le punch-in ; `converger` = false (tir) :
 # personne ne bouge, seul le punch-in reste, recentré sur `foyer`.
@@ -61,7 +66,7 @@ static func jouer(couche_scene: Control, foyer: Vector2,
 	var f := facteur_delais
 	var tw := couche_scene.create_tween()
 	tw.tween_method(poser_echelle.bind(couche_scene), couche_scene.scale, Vector2.ONE * zoom,
-			DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			DUREE_IN * f).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 	if converger:
 		tw.parallel().tween_property(att, "position", pos_att,
 				DUREE_IN * f).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)

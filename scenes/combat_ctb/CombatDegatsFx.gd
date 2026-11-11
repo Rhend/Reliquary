@@ -4,6 +4,7 @@
 #
 # C'est LA couche FX plein écran de `CombatCtbUi` (son `_fx`), posée au-dessus
 # de tout le contenu de jeu. Elle porte quatre effets, tous PUREMENT visuels
+# (le hit-stop, lui, est LOCAL aux personnages : `CombatCtbUi._geler_contact`)
 # (le moteur n'en sait rien, aucun n'attend ni ne bloque la boucle de combat) :
 #
 #   • `chiffre()`  — le chiffre flottant, ACCROCHÉ à une ancre (la tête du
@@ -22,8 +23,6 @@
 #     couvrir pile son propre débattement. Elle agit sur un nœud ENVELOPPE dédié
 #     (`CombatCtbUi._couche_secousse`), jamais sur `_couche_scene` : le `scale`
 #     de celle-ci appartient au zoom-duel ET est lu par la parallaxe du décor.
-#   • `gel()`      — hit-stop : le temps du jeu se fige quelques centièmes sur
-#     l'image d'impact (critique, coup fatal), puis tout repart.
 #   • `flash()`    — voile plein écran très bref (critique).
 #
 # Pas de `class_name` : préchargé par CombatCtbUi (`DEGATS_FX`).
@@ -33,10 +32,14 @@ extends Control
 enum Style { COUP, CRIT, SOIN, INFO }
 
 const PAS_EMPILEMENT := 30.0   # écart vertical entre deux chiffres d'une même cible
-
-# Hit-stop : facteur de temps pendant le gel (0 exact figerait aussi les
-# timers d'impact en attente — on ralentit à l'extrême, on n'arrête pas).
-const ECHELLE_GEL := 0.04
+# Gabarits de rastérisation des textes (voir `_label`) : taille de police et
+# contour FIXES, l'échelle du nœud fait la taille affichée.
+const RASTER_GROS := 56
+const CONTOUR_GROS := 12
+const RASTER_PETIT := 24
+const CONTOUR_PETIT := 7
+const GLYPHES_GROS := "0123456789+-−"
+const GLYPHES_PETIT := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzéèêàç0123456789 +-−!✦"
 
 # Secousse : pulsations (rad/s) volontairement non multiples l'une de l'autre.
 const SECOUSSE_PULS_X := 64.0
@@ -55,9 +58,6 @@ var _sec_duree := 0.0
 var _sec_t := 0.0
 var _sec_sens := 1.0
 var _sec_phase := 0.0
-
-var _gel_actif := false
-var _echelle_avant_gel := 1.0
 
 # ─── Chiffre accroché à son ancre ────────────────────────────
 class Chiffre extends Control:
@@ -116,9 +116,9 @@ class Eclat extends Control:
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_prechauffer_glyphes()
 
 func _exit_tree() -> void:
-	_fin_gel()
 	_fin_secousse()
 
 func _process(delta: float) -> void:
@@ -161,15 +161,14 @@ func chiffre(ancre: Callable, cle: Variant, texte: String, style: int,
 	c.decalage = Vector2(0.0, -PAS_EMPILEMENT * rang)
 	add_child(c)
 
-	var gros := style == Style.COUP or style == Style.CRIT
-	var lbl := _label(texte, taille, couleur, 10 if style == Style.CRIT else (8 if gros else 5))
+	var lbl := _label(texte, taille, couleur, style != Style.INFO)
 	c.add_child(lbl)
-	var t_lbl := lbl.get_minimum_size()
+	var t_lbl := lbl.get_minimum_size() * lbl.scale
 	lbl.position = -t_lbl * 0.5
 	if etiquette != "":
-		var tag := _label(etiquette, maxi(12, int(taille * 0.36)), Color.WHITE, 5)
+		var tag := _label(etiquette, maxi(12, int(taille * 0.36)), Color.WHITE, false)
 		c.add_child(tag)
-		var t_tag := tag.get_minimum_size()
+		var t_tag := tag.get_minimum_size() * tag.scale
 		tag.position = Vector2(-t_tag.x * 0.5, -t_lbl.y * 0.5 - t_tag.y + 6.0)
 	c._process(0.0)   # posé dès cette frame, pas en (0, 0) le temps d'un tick
 
@@ -243,18 +242,27 @@ func _animer_sortie(c: Chiffre, vie: float, fondu: float) -> void:
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(c.queue_free)
 
-func _label(texte: String, taille: int, couleur: Color, contour: int) -> Label:
+# ⚠ Un texte n'est JAMAIS rastérisé à sa taille d'affichage : chaque couple
+# (taille de police, épaisseur de contour) inédit oblige le moteur à dessiner
+# un nouveau jeu de glyphes, et la taille d'un chiffre varie avec les dégâts —
+# soit un à-coup à presque chaque coup. Deux gabarits FIXES seulement (gros
+# chiffres / petits textes), préchauffés au montage (`_prechauffer_glyphes`),
+# puis mis à l'échelle par le nœud.
+func _label(texte: String, taille: int, couleur: Color, gros: bool) -> Label:
+	var raster := RASTER_GROS if gros else RASTER_PETIT
+	var contour := CONTOUR_GROS if gros else CONTOUR_PETIT
 	var l := Label.new()
 	l.text = texte
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.scale = Vector2.ONE * (float(taille) / float(raster))
 	l.add_theme_font_override("font", _police_grasse())
-	l.add_theme_font_size_override("font_size", taille)
+	l.add_theme_font_size_override("font_size", raster)
 	l.add_theme_color_override("font_color", couleur)
 	l.add_theme_constant_override("outline_size", contour)
 	l.add_theme_color_override("font_outline_color", Color(0.02, 0.02, 0.05, 0.92))
 	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
 	l.add_theme_constant_override("shadow_offset_x", 0)
-	l.add_theme_constant_override("shadow_offset_y", 3)
+	l.add_theme_constant_override("shadow_offset_y", 5 if gros else 3)
 	l.add_theme_constant_override("shadow_outline_size", contour)
 	return l
 
@@ -339,18 +347,22 @@ func _fin_secousse() -> void:
 		_sec_noeud.scale = Vector2.ONE
 	_sec_noeud = null
 
-# ─── Hit-stop ────────────────────────────────────────────────
-# `duree` en secondes RÉELLES (le timer ignore l'échelle de temps qu'il pose).
-func gel(duree: float) -> void:
-	if _gel_actif or duree <= 0.0 or not is_inside_tree():
-		return
-	_gel_actif = true
-	_echelle_avant_gel = Engine.time_scale
-	Engine.time_scale = _echelle_avant_gel * ECHELLE_GEL
-	get_tree().create_timer(duree, true, false, true).timeout.connect(_fin_gel)
-
-func _fin_gel() -> void:
-	if not _gel_actif:
-		return
-	_gel_actif = false
-	Engine.time_scale = _echelle_avant_gel
+# ─── Préchauffe des glyphes ──────────────────────────────────
+# Les glyphes (et leur contour) ne sont dessinés qu'à leur PREMIER affichage :
+# sans ceci, c'est le premier coup du combat qui payait. Deux étiquettes
+# quasi invisibles (alpha sous le perceptible, mais au-dessus du seuil où le
+# moteur saute le dessin) vivent quelques images à l'ouverture, puis s'en vont.
+func _prechauffer_glyphes() -> void:
+	var temoins: Array[Label] = [
+		_label(GLYPHES_GROS, RASTER_GROS, Color.WHITE, true),
+		_label(GLYPHES_PETIT, RASTER_PETIT, Color.WHITE, false),
+	]
+	for l in temoins:
+		l.modulate.a = 0.01
+		add_child(l)
+	for i in 3:
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
+	for l in temoins:
+		l.queue_free()

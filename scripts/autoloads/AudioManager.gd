@@ -81,6 +81,10 @@ func _build_library() -> void:
 	# Placeholders (à remplacer par de vrais fichiers sous le même nom) :
 	_streams["ui_select"]          = _gen_blip(720.0, 0.09)               # clic UI net
 	_streams["attack"]             = _gen_whoosh(0.16)                    # souffle d'attaque
+	# Choc au CONTACT (11/11/2026) : le souffle ci-dessus part avec le geste,
+	# le choc sonne à l'impact — deux temps distincts, plus lisibles.
+	_streams["impact"]             = _gen_impact(150.0, 0.16, 0.7)        # coup qui porte
+	_streams["impact_crit"]        = _gen_impact(105.0, 0.30, 1.0)        # critique : plus grave, plus long
 	_streams["trap_appear"]        = _gen_menace(110.0, 0.55)             # grave, menaçant
 	_streams["benediction_appear"] = _gen_arpeggio(                       # arpège majeur joyeux
 			[523.25, 659.25, 783.99], 0.10, 7.0)
@@ -184,6 +188,24 @@ func _gen_blip(freq: float, dur: float) -> AudioStreamWAV:
 		if t < 0.002:                       # fondu d'attaque 2 ms (évite le « clic »)
 			env *= t / 0.002
 		_put_s16(data, i, sin(t * freq * TAU) * 0.5 * env)
+	return _finish_wav(sr, data)
+
+# Choc sourd : sinus grave dont la hauteur CHUTE (le « poids » du coup) +
+# claque de bruit très brève à l'attaque (le contact). `bruit` dose la claque.
+func _gen_impact(freq: float, dur: float, bruit: float) -> AudioStreamWAV:
+	var sr := 22050
+	var n  := int(sr * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var phase := 0.0
+	var prev := 0.0
+	for i: int in n:
+		var frac := float(i) / float(n)
+		phase += TAU * freq * lerpf(1.0, 0.35, frac) / float(sr)
+		prev = lerpf(prev, randf() * 2.0 - 1.0, 0.55)
+		var claque := prev * bruit * pow(1.0 - frac, 9.0)
+		var corps := sin(phase) * 0.8 * pow(1.0 - frac, 2.2)
+		_put_s16(data, i, clampf(corps + claque, -1.0, 1.0))
 	return _finish_wav(sr, data)
 
 # Souffle / whoosh : bruit blanc adouci (lissage 1 pôle) sous une enveloppe
