@@ -174,6 +174,14 @@ const DEBUG_TIER_BUTTONS := true
 # discret en haut à gauche du hub. À passer à false avant release — la
 # ShowRoom est un outil d'atelier, pas du contenu de jeu.
 const DEBUG_SHOWROOM_BTN := true
+# Le jeu s'ouvre DIRECTEMENT sur un combat (demande Rhend 11/11/2026) : à la
+# fin de la préchauffe du PREMIER lancement, on bascule sur la ShowRoom (= le
+# vrai `CombatCtbUi`, combat factice sans récompense ni sauvegarde) au lieu de
+# révéler le hub. Échap y ramène au QG, qui ne rebascule plus (une seule fois
+# par session). Ignoré en headless et quand le Village n'est pas la scène
+# courante (tests, ScreenshotTool). À passer à false avant release.
+const DEBUG_BOOT_COMBAT := true
+static var _boot_combat_fait := false
 var _debug_tier_lbl: Label = null
 
 # ─── Init ─────────────────────────────────────────────────────
@@ -224,7 +232,10 @@ func _ready() -> void:
 	# Spine mis en cache (AssetCache) MAINTENANT, pas au premier combat de la
 	# partie — voile plein cadre par-dessus le hub déjà construit, retiré en
 	# fondu une fois la liste épuisée (voir BootWarmupScreen).
-	BootWarmupScreen.demarrer(self)
+	var prechauffe := BootWarmupScreen.demarrer(self)
+	if DEBUG_BOOT_COMBAT and not _boot_combat_fait \
+			and DisplayServer.get_name() != "headless":
+		prechauffe.prechauffe_terminee.connect(_boot_vers_combat)
 
 # Échap ouvre/ferme le panneau Paramètres (les popups modaux — FileDialog —
 # consomment Échap avant nous, donc pas de conflit).
@@ -1358,6 +1369,15 @@ func _build_showroom_btn() -> void:
 	btn.add_theme_stylebox_override("hover",  UIHelpers.card_style(UIColors.TEXT_MUTED, 0.15, 0.50, 1, 4))
 	btn.pressed.connect(_ouvrir_showroom)
 	add_child(btn)
+
+# Bascule de démarrage (`DEBUG_BOOT_COMBAT`) : rien à sauver, la partie vient
+# d'être chargée — d'où pas de `sauvegarder_maintenant()` ici.
+func _boot_vers_combat() -> void:
+	if _boot_combat_fait or get_tree().current_scene != self:
+		return
+	_boot_combat_fait = true
+	ShowRoom.scene_retour = "res://scenes/village/village.tscn"
+	get_tree().change_scene_to_file("res://scenes/showroom/ShowRoom.tscn")
 
 func _ouvrir_showroom() -> void:
 	# Écrit avant de quitter la scène : la ShowRoom n'écrit jamais la

@@ -21,6 +21,11 @@
 class_name BootWarmupScreen
 extends Control
 
+# Émis quand tout est en cache, AVANT le fondu de sortie : l'écran est encore
+# opaque, un appelant peut donc changer de scène sans laisser voir le hub
+# (voir `Village.DEBUG_BOOT_COMBAT`).
+signal prechauffe_terminee
+
 var _barre: ProgressBar
 var _texte: Label
 
@@ -31,9 +36,10 @@ var _texte: Label
 # après ouverture du Village comptent sur un boot bref).
 const FICHIERS_PAR_FRAME := 6
 
-static func demarrer(parent: Control) -> void:
+static func demarrer(parent: Control) -> BootWarmupScreen:
 	var ecran := BootWarmupScreen.new()
 	parent.add_child(ecran)
+	return ecran
 
 # Chemins des assets lourds rechargés à chaque combat (voir AssetCache) —
 # préchauffés une fois pour toutes ici. Les entrées absentes de la livraison
@@ -104,6 +110,9 @@ func _prechauffer() -> void:
 			if is_instance_valid(_barre):
 				_barre.value = float(i + 1) / float(total) * 100.0
 			await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	prechauffe_terminee.emit()
 	if not is_inside_tree():
 		return
 	var tw := create_tween()

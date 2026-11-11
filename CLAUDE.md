@@ -423,6 +423,11 @@ godot --headless --path . --quit-after 30
 - `Village.DEBUG_SHOWROOM_BTN = true` → bouton « ShowRoom » en haut à gauche du hub
   (→ `scenes/showroom/ShowRoom.tscn`, Échap ramène au QG via `ShowRoom.scene_retour`).
   Outil d'atelier, pas du contenu de jeu → remettre à false avant release.
+- `Village.DEBUG_BOOT_COMBAT = true` → le jeu s'ouvre DIRECTEMENT sur un combat
+  (11/11/2026) : à la fin de la préchauffe du premier lancement, bascule sur la
+  ShowRoom (`BootWarmupScreen.prechauffe_terminee`, émis avant le fondu) ; Échap
+  ramène au QG, une seule fois par session ; ignoré en headless et quand le
+  Village n'est pas la scène courante (tests, ScreenshotTool).
 - `HoloMap3D.FLICKER_NEON = false` → grésillement des néons désactivé volontairement
   (idée validée, application à retravailler ; le shader `holo_neon` garde le code).
 - `holo_decor.PROP_NEON` (true par défaut) → false = props artistes de la holomap
