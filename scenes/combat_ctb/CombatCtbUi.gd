@@ -209,6 +209,28 @@ var _portraits_generes: Dictionary = {}   # CtbCombattant → Texture2D
 # d'impact du geste de l'attaquant — voir `_sur_evenement` / `_resoudre_impact`.
 var _impacts_en_attente: Array[CtbCombattant] = []
 var _couche_scene: Control = null   # couches zoomables (fonds + sol + sprites)
+# Enveloppe de `_couche_scene` réservée à la SECOUSSE caméra (`CombatDegatsFx.
+# secouer`) : sa position/son échelle n'appartiennent qu'à elle, pour ne jamais
+# disputer le `scale` de `_couche_scene` au zoom-duel ni fausser la parallaxe
+# du décor, qui compense ce scale-là.
+var _couche_secousse: Control = null
+const DEGATS_FX := preload("res://scenes/combat_ctb/CombatDegatsFx.gd")
+# Feel des coups (demande Rhend 11/11/2026). Secousse : [amplitude px, durée s]
+# — un coup encaissé par le HÉROS secoue plus qu'un coup porté ; un coup fatal
+# ajoute `SECOUSSE_MORT_PX`. Hit-stop en secondes réelles (critique / fatal).
+const SECOUSSE_COUP := [3.0, 0.16]
+const SECOUSSE_COUP_SUBI := [5.5, 0.22]
+const SECOUSSE_CRIT := [13.0, 0.40]
+const SECOUSSE_CRIT_SUBI := [16.0, 0.46]
+const SECOUSSE_MORT_PX := 4.0
+const GEL_CRIT_S := 0.07
+const GEL_MORT_S := 0.09
+# Chiffre de dégâts : taille de base + bonus selon la part des PV max de la
+# cible emportée par le coup (plafonnée à `DEGATS_PART_PLEINE`).
+const DEGATS_TAILLE := [26, 10]
+const DEGATS_TAILLE_CRIT := [42, 12]
+const DEGATS_PART_PLEINE := 0.5
+const DEGATS_MARGE_TETE := 20.0   # px au-dessus du sommet de la silhouette
 var _duel_tween: Tween = null
 const SHADER_BRUME_DUEL := preload("res://scenes/combat_ctb/brume_duel.gdshader")
 # Part de chaque bord de l'écran plongée dans la brume noire pendant un duel
@@ -278,7 +300,7 @@ var _rangee_boutons: Control
 var _rangee_cibles: HBoxContainer
 var _objet_en_attente: ConsommableData = null   # objet ciblé en attente de cible
 var _competence_en_attente: CompetenceCtbData = null   # idem pour une compétence
-var _fx: Control               # couche des textes flottants (plein écran)
+var _fx: DEGATS_FX             # couche FX plein écran (chiffres, gerbes, secousse)
 var _voile: ColorRect          # fondu de transition + écran d'issue
 var _voile_contenu: VBoxContainer
 var _recap: Dictionary = {}
@@ -463,7 +485,11 @@ func _construire() -> void:
 	_couche_scene = Control.new()
 	_couche_scene.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_couche_scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_couche_scene)
+	_couche_secousse = Control.new()
+	_couche_secousse.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_couche_secousse.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_couche_secousse)
+	_couche_secousse.add_child(_couche_scene)
 	# Brume noire de bordure du zoom-duel : AU-DESSUS de la scène zoomée (elle
 	# ne zoome pas avec elle), SOUS tout le chrome ajouté ensuite.
 	_brume_duel = ColorRect.new()
@@ -609,9 +635,9 @@ func _construire() -> void:
 	_montrer_actions(false)
 
 	# Couche FX (dégâts flottants) au-dessus de tout le contenu de jeu.
-	_fx = Control.new()
-	_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Chiffres accrochés aux têtes, gerbes d'impact, secousse, hit-stop : voir
+	# `CombatDegatsFx`.
+	_fx = DEGATS_FX.new()
 	add_child(_fx)
 
 	# PAS de scanlines ici (retiré 17/09/2026, retour Rhend : « enlève le
@@ -1627,37 +1653,39 @@ func _sur_evenement(e: Dictionary) -> void:
 		"tick_statut":
 			# Tick de DoT : distinct des coups (violet, préfixe du statut).
 			_flotter(e["cible"] as CtbCombattant, "−%d %s" % [int(e["degats"]),
-					str(e["nom"])], 14, UIColors.POISON, false)
+					str(e["nom"])], DEGATS_FX.Style.INFO, UIColors.POISON, 17)
 		"statut_pose":
 			var sd := e["statut"] as StatutCtbData
 			# StatutCtbData partage les champs nom_affichage_* : même chemin
 			# Translations que les combattants (pas de FR en dur).
 			var nom := Translations.resource_name(sd, sd.id)
-			_flotter(e["cible"] as CtbCombattant, "+ %s" % nom, 13, UIColors.POISON, false)
+			_flotter(e["cible"] as CtbCombattant, "+ %s" % nom, DEGATS_FX.Style.INFO, UIColors.POISON, 15)
 		"defense":
 			_flotter(e["combattant"] as CtbCombattant,
-					Translations.T("ctb.garde_pill"), 15, UIColors.SHIELD, false)
+					Translations.T("ctb.garde_pill"), DEGATS_FX.Style.INFO, UIColors.SHIELD, 17)
 		"competence":
 			# Annonce du lancement (chantier 16) — les dégâts éventuels
 			# arrivent par l'événement « attaque » standard juste après.
 			var comp := e["competence"] as CompetenceCtbData
 			_flotter(e["utilisateur"] as CtbCombattant,
-					"✦ %s" % Translations.resource_name(comp, comp.id), 14,
-					UIColors.CYBER_ACCENT_2, false)
+					"✦ %s" % Translations.resource_name(comp, comp.id), DEGATS_FX.Style.INFO,
+					UIColors.CYBER_ACCENT_2, 16)
 		"soin":
 			_flotter(e["cible"] as CtbCombattant,
-					"+%d" % int(roundf(float(e["soin"]))), 18,
-					UIColors.HEAL_COLOR, true)
+					"+%d" % int(roundf(float(e["soin"]))), DEGATS_FX.Style.SOIN,
+					UIColors.HEAL_COLOR, 26)
 		"objet":
 			# Consommable (chantier 7) : dégâts (Bombe) ou soin (Nano).
 			if e.has("degats"):
 				AudioManager.play_sfx("attack", -4.0)
-				_flotter(e["cible"] as CtbCombattant, str(int(e["degats"])), 20,
-						UIColors.DMG_HEAVY_HERO, true)
+				_flotter(e["cible"] as CtbCombattant, str(int(e["degats"])), DEGATS_FX.Style.COUP,
+						UIColors.DMG_HEAVY_HERO, 30)
+				_feel_impact(e["cible"] as CtbCombattant, 1.0, false,
+						not (e["cible"] as CtbCombattant).est_vivant(), UIColors.DMG_HEAVY_HERO)
 			elif e.has("soin"):
 				_flotter(e["cible"] as CtbCombattant,
-						"+%d" % int(roundf(float(e["soin"]))), 18,
-						UIColors.HEAL_COLOR, true)
+						"+%d" % int(roundf(float(e["soin"]))), DEGATS_FX.Style.SOIN,
+						UIColors.HEAL_COLOR, 26)
 
 # Le coup PORTE : réaction de la cible, chiffre de dégâts, son. Appelé à
 # l'instant d'impact du geste (`_impact_differe`), ou tout de suite quand il
@@ -1677,9 +1705,42 @@ func _resoudre_impact(e: Dictionary) -> void:
 		couleur = UIColors.DMG_HEAVY_ENEMY if crit else UIColors.DMG_BY_ENEMY
 	else:
 		couleur = UIColors.DMG_HEAVY_HERO if crit else UIColors.DMG_BY_HERO
-	var texte := (Translations.T("ctb.crit_float") % degats) if crit else str(degats)
 	AudioManager.play_sfx("attack", -6.0)
-	_flotter(cible, texte, 22 if crit else 17, couleur, crit)
+	# Le chiffre grossit avec la part des PV max emportée : un gros coup se lit
+	# à sa taille avant même d'être lu.
+	var part := clampf(float(degats) / maxf(1.0, cible.stat_finale("pv_max")),
+			0.0, DEGATS_PART_PLEINE) / DEGATS_PART_PLEINE
+	var gabarit: Array = DEGATS_TAILLE_CRIT if crit else DEGATS_TAILLE
+	var taille := int(gabarit[0]) + int(roundf(float(gabarit[1]) * part))
+	var style: int = DEGATS_FX.Style.CRIT if crit else DEGATS_FX.Style.COUP
+	_flotter(cible, str(degats), style, couleur, taille,
+			Translations.T("ctb.crit_tag") if crit else "")
+	var sens := 1.0 if (e["attaquant"] as CtbCombattant).est_joueur() else -1.0
+	_feel_impact(cible, sens, crit, bool(e["mort"]), couleur)
+
+# Feel d'un coup qui porte — gerbe sur le torse, secousse caméra dans le sens
+# du coup, et sur un critique/coup fatal : hit-stop + voile bref. Purement
+# visuel, jamais attendu par la boucle ; rien en `facteur_delais = 0` (tests).
+func _feel_impact(cible: CtbCombattant, sens: float, crit: bool, mort: bool,
+		couleur: Color) -> void:
+	if facteur_delais <= 0.0 or _fx == null or _sol == null:
+		return
+	if _noeud_bataille(cible) != null:
+		_fx.eclat(_point_fx(cible, _hauteur_visuelle(cible) * 0.55), couleur, sens, crit)
+	var subi := cible.est_joueur()
+	var secousse: Array
+	if crit:
+		secousse = SECOUSSE_CRIT_SUBI if subi else SECOUSSE_CRIT
+	else:
+		secousse = SECOUSSE_COUP_SUBI if subi else SECOUSSE_COUP
+	_fx.secouer(_couche_secousse,
+			float(secousse[0]) + (SECOUSSE_MORT_PX if mort else 0.0),
+			float(secousse[1]), sens)
+	if crit:
+		_fx.flash(UIColors.DMG_HEAVY_ENEMY if subi else Color.WHITE,
+				0.20 if subi else 0.13)
+	if crit or mort:
+		_fx.gel(GEL_MORT_S if mort else GEL_CRIT_S)
 
 func _impact_differe(e: Dictionary) -> void:
 	_impacts_en_attente.erase(e["cible"])
@@ -1688,35 +1749,41 @@ func _impact_differe(e: Dictionary) -> void:
 	_resoudre_impact(e)
 	_rafraichir_tout()   # PV, statuts et file suivent le coup, pas la fin du duel
 
-func _flotter(cb: CtbCombattant, texte: String, taille: int, couleur: Color,
-		punch: bool) -> void:
+# Texte flottant AU-DESSUS DE LA TÊTE du combattant (retour Rhend 11/11/2026 —
+# il naissait à hauteur de torse, décalé hors de la silhouette : « loin à
+# droite »). L'ancre est RECALCULÉE à chaque frame par la couche FX : le
+# chiffre suit sa cible pendant la convergence du duel, le zoom et la secousse.
+func _flotter(cb: CtbCombattant, texte: String, style: int, couleur: Color,
+		taille: int, etiquette := "") -> void:
 	if _fx == null or _sol == null:
 		return
-	# Le chiffre naît au niveau du TORSE, décalé HORS de la silhouette, côté
-	# opposé à l'adversaire (retour Rhend 14/10/2026 : aux pieds on ne le
-	# voyait pas). Point calculé depuis la position RÉELLE du nœud (il peut
-	# être en plein duel, déplacé au centre) puis converti en global : suit
-	# donc aussi le zoom de la scène.
-	var noeud := _noeud_bataille(cb)
-	var carte := _cartes.get(cb) as CarteCombattantCtb
-	if noeud == null and carte == null:
+	if _noeud_bataille(cb) == null and not _cartes.has(cb):
 		return
+	var sommet := _hauteur_visuelle(cb) + DEGATS_MARGE_TETE
+	var ancre := func() -> Vector2: return _point_fx(cb, sommet)
+	_fx.chiffre(ancre, cb, texte, style,
+			couleur, taille, etiquette)
+
+# Hauteur à l'écran de la silhouette d'un combattant (sprite Spine, sinon orbe).
+func _hauteur_visuelle(cb: CtbCombattant) -> float:
+	var spr: SpriteSpinePersonnage = _sprites.get(cb)
+	if is_instance_valid(spr) and spr.hauteur_rendue_px() > 0.0:
+		return spr.hauteur_rendue_px()
+	return ORBE_TAILLE.y
+
+# Point situé `hauteur_px` au-dessus des PIEDS du combattant, à l'aplomb de son
+# axe, dans l'espace de la couche FX. Part de la position RÉELLE du nœud (il
+# peut être en plein duel, déplacé au centre) et traverse la transformation de
+# la scène : suit donc le zoom et la secousse.
+func _point_fx(cb: CtbCombattant, hauteur_px: float) -> Vector2:
 	var pied: Vector2 = _pieds.get(cb, Vector2.ZERO)
-	var haut := ORBE_TAILLE.y
-	var larg := ORBE_TAILLE.x
-	if noeud != null:
-		pied = noeud.position if _sprites.has(cb) \
-				else noeud.position + Vector2(ORBE_TAILLE.x * 0.5, ORBE_TAILLE.y - 10.0)
-		var spr: SpriteSpinePersonnage = _sprites.get(cb)
-		if spr != null:
-			if spr.hauteur_rendue_px() > 0.0:
-				haut = spr.hauteur_rendue_px()
-			if spr.largeur_rendue_px() > 0.0:
-				larg = spr.largeur_rendue_px()
-	var cote := -1.0 if cb.est_joueur() else 1.0   # héros à gauche, ennemis à droite
-	var local := pied + Vector2(cote * (larg * 0.5 + 24.0), -haut * 0.55)
-	var pos := _sol.get_global_transform() * local - _fx.global_position
-	UIHelpers.float_text(_fx, texte, taille, couleur, pos, 46.0, punch)
+	var noeud := _noeud_bataille(cb)
+	if is_instance_valid(noeud):
+		var p: Vector2 = noeud.position
+		pied = p if _sprites.has(cb) \
+				else p + Vector2(ORBE_TAILLE.x * 0.5, ORBE_TAILLE.y - 10.0)
+	return _sol.get_global_transform() * (pied + Vector2(0.0, -hauteur_px)) \
+			- _fx.global_position
 
 # ─── Transitions de bataille (placeholder assumé) ────────────
 
