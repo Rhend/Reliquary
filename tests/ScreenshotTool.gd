@@ -813,7 +813,7 @@ func _shoot_showroom_coup() -> void:
 			garde += 1
 		await _capture("res://tests/_shot_coup_%d_boutons.png" % tour)
 		ui._sur_attaquer()
-		ui._sur_cible_cliquee(ui._ennemis_vivants()[0])
+		ui._sur_cible_cliquee(ui._ennemis_vivants()[-1])
 		var impact := (ui._sprites[ui._acteur_actif] as SpriteSpinePersonnage).delai_impact()
 		await get_tree().create_timer(impact * 0.6).timeout
 		await _capture("res://tests/_shot_coup_%d_avant_impact.png" % tour)
@@ -821,6 +821,24 @@ func _shoot_showroom_coup() -> void:
 		await _capture("res://tests/_shot_coup_%d_apres_impact.png" % tour)
 		while ui._btn_attaquer.visible:
 			await get_tree().process_frame
+		# Riposte ENNEMIE (duel des deux camps, 11/11/2026) : capture au cœur du
+		# geste du premier ennemi qui attaque après ce tour.
+		if tour == 2:
+			garde = 0
+			while (ui._duel_acteurs.is_empty() or (ui._duel_acteurs[0] as CtbCombattant).est_joueur()) \
+					and garde < 3000:
+				# Un allié qui rejoue entre-temps : il attaque pour passer la main.
+				if ui._btn_attaquer.visible and ui._duel_acteurs.is_empty():
+					ui._sur_attaquer()
+					ui._sur_cible_cliquee(ui._ennemis_vivants()[-1])
+				await get_tree().process_frame
+				garde += 1
+			if not ui._duel_acteurs.is_empty() \
+					and not (ui._duel_acteurs[0] as CtbCombattant).est_joueur():
+				var spr_e := ui._sprites.get(ui._duel_acteurs[0]) as SpriteSpinePersonnage
+				var t_imp := spr_e.delai_impact() if spr_e != null else 0.3
+				await get_tree().create_timer(t_imp + 0.25).timeout
+				await _capture("res://tests/_shot_coup_ennemi.png")
 
 # ── Comparaison de taille : FlameBot et WorkBot sur une même ligne ──────────
 # Diagnostic demandé par Rhend (09/2026, chara design des tailles relatives) :

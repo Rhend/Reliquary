@@ -13,10 +13,10 @@
 # sprite Spine RÉEL de Christophe (SpriteSpinePersonnage : Idle en boucle,
 # Attack_CaC ou Attack_Shoot selon le GESTE de l'action ; retombe sur le
 # placeholder si le runtime spine-godot manque) ; les adversaires ont le leur
-# dès qu'ils sont au registre Spine (EnergyBoule en repli sinon). L'attaque du
-# JOUEUR déclenche un ZOOM-DUEL façon Darkest Dungeon : les deux personnages
-# glissent au centre de l'écran face à face, punch-in fort (crit = plus
-# marqué), puis retour — activations ennemies SANS effet de caméra ; seule la
+# dès qu'ils sont au registre Spine (EnergyBoule en repli sinon). TOUTE attaque
+# (joueur comme ennemi, depuis le 11/11/2026) déclenche un ZOOM-DUEL façon
+# Darkest Dungeon : les deux personnages glissent au centre de l'écran face à
+# face, punch-in fort (crit = plus marqué), puis retour ; seule la
 # scène zoome, le chrome UI reste fixe. Un TIR (compétence à distance) garde
 # le punch-in mais ne fait converger personne : il cadre le tireur et sa cible.
 # DA finale hors scope (Christophe).
@@ -100,11 +100,11 @@ const FILE_ALPHA_QUEUE := 0.55        # opacité de la dernière puce de la file
 const FILE_LIGNE_HAUTEUR_PX := 36     # trait Cyber_Line sous la file
 const FILE_PIED_HAUTEUR_PX := 38.0
 
-# Zoom-DUEL sur l'attaque du JOUEUR uniquement (recette Darkest Dungeon 1,
+# Zoom-DUEL sur TOUTE attaque, des deux camps (recette Darkest Dungeon 1,
 # resserrée — retour Rhend) : l'attaquant et sa cible GLISSENT au centre de
 # l'écran face à face, comme pour un coup final, pendant que la scène
 # punch-in fort ; tenue le temps du coup, puis chacun regagne son
-# emplacement. Les activations ennemies n'ont AUCUN effet de caméra. Seule
+# emplacement (l'attaquant reste du côté de son camp). Seule
 # la scène (_couche_scene) bouge — le chrome UI reste fixe. Recette et
 # constantes dans `DuelZoomFx` (26/08/2026, SOURCE PARTAGÉE avec la vitrine
 # ShowRoom — jamais une copie).
@@ -1028,15 +1028,16 @@ func _boucle() -> void:
 				return
 			_montrer_actions(false)
 			moteur.jouer(_action_en_attente)
-			# Le duel peut durer (animation d'attaque + gel) : l'activation
-			# suivante attend sa fin (sondage : un tween tué n'émet pas finished).
-			while _duel_tween != null and _duel_tween.is_valid() and is_inside_tree():
-				await get_tree().process_frame
 		else:
 			await _pause(PAUSE_AVANT_ENNEMI_S)   # séquencement lisible des activations ennemies
 			if not is_inside_tree():
 				return
 			moteur.jouer(moteur.action_auto(c))
+		# Le duel (les deux camps) peut durer (animation d'attaque + gel) :
+		# l'activation suivante attend sa fin (sondage : un tween tué n'émet
+		# pas finished).
+		while _duel_tween != null and _duel_tween.is_valid() and is_inside_tree():
+			await get_tree().process_frame
 		# Le coup doit avoir PORTÉ à l'écran avant de passer à la suite.
 		while not _impacts_en_attente.is_empty() and is_inside_tree():
 			await get_tree().process_frame
@@ -1532,7 +1533,7 @@ func _duel_interrompre() -> void:
 		_duel_acteurs = []
 		_rafraichir_orbes()   # réapplique le fondu différé d'un vaincu du duel
 
-# Zoom-DUEL (attaque du joueur seulement — recette dans `DuelZoomFx`) :
+# Zoom-DUEL (toute attaque, des deux camps — recette dans `DuelZoomFx`) :
 # glissement simultané des deux personnages vers le centre + punch-in de la
 # scène, tenue le temps du coup, puis retour aux emplacements. Crit = zoom
 # plus marqué.
@@ -1556,9 +1557,13 @@ func _duel_attaque(att: CtbCombattant, cible: CtbCombattant, crit: bool,
 	# sur la seule cible pousserait le tireur hors cadre quand elle est loin.
 	var foyer: Vector2 = centre if converger \
 			else ((_pieds[att] as Vector2) + (_pieds[cible] as Vector2)) * 0.5
-	# Le joueur vient de gauche, sa cible lui fait face à droite.
-	var pos_att := _pos_depuis_pied(att, centre + Vector2(-DuelZoomFx.ECART_PX * 0.5, 0.0))
-	var pos_cib := _pos_depuis_pied(cible, centre + Vector2(DuelZoomFx.ECART_PX * 0.5, 0.0))
+	# Chacun reste de SON côté : le camp joueur à gauche, l'adverse à droite —
+	# que ce soit l'un ou l'autre qui attaque (personne ne se retourne).
+	var cote_att := -1.0 if att.est_joueur() else 1.0
+	var pos_att := _pos_depuis_pied(att,
+			centre + Vector2(cote_att * DuelZoomFx.ECART_PX * 0.5, 0.0))
+	var pos_cib := _pos_depuis_pied(cible,
+			centre + Vector2(-cote_att * DuelZoomFx.ECART_PX * 0.5, 0.0))
 	# Rien à restaurer sans convergence : les positions ne sont pas touchées.
 	_duel_restaure = [[noeud_att, noeud_att.position], [noeud_cib, noeud_cib.position]] \
 			if converger else []
@@ -1708,13 +1713,14 @@ func _sur_evenement(e: Dictionary) -> void:
 			#                  image : le temps de LIRE le chiffre ;
 			#   5. RETOUR    — dézoom et retour en place (DuelZoomFx.DUREE_OUT),
 			#                  puis la brume se lève.
-			# Mise en scène de duel UNIQUEMENT sur l'attaque du joueur —
-			# les activations ennemies restent sobres (retour Rhend). Un TIR
-			# ne fait converger personne : le zoom se recentre sur la cible.
+			# Mise en scène de duel pour LES DEUX CAMPS (retour Rhend
+			# 11/11/2026 — supersède « activations ennemies sobres ») : sans
+			# convergence, le lance-flammes du FlameBot crachait dans le vide
+			# à mi-écran de sa cible. Un TIR ne fait converger personne : le
+			# zoom se recentre sur le couple tireur/cible.
 			var attaquant := e["attaquant"] as CtbCombattant
 			var avance := DUEL_DELAI_GESTE * facteur_delais
-			var duel := attaquant.est_joueur() \
-					and _duel_attaque(attaquant, cible, bool(e["crit"]), not a_distance, avance)
+			var duel := _duel_attaque(attaquant, cible, bool(e["crit"]), not a_distance, avance)
 			if not duel:
 				avance = 0.0
 			var duree_geste := 0.0
