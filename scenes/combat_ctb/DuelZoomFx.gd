@@ -36,7 +36,9 @@ const FOCUS_HAUT_PX := 60.0   # remonte le pivot des pieds vers les torses
 # APPROCHE : assez longue pour être VUE (0,14 s à l'origine : la caméra et les
 # corps se téléportaient, « tout se passe d'un coup » — retour Rhend
 # 11/11/2026). Départ vif, arrivée amortie (QUART/OUT).
-const DUREE_IN := 0.28
+# ⚠ Réglé à 0,09 s par Rhend le 11/11/2026 après essai du 0,28 (approche et
+# retour voulus quasi instantanés) — ne pas rallonger sans son accord.
+const DUREE_IN := 0.09
 # Gel sur la DERNIÈRE image du geste, après la fin de l'animation d'attaque
 # (la tenue totale est dynamique : l'appelant passe `tenue_s`). Plus de calage
 # à tenir avec les pauses de CombatCtbUi : sa boucle attend la fin du tween
@@ -44,7 +46,7 @@ const DUREE_IN := 0.28
 const TENUE := 0.30
 # RETOUR : plus lent que l'approche, départ ET arrivée amortis — le coup
 # retombe, il ne se coupe pas.
-const DUREE_OUT := 0.36
+const DUREE_OUT := 0.09
 
 # Rejoue l'effet. `crit` accentue le punch-in ; `converger` = false (tir) :
 # personne ne bouge, seul le punch-in reste, recentré sur `foyer`.

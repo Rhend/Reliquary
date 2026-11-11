@@ -229,7 +229,7 @@ const GEL_CRIT_S := 0.11
 const GEL_MORT_S := 0.14
 # Chronologie d'un coup (voir `_sur_evenement`, « attaque ») : délai entre le
 # début de l'approche du duel et le départ du geste de l'attaquant.
-const DUEL_DELAI_GESTE := 0.16
+const DUEL_DELAI_GESTE := 0.06
 # Respirations de la boucle (× facteur_delais) : avant qu'un ennemi n'agisse,
 # entre deux activations, et avant l'écran d'issue (le coup fatal se lit).
 const PAUSE_AVANT_ENNEMI_S := 0.45
