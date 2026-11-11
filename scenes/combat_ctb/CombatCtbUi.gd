@@ -293,6 +293,9 @@ var _liens_actions: Array[Dictionary] = []
 var _bandeaux: VBoxContainer
 var _btn_attaquer: Button
 var _btn_objet: Button = null          # créé au tour du joueur, grisé si inventaire vide
+# Compétences exposées en bouton d'action (`CompetenceCtbData.bouton_action`) :
+# recréées à chaque tour pour le combattant qui joue, grisées en recharge.
+var _btns_competences: Array[Button] = []
 # Boutons d'action : Control de positionnement LIBRE (retour Rhend
 # 07/09/2026, 2 colonnes encadrant le héros — voir
 # _disposer_actions_deux_colonnes), plus une HBoxContainer classique.
@@ -618,7 +621,8 @@ func _construire() -> void:
 	_btn_attaquer = CombatUiSkin.bouton(Translations.T("ctb.attaquer"))
 	_btn_attaquer.pressed.connect(_sur_attaquer)
 	_rangee_boutons.add_child(_btn_attaquer)
-	# Seules Attaquer et Objet existent à l'écran (retour Rhend 14/10/2026) :
+	# Seules Attaquer et Objet existent d'office à l'écran (retour Rhend 14/10/2026 ;
+	# + les compétences marquées `bouton_action`, 11/11/2026, voir `_montrer_actions`) :
 	# une action sans os d'ancrage n'apparaît pas — ni Défendre, ni compétences
 	# (le moteur les gère toujours, l'UI ne les expose plus).
 	# PAS de bouton Objet ici : il n'existe que si l'inventaire de run est
@@ -1046,6 +1050,10 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 	# si l'inventaire de run est vide OU absent (ShowRoom/sandbox sans run
 	# réelle : `inventaire_fournisseur` invalide) — même langage que les
 	# compétences en recharge, recréé à chaque tour (le contenu a pu changer).
+	for b_comp in _btns_competences:
+		_rangee_boutons.remove_child(b_comp)
+		b_comp.queue_free()
+	_btns_competences.clear()
 	if _btn_objet != null:
 		_rangee_boutons.remove_child(_btn_objet)
 		_btn_objet.queue_free()
@@ -1061,6 +1069,24 @@ func _montrer_actions(on: bool, acteur: CtbCombattant = null) -> void:
 		var visibles: Array = [_btn_attaquer]
 		if _btn_objet != null:
 			visibles.append(_btn_objet)
+		# Ordre = disposition : indices pairs colonne GAUCHE, impairs colonne
+		# DROITE (`_disposer_actions_deux_colonnes`). Attaquer (0) et la première
+		# compétence (2) tombent donc dans la même colonne, la compétence
+		# SOUS Attaquer — demande Rhend 11/11/2026.
+		var joueur := acteur if acteur != null else moteur.avatar()
+		if joueur != null:
+			for comp: CompetenceCtbData in joueur.data.competences:
+				if not comp.bouton_action:
+					continue
+				var nom_comp := Translations.resource_name(comp, comp.id)
+				var pret := joueur.competence_prete(comp)
+				var b_comp := CombatUiSkin.bouton(nom_comp if pret
+						else "%s (%d)" % [nom_comp, joueur.cooldown_restant(comp)])
+				b_comp.disabled = not pret
+				b_comp.pressed.connect(_sur_competence.bind(comp))
+				_rangee_boutons.add_child(b_comp)
+				_btns_competences.append(b_comp)
+				visibles.append(b_comp)
 		_disposer_actions_deux_colonnes(visibles, acteur)
 	if not on:
 		_mettre_cibles_en_avant(false)
@@ -1192,6 +1218,25 @@ func _sur_attaquer() -> void:
 		return
 	_montrer_choix_cibles(vivants)
 
+# Compétence exposée en bouton (« Attaque critique ») : même parcours que
+# l'attaque — coup direct s'il ne reste qu'une cible, sinon mode ciblage
+# (`_competence_en_attente` est lue par `_sur_cible_cliquee`).
+func _sur_competence(comp: CompetenceCtbData) -> void:
+	if not _btn_attaquer.visible:
+		return
+	_objet_en_attente = null
+	_competence_en_attente = null
+	if not comp.cible_requise():
+		_valider_action({"type": Enums.ActionCtb.COMPETENCE, "competence": comp})
+		return
+	var vivants: Array[CtbCombattant] = _ennemis_vivants()
+	if vivants.size() <= 1:
+		_valider_action({"type": Enums.ActionCtb.COMPETENCE, "competence": comp,
+				"cible": vivants[0] if vivants.size() == 1 else null})
+		return
+	_competence_en_attente = comp
+	_montrer_choix_cibles(vivants)
+
 # Mode ciblage (attaque, compétence ou objet ciblé) : l'ennemi se choisit
 # À LA SOURIS — clic sur son personnage DANS LA SCÈNE (zone + réticule or)
 # ou sur sa carte. Plus de boutons nominatifs (retour Rhend 07/2026) :
@@ -1220,6 +1265,7 @@ func _sur_objet() -> void:
 	if _btn_objet == null or not _btn_objet.visible or _btn_objet.disabled:
 		return
 	_objet_en_attente = null
+	_competence_en_attente = null   # une compétence en cours de ciblage est abandonnée
 	UIHelpers.clear_children_now(_rangee_cibles)
 	_rangee_cibles.add_child(ExpeStyle.label_mono(
 			Translations.T("ctb.choisir_objet"), 12, UIColors.CYBER_TEXTE_MUTED))

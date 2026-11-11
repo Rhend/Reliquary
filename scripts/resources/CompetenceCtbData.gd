@@ -28,6 +28,13 @@ extends Resource
 # change ni les dégâts ni le ciblage, seulement l'animation de l'attaquant et
 # la mise en scène (voir Enums.AnimationAttaque). Ignoré par les autres effets.
 @export var animation: Enums.AnimationAttaque = Enums.AnimationAttaque.MELEE
+# Critique GARANTI (ATTAQUE_MULT uniquement) : le coup est critique quel que
+# soit le jet — qui reste TIRÉ, pour ne pas décaler les suites seedées.
+@export var crit_garanti: bool = false
+# Exposée à l'écran comme BOUTON D'ACTION du combattant (`CombatCtbUi`, sous
+# « Attaquer »). Faux par défaut : depuis le 14/10/2026 l'UI ne montre plus
+# les compétences, seules celles qui le demandent ici réapparaissent.
+@export var bouton_action: bool = false
 # Cooldown en ACTIVATIONS du lanceur (0 = utilisable à chaque activation).
 @export var cooldown: int = 3
 

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CompetenceCtbData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/CompetenceCtbData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "comp_attaque_critique"
+nom_affichage_fr = "Attaque critique"
+nom_affichage_en = "Critical Strike"
+lore_fr = "Un coup qui trouve toujours la faille."
+lore_en = "A blow that always finds the weak point."
+effet = 0
+valeur = 1.0
+; Critique GARANTI (le jet de crit est ignoré) — exposée comme bouton d'action
+; sous « Attaquer ». Cooldown 0 PROVISOIRE (demande Rhend 11/11/2026), à
+; calibrer : en l'état elle rend l'attaque de base caduque.
+crit_garanti = true
+bouton_action = true
+cooldown = 0

@@ -334,7 +334,8 @@ func _tick_statuts(c: CtbCombattant, timing: Enums.TimingStatut) -> void:
 # multiplie les deux : c'est le contrat).
 # `animation` : GESTE relayé tel quel à l'UI — aucune incidence sur le calcul.
 func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant, mult: float = 1.0,
-		animation: Enums.AnimationAttaque = Enums.AnimationAttaque.MELEE) -> void:
+		animation: Enums.AnimationAttaque = Enums.AnimationAttaque.MELEE,
+		crit_garanti: bool = false) -> void:
 	var cb := cible
 	if cb == null or not cb.est_vivant():
 		cb = _premiere_cible(att)
@@ -343,7 +344,10 @@ func _resoudre_attaque(att: CtbCombattant, cible: CtbCombattant, mult: float = 1
 		return
 	# Clamp [0;1] au moment du JET uniquement (arbitrage 06/07) : la donnée
 	# reste non clampée (un excès de crit_chance est visible dans les stats).
-	var is_crit := rng.randf() < clampf(att.stat_finale("crit_chance"), 0.0, 1.0)
+	# `crit_garanti` (compétence « Attaque critique ») : le jet reste TIRÉ en
+	# premier — la suite du rng est la même qu'une attaque normale.
+	var is_crit := rng.randf() < clampf(att.stat_finale("crit_chance"), 0.0, 1.0) \
+			or crit_garanti
 	var brut := Balance.mitigated_damage(att.stat_finale("atk"), cb.stat_finale("def")) * mult
 	if is_crit:
 		brut *= att.stat_finale("crit_multiplier")
@@ -443,7 +447,7 @@ func _resoudre_competence(c: CtbCombattant, action: Dictionary) -> void:
 			# Défendre, plancher) × valeur — événement « attaque » standard,
 			# qui relaie le GESTE déclaré par la compétence (mêlée ou tir).
 			_resoudre_attaque(c, action.get("cible") as CtbCombattant, comp.valeur,
-					comp.animation as Enums.AnimationAttaque)
+					comp.animation as Enums.AnimationAttaque, comp.crit_garanti)
 		Enums.EffetCompetence.SOIN_PCT_PV_MAX:
 			var pv_max := c.stat_finale("pv_max")
 			var avant := c.pv

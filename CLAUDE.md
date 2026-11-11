@@ -226,9 +226,13 @@ MELEE par défaut) — PUREMENT visuel, relayé tel quel dans l'événement
 `attaque` : il n'y a AUCUNE notion de portée ou de distance dans le CTB, il
 ne change ni dégâts ni ciblage. Dotation du héros data-driven
 `data/progression/competences_heros.tres` (Frappe lourde ×1.6 cd 3, Second
-souffle 25 % cd 4, **Tir de lame ×1.25 cd 2 — le déclencheur du geste
+souffle 25 % cd 4, **Attaque critique ×1 cd 0 — critique GARANTI
+(`CompetenceCtbData.crit_garanti`, le jet de crit reste tiré pour ne pas décaler
+les suites seedées), SEULE compétence exposée en bouton (`bouton_action`),
+sous « Attaquer » — 11/11/2026**, **Tir de lame ×1.25 cd 2 — le déclencheur du geste
 `Attack_Shoot`** ; toutes provisoires), appliquée par CtbPont au
-transitoire. UI : ⚠ plus AUCUN bouton de compétence ni de Défendre depuis
+transitoire. UI : ⚠ plus de bouton de Défendre ni de compétence (HORMIS celles
+marquées `bouton_action`, recréées à chaque tour par `_montrer_actions`) depuis
 le 14/10/2026 (seules Attaquer et Objet sont exposées — le moteur gère
 toujours les deux, l'UI ne les propose plus) ; événements
 `competence`/`soin`. Outil : `tools/SimulateurEquilibrage.tscn` (N runs
